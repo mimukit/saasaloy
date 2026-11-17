@@ -1,0 +1,33 @@
+---
+// One order, installed by `saasaloy add ecommerce`. On demand, not prerendered. Session
+// only: the island reads the order with the browser's cookies, and the api answers 404
+// for an order of another account. A number that is not a whole number answers the
+// site's 404 here.
+import { config } from "@repo/config";
+import { formatOrderNumber } from "@repo/ecommerce";
+import { siteName } from "@repo/ui";
+import { Footer } from "@repo/ui/blocks/footer";
+import { OrderPage } from "@web/components/shop/OrderPage";
+import { ShopNav } from "@web/components/shop/ShopNav";
+import Layout from "../../../layouts/Layout.astro";
+
+export const prerender = false;
+
+const number = Astro.params.number ?? "";
+if (!/^\d{1,15}$/.test(number)) {
+  return new Response(null, { status: 404 });
+}
+---
+
+<Layout
+  title={`Order ${formatOrderNumber(config.ecommerce.orderNumberPrefix, Number(number))} — ${siteName}`}
+>
+  <meta slot="head" name="robots" content="noindex" />
+  <ShopNav client:load siteName={siteName} current="orders" />
+  <main id="main" tabindex="-1">
+    <div class="section-container pt-28 pb-20 md:pt-36 md:pb-28">
+      <OrderPage client:load number={number} />
+    </div>
+  </main>
+  <Footer siteName={siteName} />
+</Layout>

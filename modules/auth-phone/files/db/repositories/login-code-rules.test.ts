@@ -25,6 +25,17 @@ describe("loginCodePurposeOf", () => {
     assert.equal(loginCodePurposeOf("verification-code"), "sign_up");
     assert.equal(loginCodePurposeOf("order-shipped"), "sign_up");
   });
+
+  it("reads the sign-in template as a sign-in", () => {
+    assert.equal(loginCodePurposeOf("sign-in-code"), "sign_in");
+  });
+});
+
+describe("loginCodeIdentifier", () => {
+  it("keeps a sign-in code under the bare phone, as the plugin stores it", () => {
+    assert.equal(loginCodeIdentifier(PHONE, "sign_in"), PHONE);
+    assert.equal(loginCodeIdentifier(PHONE, "sign_up"), PHONE);
+  });
 });
 
 describe("parseLoginCodeIdentifier", () => {

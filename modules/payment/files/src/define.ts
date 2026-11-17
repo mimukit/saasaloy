@@ -88,6 +88,26 @@ export interface PaymentRegistry {
 const OPEN: readonly PaymentStatus[] = ["pending", "submitted"];
 
 /**
+ * Whether the payment's method declared no submit fields: the core kept instructions at
+ * `create` and their `fields` is empty. Cash on delivery is the case. Nobody submits such
+ * a payment, so staff confirm or reject it from `pending`. A payment with no kept
+ * instructions (a gateway's) does not qualify: its verdict comes from the gateway.
+ */
+export function takesNoSubmission(payment: Payment): boolean {
+  const instructions = payment.providerData?.instructions;
+  if (typeof instructions !== "object" || instructions === null) {
+    return false;
+  }
+  const { fields } = instructions as { fields?: unknown };
+  return Array.isArray(fields) && fields.length === 0;
+}
+
+/** The statuses staff may confirm or reject a payment from. */
+function reviewableFrom(payment: Payment): readonly PaymentStatus[] {
+  return takesNoSubmission(payment) ? ["pending"] : ["submitted"];
+}
+
+/**
  * Build the registry. `providers` and `listeners` are the patch points: every
  * `payment-<provider>` module appends to `providers`, and a capability that reacts to a
  * payment (a subscription renewal) appends to `listeners`. See `src/index.ts`.
@@ -341,7 +361,8 @@ export function definePayment(config: PaymentConfig): PaymentRegistry {
         confirm: (id, input = {}) =>
           inPaymentStore(async (store) => {
             const payment = await load(store, id);
-            if (payment.status !== "submitted") {
+            const from = reviewableFrom(payment);
+            if (!from.includes(payment.status)) {
               throw await lost(store, id, "confirm");
             }
             const provider = ownerOf(payment);
@@ -353,7 +374,7 @@ export function definePayment(config: PaymentConfig): PaymentRegistry {
             const moved = await move(
               store,
               payment,
-              ["submitted"],
+              from,
               "successful",
               {
                 providerData: merge(payment, answer?.providerData),
@@ -379,7 +400,8 @@ export function definePayment(config: PaymentConfig): PaymentRegistry {
               );
             }
             const payment = await load(store, id);
-            if (payment.status !== "submitted") {
+            const from = reviewableFrom(payment);
+            if (!from.includes(payment.status)) {
               throw await lost(store, id, "reject");
             }
             const provider = ownerOf(payment);
@@ -393,7 +415,7 @@ export function definePayment(config: PaymentConfig): PaymentRegistry {
             const moved = await move(
               store,
               payment,
-              ["submitted"],
+              from,
               "failed",
               {},
               {

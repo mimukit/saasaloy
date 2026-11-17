@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth-phone
-description: Runbook for the auth-phone module, phone number sign-up, sign-in and password reset by SMS code on Better Auth's client instance. Use when wiring phone sign-in, changing the code length, life, tries or the allowed number prefixes in the auth-phone config section, reading a login code from the console provider, or debugging send-otp, verify, check-reset-code or reset-password.
+description: Runbook for the auth-phone module, phone number sign-up, sign-in and password reset by SMS code on Better Auth's client instance. Use when wiring phone sign-in or sign-in by code (codeSignIn), changing the code length, life, tries or the allowed number prefixes in the auth-phone config section, reading a login code from the console provider, or debugging send-otp, verify, check-reset-code or reset-password.
 ---
 
 # auth-phone: phone sign-in by SMS code
@@ -16,7 +16,7 @@ A customer signs up by phone with an SMS code, sets a password, signs in with ph
 | `files/auth/phone-rules.ts` | `packages/auth/src/phone-rules.ts`, the import-free number rules (`toE164`, `isAllowedPhone`, `placeholderEmail`, the path constants), at `@repo/auth/phone-rules` |
 | `files/auth/phone.ts` | `packages/auth/src/phone.ts`, `sendLoginCode()` and the rules again, at `@repo/auth/phone` |
 | `files/auth/plugins/phone-number.ts` | `packages/auth/src/plugins/phone-number.ts`, Better Auth's `phoneNumber()` with this project's options |
-| `files/auth/plugins/phone-account.ts` | `packages/auth/src/plugins/phone-account.ts`, the 409 hook, `check-reset-code` and verify on reset |
+| `files/auth/plugins/phone-account.ts` | `packages/auth/src/plugins/phone-account.ts`, the 409 hook and its code sign-in exception, `check-reset-code` and verify on reset |
 | `files/config/auth-phone.ts` | `packages/config/src/sections/auth-phone.ts`, read as `config["auth-phone"]` |
 | `files/db/seed/phone-accounts.ts` | `packages/db/src/seed/phone-accounts.ts`, two seeded phone accounts |
 | `files/db/repositories/phone-logins.ts` | `packages/db/src/repositories/phone-logins.ts`, `findPhoneLogin()` and `hasPassword()` |
@@ -53,9 +53,22 @@ Every path below sits under `/auth`, on the client instance.
 1. Sign-up: `POST /phone-number/send-otp` with `{ phoneNumber }`, then `POST /phone-number/verify` with `{ phoneNumber, code }`. `verify` creates the account with the placeholder email `<digits>@phone.invalid`, role `user` and `phone_number_verified` true, and opens a session. A number that has an account answers 409 `PHONE_NUMBER_EXIST` on both calls.
 2. First password: `POST /phone-number/set-password` with `{ newPassword }`, on the session `verify` opened.
 3. Sign-in: `POST /sign-in/phone-number` with `{ phoneNumber, password }`.
-4. Set or reset: `POST /phone-number/request-password-reset` with `{ phoneNumber }`, then `POST /phone-number/check-reset-code` with `{ phoneNumber, otp }`, then `POST /phone-number/reset-password` with `{ phoneNumber, otp, newPassword }`. `check-reset-code` exists because Better Auth checks a reset code only together with the new password. It keeps a right code for `reset-password` and spends one try on a wrong one. `reset-password` also sets a first password, and it marks the phone verified.
+4. Sign-in by code: `POST /phone-number/send-otp` with `{ phoneNumber, signIn: true }`, then `POST /phone-number/verify` with `{ phoneNumber, code, signIn: true }`. See "Sign-in by code" below.
+5. Set or reset: `POST /phone-number/request-password-reset` with `{ phoneNumber }`, then `POST /phone-number/check-reset-code` with `{ phoneNumber, otp }`, then `POST /phone-number/reset-password` with `{ phoneNumber, otp, newPassword }`. `check-reset-code` exists because Better Auth checks a reset code only together with the new password. It keeps a right code for `reset-password` and spends one try on a wrong one. `reset-password` also sets a first password, and it marks the phone verified.
 
 A phone sign-up never becomes the superadmin, and no email sign-up does either. `packages/auth/src/auth.ts` promotes no account. The first superadmin comes from the seed or from `pnpm db:prod:superadmin`.
+
+## Sign-in by code
+
+`codeSignIn` in the `auth-phone` config section is `true` by default. With it on, a `send-otp` and a `verify` that carry `signIn: true` pass the 409 hook for a number that has an account, and `verify` opens a session on that account and marks its phone verified. The account may have a password or not. A new number with `signIn: true` signs up, as a plain sign-up does, so a checkout sends the flag for every number.
+
+- The app screens do not use it. `/phone/sign-up` sends no flag, so a known number still gets 409 `PHONE_NUMBER_EXIST` there, and `/phone/sign-in` keeps phone and password. Checkout (`ecommerce`) is the caller.
+- With `codeSignIn: false`, the same request answers 409 `PHONE_NUMBER_EXIST` on both calls and sends nothing. Checkout then asks for the password, with the reset link.
+- A banned account gets 403 `BANNED_USER` on `send-otp`, before a code goes out. A ban that lands between the send and the check gets the same answer from `verify`, through Better Auth's `admin()` session hook, and no session opens.
+- The code is logged as a `login_code` SMS with the template `sign-in-code`, and it spends the one budget sign-up and reset codes share: one code per `resendSeconds` and `codesPerHour` per number. The login codes screen lists it with the purpose "Sign-in".
+- It reaches no account that reset by code does not already reach. A reset code goes to the same number and sets a new password on the account that owns it, which then signs in. Sign-in by code skips the new password, nothing more. Turn it off only if a project wants the code to work for sign-up and reset alone.
+
+The body flag is not a security check: anyone may send it. It exists so the sign-up screen keeps its 409 for a known number.
 
 ## Better Auth facts this module depends on
 
@@ -71,7 +84,7 @@ These hold on better-auth 1.7.7. Check them again after a Better Auth upgrade, b
 
 With `admin` installed, `auth-phone` mounts `GET /admin/login-codes` with a `chained-route` patch and adds a "Login codes" row under "SMS" in the admin nav with a `nav-entry` patch. The screen lists every `login_code` SMS of the last 30 minutes, newest first: the phone, the account it belongs to, the purpose, the state, the tries left, the send result, and the send error through `maskCodes()`.
 
-The state comes from Better Auth's `verifications` row for the code. A sign-up code sits under the identifier `<phone>`, a reset code under `<phone>-request-password-reset`, and the value is `<code>:<wrong tries>`. A request is `live` when it is the newest for its identifier and its row has tries left before `expiresAt`. A gone code is `ended` inside `codeTtlSeconds` (used, out of tries, or replaced by a newer code) and `expired` after it.
+The state comes from Better Auth's `verifications` row for the code. A sign-up or sign-in code sits under the identifier `<phone>`, a reset code under `<phone>-request-password-reset`, and the value is `<code>:<wrong tries>`. A request is `live` when it is the newest for its identifier and its row has tries left before `expiresAt`. A gone code is `ended` inside `codeTtlSeconds` (used, out of tries, or replaced by a newer code) and `expired` after it.
 
 The screen never shows a code, and the api answer holds none: `parseLoginCodeValue()` reads the tries and drops the digits. A reveal for support waits on the admin audit log (#310) and is a follow-up issue. Do not add a code field to the route.
 
@@ -89,7 +102,7 @@ The codes come from the api's log, not from a test-only provider. The `e2e` modu
 
 The module declares no env keys. `sms` needs `SMS_PROVIDER`; use `console` in development, never in a deployed environment, because the console provider prints every code to the log.
 
-The `auth-phone` config section holds `codeLength`, `codeTtlSeconds`, `codeAttempts`, `resendSeconds`, `codesPerHour`, `allowedPrefixes` and `defaultCountryCode`. Change them in `packages/config/src/project.ts`.
+The `auth-phone` config section holds `codeLength`, `codeTtlSeconds`, `codeAttempts`, `resendSeconds`, `codesPerHour`, `allowedPrefixes`, `defaultCountryCode` and `codeSignIn`. Change them in `packages/config/src/project.ts`.
 
 ## Guards and results
 
@@ -97,7 +110,7 @@ Two guards run ahead of Better Auth on `/auth`, through `authGuards` in `apps/ap
 
 | Path | Answer |
 | --- | --- |
-| `/phone-number/send-otp`, `/phone-number/request-password-reset` | 429 `rate_limited` with `Retry-After` for a second code inside `resendSeconds`, or past `codesPerHour` in an hour. Sign-up and reset codes share one budget. |
+| `/phone-number/send-otp`, `/phone-number/request-password-reset` | 429 `rate_limited` with `Retry-After` for a second code inside `resendSeconds`, or past `codesPerHour` in an hour. Sign-up, sign-in and reset codes share one budget. |
 | `/phone-number/request-password-reset` | 404 `no_account` for a number with no account. No code is stored and no SMS goes out. |
 | `/sign-in/phone-number` | 429 `rate_limited` from the `strict` policy, once per client address and once per number. Then 401 `no_account` or 401 `no_password`. A wrong password keeps Better Auth's `INVALID_PHONE_NUMBER_OR_PASSWORD`, and a banned account keeps `BANNED_USER`. |
 

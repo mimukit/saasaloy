@@ -72,6 +72,15 @@ function camelCase(snake: string): string {
   return snake.replaceAll(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
+/** True when the schema file's module names `database-postgres` in its `dependsOn`. */
+function postgresOnly(file: string): boolean {
+  const module = relative(file).split("/")[1] ?? "";
+  const descriptor = JSON.parse(
+    readFileSync(join(MODULES, module, "registry-item.json"), "utf-8")
+  ) as { dependsOn?: string[] };
+  return descriptor.dependsOn?.includes("database-postgres") ?? false;
+}
+
 const relative = (file: string) => file.slice(ROOT.length);
 const files = schemaFiles();
 
@@ -121,8 +130,12 @@ describe("module schema table names", () => {
     });
   }
 
+  // A module that `dependsOn` `database-postgres` runs on Postgres only (`ecommerce`, plan
+  // 0106: its checkout locks rows with `SELECT … FOR UPDATE`), so its `.pg.ts` has no twin.
   it("gives each .pg.ts file a .sqlite.ts twin with the same tables", () => {
-    for (const pg of files.filter((file) => file.endsWith(".pg.ts"))) {
+    for (const pg of files.filter(
+      (file) => file.endsWith(".pg.ts") && !postgresOnly(file)
+    )) {
       const sqlite = pg.replace(/\.pg\.ts$/, ".sqlite.ts");
       assert.ok(files.includes(sqlite), `${relative(pg)} has no sqlite twin`);
       const shape = (path: string) =>

@@ -409,6 +409,114 @@ describe("the status machine", () => {
   });
 });
 
+describe("a method with no submit fields (cash on delivery)", () => {
+  // `cod` answers instructions with no fields, so nobody submits it: staff confirm it
+  // from `pending` when the cash arrives, or reject it when the delivery fails.
+  const manual = provider(
+    "manual",
+    { bkash: true, cod: true },
+    {
+      create: (_env, input) =>
+        Promise.resolve({
+          instructions:
+            input.payment.method === "cod"
+              ? { fields: [], note: "Pay the courier in cash." }
+              : {
+                  account: { label: "bKash personal", number: "01700000000" },
+                  fields: [{ id: "transactionId", label: "Transaction ID" }],
+                },
+          kind: "instructions",
+        }),
+    }
+  );
+  const env: PaymentEnv = { PAYMENT_PROVIDER: "manual" };
+  const client = () =>
+    definePayment({ listeners: [], providers: [manual] }).create(env);
+
+  it("confirms a pending cod payment as successful, with one event", async () => {
+    const { payment } = await client().create(order("cod"));
+
+    const confirmed = await client().confirm(payment.id, {
+      actorUserId: "staff_1",
+      note: "Courier remitted.",
+    });
+
+    assert.equal(confirmed.status, "successful");
+    assert.equal(confirmed.settledAmount, 125_000);
+    assert.ok(confirmed.settledAt instanceof Date);
+    assert.deepEqual(
+      store.events.map((e) => [e.fromStatus, e.toStatus, e.actorUserId]),
+      [
+        [null, "pending", null],
+        ["pending", "successful", "staff_1"],
+      ]
+    );
+  });
+
+  it("still refuses to confirm a pending bkash payment", async () => {
+    const { payment } = await client().create(order("bkash"));
+    await assert.rejects(client().confirm(payment.id), { code: "conflict" });
+    assert.equal(store.rows.get(payment.id)?.status, "pending");
+  });
+
+  it("refuses to confirm a pending payment whose provider gave no instructions", async () => {
+    const gateway = provider(
+      "gateway",
+      { card: true },
+      {
+        create: () =>
+          Promise.resolve({ kind: "redirect", url: "https://pay.test/x" }),
+      }
+    );
+    const c = definePayment({ listeners: [], providers: [gateway] }).create({
+      PAYMENT_PROVIDER: "gateway",
+    });
+    const { payment } = await c.create(order("card"));
+    await assert.rejects(c.confirm(payment.id), { code: "conflict" });
+  });
+
+  it("rejects a pending cod payment with delivery_refused as failed", async () => {
+    const { payment } = await client().create(order("cod"));
+
+    const rejected = await client().reject(payment.id, {
+      actorUserId: "staff_1",
+      reason: "delivery_refused",
+    });
+
+    assert.equal(rejected.status, "failed");
+    assert.equal(store.events.at(-1)?.reason, "delivery_refused");
+    assert.equal(store.events.at(-1)?.fromStatus, "pending");
+  });
+
+  it("rejects a pending cod payment with delivery_failed as failed", async () => {
+    const { payment } = await client().create(order("cod"));
+
+    const rejected = await client().reject(payment.id, {
+      reason: "delivery_failed",
+    });
+
+    assert.equal(rejected.status, "failed");
+  });
+
+  it("still refuses to reject a pending bkash payment", async () => {
+    const { payment } = await client().create(order("bkash"));
+    await assert.rejects(
+      client().reject(payment.id, { reason: "delivery_refused" }),
+      { code: "conflict" }
+    );
+  });
+
+  it("gives two racing confirms on a cod payment one success and one conflict", async () => {
+    const { payment } = await client().create(order("cod"));
+    const results = await Promise.allSettled([
+      client().confirm(payment.id),
+      client().confirm(payment.id),
+    ]);
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+    assert.equal(results.filter((r) => r.status === "rejected").length, 1);
+  });
+});
+
 describe("refunds", () => {
   const manual = provider("manual", { bkash: true });
   const client = () =>

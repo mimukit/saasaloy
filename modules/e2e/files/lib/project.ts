@@ -43,6 +43,8 @@ export const SPEC_TAGS = [
   "app",
   "auth",
   "auth-phone",
+  "ecommerce",
+  "payment-manual",
   "sms-console",
   "waitlist",
 ] as const;

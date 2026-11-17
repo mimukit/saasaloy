@@ -1,6 +1,6 @@
 ---
 name: saasaloy-payment
-description: Runbook for the payment capability, a vendor-blind one-time payment core in packages/payment with per-provider modules (payment-console for development, payment-manual for bKash, Nagad, Rocket and bank transfers staff confirm by hand, later payment-sslcommerz, payment-bkash). Use when taking a payment for an order or any other app record, writing the shopper route that starts one, reacting to a status change with a listener, reviewing manual payments, recording a refund, choosing PAYMENT_PROVIDER, or writing a payment provider.
+description: Runbook for the payment capability, a vendor-blind one-time payment core in packages/payment with per-provider modules (payment-console for development, payment-manual for bKash, Nagad, Rocket, bank transfers and cash on delivery that staff confirm by hand, later payment-sslcommerz, payment-bkash). Use when taking a payment for an order or any other app record, writing the shopper route that starts one, reacting to a status change with a listener, reviewing manual payments, recording a refund, choosing PAYMENT_PROVIDER, or writing a payment provider.
 ---
 
 # payment: one-time payments from `packages/payment`
@@ -21,13 +21,15 @@ The core is the only writer of `payments`, `payment_events` and `payment_refunds
 
 | Status | Means | Moves to |
 | --- | --- | --- |
-| `pending` | Created. The payer has not paid, or has not told us yet. | `submitted` (manual `submit`), `successful` / `failed` / `cancelled` (gateway callback) |
+| `pending` | Created. The payer has not paid, or has not told us yet. | `submitted` (manual `submit`), `successful` / `failed` / `cancelled` (gateway callback), `successful` (confirm) / `failed` (reject) for a method with no submit fields |
 | `submitted` | The payer submitted a transaction id. Staff review it. | `successful` (confirm), `failed` (reject) |
 | `successful` | The money arrived. | nothing; refunds are rows, not a status |
 | `failed` | Rejected by staff or declined at the gateway. | nothing |
 | `cancelled` | The payer gave up at the gateway. | nothing |
 
-`confirm` and `reject` are conditional updates on `status = 'submitted'`. Two staff who click at once get one success and one `conflict`. A gateway verdict is a conditional update out of `pending` or `submitted`, and a replay of a verdict already applied changes nothing.
+`confirm` and `reject` are conditional updates on `status = 'submitted'`. Two staff who click at once get one success and one `conflict`.
+
+A method with no submit fields is the one exception (ADR 0061). When the instructions the core kept at `create` hold an empty `fields` list, nobody submits the payment, so `confirm` and `reject` take it from `pending` instead, with the same conditional update and the same `conflict` for the loser. Cash on delivery (`cod` in `payment-manual`) is the case. `takesNoSubmission(payment)` from `@repo/payment` answers the question. A `pending` payment of any other method still answers `conflict` to `confirm` and `reject`, and a gateway payment, which keeps no instructions, never qualifies. A gateway verdict is a conditional update out of `pending` or `submitted`, and a replay of a verdict already applied changes nothing.
 
 A rejected or cancelled payment frees its transaction id. The partial unique index on `(provider, transaction_id_normalized)` covers only rows whose status is not `failed` or `cancelled`, so a payment rejected by mistake can be submitted again. A second live claim on the same id answers `duplicate_transaction`.
 
@@ -158,7 +160,7 @@ The staff reason and note are on the latest `payment_events` row for the payment
 | `POST /admin/payment/payments/:id/review` | `{ action: "confirm", note? }` or `{ action: "reject", reason, note? }` | the detail shape |
 | `POST /admin/payment/payments/:id/refunds` | `{ amount, note? }` | the detail shape |
 
-`reason` is one of `amount_mismatch`, `not_found`, `duplicate`, `other`. Errors use the api envelope `{ error: { code, message } }`. The status per code: `not_found` 404; `conflict` and `duplicate_transaction` 409; `invalid_request`, `method_unavailable` and `callback_invalid` 400; `rate_limited` 429; `declined` and `provider_error` 502.
+`reason` is one of `REJECT_REASONS`: `amount_mismatch`, `not_found`, `duplicate`, `delivery_refused`, `delivery_failed`, `other`. The first three reject a submission. `delivery_refused` (the buyer would not take the parcel) and `delivery_failed` (the courier could not deliver it) reject a cash on delivery payment, and a listener reads them to move the order, for example `ecommerce` moves a `shipped` order to `returned`. The detail shape carries `takesNoSubmission` and `reviewable`, so a screen knows which reasons fit and whether to offer Confirm and Reject. Errors use the api envelope `{ error: { code, message } }`. The status per code: `not_found` 404; `conflict` and `duplicate_transaction` 409; `invalid_request`, `method_unavailable` and `callback_invalid` 400; `rate_limited` 429; `declined` and `provider_error` 502.
 
 A refund is allowed only on a `successful` payment, and the sum of a payment's refunds stays at or below its `amount`. The core reserves the amount with a conditional update before it calls the provider and releases it if the provider refuses. There is no `refunded` status: read `refundedAmount`.
 
@@ -201,7 +203,7 @@ The key is then typed on every `<Link to="/payments" search={{ payment }}>` and 
 | Module | `PAYMENT_PROVIDER` name | Methods | Notes |
 | --- | --- | --- | --- |
 | `payment-console` | `console` | `card` | Development only. A fake hosted checkout, no account, no network. |
-| `payment-manual` | `manual` | `bkash`, `nagad`, `rocket`, `bank` | The shopper pays outside the site and submits the transaction ID. Staff confirm on the Payments page. Nothing is verified automatically. Accounts are options in `manual({ methods })`. See the section below. |
+| `payment-manual` | `manual` | `bkash`, `nagad`, `rocket`, `bank`, `cod` | The shopper pays outside the site and submits the transaction ID, or pays the courier in cash (`cod`, no submission). Staff confirm on the Payments page. Nothing is verified automatically. Accounts are options in `manual({ methods })`. See the section below. |
 
 ### payment-console: development only
 
@@ -244,6 +246,7 @@ export const payment = definePayment({
           branch: "Gulshan",
           routingNumber: "225261725",
         },
+        cod: { note: "Keep the exact amount ready for the rider." },
       },
     }),
   ],
@@ -255,12 +258,14 @@ export const payment = definePayment({
 | --- | --- | --- |
 | `bkash`, `nagad`, `rocket` | a wallet | `account` (any form `bangladeshMobile` accepts, shown to the shopper as `01712345678`), `kind` (`personal`, `merchant` or `agent`), optional `name` and `note` |
 | `bank` | a bank account | `accountName`, `accountNumber`, `bankName`, `branch`, optional `routingNumber`, `currency` (default `BDT`) and `note` |
+| `cod` | cash on delivery | optional `note`, which replaces the default "Pay the courier" line. `cod: {}` turns it on. |
 
 Rules:
 
 - Only a configured method is available. `methods()` reports the others, and `card`, with `available: false`.
 - A malformed wallet number or a missing bank field throws when `manual({...})` runs at module load. The Worker fails to start, and no shopper sees a wrong account.
 - A wallet takes `BDT` only. A bank account takes its `currency`. A payment in another currency fails at `create` with `invalid_request` (`providerCode: "unsupported_currency"`), and the core moves the row to `failed`.
+- `cod` takes any currency, carries no account, and answers instructions with an empty `fields` list. Its note starts with "Pay BDT 1,250.00 in cash when the parcel arrives."
 - The `kind` picks the default note: `personal` says "Use Send Money, not Cash Out", `merchant` says "Use Make Payment, not Send Money". Set `note` to replace it.
 
 #### The shopper flow
@@ -295,6 +300,15 @@ Open **Payments** in the admin app. The **Submitted** chip is the default, oldes
 The **Payments** row in the sidebar shows how many payments wait in **Submitted**. The module adds `{ to: "/payments", path: "/admin/payment/review-count" }` to the admin app's `NAV_COUNTS` with a `const-array` patch, and the shell refetches it on window focus and every 60 s. No count shows when nothing waits. The `saasaloy-admin` skill describes live counts.
 
 Two staff who click Confirm at once get one success and one 409. The page shows the loser a toast that someone else reviewed the payment first.
+
+#### Cash on delivery
+
+A `cod` payment stays `pending` until the cash is in. `submit` answers `invalid_request` with `providerCode: "no_submission"`. The Payments page lists it under **Pending**, and its detail offers **Confirm** and **Reject** from there.
+
+1. Click **Confirm** when the courier remits the cash. The payment moves from `pending` to `successful`, and `settled_amount` takes `amount`.
+2. Click **Reject** when the parcel comes back. Pick `delivery_refused` (the buyer would not take it) or `delivery_failed` (the courier could not deliver it), or `other`. The payment moves to `failed`. The submission reasons are not offered for a `cod` payment, and the delivery reasons are not offered for a submitted one.
+
+The review count on the sidebar counts `submitted` payments only, so a pending `cod` payment does not raise it. The order that owns the payment, not the Payments page, is where staff track a delivery.
 
 A rejected payment is final. Its transaction ID is free again, because the partial unique index skips `failed` rows. If staff rejected a real payment by mistake, the shopper starts a new payment for the same reference and submits the same transaction ID on it.
 

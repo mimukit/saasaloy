@@ -95,7 +95,7 @@ export const paymentEvents = pgTable(
     toStatus: text("to_status").notNull(),
     /** The staff member who confirmed or rejected it. Null for the payer and the gateway. */
     actorUserId: text("actor_user_id"),
-    /** amount_mismatch | not_found | duplicate | other. Required on a rejection. */
+    /** amount_mismatch | not_found | duplicate | delivery_refused | delivery_failed | other. Required on a rejection. */
     reason: text("reason"),
     /** Free text for the payer, written by staff on a rejection. */
     note: text("note"),

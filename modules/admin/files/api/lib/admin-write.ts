@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { config } from "@repo/config";
-import { requireAdmin, withAuthScope } from "@repo/auth/server";
-import type { AuthRequestContext } from "@repo/auth/server";
+import { requireAdmin, requireRole, withAuthScope } from "@repo/auth/server";
+import type { AuthRequestContext, RoleDemand } from "@repo/auth/server";
 import {
   TEST_DB,
   TRANSACTION_IS_ATOMIC,
@@ -264,10 +264,26 @@ async function runAfterCommit(
   }
 }
 
+/** What a route may change about the gate `adminWrite` runs. */
+export interface AdminWriteOptions {
+  /**
+   * The roles the gate admits. Unset, it is `requireAdmin`: admin or superadmin. A route
+   * every admin-app user may call, such as the shop's, passes `ADMIN_APP_ROLES`, so a role
+   * a project adds to `auth.adminAppExtraRoles` passes too.
+   */
+  roles?: RoleDemand;
+}
+
 /** The signed-in admin, or a thrown 401 or 403. */
-async function actorOf(c: AdminWriteContext): Promise<AdminActor> {
-  // Throws 401 when nobody is signed in and 403 for any role but admin or superadmin.
-  const session = await withAuthScope(c, () => requireAdmin(c));
+async function actorOf(
+  c: AdminWriteContext,
+  options: AdminWriteOptions = {}
+): Promise<AdminActor> {
+  // Throws 401 when nobody is signed in and 403 for any role the gate does not admit.
+  const { roles } = options;
+  const session = await withAuthScope(c, () =>
+    roles === undefined ? requireAdmin(c) : requireRole(c, roles)
+  );
   return {
     id: session.user.id,
     role: session.user.role ?? config.auth.adminRole,
@@ -280,9 +296,10 @@ async function actorOf(c: AdminWriteContext): Promise<AdminActor> {
  */
 export async function adminWrite<T>(
   c: AdminWriteContext,
-  body: (scope: AdminWriteScope) => Promise<T>
+  body: (scope: AdminWriteScope) => Promise<T>,
+  options: AdminWriteOptions = {}
 ): Promise<T> {
-  const actor = await actorOf(c);
+  const actor = await actorOf(c, options);
   const log = loggerOf(c);
   const tasks: ((db: Db) => Promise<unknown>)[] = [];
   const afterCommit: AfterCommit = (task) => {

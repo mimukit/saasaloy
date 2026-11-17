@@ -1,0 +1,229 @@
+---
+// The shop's catalog, installed by `saasaloy add ecommerce`. On demand, not prerendered:
+// a product staff publish in apps/admin shows on the next request. The marketing pages
+// stay prerendered.
+//
+// `?page=N` pages the grid, `config.ecommerce.pageSize` to a page, newest first.
+// `?category=<slug>` narrows it to one category, and `?sort=price_asc|price_desc` orders
+// it by price. A page number that is not a positive whole number, a page past the last,
+// or an unknown sort answers the site's 404.
+import { parsePageParam } from "@repo/cms/client";
+import { priceFrom, productPath } from "@repo/ecommerce/client";
+import { siteName } from "@repo/ui";
+import { Footer } from "@repo/ui/blocks/footer";
+import { buttonVariants } from "@repo/ui/components/button";
+import { interpolate } from "@repo/ui/lib/interpolate";
+import { cn } from "@repo/ui/lib/utils";
+import { ShopNav } from "@web/components/shop/ShopNav";
+import {
+  money,
+  SHOP_BASE,
+  SHOP_SORTS,
+  shopClient,
+  shopCopy,
+} from "@web/lib/shop";
+import Layout from "../../layouts/Layout.astro";
+
+export const prerender = false;
+
+const page = parsePageParam(Astro.url.searchParams.get("page"));
+if (page === undefined) {
+  // An empty 404 makes Astro render src/pages/404.astro with that status.
+  return new Response(null, { status: 404 });
+}
+const category = Astro.url.searchParams.get("category") ?? undefined;
+const sortParam = Astro.url.searchParams.get("sort") ?? "newest";
+const sort = SHOP_SORTS.find((option) => option.value === sortParam)?.value;
+if (sort === undefined) {
+  return new Response(null, { status: 404 });
+}
+const client = shopClient();
+const [list, categories] = await Promise.all([
+  client.products({ category, page, sort }),
+  client.categories(),
+]);
+if (page > Math.max(list.pageCount, 1)) {
+  return new Response(null, { status: 404 });
+}
+const lead = interpolate(shopCopy.lead, { siteName });
+const query = (next: number, inCategory = category) => {
+  const params = new URLSearchParams();
+  if (next > 1) {
+    params.set("page", String(next));
+  }
+  if (inCategory) {
+    params.set("category", inCategory);
+  }
+  if (sort !== "newest") {
+    params.set("sort", sort);
+  }
+  const text = params.toString();
+  return text ? `${SHOP_BASE}?${text}` : SHOP_BASE;
+};
+const chip = (active: boolean) =>
+  cn(
+    buttonVariants({ variant: active ? "default" : "outline" }),
+    "h-9 rounded-4xl px-4"
+  );
+---
+
+<Layout
+  title={`${shopCopy.title} — ${siteName}`}
+  description={lead}
+  canonicalPath={query(page)}
+>
+  <ShopNav client:load siteName={siteName} current="shop" />
+  <main id="main" tabindex="-1">
+    <div class="section-container pt-28 pb-20 md:pt-36 md:pb-28">
+      <h1 class="text-section-title">{shopCopy.title}</h1>
+      <div class="mt-6 flex flex-wrap items-start justify-between gap-4">
+        {categories.length > 0 ? (
+          <nav
+            aria-label={shopCopy.categoriesLabel}
+            class="flex flex-wrap gap-2"
+          >
+            <a
+              href={query(1, undefined)}
+              class={chip(!category)}
+              aria-current={!category ? "page" : undefined}
+            >
+              {shopCopy.allCategories}
+            </a>
+            {categories.map((row) => (
+              <a
+                href={query(1, row.slug)}
+                class={chip(category === row.slug)}
+                aria-current={category === row.slug ? "page" : undefined}
+              >
+                {row.name}
+              </a>
+            ))}
+          </nav>
+        ) : (
+          <span />
+        )}
+        {/* A plain GET form: it works with no JavaScript (the button), and the script
+            below sends it as soon as the choice changes. */}
+        <form
+          method="get"
+          action={SHOP_BASE}
+          data-shop-sort
+          class="flex items-center gap-2"
+        >
+          {category && <input type="hidden" name="category" value={category} />}
+          <label for="shop-sort" class="sr-only">
+            {shopCopy.sortLabel}
+          </label>
+          <select
+            id="shop-sort"
+            name="sort"
+            class="border-input focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 h-9 rounded-lg border bg-transparent px-2.5 text-base outline-none focus-visible:ring-3 md:text-sm"
+          >
+            {SHOP_SORTS.map((option) => (
+              <option value={option.value} selected={option.value === sort}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            class={cn(buttonVariants({ variant: "outline" }), "h-9")}
+            data-shop-sort-apply
+          >
+            {shopCopy.sortApply}
+          </button>
+        </form>
+      </div>
+      {list.products.length === 0 ? (
+        <p class="text-muted-foreground mt-10 border-t pt-8">
+          {category ? shopCopy.emptyCategory : shopCopy.empty}
+        </p>
+      ) : (
+        <ul class="mt-8 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {list.products.map((product) => {
+            const price = priceFrom(product);
+            return (
+              <li>
+                <a
+                  href={productPath(SHOP_BASE, product.slug)}
+                  class="group bg-card text-card-foreground focus-visible:ring-ring/50 flex h-full flex-col overflow-hidden rounded-xl border outline-none focus-visible:ring-3"
+                >
+                  <div class="bg-muted relative aspect-[6/5] w-full">
+                    {product.image?.url && (
+                      <img
+                        src={product.image.url}
+                        alt={product.image.alt}
+                        loading="lazy"
+                        class="size-full object-cover"
+                      />
+                    )}
+                    {product.available <= 0 && (
+                      <span class="bg-foreground/80 text-background absolute top-2 left-2 rounded-md px-2 py-0.5 text-xs font-medium">
+                        {shopCopy.outOfStock}
+                      </span>
+                    )}
+                  </div>
+                  <div class="flex flex-1 flex-col gap-1 p-3 sm:p-4">
+                    <h2 class="text-sm leading-snug wrap-anywhere group-hover:underline group-hover:underline-offset-4 sm:text-base">
+                      {product.title}
+                    </h2>
+                    {price && (
+                      <p class="text-sm font-semibold tabular-nums sm:text-base">
+                        {price.from && (
+                          <span class="font-normal">{shopCopy.from} </span>
+                        )}
+                        {money(price.amount, list.currency)}
+                      </p>
+                    )}
+                  </div>
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {list.pageCount > 1 && (
+        <nav
+          aria-label={shopCopy.pagerLabel}
+          class="mt-10 flex flex-wrap items-center justify-center gap-4"
+        >
+          {page > 1 && (
+            <a
+              href={query(page - 1)}
+              class={buttonVariants({ variant: "outline" })}
+            >
+              {shopCopy.newer}
+            </a>
+          )}
+          <span class="text-muted-foreground text-sm">
+            Page {page} of {list.pageCount}
+          </span>
+          {page < list.pageCount && (
+            <a
+              href={query(page + 1)}
+              class={buttonVariants({ variant: "outline" })}
+            >
+              {shopCopy.older}
+            </a>
+          )}
+        </nav>
+      )}
+    </div>
+  </main>
+  <Footer siteName={siteName} />
+</Layout>
+
+<script>
+  // Send the sort form on change, and hide its button once this runs: with no
+  // JavaScript the button is how the choice is applied.
+  for (const form of document.querySelectorAll<HTMLFormElement>(
+    "[data-shop-sort]"
+  )) {
+    form
+      .querySelector<HTMLElement>("[data-shop-sort-apply]")
+      ?.setAttribute("hidden", "");
+    form.querySelector("select")?.addEventListener("change", () => {
+      form.requestSubmit();
+    });
+  }
+</script>

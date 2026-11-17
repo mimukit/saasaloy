@@ -1,0 +1,67 @@
+---
+// One product, installed by `saasaloy add ecommerce`. On demand, not prerendered. The
+// description is the html the api rendered when staff saved it, with the CMS renderer,
+// written with `set:html`: the renderer escapes text and drops unsafe links, and nothing
+// else writes that column. A draft or unknown slug answers the site's 404.
+import { siteName } from "@repo/ui";
+import { Footer } from "@repo/ui/blocks/footer";
+import { ProductBuy } from "@web/components/shop/ProductBuy";
+import { ShopNav } from "@web/components/shop/ShopNav";
+import { PROSE } from "@web/lib/cms";
+import { SHOP_BASE, shopClient, shopCopy } from "@web/lib/shop";
+import Layout from "../../layouts/Layout.astro";
+
+export const prerender = false;
+
+const slug = Astro.params.slug ?? "";
+const client = shopClient();
+const [product, methods] = await Promise.all([
+  client.product(slug),
+  client.paymentMethods(),
+]);
+if (!product) {
+  // An empty 404 makes Astro render src/pages/404.astro with that status.
+  return new Response(null, { status: 404 });
+}
+const cashOnDelivery = methods.some((method) => method.id === "cod");
+const image = product.images[0]?.url ?? undefined;
+---
+
+<Layout title={`${product.title} — ${siteName}`} {...(image ? { image } : {})}>
+  <ShopNav client:load siteName={siteName} current="shop" />
+  <main id="main" tabindex="-1">
+    <div class="section-container pt-28 pb-20 md:pt-36 md:pb-28">
+      <a
+        href={SHOP_BASE}
+        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 mb-6 inline-flex items-center gap-1.5 rounded-sm text-sm font-medium outline-none focus-visible:ring-3"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="size-4"
+        >
+          <path d="m12 19-7-7 7-7" />
+          <path d="M19 12H5" />
+        </svg>
+        {shopCopy.allProducts}
+      </a>
+      <ProductBuy
+        client:load
+        product={product}
+        cashOnDelivery={cashOnDelivery}
+      />
+      {product.descriptionHtml && (
+        <div class="bg-card text-card-foreground mt-6 rounded-xl border p-5 md:p-6">
+          <div class={PROSE} set:html={product.descriptionHtml} />
+        </div>
+      )}
+    </div>
+  </main>
+  <Footer siteName={siteName} />
+</Layout>

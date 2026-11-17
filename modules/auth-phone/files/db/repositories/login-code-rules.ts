@@ -3,15 +3,19 @@
 //
 // Better Auth's `phoneNumber()` plugin (1.7.7) keeps a code in `verifications`:
 //
-// - `identifier` is the E.164 phone for a sign-up code and `<phone>-request-password-reset`
-//   for a set-or-reset code.
+// - `identifier` is the E.164 phone for a sign-up or a sign-in code and
+//   `<phone>-request-password-reset` for a set-or-reset code.
 // - `value` is `<code>:<wrong tries>`. A wrong try writes the row again with one more try,
 //   and a right code deletes it.
 //
 // Nothing here hands the code on. `parseLoginCodeValue()` reads the tries and drops the
 // digits, so no caller of this file can put a code in a response by mistake.
 
-export const LOGIN_CODE_PURPOSES = ["sign_up", "password_reset"] as const;
+export const LOGIN_CODE_PURPOSES = [
+  "sign_up",
+  "sign_in",
+  "password_reset",
+] as const;
 export type LoginCodePurpose = (typeof LOGIN_CODE_PURPOSES)[number];
 
 /**
@@ -20,6 +24,7 @@ export type LoginCodePurpose = (typeof LOGIN_CODE_PURPOSES)[number];
  */
 const TEMPLATES = {
   password_reset: "password-reset-code",
+  sign_in: "sign-in-code",
   sign_up: "verification-code",
 } as const satisfies Record<LoginCodePurpose, string>;
 
@@ -34,7 +39,10 @@ export type LoginCodeState = "live" | "expired" | "ended";
 
 /** The purpose an SMS row's template names. Any other template reads as a sign-up. */
 export function loginCodePurposeOf(template: string): LoginCodePurpose {
-  return template === TEMPLATES.password_reset ? "password_reset" : "sign_up";
+  if (template === TEMPLATES.password_reset) {
+    return "password_reset";
+  }
+  return template === TEMPLATES.sign_in ? "sign_in" : "sign_up";
 }
 
 /** The `verifications.identifier` the plugin keeps a code of `purpose` for `phone` under. */
@@ -45,7 +53,11 @@ export function loginCodeIdentifier(
   return purpose === "password_reset" ? `${phone}${RESET_SUFFIX}` : phone;
 }
 
-/** The phone and purpose an identifier names, or `null` for one no login code uses. */
+/**
+ * The phone and purpose an identifier names, or `null` for one no login code uses. A
+ * sign-in code shares the bare phone with a sign-up code, so a bare phone reads as a
+ * sign-up; the SMS row's template tells the two apart.
+ */
 export function parseLoginCodeIdentifier(
   identifier: string
 ): { phone: string; purpose: LoginCodePurpose } | null {

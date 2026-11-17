@@ -23,7 +23,7 @@ import { contactOf } from "@admin/lib/contact";
 // the api answer holds none. It renders inside the page frame the root route provides.
 
 type State = "live" | "expired" | "ended";
-type Purpose = "sign_up" | "password_reset";
+type Purpose = "sign_up" | "sign_in" | "password_reset";
 
 interface LoginCodeRow {
   id: string;
@@ -63,6 +63,7 @@ export const Route = createFileRoute("/login-codes")({
 
 const PURPOSE_LABELS: Record<Purpose, string> = {
   password_reset: "Password reset",
+  sign_in: "Sign-in",
   sign_up: "Sign-up",
 };
 
@@ -237,7 +238,7 @@ function LoginCodesPage() {
           <EmptyState
             icon={KeyRoundIcon}
             title={`No codes in the last ${minutes} minutes`}
-            description="A code appears here once a customer asks for a sign-up or a reset code."
+            description="A code appears here once a customer asks for a sign-up, a sign-in or a reset code."
           />
         }
       />

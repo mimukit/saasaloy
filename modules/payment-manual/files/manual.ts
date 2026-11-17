@@ -31,6 +31,11 @@ import type {
 // shopper, and checking it in keeps it reviewed (ADR 0039). A method with no account set is
 // reported as unavailable, so `create` with it answers `method_unavailable`.
 //
+// Cash on delivery is a method here too, `cod`, because it differs from the others only in
+// who confirms: the buyer pays the courier, so nobody submits anything. Its instructions
+// carry no account and an empty `fields`, and the core reads that empty list as "staff
+// confirm or reject from `pending`" (ADR 0061).
+//
 // Ported from the provider half of PR #170 (`subscription-bkash-personal`): the three submission
 // fields, the bKash transaction id rule and the trim-and-upper-case normalization. The
 // sender number goes through `bangladeshMobile` from `@repo/validators/phone` instead of
@@ -65,6 +70,12 @@ export interface ManualBankAccount {
   note?: string;
 }
 
+/** Cash on delivery. `{}` turns it on with the default note. */
+export interface ManualCashOnDelivery {
+  /** One short line for the buyer. Replaces the default "pay the courier" line. */
+  note?: string;
+}
+
 /** The registration options: one entry per method this shop takes. */
 export interface ManualOptions {
   methods?: {
@@ -72,11 +83,12 @@ export interface ManualOptions {
     nagad?: ManualWalletAccount;
     rocket?: ManualWalletAccount;
     bank?: ManualBankAccount;
+    cod?: ManualCashOnDelivery;
   };
 }
 
 type WalletId = "bkash" | "nagad" | "rocket";
-type MethodId = WalletId | "bank";
+type MethodId = WalletId | "bank" | "cod";
 
 const WALLETS: Record<
   WalletId,
@@ -140,24 +152,33 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
     methods(_env: PaymentEnv): PaymentMethod[] {
       return [
         {
+          ...publicAccount(accounts, "bkash"),
           available: accounts.bkash !== undefined,
           id: "bkash",
           label: "bKash",
         },
         {
+          ...publicAccount(accounts, "nagad"),
           available: accounts.nagad !== undefined,
           id: "nagad",
           label: "Nagad",
         },
         {
+          ...publicAccount(accounts, "rocket"),
           available: accounts.rocket !== undefined,
           id: "rocket",
           label: "Rocket",
         },
         {
+          ...publicAccount(accounts, "bank"),
           available: accounts.bank !== undefined,
           id: "bank",
           label: "Bank transfer",
+        },
+        {
+          available: accounts.cod !== undefined,
+          id: "cod",
+          label: "Cash on delivery",
         },
         // Known so a page can say so; never taken. A card needs a gateway provider.
         { available: false, id: "card", label: "Card" },
@@ -172,6 +193,25 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
       const method = methodOf(payment);
       const amount = formatAmount(payment.amount, payment.currency);
 
+      if (method === "cod") {
+        const { cod } = accounts;
+        if (!cod) {
+          throw unconfigured(method);
+        }
+        // No account and no fields: nobody submits a cash payment. Any currency goes,
+        // because the courier takes whatever the shop prices in.
+        return Promise.resolve({
+          instructions: {
+            fields: [],
+            note: `Pay ${amount} in cash when the parcel arrives. ${
+              cod.note ??
+              "Pay the courier, not a stranger, and keep the receipt."
+            }`,
+          },
+          kind: "instructions",
+        });
+      }
+
       if (method === "bank") {
         const { bank } = accounts;
         if (!bank) {
@@ -182,12 +222,7 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
         }
         return Promise.resolve({
           instructions: {
-            account: {
-              kind: "bank",
-              label: bank.bankName,
-              name: bank.accountName,
-              number: bank.accountNumber,
-            },
+            account: bankAccount(bank),
             fields: fields(method),
             note: [
               `Transfer exactly ${amount}.`,
@@ -212,12 +247,7 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
         throw wrongCurrency(method, payment.currency, WALLET_CURRENCY);
       }
       const instructions: PaymentInstructions = {
-        account: {
-          kind: wallet.kind,
-          label: `${WALLETS[method].brand} ${wallet.kind}`,
-          number: wallet.account,
-          ...(wallet.name ? { name: wallet.name } : {}),
-        },
+        account: walletAccount(method, wallet),
         fields: fields(method),
         note: `Send exactly ${amount}. ${wallet.note ?? KIND_NOTE[wallet.kind]}`,
       };
@@ -230,6 +260,15 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
       input: SubmitInput
     ): Promise<SubmitResult> {
       const method = methodOf(payment);
+      if (method === "cod") {
+        return Promise.reject(
+          new PaymentError(
+            "invalid_request",
+            "A cash on delivery payment takes no submission. Staff confirm it when the courier hands over the cash.",
+            { providerCode: "no_submission" }
+          )
+        );
+      }
       const transaction = normalizeTransactionId(method, input.transactionId);
       return Promise.resolve({
         claimedAmount: claimedAmount(input.amount),
@@ -334,8 +373,48 @@ function claimedAmount(value: unknown): number {
   return value;
 }
 
+/** A wallet as its instructions show it: brand and kind, the number, the holder. */
+function walletAccount(
+  method: WalletId,
+  wallet: ManualWalletAccount
+): NonNullable<PaymentInstructions["account"]> {
+  return {
+    kind: wallet.kind,
+    label: `${WALLETS[method].brand} ${wallet.kind}`,
+    number: wallet.account,
+    ...(wallet.name ? { name: wallet.name } : {}),
+  };
+}
+
+/** A bank account as its instructions show it. */
+function bankAccount(
+  bank: ManualBankAccount
+): NonNullable<PaymentInstructions["account"]> {
+  return {
+    kind: "bank",
+    label: bank.bankName,
+    name: bank.accountName,
+    number: bank.accountNumber,
+  };
+}
+
+/**
+ * `{ account }` for a configured wallet or bank, so `methods()` can list the account a
+ * payer sends to before a payment exists; `{}` otherwise. The same value `create` shows.
+ */
+function publicAccount(
+  accounts: CheckedAccounts,
+  method: WalletId | "bank"
+): Pick<PaymentMethod, "account"> {
+  if (method === "bank") {
+    return accounts.bank ? { account: bankAccount(accounts.bank) } : {};
+  }
+  const wallet = accounts[method];
+  return wallet ? { account: walletAccount(method, wallet) } : {};
+}
+
 /** The three inputs the shopper fills, labelled for the method. */
-function fields(method: MethodId): SubmitField[] {
+function fields(method: Exclude<MethodId, "cod">): SubmitField[] {
   if (method === "bank") {
     return [
       {
@@ -372,6 +451,7 @@ interface CheckedAccounts {
   nagad?: ManualWalletAccount;
   rocket?: ManualWalletAccount;
   bank?: Required<Pick<ManualBankAccount, "currency">> & ManualBankAccount;
+  cod?: ManualCashOnDelivery;
 }
 
 /** Check the registration options once, at construction. A bad account throws here. */
@@ -422,12 +502,21 @@ function checkOptions(options: ManualOptions): CheckedAccounts {
     checked.bank = { ...bank, currency };
   }
 
+  const { cod } = methods;
+  if (cod) {
+    if (cod.note !== undefined && typeof cod.note !== "string") {
+      throw new Error("manual(): methods.cod.note has to be a string.");
+    }
+    const note = cod.note?.trim();
+    checked.cod = note ? { note } : {};
+  }
+
   return checked;
 }
 
 function methodOf(payment: Payment): MethodId {
   const { method } = payment;
-  if (method === "bank" || isWallet(method)) {
+  if (method === "bank" || method === "cod" || isWallet(method)) {
     return method;
   }
   throw unknownMethod(method);
@@ -445,7 +534,7 @@ function invalid(field: string, message: string): PaymentError {
 function unknownMethod(method: string): PaymentError {
   return new PaymentError(
     "method_unavailable",
-    `The manual provider takes bkash, nagad, rocket and bank, not "${method}".`,
+    `The manual provider takes bkash, nagad, rocket, bank and cod, not "${method}".`,
     { providerCode: "unknown_method" }
   );
 }
@@ -453,7 +542,9 @@ function unknownMethod(method: string): PaymentError {
 function unconfigured(method: MethodId): PaymentError {
   return new PaymentError(
     "method_unavailable",
-    `The manual provider has no ${method} account. Add methods.${method} to manual({ ... }) in packages/payment/src/index.ts.`,
+    method === "cod"
+      ? "The manual provider does not take cash on delivery. Add methods.cod to manual({ ... }) in packages/payment/src/index.ts."
+      : `The manual provider has no ${method} account. Add methods.${method} to manual({ ... }) in packages/payment/src/index.ts.`,
     { providerCode: "unconfigured" }
   );
 }
