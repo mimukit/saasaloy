@@ -33,6 +33,14 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
       res.end();
       return;
     }
+    case "/proxied": {
+      // The Cloudflare plugin copies a worker response's headers onto the reply, and
+      // Astro's pages come back with `transfer-encoding: chunked` among them.
+      res.setHeader("content-type", "text/html");
+      res.setHeader("transfer-encoding", "chunked");
+      res.end(SCRIPT);
+      return;
+    }
     case "/small": {
       res.setHeader("content-type", "text/javascript");
       res.end("export {};");
@@ -71,6 +79,7 @@ async function get(path: string, acceptEncoding = "gzip, br") {
     status: res.statusCode ?? 0,
     encoding,
     length: res.headers["content-length"] ?? null,
+    transferEncoding: res.headers["transfer-encoding"] ?? null,
     raw,
     body: encoding === "gzip" ? gunzipSync(raw).toString() : raw.toString(),
   };
@@ -108,6 +117,16 @@ describe(gzipMiddleware, () => {
       expect(res.raw.length).toBeLessThan(SCRIPT.length);
     }
   );
+
+  // A reply with both headers breaks the HTTP/1.1 framing, and Node's fetch refuses it:
+  // "Content-Length can't be present with Transfer-Encoding" (issue #347).
+  it("drops a copied transfer-encoding when it sets the length", async () => {
+    const res = await get("/proxied");
+
+    expect(res.encoding).toBe("gzip");
+    expect(res.transferEncoding).toBeNull();
+    expect(res.body).toBe(SCRIPT);
+  });
 
   it("sends a small file as it is", async () => {
     const res = await get("/small");

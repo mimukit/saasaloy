@@ -124,6 +124,10 @@ export function gzipMiddleware(
       res.setHeader("vary", "accept-encoding");
     }
     if (res.statusCode !== 304 && res.statusCode !== 204) {
+      // The whole body is known now, so it goes out with a length. A `transfer-encoding`
+      // copied from a worker response (the Cloudflare plugin does this for Astro's pages)
+      // must go, or the reply carries both and an HTTP/1.1 client refuses it.
+      res.removeHeader("transfer-encoding");
       res.setHeader("content-length", body.length);
     }
     // Node's own `end()` calls `writeHead()` to send the headers, so the real ones go back
