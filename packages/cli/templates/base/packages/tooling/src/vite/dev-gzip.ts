@@ -1,5 +1,9 @@
 import { gzipSync } from "node:zlib";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type {
+  IncomingMessage,
+  OutgoingHttpHeaders,
+  ServerResponse,
+} from "node:http";
 import type { Plugin } from "vite";
 
 // The dev server sends every module uncompressed. On localhost that costs nothing, but a
@@ -38,6 +42,11 @@ export function shouldGzip(
 }
 
 type Chunk = string | Uint8Array;
+type WriteCallback = (error: Error | null | undefined) => void;
+
+function isHeaderRecord(value: unknown): value is OutgoingHttpHeaders {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 function toBuffer(chunk: Chunk, encoding?: BufferEncoding): Buffer {
   return typeof chunk === "string"
@@ -58,36 +67,36 @@ export function gzipMiddleware(
 
   const chunks: Buffer[] = [];
   const end = res.end.bind(res);
-  const { write } = res;
-  const { writeHead } = res;
+  const write = res.write.bind(res);
+  const writeHead = res.writeHead.bind(res);
 
   // `writeHead` would flush the headers before the body is known, so it only records
   // them on the response here and the real one runs at `end()`.
-  res.writeHead = ((status: number, ...rest: unknown[]) => {
+  res.writeHead = (status: number, ...rest: unknown[]) => {
     res.statusCode = status;
-    const headers = rest.find((arg) => typeof arg === "object" && arg !== null);
+    const headers = rest.find(isHeaderRecord);
     if (headers) {
-      for (const [name, value] of Object.entries(
-        headers as Record<string, string>
-      )) {
-        res.setHeader(name, value);
+      for (const [name, value] of Object.entries(headers)) {
+        if (value !== undefined) {
+          res.setHeader(name, value);
+        }
       }
     }
     return res;
-  }) as typeof res.writeHead;
+  };
 
-  res.write = ((
+  res.write = (
     chunk: Chunk,
-    encoding?: BufferEncoding | (() => void),
-    done?: () => void
-  ) => {
+    encoding?: BufferEncoding | WriteCallback,
+    done?: WriteCallback
+  ): boolean => {
     chunks.push(
       toBuffer(chunk, typeof encoding === "string" ? encoding : undefined)
     );
     const callback = typeof encoding === "function" ? encoding : done;
-    callback?.();
+    callback?.(null);
     return true;
-  }) as typeof res.write;
+  };
 
   res.end = ((
     chunk?: Chunk | (() => void),

@@ -1,7 +1,6 @@
 import { once } from "node:events";
-import { createServer, request } from "node:http";
-import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { IncomingMessage, createServer, request } from "node:http";
+import type { Server, ServerResponse } from "node:http";
 import { gunzipSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -15,7 +14,7 @@ import { devGzip, gzipMiddleware, shouldGzip } from "./dev-gzip.ts";
 const SCRIPT = "export const value = 1;\n".repeat(200);
 
 function handle(req: IncomingMessage, res: ServerResponse): void {
-  switch (req.url) {
+  switch (req.url ?? "") {
     case "/end": {
       res.setHeader("content-type", "text/javascript");
       res.statusCode = 200;
@@ -55,10 +54,16 @@ async function get(path: string, acceptEncoding = "gzip, br") {
     headers: { "accept-encoding": acceptEncoding },
   });
   req.end();
-  const [res] = (await once(req, "response")) as [IncomingMessage];
+  const events: unknown[] = await once(req, "response");
+  const res = events.at(0);
+  if (!(res instanceof IncomingMessage)) {
+    throw new TypeError("The request emitted no response.");
+  }
   const parts: Buffer[] = [];
   for await (const part of res) {
-    parts.push(part as Buffer);
+    if (Buffer.isBuffer(part)) {
+      parts.push(part);
+    }
   }
   const raw = Buffer.concat(parts);
   const encoding = res.headers["content-encoding"] ?? null;
@@ -73,12 +78,18 @@ async function get(path: string, acceptEncoding = "gzip, br") {
 
 describe(gzipMiddleware, () => {
   beforeAll(async () => {
-    server = createServer((req, res) =>
-      gzipMiddleware(req, res, () => handle(req, res))
-    );
+    server = createServer((req, res) => {
+      gzipMiddleware(req, res, () => {
+        handle(req, res);
+      });
+    });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
-    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      throw new TypeError("The server has no TCP port.");
+    }
+    origin = `http://127.0.0.1:${address.port}`;
   });
 
   afterAll(() => {

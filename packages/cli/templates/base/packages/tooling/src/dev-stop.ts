@@ -116,8 +116,7 @@ export function selectTargets(options: {
     pid = byPid.get(pid)?.ppid;
   }
   const selfTree = [self];
-  while (selfTree.length > 0) {
-    const pid = selfTree.pop() as number;
+  for (let pid = selfTree.pop(); pid !== undefined; pid = selfTree.pop()) {
     for (const child of children.get(pid) ?? []) {
       if (!protectedPids.has(child)) {
         protectedPids.add(child);
@@ -136,17 +135,17 @@ export function selectTargets(options: {
 
   const chosen = new Set<number>();
   const queue = matched.map((proc) => proc.pid);
-  while (queue.length > 0) {
-    const pid = queue.pop() as number;
+  for (let pid = queue.pop(); pid !== undefined; pid = queue.pop()) {
     if (chosen.has(pid) || protectedPids.has(pid)) {
       continue;
     }
     chosen.add(pid);
     queue.push(...(children.get(pid) ?? []));
   }
+  // Every chosen pid came from `procs`, so each one is in `byPid`.
   return [...chosen]
     .toSorted((a, b) => a - b)
-    .map((pid) => byPid.get(pid) as ProcInfo);
+    .flatMap((pid) => byPid.get(pid) ?? []);
 }
 
 /** The name and ppid in a `/proc/<pid>/stat` line. The name may hold spaces. */
@@ -182,8 +181,9 @@ export function parseProcNetTcp(
       continue;
     }
     const port = Number.parseInt(fields[1]?.split(":")[1] ?? "", 16);
-    if (Number.isInteger(port)) {
-      sockets.push({ port, inode: fields[9] as string });
+    const inode = fields.at(9);
+    if (Number.isInteger(port) && inode !== undefined) {
+      sockets.push({ port, inode });
     }
   }
   return sockets;
@@ -197,7 +197,7 @@ export function parsePs(text: string): Omit<ProcInfo, "cwd">[] {
     if (match === null) {
       continue;
     }
-    const args = (match[3] as string).trim();
+    const args = (match[3] ?? "").trim();
     procs.push({
       pid: Number(match[1]),
       ppid: Number(match[2]),

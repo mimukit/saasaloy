@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { createServer } from "node:net";
-import type { AddressInfo, Server } from "node:net";
+import type { Server } from "node:net";
 import { describe, it } from "node:test";
 import {
   BLOCK_END,
@@ -134,7 +134,7 @@ describe("blockPorts", () => {
 });
 
 describe("chooseBlock", () => {
-  const never = (): Promise<boolean> => Promise.resolve(false);
+  const never = async (): Promise<boolean> => false;
 
   it("takes the home block when nothing holds it", async () => {
     assert.equal(
@@ -166,9 +166,9 @@ describe("chooseBlock", () => {
       home: 7,
       recorded: undefined,
       claimed: new Set(),
-      isListening: (candidate) => {
+      isListening: async (candidate) => {
         asked.push(candidate);
-        return Promise.resolve(candidate === 7);
+        return candidate === 7;
       },
     });
     assert.equal(block, 8);
@@ -193,7 +193,7 @@ describe("chooseBlock", () => {
         home: 7,
         recorded: 12,
         claimed: new Set([7]),
-        isListening: () => Promise.resolve(true),
+        isListening: async () => true,
       }),
       12
     );
@@ -217,7 +217,7 @@ describe("chooseBlock", () => {
         home: 0,
         recorded: undefined,
         claimed: new Set(),
-        isListening: () => Promise.resolve(true),
+        isListening: async () => true,
       }),
       /every block/
     );
@@ -419,10 +419,18 @@ describe("isPortListening", () => {
     return server;
   }
 
+  function portOf(server: Server): number {
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      throw new Error("The server has no TCP port.");
+    }
+    return address.port;
+  }
+
   for (const host of ["127.0.0.1", "0.0.0.0", "::"]) {
     it(`sees a server bound on ${host}`, async () => {
       const server = await listen(host);
-      const { port } = server.address() as AddressInfo;
+      const port = portOf(server);
       try {
         assert.equal(await isPortListening(port), true);
       } finally {
@@ -433,7 +441,7 @@ describe("isPortListening", () => {
 
   it("sees a free port as free", async () => {
     const server = await listen("127.0.0.1");
-    const { port } = server.address() as AddressInfo;
+    const port = portOf(server);
     server.close();
     await once(server, "close");
     assert.equal(await isPortListening(port), false);
