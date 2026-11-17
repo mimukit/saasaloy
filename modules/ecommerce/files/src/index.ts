@@ -36,8 +36,9 @@ export {
   holdExpiry,
   isLiveReservation,
   mergedQuantity,
+  shortLineMessage,
 } from "./rules";
-export type { HoldKind, HoldLike, PriceLike } from "./rules";
+export type { HoldKind, HoldLike, PriceLike, StockLine } from "./rules";
 export { fillOrderMessage, formatOrderNumber } from "./notify";
 export type { OrderMessageValues } from "./notify";
 export {

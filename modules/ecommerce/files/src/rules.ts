@@ -91,3 +91,29 @@ export function mergedQuantity(
 ): number {
   return Math.max(0, Math.min(userQuantity + guestQuantity, available));
 }
+
+/** A cart line as the checkout stock check reads it. */
+export interface StockLine {
+  productTitle: string;
+  variantTitle: string;
+  quantity: number;
+  available: number;
+}
+
+/**
+ * The buyer's message for the first line the available stock no longer covers, or null
+ * when every line fits. Checkout answers it with `out_of_stock`, so the buyer reads which
+ * item ran out rather than a variant id.
+ */
+export function shortLineMessage(lines: readonly StockLine[]): string | null {
+  const short = lines.find((line) => line.quantity > line.available);
+  if (!short) {
+    return null;
+  }
+  const name = short.variantTitle
+    ? `${short.productTitle} (${short.variantTitle})`
+    : short.productTitle;
+  return short.available <= 0
+    ? `${name} sold out while you checked out. Remove it from the cart to place the order.`
+    : `Only ${short.available} of ${name} left. Lower the quantity in the cart to place the order.`;
+}

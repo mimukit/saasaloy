@@ -10,6 +10,7 @@ import {
   holdExpiry,
   isLiveReservation,
   mergedQuantity,
+  shortLineMessage,
 } from "./rules.ts";
 
 function code(fn: () => unknown): string | undefined {
@@ -119,5 +120,36 @@ describe("mergedQuantity", () => {
   it("caps the sum at the available stock", () => {
     assert.equal(mergedQuantity(2, 3, 4), 4);
     assert.equal(mergedQuantity(0, 3, 0), 0);
+  });
+});
+
+describe("shortLineMessage", () => {
+  const line = {
+    available: 3,
+    productTitle: "Cotton tee",
+    quantity: 2,
+    variantTitle: "",
+  };
+
+  it("answers null when every line fits", () => {
+    assert.equal(shortLineMessage([line]), null);
+    assert.equal(shortLineMessage([]), null);
+  });
+
+  it("names a sold-out line by product and variant", () => {
+    assert.equal(
+      shortLineMessage([
+        line,
+        { ...line, available: 0, variantTitle: "Red / M" },
+      ]),
+      "Cotton tee (Red / M) sold out while you checked out. Remove it from the cart to place the order."
+    );
+  });
+
+  it("says how many are left when some are", () => {
+    assert.equal(
+      shortLineMessage([{ ...line, available: 1 }]),
+      "Only 1 of Cotton tee left. Lower the quantity in the cart to place the order."
+    );
   });
 });

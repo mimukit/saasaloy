@@ -147,7 +147,15 @@ describe("POST /shop/checkout", () => {
     });
 
     await expect(answer(res)).resolves.toMatchObject({
-      body: { error: { code: "out_of_stock" } },
+      body: {
+        error: {
+          code: "out_of_stock",
+          // The buyer reads the item that ran out, never a variant id.
+          message: expect.stringMatching(
+            /^Only 1 of .+ left\. Lower the quantity in the cart/
+          ),
+        },
+      },
       status: 409,
     });
     await expect(memberOrders()).resolves.toBe(0);

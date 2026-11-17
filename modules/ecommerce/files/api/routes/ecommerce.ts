@@ -39,7 +39,12 @@ import type {
   OrderPaymentRow,
 } from "@repo/db/repositories/ecommerce/orders";
 import { listZones } from "@repo/db/repositories/ecommerce/zones";
-import { cartTotals, EcommerceError } from "@repo/ecommerce";
+import {
+  cartTotals,
+  EcommerceError,
+  isEcommerceError,
+  shortLineMessage,
+} from "@repo/ecommerce";
 import { createPayment } from "@repo/payment";
 import {
   cartItemInput,
@@ -535,6 +540,10 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
           `${unavailable.productTitle} is no longer for sale. Remove it from the cart.`
         );
       }
+      const short = shortLineMessage(view.lines);
+      if (short) {
+        throw new EcommerceError("out_of_stock", short);
+      }
 
       let address: Record<string, unknown> & { name: string; phone: string };
       if (body.addressId) {
@@ -558,21 +567,37 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
         throw new EcommerceError("not_found", "No address.");
       }
 
-      const placed = await placeOrder(db, env(c), {
-        actor: { type: "system" },
-        contactName: address.name,
-        contactPhone: phone ?? address.phone,
-        lines: view.lines.map((line) => ({
-          quantity: line.quantity,
-          variantId: line.variantId,
-        })),
-        note: body.note ?? null,
-        paymentMethod: body.paymentMethod,
-        returnUrl: body.returnUrl,
-        shippingAddress: address,
-        userId: user.id,
-        zoneId: body.zoneId,
-      });
+      // The cart check above reads stock without a lock. A buyer who took the last unit
+      // since then makes `createOrder` refuse under its row lock; name the line that ran
+      // out rather than the variant id.
+      let placed: Awaited<ReturnType<typeof placeOrder>>;
+      try {
+        placed = await placeOrder(db, env(c), {
+          actor: { type: "system" },
+          contactName: address.name,
+          contactPhone: phone ?? address.phone,
+          lines: view.lines.map((line) => ({
+            quantity: line.quantity,
+            variantId: line.variantId,
+          })),
+          note: body.note ?? null,
+          paymentMethod: body.paymentMethod,
+          returnUrl: body.returnUrl,
+          shippingAddress: address,
+          userId: user.id,
+          zoneId: body.zoneId,
+        });
+      } catch (error) {
+        if (isEcommerceError(error) && error.code === "out_of_stock") {
+          const fresh = await getCartView(db, cart.id);
+          throw new EcommerceError(
+            "out_of_stock",
+            shortLineMessage(fresh.lines) ??
+              "An item in your cart sold out. Check the cart, then place the order again."
+          );
+        }
+        throw error;
+      }
       if (body.address && body.saveAddress) {
         await saveAddress(db, user.id, {
           area: body.address.area,

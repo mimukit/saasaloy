@@ -20,6 +20,11 @@
     "cms"
   ],
   "dependencies": [],
+  "removeWarnings": [
+    "The deployed tables survive this removal: product_categories, products, product_options, product_option_values, product_variants, product_images, variant_prices, inventory_levels, shipping_zones, orders, order_items, order_events, stock_reservations, stock_movements, carts, cart_items and customer_addresses, and the order_numbers sequence. Orders, order_items and order_events are the only record of what the shop sold, so export them first. Then run pnpm --filter @repo/db db:generate and review the drop migration before you apply it.",
+    "The shop's payments stay in the payments table with reference_type order, and product images stay as file-uploads rows in storage_objects. Confirm or reject the open cash-on-delivery payments first: once ecommerce is gone, no listener moves an order.",
+    "@repo/ecommerce stays in packages/payment/package.json, and in packages/db, apps/api, apps/admin and apps/web; apps/web also keeps @repo/auth and lucide-react. A package-json-dependency patch has no removal inverse, so drop those lines by hand and run pnpm install. Then check packages/payment/src/index.ts: if orderPaymentListener and its @repo/ecommerce import are still there because the remover refused to reverse the listener registration, delete both by hand."
+  ],
   "patches": [
     {
       "file": "packages/config/src/sections.ts",
@@ -611,6 +616,13 @@
     {
       "path": "files/web/pages/shop/orders/[number].astro",
       "target": "@web/pages/shop/orders/[number].astro"
+    },
+    {
+      "path": "files/e2e/specs/ecommerce-journey.spec.ts",
+      "target": "@e2e/specs/ecommerce-journey.spec.ts",
+      "when": {
+        "installed": ["e2e"]
+      }
     }
   ],
   "scaffolds": [
