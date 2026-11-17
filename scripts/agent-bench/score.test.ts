@@ -552,6 +552,40 @@ describe("the preview line", () => {
     );
   });
 
+  it("does not count a command that only names wrangler.jsonc or .wrangler/", () => {
+    const bash = (command: string) =>
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "Bash", input: { command } }],
+        },
+      });
+    const calls = deployCalls(
+      [
+        bash("grep -n d1_databases apps/api/wrangler.jsonc"),
+        bash("rm -rf apps/api/.wrangler/state"),
+        bash("pnpm --filter api exec wrangler d1 migrations apply DB --remote"),
+        bash("npx wrangler@4.40.0 deploy"),
+      ].join("\n")
+    );
+    assert.deepEqual(calls, [
+      "pnpm --filter api exec wrangler d1 migrations apply DB --remote",
+      "npx wrangler@4.40.0 deploy",
+    ]);
+    assert.equal(
+      judgePreview(
+        "none",
+        deployCalls(
+          [
+            bash("grep -n d1_databases apps/api/wrangler.jsonc"),
+            bash("rm -rf apps/api/.wrangler/state"),
+          ].join("\n")
+        )
+      ).verdict,
+      "N/A"
+    );
+  });
+
   it("is N/A with deploy: none and no deploy call, and FAIL with one", () => {
     assert.equal(judgePreview("none", []).verdict, "N/A");
     const result = judgePreview("none", ["npx wrangler deploy"]);

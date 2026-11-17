@@ -537,9 +537,12 @@ export function deployOf(brief?: string): "preview" | "none" {
   return /^deploy:\s*preview\s*$/m.test(front) ? "preview" : "none";
 }
 
-const DEPLOY_COMMAND = /\bwrangler\b|\bdeploy:(?:preview|production)\b/;
-const PLAIN_DEPLOY =
-  /\bwrangler\s+(?:deploy|publish|d1|pages|versions|secret)\b|\bdeploy:(?:preview|production)\b/;
+/**
+ * A `wrangler` invocation with a subcommand that reaches a Cloudflare account, or a deploy
+ * script. A command that only names `wrangler.jsonc` or `.wrangler/` is not a call.
+ */
+const DEPLOY_COMMAND =
+  /\bwrangler(?:@[\w.^~-]+)?\s+(?:deploy|publish|d1|pages|versions|secret|kv|r2|queues|rollback|delete|tail|triggers|deployments|hyperdrive)\b|\bdeploy:(?:preview|production)\b/;
 
 interface ToolEvent {
   type?: string;
@@ -567,7 +570,7 @@ export function deployCalls(transcript: string): string[] {
       event = undefined;
     }
     if (!event || typeof event !== "object") {
-      if (PLAIN_DEPLOY.test(trimmed)) {
+      if (DEPLOY_COMMAND.test(trimmed)) {
         calls.push(trimmed);
       }
       continue;
