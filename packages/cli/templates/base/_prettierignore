@@ -28,6 +28,11 @@ saasaloy-lock.json
 # never touch it and a build must never fight a format pass.
 **/routeTree.gen.ts
 
+# drizzle-kit writes the migration journal and its snapshots on every `db:generate`, in its
+# own JSON layout. Prettier would rewrite them, and `pnpm check` would fail right after each
+# `db:generate` until a format pass ran over files nobody edits by hand.
+packages/db/migrations/meta/
+
 # Build output and dependencies.
 **/node_modules
 **/dist

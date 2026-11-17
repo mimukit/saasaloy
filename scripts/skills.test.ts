@@ -13,7 +13,11 @@
 //     heading that starts `## Wire-up`;
 //   - the eight capability skills the gap audit named have a removal section and a
 //     failure-mode section;
-//   - the base template ships `saasaloy-build`, `saasaloy-feature` and `saasaloy-update`.
+//   - the base template ships `saasaloy-build`, `saasaloy-feature` and `saasaloy-update`;
+//   - `saasaloy-build` names the steps a fresh scaffold needs (plan 0109): the install
+//     that tolerates a changed lockfile, `db:generate` before `db:setup`, the env step
+//     after each `add`, the first commit, and the resume rules, and the base `AGENTS.md`
+//     agrees with it on who runs `pnpm env:setup`.
 //
 // Run it with `pnpm test:scripts`.
 
@@ -246,4 +250,56 @@ describe("the base skills", () => {
       );
     });
   }
+});
+
+describe("saasaloy-build runs on a fresh scaffold (plan 0109)", () => {
+  const build = readFileSync(
+    join(BASE_SKILLS, "saasaloy-build", "SKILL.md"),
+    "utf-8"
+  );
+  const agents = readFileSync(
+    join(ROOT, "packages", "cli", "templates", "base", "AGENTS.md"),
+    "utf-8"
+  );
+  /** The body of the `### <title>` section, up to the next `##` or `###` heading. */
+  const subsection = (title: string): string => {
+    const lines = build.split("\n");
+    const start = lines.indexOf(`### ${title}`);
+    if (start === -1) {
+      return "";
+    }
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => /^#{2,3} /.test(line));
+    return (end === -1 ? rest : rest.slice(0, end)).join("\n");
+  };
+  const afterAdd = subsection("Stage: Validate and Stage: MVP");
+
+  it("installs with --no-frozen-lockfile after an add", () => {
+    assert.match(afterAdd, /pnpm install --no-frozen-lockfile/);
+  });
+
+  it("names db:generate before db:setup, and the env step after each add", () => {
+    const generate = afterAdd.indexOf("pnpm --filter @repo/db db:generate");
+    const setup = afterAdd.indexOf("pnpm db:setup");
+    assert.ok(generate !== -1, "db:generate is not named");
+    assert.ok(setup > generate, "db:setup is not after db:generate");
+    assert.match(afterAdd, /pnpm env:setup`, after every `add`/);
+  });
+
+  it("makes the first commit at Intake when init skipped it", () => {
+    const intake = subsection("Stage: Intake");
+    assert.match(intake, /chore\(repo\): initial commit/);
+    assert.match(intake, /git rev-parse --verify --quiet HEAD/);
+  });
+
+  it("has a rule for a dirty tree on resume, and reads stage commits from git", () => {
+    assert.match(subsection("A dirty tree on resume"), /git stash/);
+    assert.match(build, /git log --format='%h %s' main\.\.HEAD/);
+  });
+
+  it("agrees with AGENTS.md that the agent runs pnpm env:setup", () => {
+    assert.match(build, /The build runs `pnpm env:setup` itself/);
+    assert.match(agents, /The agent runs `pnpm env:setup` itself/);
+    assert.doesNotMatch(agents, /The person also runs `pnpm env:setup`/);
+  });
 });

@@ -63,9 +63,9 @@ scaffold into the current directory, or a path like `./apps/my-app` — the last
 segment becomes the project name. Omit the name entirely and the CLI asks for it.
 
 `init` copies the base template, then offers to run `pnpm install` for you. Say yes and it
-installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree that tracks it. An ignored directory inside a repository still gets its own.
+installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree that tracks it. An ignored directory inside a repository still gets its own. After the install it runs `pnpm env:setup` for the local defaults, and then it commits the scaffold on `main` as `chore(repo): initial commit`. With no git identity it warns and makes no commit.
 
-`init` takes three flags: `--force` scaffolds into a directory that is not empty, `--no-install` never runs `pnpm install` and never asks, and `--no-git` skips `git init`. Any other flag stops the command with an error instead of being ignored.
+`init` takes three flags: `--force` scaffolds into a directory that is not empty, `--no-install` never runs `pnpm install` and never asks, and `--no-git` skips `git init` and the first commit. Any other flag stops the command with an error instead of being ignored.
 
 If the target directory already has files in it, `init` stops and tells you to re-run with
 `--force`. A `.git` directory on its own doesn't count as non-empty, so you can scaffold
