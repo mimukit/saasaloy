@@ -241,7 +241,7 @@ describe("the real registry", () => {
     );
   });
 
-  it("gives the README's 18 providers and 4 drivers", () => {
+  it("gives the README's 19 providers and 4 drivers", () => {
     assert.deepEqual(namesOf("provider"), [
       "email-cloudflare",
       "email-console",
@@ -253,6 +253,7 @@ describe("the real registry", () => {
       "payment-bkash",
       "payment-console",
       "payment-manual",
+      "payment-sslcommerz",
       "queue-cloudflare",
       "queue-memory",
       "sms-console",
