@@ -123,7 +123,7 @@ Web finding (#186): `astro dev` exits before it is ready on a base-only project 
 - Use `git diff` in the playground to review exactly what an `add` wrote.
 - Verify: `play:restore` after a full `add` returns to the baseline in seconds with no full install.
 
-### Phase 3: one-command bring-up with presets (#187)
+### Phase 3: one-command bring-up with presets (#187) (built 2026-10-25)
 
 - Add `pnpm play:up --preset minimal|full [--db d1|postgres]`.
 - The script builds the CLI, runs `init`, runs `add` for the preset's module list, installs, writes `packages/env/.env` from the preset, runs `pnpm env:setup`, runs `db:generate` and the migration, seeds (Phase 4), snapshots (Phase 2) and starts the web, api and admin dev servers.
@@ -149,7 +149,7 @@ Superseded by [plan 0072](0072-plan-seed-system-2026-10-20.md) (#207). Seed data
 - Exclude `examples/` from the root pnpm workspace globs, `pnpm lint`, `prettier --check .` and Stylelint, and give it its own ignore rules where needed.
 - Verify: a PR that changes a module file shows the matching change under `examples/full`.
 
-### Phase 6: module smoke scripts (#187)
+### Phase 6: module smoke scripts (#187) (built 2026-10-25)
 
 - A module can ship `modules/<name>/smoke.ts`. It is never copied into a project.
 - A shared helper signs in as a seeded user, keeps the cookie, and prints one PASS or FAIL line per check.
