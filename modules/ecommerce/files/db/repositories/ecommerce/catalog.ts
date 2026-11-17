@@ -679,8 +679,26 @@ async function assemble(
   };
 }
 
+/** The ORDER BY of a product list. Ties fall back to newest, then id, so pages are stable. */
+function productOrder(
+  sort: "newest" | "price_asc" | "price_desc",
+  currency: string
+) {
+  if (sort === "newest") {
+    return [desc(products.createdAt), asc(products.id)];
+  }
+  const lowest = sql`(select min(${variantPrices.amount}) from ${productVariants} inner join ${variantPrices} on ${variantPrices.variantId} = ${productVariants.id} and ${variantPrices.currency} = ${currency} where ${productVariants.productId} = ${products.id} and ${productVariants.active})`;
+  return [
+    sort === "price_asc"
+      ? sql`${lowest} asc nulls last`
+      : sql`${lowest} desc nulls last`,
+    desc(products.createdAt),
+    asc(products.id),
+  ];
+}
+
 /**
- * A page of products, newest first, with each one's price range in `currency` and its
+ * A page of products, newest first unless `sort` says otherwise, with each one's price range in `currency` and its
  * available stock. `status: "active"` is the storefront's list.
  */
 export async function listProducts(
@@ -693,6 +711,11 @@ export async function listProducts(
     categorySlug?: string;
     /** A part of the title or of a variant's SKU, matched in any case. */
     search?: string;
+    /**
+     * `newest` (the default), or by the lowest active variant price in `currency`, low to
+     * high or high to low. A product with no such price sorts last either way.
+     */
+    sort?: "newest" | "price_asc" | "price_desc";
     now?: Date;
   }
 ): Promise<ProductPage> {
@@ -723,7 +746,7 @@ export async function listProducts(
     .select()
     .from(products)
     .where(where)
-    .orderBy(desc(products.createdAt), asc(products.id))
+    .orderBy(...productOrder(input.sort ?? "newest", input.currency))
     .limit(input.pageSize)
     .offset((page - 1) * input.pageSize);
 

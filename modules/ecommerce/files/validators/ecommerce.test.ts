@@ -34,6 +34,7 @@ const {
   orderListQuery,
   orderStatusInput,
   productInput,
+  productListQuery,
   productOptionsInput,
   shippingZoneInput,
   shopPhone,
@@ -249,6 +250,24 @@ describe("orderStatusInput and orderListQuery", () => {
       status: "placed",
     });
     assert.equal(orderListQuery.safeParse({ status: "paid" }).success, false);
+  });
+});
+
+describe("productListQuery", () => {
+  it("sorts newest first unless asked, and takes the two price orders", () => {
+    assert.equal(productListQuery.parse({}).sort, "newest");
+    assert.equal(
+      productListQuery.parse({ sort: "price_asc" }).sort,
+      "price_asc"
+    );
+    assert.equal(
+      productListQuery.parse({ sort: "price_desc" }).sort,
+      "price_desc"
+    );
+  });
+
+  it("refuses any other order", () => {
+    assert.equal(productListQuery.safeParse({ sort: "title" }).success, false);
   });
 });
 

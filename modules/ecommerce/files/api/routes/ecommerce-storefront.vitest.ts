@@ -259,6 +259,73 @@ describe("the storefront", () => {
     });
   });
 
+  describe("GET /shop/products", () => {
+    it("sorts by price either way", async () => {
+      const cheap = await makeVariant(database.db, {
+        onHand: 1,
+        price: 10_000,
+      });
+      const dear = await makeVariant(database.db, { onHand: 1, price: 90_000 });
+      const middle = await makeVariant(database.db, {
+        onHand: 1,
+        price: 50_000,
+      });
+      const mine = new Set([cheap.productId, dear.productId, middle.productId]);
+
+      async function order(query: string): Promise<string[]> {
+        const res = await call(database, `/shop/products${query}`);
+        const body = (await expectStatus(res).json()) as {
+          products: { id: string }[];
+        };
+        return body.products
+          .map((product) => product.id)
+          .filter((id) => mine.has(id));
+      }
+
+      // Newest first is the default; inside one test transaction every row shares one
+      // `now()`, so that order is not observable here and the validator test covers it.
+      await expect(order("")).resolves.toHaveLength(3);
+      await expect(order("?sort=price_asc")).resolves.toStrictEqual([
+        cheap.productId,
+        middle.productId,
+        dear.productId,
+      ]);
+      await expect(order("?sort=price_desc")).resolves.toStrictEqual([
+        dear.productId,
+        middle.productId,
+        cheap.productId,
+      ]);
+    });
+
+    it("answers 400 for an unknown sort", async () => {
+      const res = await call(database, "/shop/products?sort=title");
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("GET /shop/payment-methods", () => {
+    it("lists a wallet's public account for the checkout radio, and none for cod", async () => {
+      const res = await call(database, "/shop/payment-methods");
+      await expect(answer(res)).resolves.toMatchObject({
+        body: {
+          methods: expect.arrayContaining([
+            {
+              account: {
+                kind: "personal",
+                label: "bKash personal",
+                number: "01712345678",
+              },
+              id: "bkash",
+              label: "bKash",
+            },
+            { account: null, id: "cod", label: "Cash on delivery" },
+          ]),
+        },
+        status: 200,
+      });
+    });
+  });
+
   describe("GET /shop/categories", () => {
     it("lists the categories in position order", async () => {
       const suffix = Date.now().toString(36);

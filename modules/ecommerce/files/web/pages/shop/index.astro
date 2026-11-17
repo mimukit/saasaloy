@@ -4,8 +4,9 @@
 // stay prerendered.
 //
 // `?page=N` pages the grid, `config.ecommerce.pageSize` to a page, newest first.
-// `?category=<slug>` narrows it to one category. A page number that is not a positive
-// whole number, or past the last page, answers the site's 404.
+// `?category=<slug>` narrows it to one category, and `?sort=price_asc|price_desc` orders
+// it by price. A page number that is not a positive whole number, a page past the last,
+// or an unknown sort answers the site's 404.
 import { parsePageParam } from "@repo/cms/client";
 import { priceFrom, productPath } from "@repo/ecommerce/client";
 import { siteName } from "@repo/ui";
@@ -14,7 +15,13 @@ import { buttonVariants } from "@repo/ui/components/button";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 import { ShopNav } from "@web/components/shop/ShopNav";
-import { money, SHOP_BASE, shopClient, shopCopy } from "@web/lib/shop";
+import {
+  money,
+  SHOP_BASE,
+  SHOP_SORTS,
+  shopClient,
+  shopCopy,
+} from "@web/lib/shop";
 import Layout from "../../layouts/Layout.astro";
 
 export const prerender = false;
@@ -25,22 +32,30 @@ if (page === undefined) {
   return new Response(null, { status: 404 });
 }
 const category = Astro.url.searchParams.get("category") ?? undefined;
+const sortParam = Astro.url.searchParams.get("sort") ?? "newest";
+const sort = SHOP_SORTS.find((option) => option.value === sortParam)?.value;
+if (sort === undefined) {
+  return new Response(null, { status: 404 });
+}
 const client = shopClient();
 const [list, categories] = await Promise.all([
-  client.products({ category, page }),
+  client.products({ category, page, sort }),
   client.categories(),
 ]);
 if (page > Math.max(list.pageCount, 1)) {
   return new Response(null, { status: 404 });
 }
 const lead = interpolate(shopCopy.lead, { siteName });
-const query = (next: number) => {
+const query = (next: number, inCategory = category) => {
   const params = new URLSearchParams();
   if (next > 1) {
     params.set("page", String(next));
   }
-  if (category) {
-    params.set("category", category);
+  if (inCategory) {
+    params.set("category", inCategory);
+  }
+  if (sort !== "newest") {
+    params.set("sort", sort);
   }
   const text = params.toString();
   return text ? `${SHOP_BASE}?${text}` : SHOP_BASE;
@@ -61,29 +76,64 @@ const chip = (active: boolean) =>
   <main id="main" tabindex="-1">
     <div class="section-container pt-28 pb-20 md:pt-36 md:pb-28">
       <h1 class="text-section-title">{shopCopy.title}</h1>
-      {categories.length > 0 && (
-        <nav
-          aria-label={shopCopy.categoriesLabel}
-          class="mt-6 flex flex-wrap gap-2"
-        >
-          <a
-            href={SHOP_BASE}
-            class={chip(!category)}
-            aria-current={!category ? "page" : undefined}
+      <div class="mt-6 flex flex-wrap items-start justify-between gap-4">
+        {categories.length > 0 ? (
+          <nav
+            aria-label={shopCopy.categoriesLabel}
+            class="flex flex-wrap gap-2"
           >
-            {shopCopy.allCategories}
-          </a>
-          {categories.map((row) => (
             <a
-              href={`${SHOP_BASE}?category=${encodeURIComponent(row.slug)}`}
-              class={chip(category === row.slug)}
-              aria-current={category === row.slug ? "page" : undefined}
+              href={query(1, undefined)}
+              class={chip(!category)}
+              aria-current={!category ? "page" : undefined}
             >
-              {row.name}
+              {shopCopy.allCategories}
             </a>
-          ))}
-        </nav>
-      )}
+            {categories.map((row) => (
+              <a
+                href={query(1, row.slug)}
+                class={chip(category === row.slug)}
+                aria-current={category === row.slug ? "page" : undefined}
+              >
+                {row.name}
+              </a>
+            ))}
+          </nav>
+        ) : (
+          <span />
+        )}
+        {/* A plain GET form: it works with no JavaScript (the button), and the script
+            below sends it as soon as the choice changes. */}
+        <form
+          method="get"
+          action={SHOP_BASE}
+          data-shop-sort
+          class="flex items-center gap-2"
+        >
+          {category && <input type="hidden" name="category" value={category} />}
+          <label for="shop-sort" class="sr-only">
+            {shopCopy.sortLabel}
+          </label>
+          <select
+            id="shop-sort"
+            name="sort"
+            class="border-input focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 h-9 rounded-lg border bg-transparent px-2.5 text-base outline-none focus-visible:ring-3 md:text-sm"
+          >
+            {SHOP_SORTS.map((option) => (
+              <option value={option.value} selected={option.value === sort}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            class={cn(buttonVariants({ variant: "outline" }), "h-9")}
+            data-shop-sort-apply
+          >
+            {shopCopy.sortApply}
+          </button>
+        </form>
+      </div>
       {list.products.length === 0 ? (
         <p class="text-muted-foreground mt-10 border-t pt-8">
           {category ? shopCopy.emptyCategory : shopCopy.empty}
@@ -162,3 +212,18 @@ const chip = (active: boolean) =>
   </main>
   <Footer siteName={siteName} />
 </Layout>
+
+<script>
+  // Send the sort form on change, and hide its button once this runs: with no
+  // JavaScript the button is how the choice is applied.
+  for (const form of document.querySelectorAll<HTMLFormElement>(
+    "[data-shop-sort]"
+  )) {
+    form
+      .querySelector<HTMLElement>("[data-shop-sort-apply]")
+      ?.setAttribute("hidden", "");
+    form.querySelector("select")?.addEventListener("change", () => {
+      form.requestSubmit();
+    });
+  }
+</script>

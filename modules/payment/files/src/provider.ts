@@ -124,6 +124,12 @@ export interface PaymentMethod {
   label: string;
   /** False when the provider knows the method but cannot take it here, e.g. no account set. */
   available: boolean;
+  /**
+   * The account a manual method's payer sends money to, the same value its instructions
+   * carry after `create`. Public by nature: every payer of the method is shown it. A page
+   * may print it before the payment exists. Absent for a gateway and for cash on delivery.
+   */
+  account?: PaymentInstructions["account"];
 }
 
 /** One input a manual payment asks the payer to fill. */

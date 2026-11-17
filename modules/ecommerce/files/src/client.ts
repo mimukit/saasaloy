@@ -79,7 +79,15 @@ export interface ShopZone {
 export interface ShopMethod {
   id: string;
   label: string;
+  /**
+   * The public account a manual method's payer sends money to, so checkout can show it
+   * before the order exists. Null for cash on delivery and for a gateway.
+   */
+  account?: { kind: string | null; label: string; number: string } | null;
 }
+
+/** The catalog's orders: newest first, or by the lowest price either way. */
+export type ShopSort = "newest" | "price_asc" | "price_desc";
 
 export interface ShopCartLine {
   variantId: string;
@@ -259,6 +267,7 @@ export interface ShopClient {
   products(query?: {
     page?: number;
     category?: string;
+    sort?: ShopSort;
   }): Promise<ShopProductList>;
   /** One active product, or null when the api sells none by that slug. */
   product(slug: string): Promise<ShopProduct | null>;
@@ -404,6 +413,9 @@ export function createShopClient(options: ShopClientOptions): ShopClient {
       if (query.category) {
         params.set("category", query.category);
       }
+      if (query.sort && query.sort !== "newest") {
+        params.set("sort", query.sort);
+      }
       return json<ShopProductList>(`/products?${params.toString()}`);
     },
     removeLine(variantId) {
@@ -532,6 +544,24 @@ export function addressLines(address: {
   return [filled(address.line1), filled(address.line2), last].filter(
     (line): line is string => line !== undefined && line !== ""
   );
+}
+
+/**
+ * The line under a manual method at checkout, before the order exists: where to send
+ * `amount` (already formatted) and what the next page asks for. Null with no account.
+ */
+export function methodPreview(
+  method: Pick<ShopMethod, "account" | "id" | "label">,
+  amount: string
+): string | null {
+  const { account } = method;
+  if (!account) {
+    return null;
+  }
+  if (account.kind === "bank") {
+    return `Transfer ${amount} to ${account.label} account ${account.number}, then enter the transfer reference on the next page.`;
+  }
+  return `Send ${amount} to the ${account.label} number ${account.number}, then enter the transaction ID on the next page.`;
 }
 
 /** Why a cart line blocks checkout, or null when it does not. */

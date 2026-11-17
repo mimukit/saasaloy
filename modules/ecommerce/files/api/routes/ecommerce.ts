@@ -353,6 +353,7 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
         currency: shop().currency,
         page: query.page,
         pageSize: shop().pageSize,
+        sort: query.sort,
         status: "active",
       });
       const images = await imagesOf(
@@ -429,7 +430,16 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
       const methods = createPayment(env(c)).methods();
       return c.json(
         {
+          // `account` is the public number a manual method's payer sends to, so the
+          // checkout radio can show it before the order exists. Null for cod and gateways.
           methods: methods.map((method) => ({
+            account: method.account
+              ? {
+                  kind: method.account.kind ?? null,
+                  label: method.account.label,
+                  number: method.account.number,
+                }
+              : null,
             id: method.id,
             label: method.label,
           })),

@@ -125,12 +125,18 @@ export const stockAdjustInput = z.union([
 export type StockAdjustInput = z.infer<typeof stockAdjustInput>;
 
 /** Query of the public catalog and the admin product list. */
+/** The orders the catalog lists products in. */
+export const PRODUCT_SORTS = ["newest", "price_asc", "price_desc"] as const;
+export type ProductSort = (typeof PRODUCT_SORTS)[number];
+
 export const productListQuery = z.object({
   page,
   category: productSlug.optional(),
   status: z.enum(["draft", "active", "all"]).default("all"),
   /** The staff list's search: a part of the title or of a variant's SKU, any case. */
   q: z.string().trim().max(120).optional(),
+  /** The storefront's order: newest first, or by the lowest active price either way. */
+  sort: z.enum(PRODUCT_SORTS).default("newest"),
 });
 export type ProductListQuery = z.infer<typeof productListQuery>;
 

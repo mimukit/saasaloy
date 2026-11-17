@@ -1,7 +1,7 @@
 import { config } from "@repo/config";
 import { formatPrice } from "@repo/ecommerce";
 import { createShopClient, shopDate } from "@repo/ecommerce/client";
-import type { ShopClient } from "@repo/ecommerce/client";
+import type { ShopClient, ShopSort } from "@repo/ecommerce/client";
 import type { OrderStatus } from "@repo/ecommerce";
 import { webEnv } from "@web/env";
 
@@ -77,12 +77,21 @@ export function methodHint(id: string): string {
   return "You finish the payment after you place the order.";
 }
 
+/** The catalog's sort choices, in the order the select lists them. */
+export const SHOP_SORTS: readonly { value: ShopSort; label: string }[] = [
+  { label: "Newest", value: "newest" },
+  { label: "Price: low to high", value: "price_asc" },
+  { label: "Price: high to low", value: "price_desc" },
+];
+
 /** Every word the shop pages show. `{siteName}` is filled in by the page. */
 export const shopCopy = {
   title: "Shop",
   lead: "Everything {siteName} sells, newest first.",
   allCategories: "All",
   categoriesLabel: "Categories",
+  sortLabel: "Sort products",
+  sortApply: "Sort",
   empty: "Nothing is for sale yet. Products show here once staff publish them.",
   emptyCategory: "Nothing in this category is for sale right now.",
   outOfStock: "Out of stock",

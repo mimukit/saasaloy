@@ -549,6 +549,10 @@
       "target": "@web/lib/shop-auth.ts"
     },
     {
+      "path": "files/web/lib/districts.ts",
+      "target": "@web/lib/districts.ts"
+    },
+    {
       "path": "files/web/components/shop/shop-ui.tsx",
       "target": "@web/components/shop/shop-ui.tsx"
     },

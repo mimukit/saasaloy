@@ -207,6 +207,33 @@ describe("payment-manual methods", () => {
     );
   });
 
+  it("lists the public account of each configured wallet and bank, and none for cod", () => {
+    const listed = client({
+      methods: { ...OPTIONS.methods, cod: {} },
+    }).methods();
+    const byId = new Map(listed.map((m) => [m.id, m.account]));
+    assert.deepEqual(byId.get("bkash"), {
+      kind: "personal",
+      label: "bKash personal",
+      name: "Rahim",
+      number: "01712345678",
+    });
+    assert.deepEqual(byId.get("bank"), {
+      kind: "bank",
+      label: "City Bank",
+      name: "Rahim Traders",
+      number: "1501 2345 6789 01",
+    });
+    assert.equal(byId.get("cod"), undefined);
+  });
+
+  it("lists no account for a method with none configured", () => {
+    const nagad = manual(OPTIONS)
+      .methods({})
+      .find((m) => m.id === "nagad");
+    assert.equal(nagad?.account, undefined);
+  });
+
   it("offers nothing with no options, the shape the install patch writes", () => {
     assert.deepEqual(client({}).methods(), []);
   });

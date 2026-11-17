@@ -6,6 +6,7 @@ import { config } from "@repo/config";
 import {
   addressLines,
   cartLineNotice,
+  methodPreview,
   orderPath,
   ShopClientError,
 } from "@repo/ecommerce/client";
@@ -36,6 +37,7 @@ import {
   verifiedContact,
 } from "@web/lib/shop-auth";
 import type { ShopSessionUser } from "@web/lib/shop-auth";
+import { BANGLADESH_DISTRICTS } from "@web/lib/districts";
 import { PhoneStep } from "./PhoneStep";
 import { ErrorLine, FieldLabel, Thumb, WarningLine } from "./shop-ui";
 
@@ -662,7 +664,7 @@ function DeliveryForm({
       form.name.trim() === "" && "your name",
       form.phone.trim() === "" && "a phone number",
       form.line1.trim() === "" && "the address line",
-      form.city.trim() === "" && "the city or district",
+      form.city.trim() === "" && "the district",
     ].filter(Boolean);
     if (missing.length > 0) {
       setProblem(`Enter ${missing.join(", ")}.`);
@@ -727,9 +729,33 @@ function DeliveryForm({
               autoComplete: "address-level3",
               optional: true,
             })}
-            {field("city", "City or district", {
-              autoComplete: "address-level2",
-            })}
+            <div>
+              <FieldLabel htmlFor={`${ids}-city`}>District</FieldLabel>
+              <select
+                id={`${ids}-city`}
+                autoComplete="address-level2"
+                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 h-10 w-full rounded-lg border bg-transparent px-2.5 text-base outline-none focus-visible:ring-3 md:text-sm"
+                value={form.city}
+                onChange={(event) => {
+                  setForm((current) => ({
+                    ...current,
+                    city: event.target.value,
+                  }));
+                }}
+              >
+                <option value="">Choose a district</option>
+                {/* A city kept from an older address, not on the list, stays choosable. */}
+                {form.city !== "" &&
+                  !BANGLADESH_DISTRICTS.includes(form.city) && (
+                    <option value={form.city}>{form.city}</option>
+                  )}
+                {BANGLADESH_DISTRICTS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -908,7 +934,8 @@ function PaymentForm({
             <span className="block font-medium">{row.label}</span>
             {method === row.id && (
               <span className="text-muted-foreground block text-sm">
-                {methodHint(row.id)}
+                {methodPreview(row, money(total, currency)) ??
+                  methodHint(row.id)}
               </span>
             )}
           </ChoiceCard>

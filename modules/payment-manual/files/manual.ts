@@ -152,21 +152,25 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
     methods(_env: PaymentEnv): PaymentMethod[] {
       return [
         {
+          ...publicAccount(accounts, "bkash"),
           available: accounts.bkash !== undefined,
           id: "bkash",
           label: "bKash",
         },
         {
+          ...publicAccount(accounts, "nagad"),
           available: accounts.nagad !== undefined,
           id: "nagad",
           label: "Nagad",
         },
         {
+          ...publicAccount(accounts, "rocket"),
           available: accounts.rocket !== undefined,
           id: "rocket",
           label: "Rocket",
         },
         {
+          ...publicAccount(accounts, "bank"),
           available: accounts.bank !== undefined,
           id: "bank",
           label: "Bank transfer",
@@ -218,12 +222,7 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
         }
         return Promise.resolve({
           instructions: {
-            account: {
-              kind: "bank",
-              label: bank.bankName,
-              name: bank.accountName,
-              number: bank.accountNumber,
-            },
+            account: bankAccount(bank),
             fields: fields(method),
             note: [
               `Transfer exactly ${amount}.`,
@@ -248,12 +247,7 @@ export function manual(options: ManualOptions = {}): PaymentProvider {
         throw wrongCurrency(method, payment.currency, WALLET_CURRENCY);
       }
       const instructions: PaymentInstructions = {
-        account: {
-          kind: wallet.kind,
-          label: `${WALLETS[method].brand} ${wallet.kind}`,
-          number: wallet.account,
-          ...(wallet.name ? { name: wallet.name } : {}),
-        },
+        account: walletAccount(method, wallet),
         fields: fields(method),
         note: `Send exactly ${amount}. ${wallet.note ?? KIND_NOTE[wallet.kind]}`,
       };
@@ -377,6 +371,46 @@ function claimedAmount(value: unknown): number {
     );
   }
   return value;
+}
+
+/** A wallet as its instructions show it: brand and kind, the number, the holder. */
+function walletAccount(
+  method: WalletId,
+  wallet: ManualWalletAccount
+): NonNullable<PaymentInstructions["account"]> {
+  return {
+    kind: wallet.kind,
+    label: `${WALLETS[method].brand} ${wallet.kind}`,
+    number: wallet.account,
+    ...(wallet.name ? { name: wallet.name } : {}),
+  };
+}
+
+/** A bank account as its instructions show it. */
+function bankAccount(
+  bank: ManualBankAccount
+): NonNullable<PaymentInstructions["account"]> {
+  return {
+    kind: "bank",
+    label: bank.bankName,
+    name: bank.accountName,
+    number: bank.accountNumber,
+  };
+}
+
+/**
+ * `{ account }` for a configured wallet or bank, so `methods()` can list the account a
+ * payer sends to before a payment exists; `{}` otherwise. The same value `create` shows.
+ */
+function publicAccount(
+  accounts: CheckedAccounts,
+  method: WalletId | "bank"
+): Pick<PaymentMethod, "account"> {
+  if (method === "bank") {
+    return accounts.bank ? { account: bankAccount(accounts.bank) } : {};
+  }
+  const wallet = accounts[method];
+  return wallet ? { account: walletAccount(method, wallet) } : {};
 }
 
 /** The three inputs the shopper fills, labelled for the method. */

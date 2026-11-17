@@ -9,6 +9,7 @@ import {
   createShopClient,
   initialSelection,
   itemsText,
+  methodPreview,
   orderPath,
   orderTrack,
   priceFrom,
@@ -203,6 +204,50 @@ describe("orderTrack", () => {
   });
 });
 
+describe("methodPreview", () => {
+  it("names the amount and the account a wallet payer sends to", () => {
+    assert.equal(
+      methodPreview(
+        {
+          account: {
+            kind: "personal",
+            label: "bKash personal",
+            number: "01712000000",
+          },
+          id: "bkash",
+          label: "bKash",
+        },
+        "৳3,610"
+      ),
+      "Send ৳3,610 to the bKash personal number 01712000000, then enter the transaction ID on the next page."
+    );
+  });
+
+  it("names the bank account for a transfer", () => {
+    assert.equal(
+      methodPreview(
+        {
+          account: { kind: "bank", label: "City Bank", number: "1501 2345" },
+          id: "bank",
+          label: "Bank transfer",
+        },
+        "৳500"
+      ),
+      "Transfer ৳500 to City Bank account 1501 2345, then enter the transfer reference on the next page."
+    );
+  });
+
+  it("answers null for a method with no account", () => {
+    assert.equal(
+      methodPreview(
+        { account: null, id: "cod", label: "Cash on delivery" },
+        "৳1"
+      ),
+      null
+    );
+  });
+});
+
 describe("paths and words", () => {
   it("builds paths under the base path", () => {
     assert.equal(
@@ -282,11 +327,19 @@ describe("createShopClient", () => {
 
     await client.products({ category: "home", page: 2 });
     await client.product("a b");
+    await client.products({ sort: "price_asc" });
+    await client.products({ sort: "newest" });
 
     assert.equal(
       fake.calls[0]?.url,
       "http://api.test/shop/products?page=2&category=home"
     );
+    assert.equal(
+      fake.calls[2]?.url,
+      "http://api.test/shop/products?page=1&sort=price_asc"
+    );
+    // The default order travels as no parameter, so the address stays short.
+    assert.equal(fake.calls[3]?.url, "http://api.test/shop/products?page=1");
     assert.equal(fake.calls[1]?.url, "http://api.test/shop/products/a%20b");
   });
 
