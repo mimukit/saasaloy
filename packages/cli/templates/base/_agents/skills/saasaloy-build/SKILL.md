@@ -23,7 +23,7 @@ The build runs `pnpm env:setup` itself. It writes `packages/env/.env` only throu
 
 ## Step 0 — read the log first
 
-**With no brief and no person, stop.** When `docs/product-brief.md` and `./product-brief.md` do not exist, and nobody in this session can answer a question (the prompt says so, or the run is headless), write nothing and say why: "No product brief exists and nobody is here to answer the saasaloy-setup interview." Then stop. With a person present, run `saasaloy-setup` first. A headless run whose prompt says the owner is here and answers questions has a person present.
+**With no brief and no person, stop.** When neither `docs/product-brief.md` nor `./product-brief.md` exists, and nobody in this session can answer a question (the prompt says so, or the run is headless), write nothing and say why: "No product brief exists and nobody is here to answer the saasaloy-setup interview." Then stop. With a person present, run `saasaloy-setup` first. A headless run whose prompt says the owner is here and answers questions has a person present. Never answer the interview yourself.
 
 Open `docs/build-log.md`. When it exists, a build already ran here:
 

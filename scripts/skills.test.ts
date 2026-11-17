@@ -439,6 +439,39 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     assert.match(llms, /No brief and no person in the session: stop/);
   });
 
+  it("stops only with no brief in docs/ or the folder, and counts a scripted owner as a person", () => {
+    const rule = (text: string, heading: RegExp): string =>
+      text.split("\n").find((line) => heading.test(line)) ?? "";
+    const rules = {
+      agents: rule(agents, /No brief and no person: stop/),
+      build: rule(build, /With no brief and no person, stop/),
+      setup: rule(setup, /Stop when there is no brief and no person/),
+      llms: rule(llms, /No brief and no person in the session: stop/),
+    };
+    for (const [name, line] of Object.entries(rules)) {
+      assert.match(
+        line,
+        /headless run whose prompt says the owner is here and answers[^.]*questions has a person/,
+        `${name} does not count a scripted owner as a person`
+      );
+      assert.match(
+        line,
+        /Never (?:invent|answer)|do not write a brief yourself/,
+        `${name} lets the agent answer the interview`
+      );
+    }
+    for (const name of ["agents", "build"] as const) {
+      assert.match(
+        rules[name],
+        /neither `docs\/product-brief\.md` nor `\.\/product-brief\.md` exists/,
+        `${name} stops while ./product-brief.md exists`
+      );
+    }
+    assert.match(rules.setup, /steps 1 and 2 found none/);
+    assert.match(setup, /`\.\/product-brief\.md` does/);
+    assert.match(rules.llms, /holds no `product-brief\.md`/);
+  });
+
   it("gives one path in llms.txt and AGENTS.md: init, the interview, the build", () => {
     assert.match(
       llms,
