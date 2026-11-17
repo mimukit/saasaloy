@@ -48,5 +48,5 @@ jobs:
       # Passes with no test files, so a project with testing off stays green.
       - run: pnpm test
 
-      # Runs only when the e2e module added a `ci:e2e` script.
+      # Runs only when the root package.json defines a `ci:e2e` script.
       - run: pnpm run --if-present ci:e2e
