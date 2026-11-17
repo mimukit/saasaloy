@@ -51,6 +51,7 @@
     "readme:cli": "node scripts/build-cli-readme.ts",
     "release:preflight": "node scripts/release-preflight.ts",
     "release:smoke": "node scripts/release-smoke.ts",
+    "scaffold:check": "node scripts/scaffold-check.ts",
     "verify:pins": "node scripts/verify-pins.ts",
     "verify:preset": "node scripts/verify-preset.ts",
     "verify:content": "node scripts/verify-content.ts",

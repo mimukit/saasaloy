@@ -62,7 +62,11 @@ describe("shouldSkipGate", () => {
  * points back here for that reason.
  */
 function gateStepsInCi(yaml: string): string[] {
-  return [...yaml.matchAll(/^\s*- run: pnpm ([\w:]+)(?: .*)?$/gm)]
+  // The gate job only: from its `gate:` key to the next job key at the same indent. The
+  // `scaffold` job runs a script the preflight leaves to `release:smoke`.
+  const gate =
+    /^ {2}gate:\n[\s\S]*?(?=^ {2}[\w-]+:\n|(?![\s\S]))/m.exec(yaml)?.[0] ?? "";
+  return [...gate.matchAll(/^\s*- run: pnpm ([\w:]+)(?: .*)?$/gm)]
     .map((match) => match[1]!)
     .filter((script) => script !== "install");
 }
