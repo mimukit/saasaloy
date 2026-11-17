@@ -17,6 +17,7 @@ import {
 import type { CartRow } from "@repo/db/repositories/ecommerce/cart";
 import {
   getActiveProductBySlug,
+  listCategories,
   listProducts,
 } from "@repo/db/repositories/ecommerce/catalog";
 import {
@@ -28,10 +29,15 @@ import {
   cancelExpiredOrders,
   getOrderByNumber,
   listOrders,
+  orderListExtras,
   orderPayments,
+  orderReservations,
   setOrderPaymentMethod,
 } from "@repo/db/repositories/ecommerce/orders";
-import type { OrderDetail } from "@repo/db/repositories/ecommerce/orders";
+import type {
+  OrderDetail,
+  OrderPaymentRow,
+} from "@repo/db/repositories/ecommerce/orders";
 import { listZones } from "@repo/db/repositories/ecommerce/zones";
 import { cartTotals, EcommerceError } from "@repo/ecommerce";
 import { createPayment } from "@repo/payment";
@@ -55,6 +61,7 @@ import {
   productCard,
   productPage,
 } from "../lib/ecommerce/catalog-view";
+import type { ImageView } from "../lib/ecommerce/catalog-view";
 import { invalidInput, shopError } from "../lib/ecommerce/http";
 import {
   assertMethod,
@@ -74,6 +81,7 @@ import "../lib/ecommerce/payment-listener";
 // patch. `apps/web` reads it over `PUBLIC_API_URL`.
 //
 //   GET    /products, /products/:slug     the active catalog, store-currency prices only
+//   GET    /categories                    the catalog's category chips
 //   GET    /zones, /payment-methods       what checkout offers
 //   GET    /cart                          the cart; a signed-in buyer's guest cart merges in
 //   POST   /cart/items                    add to the cart
@@ -215,7 +223,34 @@ async function resolveCart(
   return cart;
 }
 
-async function cartBody(db: Db, cart: CartRow | null) {
+/** A cart as the cart page shows it: each line with its product's first image. */
+async function cartView(c: ShopContext, db: Db, cartId: string) {
+  const view = await getCartView(db, cartId);
+  const images = await imagesOf(db, c.env, [
+    ...new Set(view.lines.map((line) => line.productId)),
+  ]);
+  return {
+    ...view,
+    lines: view.lines.map((line) => ({
+      ...line,
+      image: lineImage(images.get(line.productId), line.variantId),
+    })),
+  };
+}
+
+/** The variant's own image when it has one, else the product's first. */
+function lineImage(
+  images: readonly ImageView[] | undefined,
+  variantId: string | null
+): ImageView | null {
+  return (
+    images?.find((image) => image.variantId === variantId) ??
+    images?.[0] ??
+    null
+  );
+}
+
+async function cartBody(c: ShopContext, db: Db, cart: CartRow | null) {
   if (!cart) {
     return {
       ...cartTotals([], shop().currency),
@@ -224,7 +259,56 @@ async function cartBody(db: Db, cart: CartRow | null) {
       userId: null,
     };
   }
-  return getCartView(db, cart.id);
+  return cartView(c, db, cart.id);
+}
+
+/** What a manual payment asks the payer, while the payment still waits on the payer. */
+function waitingInstructions(row: OrderPaymentRow): unknown {
+  if (row.status !== "pending") {
+    return null;
+  }
+  const data = row.providerData as { instructions?: unknown } | null;
+  return data?.instructions ?? null;
+}
+
+/**
+ * The order page: the buyer's view of the order, each item with its image, each payment
+ * with its instructions while it is pending, and when the stock hold runs out (null when
+ * the order holds no stock or holds it with no expiry).
+ */
+async function orderPageBody(c: ShopContext, db: Db, order: OrderDetail) {
+  const [payments, holds, images] = await Promise.all([
+    orderPayments(db, order.id),
+    orderReservations(db, order.id),
+    // An item keeps its copy after its product is deleted; that item shows no image.
+    imagesOf(db, c.env, [
+      ...new Set(
+        order.items.flatMap((item) => (item.productId ? [item.productId] : []))
+      ),
+    ]),
+  ]);
+  const view = buyerOrderView(order, payments);
+  const timed =
+    order.status === "placed" &&
+    holds.length > 0 &&
+    holds.every((hold) => hold.expiresAt !== null);
+  const expiry = timed
+    ? Math.max(...holds.map((hold) => hold.expiresAt?.getTime() ?? 0))
+    : null;
+  return {
+    ...view,
+    holdExpiresAt: expiry === null ? null : new Date(expiry).toISOString(),
+    items: view.items.map((item) => ({
+      ...item,
+      image: item.productId
+        ? lineImage(images.get(item.productId), item.variantId)
+        : null,
+    })),
+    payments: view.payments.map((payment, index) => ({
+      ...payment,
+      instructions: waitingInstructions(payments[index] as OrderPaymentRow),
+    })),
+  };
 }
 
 /** The caller's order by its number, after its expired hold is settled; 404 for anyone else's. */
@@ -306,6 +390,22 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
     })
   )
 
+  .get("/categories", (c) =>
+    scoped(c, async (db) => {
+      const categories = await listCategories(db);
+      return c.json(
+        {
+          categories: categories.map((category) => ({
+            id: category.id,
+            name: category.name,
+            slug: category.slug,
+          })),
+        },
+        200
+      );
+    })
+  )
+
   .get("/zones", (c) =>
     scoped(c, async (db) => {
       const zones = await listZones(db, { activeOnly: true });
@@ -342,7 +442,7 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
   .get("/cart", (c) =>
     scoped(c, async (db) => {
       const cart = await resolveCart(c, db, { create: false });
-      return c.json(await cartBody(db, cart), 200);
+      return c.json(await cartBody(c, db, cart), 200);
     })
   )
 
@@ -355,7 +455,7 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
         throw new EcommerceError("not_found", "No cart.");
       }
       await addCartItem(db, cart.id, body.variantId, body.quantity);
-      return c.json(await getCartView(db, cart.id), 200);
+      return c.json(await cartView(c, db, cart.id), 200);
     })
   )
 
@@ -371,7 +471,7 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
         c.req.param("variantId"),
         c.req.valid("json").quantity
       );
-      return c.json(await getCartView(db, cart.id), 200);
+      return c.json(await cartView(c, db, cart.id), 200);
     })
   )
 
@@ -381,7 +481,7 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
       if (cart) {
         await setCartItemQuantity(db, cart.id, c.req.param("variantId"), 0);
       }
-      return c.json(await cartBody(db, cart), 200);
+      return c.json(await cartBody(c, db, cart), 200);
     })
   )
 
@@ -502,11 +602,16 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
         pageSize: shop().pageSize,
         userId: user.id,
       });
+      const extras = await orderListExtras(
+        db,
+        page.orders.map((order) => order.id)
+      );
       return c.json(
         {
           orders: page.orders.map((order) => ({
             createdAt: order.createdAt.toISOString(),
             currency: order.currency,
+            itemCount: extras.get(order.id)?.itemCount ?? 0,
             label: orderLabel(order),
             number: order.number,
             paymentMethod: order.paymentMethod,
@@ -526,10 +631,7 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
     scoped(c, async (db) => {
       const user = await sessionUser(c);
       const order = await ownOrder(db, user, c.req.param("number"));
-      return c.json(
-        buyerOrderView(order, await orderPayments(db, order.id)),
-        200
-      );
+      return c.json(await orderPageBody(c, db, order), 200);
     })
   )
 
@@ -600,9 +702,6 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
         }
         await createPayment(env(c)).submit(paymentId, c.req.valid("json"));
         const fresh = await ownOrder(db, user, String(order.number));
-        return c.json(
-          buyerOrderView(fresh, await orderPayments(db, order.id)),
-          200
-        );
+        return c.json(await orderPageBody(c, db, fresh), 200);
       })
   );

@@ -1,0 +1,24 @@
+---
+// The cart, installed by `saasaloy add ecommerce`. On demand, not prerendered. The page is
+// a shell: the cart lives on the api, so the island reads it with the browser's cookies.
+import { siteName } from "@repo/ui";
+import { Footer } from "@repo/ui/blocks/footer";
+import { CartPage } from "@web/components/shop/CartPage";
+import { ShopNav } from "@web/components/shop/ShopNav";
+import { shopCopy } from "@web/lib/shop";
+import Layout from "../../layouts/Layout.astro";
+
+export const prerender = false;
+---
+
+<Layout title={`${shopCopy.cart} — ${siteName}`}>
+  <meta slot="head" name="robots" content="noindex" />
+  <ShopNav client:load siteName={siteName} current="cart" />
+  <main id="main" tabindex="-1">
+    <div class="section-container-wide pt-28 pb-20 md:pt-36 md:pb-28">
+      <h1 class="text-section-title mb-8">{shopCopy.cart}</h1>
+      <CartPage client:load />
+    </div>
+  </main>
+  <Footer siteName={siteName} />
+</Layout>

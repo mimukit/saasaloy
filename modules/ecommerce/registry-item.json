@@ -188,6 +188,49 @@
       "section": "dependencies",
       "name": "@repo/ecommerce",
       "range": "workspace:*"
+    },
+    {
+      "file": "apps/web/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/ecommerce",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/web/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/auth",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/web/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "lucide-react",
+      "range": "1.49.0"
+    },
+    {
+      "file": "apps/web/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "assets.run_worker_first",
+      "entry": "/shop"
+    },
+    {
+      "file": "apps/web/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "assets.run_worker_first",
+      "entry": "/shop/*"
+    },
+    {
+      "file": "packages/ui/src/blocks/navbar.tsx",
+      "kind": "const-array",
+      "constName": "pageLinks",
+      "key": "href",
+      "entry": {
+        "label": "Shop",
+        "href": "/shop"
+      }
     }
   ],
   "files": [
@@ -398,6 +441,14 @@
       }
     },
     {
+      "path": "files/api/routes/ecommerce-storefront.vitest.ts",
+      "target": "@api/routes/ecommerce-storefront.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["payment-manual", "payment-console"]
+      }
+    },
+    {
       "path": "files/api/routes/admin-ecommerce.vitest.ts",
       "target": "@api/routes/admin-ecommerce.test.ts",
       "when": {
@@ -488,6 +539,74 @@
     {
       "path": "files/admin/routes/shop/reports.tsx",
       "target": "@admin/routes/shop/reports.tsx"
+    },
+    {
+      "path": "files/web/lib/shop.ts",
+      "target": "@web/lib/shop.ts"
+    },
+    {
+      "path": "files/web/lib/shop-auth.ts",
+      "target": "@web/lib/shop-auth.ts"
+    },
+    {
+      "path": "files/web/components/shop/shop-ui.tsx",
+      "target": "@web/components/shop/shop-ui.tsx"
+    },
+    {
+      "path": "files/web/components/shop/PhoneStep.tsx",
+      "target": "@web/components/shop/PhoneStep.tsx"
+    },
+    {
+      "path": "files/web/components/shop/ShopNav.tsx",
+      "target": "@web/components/shop/ShopNav.tsx"
+    },
+    {
+      "path": "files/web/components/shop/ProductBuy.tsx",
+      "target": "@web/components/shop/ProductBuy.tsx"
+    },
+    {
+      "path": "files/web/components/shop/CartPage.tsx",
+      "target": "@web/components/shop/CartPage.tsx"
+    },
+    {
+      "path": "files/web/components/shop/Checkout.tsx",
+      "target": "@web/components/shop/Checkout.tsx"
+    },
+    {
+      "path": "files/web/components/shop/SignInGate.tsx",
+      "target": "@web/components/shop/SignInGate.tsx"
+    },
+    {
+      "path": "files/web/components/shop/OrdersPage.tsx",
+      "target": "@web/components/shop/OrdersPage.tsx"
+    },
+    {
+      "path": "files/web/components/shop/OrderPage.tsx",
+      "target": "@web/components/shop/OrderPage.tsx"
+    },
+    {
+      "path": "files/web/pages/shop/index.astro",
+      "target": "@web/pages/shop/index.astro"
+    },
+    {
+      "path": "files/web/pages/shop/[slug].astro",
+      "target": "@web/pages/shop/[slug].astro"
+    },
+    {
+      "path": "files/web/pages/shop/cart.astro",
+      "target": "@web/pages/shop/cart.astro"
+    },
+    {
+      "path": "files/web/pages/shop/checkout.astro",
+      "target": "@web/pages/shop/checkout.astro"
+    },
+    {
+      "path": "files/web/pages/shop/orders/index.astro",
+      "target": "@web/pages/shop/orders/index.astro"
+    },
+    {
+      "path": "files/web/pages/shop/orders/[number].astro",
+      "target": "@web/pages/shop/orders/[number].astro"
     }
   ],
   "scaffolds": [
@@ -540,6 +659,10 @@
         {
           "path": "files/src/payment-listener.ts",
           "target": "src/payment-listener.ts"
+        },
+        {
+          "path": "files/src/client.ts",
+          "target": "src/client.ts"
         }
       ]
     }

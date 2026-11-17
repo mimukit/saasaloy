@@ -47,6 +47,14 @@ The status machine is `ORDER_TRANSITIONS` in `@repo/ecommerce`: `placed` to `con
 
 The payment listener moves orders: a successful online payment confirms the order, a submitted one makes its hold untimed, a failed or cancelled one makes it timed again, and a COD payment rejected with `delivery_refused` or `delivery_failed` returns a shipped order. `orderPaymentListener()` from `@repo/ecommerce` sits in `packages/payment/src/index.ts`; the work is `apps/api/src/lib/ecommerce/payment-listener.ts`.
 
+## Storefront
+
+The shop pages live in `apps/web/src/pages/shop/` with `prerender = false`: the catalog, a product, the cart, checkout, the order list and one order. The marketing pages stay prerendered. `wrangler.jsonc` lists `/shop` and `/shop/*` in `assets.run_worker_first`, and the navbar gains a "Shop" link. Astro routes by folder name, so to move the shop rename that folder, `basePath` and both `run_worker_first` entries together. A product slug of `cart`, `checkout` or `orders` is shadowed by the page of that name.
+
+The pages read the api through `@repo/ecommerce/client` over `PUBLIC_API_URL`, with the browser's cookies. `apps/web/src/lib/shop-auth.ts` is the web app's auth client: checkout and the order pages ask for a phone code through `auth-phone`. A new number signs up with the plain code; a known number gets a sign-in code (`signIn: true`), or the password with a reset by code when `codeSignIn` is `false`. The web and api hosts must share a parent domain in production, so the session cookie reaches both (`crossSubDomainCookies` in `packages/auth/src/auth.ts`).
+
+Checkout sends no `returnUrl`, because `payment` checks it against `PAYMENT_APP_URL` even for a manual method. A hosted gateway returns the buyer to its own default address.
+
 ## Settings
 
 The `ecommerce` config section holds the store currency (`BDT`), the shop name, the base path (`/shop`), the page size, `requirePhoneOtp`, `unpaidHoldHours` (24), `guestCartDays` (30), `lowStockThreshold`, `orderNumberPrefix`, the report `timeZone` (`Asia/Dhaka`), and the buyer SMS switches and templates. Override any key in `packages/config/src/project.ts`. The module declares no env var.
