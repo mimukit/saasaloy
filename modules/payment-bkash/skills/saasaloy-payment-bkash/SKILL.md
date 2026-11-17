@@ -91,3 +91,7 @@ If the payer pays and closes the tab before the return lands, and no webhook is 
 - [ ] Payments created in `BDT`, in poisha.
 - [ ] The webhook URL handed to bKash support, or the manual path above accepted.
 - [ ] One sandbox payment, one cancel and one refund driven end to end and read back on the admin Payments page.
+
+## Next
+
+Run `saasaloy-payment` to write the shopper route that starts a bKash payment and the listener that reacts when it settles.
