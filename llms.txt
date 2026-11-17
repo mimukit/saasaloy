@@ -4,6 +4,16 @@
 
 This file is for an AI agent that wants to build a product with Saasaloy. An agent that wants to change Saasaloy itself reads `AGENTS.md` and `CONTRIBUTING.md` instead.
 
+## Prerequisites
+
+Check each one before the first command. A missing one stops the build partway.
+
+- Node.js 24.15.0 or newer. `node --version` prints it. The CLI and a scaffold both declare `engines.node` `>=24.15.0`.
+- pnpm 12.3.4. A scaffold pins it in `packageManager`, and `init --yes` runs `pnpm install` with it.
+- A git identity: `git config user.name` and `git config user.email` both print a value. `init` makes the first commit with it, and the build commits each stage. Without one, `init` warns and skips its commit.
+- Network access to the npm registry, for `npx saasaloy@latest` and `pnpm install`, and to `api.github.com` and `codeload.github.com`, where `saasaloy add` and `saasaloy list` read the modules. The CLI reads the modules at the release tag of its own version.
+- `GITHUB_TOKEN` set to a GitHub token, so the module reads do not hit GitHub's anonymous limit of 60 requests an hour. With it the limit is 5000. `saasaloy list --json` alone downloads every module of the registry, more than 50, so one build passes 60 without a token.
+
 ## Start a project
 
 1. Check the folder you were given. It must hold a complete product brief, `product-brief.md`, and should hold a dotenv file of env values, such as `env`. A person writes the brief through the attended `saasaloy-setup` interview. Do not write the brief yourself.

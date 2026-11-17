@@ -20,16 +20,25 @@
 // runs before the gate because it costs one `git log` and one `git diff-tree` per breaking
 // commit, so a missing note fails in a second rather than after five minutes of gate.
 //
-// Imports node: builtins and two sibling scripts. Node 24 strips the types, so there is no
+// The llms.txt check builds the CLI, reads its help, and fails when the root `llms.txt` names
+// a skill, a command or a flag the release lacks (ADR 0062). It runs before the gate for the
+// same reason the update-note check does: it costs seconds, the gate costs minutes. What
+// "the release" holds is defined in `scripts/llms-txt.ts`.
+//
+// Imports node: builtins and three sibling scripts. Node 24 strips the types, so there is no
 // build step; `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Git } from "./changelog-update-notes.ts";
 import { addedUpdateNotes } from "./changelog-update-notes.ts";
+import { cliSurface, llmsSurfaceProblems, releaseSkills } from "./llms-txt.ts";
 import { updateNoteOptOut } from "./update-note-footer.ts";
 
 export type { Git } from "./changelog-update-notes.ts";
+export type { CliSurface } from "./llms-txt.ts";
+export { cliSurface, llmsSurfaceProblems, releaseSkills } from "./llms-txt.ts";
 export { updateNoteOptOut } from "./update-note-footer.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -257,6 +266,42 @@ async function main(): Promise<void> {
     );
   }
   step(`every breaking commit since ${tag} has an update note`);
+
+  // --- Does llms.txt name only what the release holds? ------------------------------
+
+  step("building the CLI to read its commands and flags");
+  run("pnpm", ["--filter", "saasaloy", "run", "build"], "pnpm build (cli)");
+  const cli = join(root, "packages", "cli", "dist", "index.js");
+  const help = (args: readonly string[]): string => {
+    const result = spawnSync(process.execPath, [cli, ...args, "--help"], {
+      cwd: root,
+      encoding: "utf-8",
+      env: { ...process.env, NO_COLOR: "1" },
+    });
+    if (result.error || result.status !== 0) {
+      fail(`saasaloy ${args.join(" ")} --help failed`, result.stderr);
+    }
+    return result.stdout;
+  };
+  const top = help([]);
+  const commands = [...cliSurface(top, {}).commands.keys()];
+  const surface = cliSurface(
+    top,
+    Object.fromEntries(commands.map((name) => [name, help([name])]))
+  );
+  const llmsProblems = llmsSurfaceProblems(
+    readFileSync(join(root, "llms.txt"), "utf-8"),
+    surface,
+    releaseSkills(root)
+  );
+  if (llmsProblems.length > 0) {
+    fail(
+      "llms.txt names what the release does not hold",
+      ...llmsProblems,
+      "Fix llms.txt, or ship what it names, then start the release again."
+    );
+  }
+  step("llms.txt names only skills, commands and flags the release holds");
 
   // --- The gate ----------------------------------------------------------------------
 

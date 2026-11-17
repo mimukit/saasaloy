@@ -19,12 +19,15 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   checkUpdateNotes,
+  cliSurface,
   GATE_SCRIPTS,
   hasGitHubToken,
   isBreakingCommit,
+  llmsSurfaceProblems,
   missingTokenMessage,
   missingUpdateNotesMessage,
   optOutMessage,
+  releaseSkills,
   shouldSkipGate,
   staleMainMessage,
   updateNoteOptOut,
@@ -323,5 +326,95 @@ describe("optOutMessage", () => {
       }),
       "aaaaaaa feat!: x: no update note (no project impact)"
     );
+  });
+});
+
+// ADR 0062: `llms.txt` is the first file an agent reads, and it must not name a skill, a
+// command or a flag the release lacks. The release is the npm package (the base skills
+// under its template, and the commands and flags the built CLI's help prints) plus the
+// registry at the release tag, which is this commit's `modules/`.
+describe("llmsSurfaceProblems", () => {
+  const TOP_HELP = [
+    "Usage: saasaloy <command> [options]",
+    "",
+    "Commands:",
+    "  init     scaffold a new Saasaloy project",
+    "  add      apply a module",
+    "  list     list the modules a registry offers",
+    "",
+    "Options:",
+    "  -h, --help     show this help, or a command's own usage",
+    "  -v, --version  print the installed saasaloy version",
+    "",
+  ].join("\n");
+  const surface = cliSurface(TOP_HELP, {
+    add: "Flags:\n  -y, --yes        skip the prompt\n  --with <module>  pick one\n  -h, --help       show this help\n",
+    init: "Flags:\n  --force           scaffold anyway\n  -y, --yes         install\n  --testing=<mode>  the mode\n  -h, --help        show this help\n",
+    list: "Flags:\n  --json  print JSON\n  -h, --help  show this help\n",
+  });
+  const skills = new Set(["saasaloy-build", "saasaloy-setup"]);
+  const BASE =
+    "https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills";
+
+  it("reads the commands and flags off the help text", () => {
+    assert.deepEqual([...surface.commands.keys()], ["init", "add", "list"]);
+    assert.deepEqual(
+      [...(surface.commands.get("init") ?? [])],
+      ["--force", "-y", "--yes", "--testing", "-h", "--help"]
+    );
+    assert.ok(surface.globalFlags.has("--version"));
+  });
+
+  it("passes a file that names only what the release holds", () => {
+    const markdown = [
+      "Run `npx saasaloy@latest init . --force --yes --testing=tests-after`, then `saasaloy add <module>@main` and `saasaloy list --json`.",
+      "`--yes` runs install. Read `.agents/skills/saasaloy-build/SKILL.md`, then the `saasaloy-setup` skill.",
+      `- [saasaloy-build](${BASE}/saasaloy-build/SKILL.md): the build.`,
+    ].join("\n");
+    assert.deepEqual(llmsSurfaceProblems(markdown, surface, skills), []);
+  });
+
+  it("fails a skill the release lacks, by link, by path and by name", () => {
+    const markdown = [
+      `- [saasaloy-gone](${BASE}/saasaloy-gone/SKILL.md): gone.`,
+      "Read `.agents/skills/saasaloy-old/SKILL.md` and the `saasaloy-missing` skill.",
+    ].join("\n");
+    assert.deepEqual(llmsSurfaceProblems(markdown, surface, skills), [
+      'the skill "saasaloy-gone" is not in the release',
+      'the skill "saasaloy-old" is not in the release',
+      'the skill "saasaloy-missing" is not in the release',
+    ]);
+  });
+
+  it("fails a command the CLI does not register", () => {
+    assert.deepEqual(
+      llmsSurfaceProblems("Run `saasaloy build --yes`.", surface, skills),
+      ['the command "saasaloy build" is not in the CLI']
+    );
+  });
+
+  it("fails a flag the command does not take, and a bare flag no command takes", () => {
+    assert.deepEqual(
+      llmsSurfaceProblems(
+        "Run `saasaloy list --all` and pass `--quiet`.",
+        surface,
+        skills
+      ),
+      [
+        'the flag "--all" is not a flag of "saasaloy list"',
+        'the flag "--quiet" is not a flag of any command',
+      ]
+    );
+  });
+
+  it("holds the real llms.txt to the skills this commit ships", async () => {
+    const root = join(import.meta.dirname, "..");
+    const markdown = await readFile(join(root, "llms.txt"), "utf-8");
+    const problems = llmsSurfaceProblems(
+      markdown,
+      { commands: new Map(), globalFlags: new Set() },
+      releaseSkills(root)
+    ).filter((problem) => problem.startsWith("the skill"));
+    assert.deepEqual(problems, []);
   });
 });
