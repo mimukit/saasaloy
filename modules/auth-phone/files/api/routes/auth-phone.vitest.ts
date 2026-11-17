@@ -49,7 +49,7 @@ const RESET_IDENTIFIER = `${PHONE_WITH_PASSWORD}-request-password-reset`;
 let log: MockInstance<typeof console.log>;
 
 /**
- * Empty every table, children first, so `users` is empty for the first-user rule. Other
+ * Empty every table, children first, so `users` is empty when a test needs it. Other
  * modules hold rows that point at a user, such as `admin`'s `audit_events`, whose
  * `actor_user_id` has no cascade. The order comes from the schema, so this file names
  * no table another module owns. `testDatabase()` writes the seed again before the next
@@ -186,8 +186,7 @@ describe("phone sign-in", () => {
 
   describe("sign-up", () => {
     it("creates a client with a verified phone and the placeholder email, even as the first user", async () => {
-      // An empty users table, where the first-user rule would make an email sign-up a
-      // superadmin.
+      // An empty users table, where a first-user rule once made a sign-up a superadmin.
       await emptyDatabase();
 
       const sent = await post("/phone-number/send-otp", {
@@ -207,9 +206,9 @@ describe("phone sign-in", () => {
       });
     });
 
-    it("still makes the first email sign-up a superadmin", async () => {
-      // The phone skip in `auth.ts`'s first-user hook keys on the path, so an email
-      // sign-up on the same empty table keeps the superadmin rule.
+    it("gives the first email sign-up the role user too", async () => {
+      // No sign-up is promoted. The first superadmin comes from the seed or
+      // `pnpm db:prod:superadmin`, never from an open sign-up on an empty table.
       await emptyDatabase();
 
       const res = await post("/sign-up/email", {
@@ -223,7 +222,7 @@ describe("phone sign-in", () => {
         .select()
         .from(users)
         .where(eq(users.email, "first@example.test"));
-      expect(row).toMatchObject({ role: config.auth.superadminRole });
+      expect(row).toMatchObject({ role: "user" });
     });
 
     it("answers 409 PHONE_NUMBER_EXIST for a number that has an account, and sends nothing", async () => {

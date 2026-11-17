@@ -125,6 +125,10 @@
       "target": "@db/seed/slices/storage-objects.ts"
     },
     {
+      "path": "files/db/column-classes/storage-objects.ts",
+      "target": "@db/column-classes/storage-objects.ts"
+    },
+    {
       "path": "files/validators/file-uploads.ts",
       "target": "@validators/file-uploads.ts"
     },

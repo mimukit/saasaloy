@@ -30,7 +30,10 @@ export type AdminSession = typeof auth.$Infer.Session;
 /** The site-admin role. better-auth's admin plugin writes this string into `user.role`. */
 export const ADMIN_ROLE = config.auth.adminRole;
 
-/** The role above `admin`. The first account to sign up wins it. */
+/**
+ * The role above `admin`. No sign-up wins it: the seed writes one in development, and
+ * production gets its first one from `pnpm db:prod:superadmin` or the auth skill's SQL.
+ */
 export const SUPERADMIN_ROLE = config.auth.superadminRole;
 
 /**

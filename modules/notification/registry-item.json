@@ -145,6 +145,14 @@
       "target": "@db/seed/slices/notification-opt-outs.ts"
     },
     {
+      "path": "files/db/column-classes/notifications.ts",
+      "target": "@db/column-classes/notifications.ts"
+    },
+    {
+      "path": "files/db/column-classes/notification-opt-outs.ts",
+      "target": "@db/column-classes/notification-opt-outs.ts"
+    },
+    {
       "path": "files/validators/notifications.ts",
       "target": "@validators/notifications.ts"
     },

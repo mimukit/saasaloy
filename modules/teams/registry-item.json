@@ -147,6 +147,22 @@
     {
       "path": "files/db/seed/organization-roles.ts",
       "target": "@db/seed/slices/organization-roles.ts"
+    },
+    {
+      "path": "files/db/column-classes/invitations.ts",
+      "target": "@db/column-classes/invitations.ts"
+    },
+    {
+      "path": "files/db/column-classes/members.ts",
+      "target": "@db/column-classes/members.ts"
+    },
+    {
+      "path": "files/db/column-classes/organization-roles.ts",
+      "target": "@db/column-classes/organization-roles.ts"
+    },
+    {
+      "path": "files/db/column-classes/organizations.ts",
+      "target": "@db/column-classes/organizations.ts"
     }
   ],
   "agent": {

@@ -149,6 +149,10 @@ describe("the api-keys-organization owner", () => {
         path: "files/db/seed/api-keys.ts",
         target: "@db/seed/slices/api-keys.ts",
       },
+      {
+        path: "files/db/column-classes/api-keys.ts",
+        target: "@db/column-classes/api-keys.ts",
+      },
     ]);
   });
 
@@ -214,6 +218,10 @@ describe("the api-keys-user owner", () => {
       {
         path: "files/db/seed/api-keys.ts",
         target: "@db/seed/slices/api-keys.ts",
+      },
+      {
+        path: "files/db/column-classes/api-keys.ts",
+        target: "@db/column-classes/api-keys.ts",
       },
     ]);
   });

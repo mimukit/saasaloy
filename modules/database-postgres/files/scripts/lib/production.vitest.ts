@@ -203,6 +203,10 @@ function fakes(over: Partial<ProductionDeps> = {}): {
       recorded.migrated.push(url);
       return true;
     },
+    applyGrants: (url) => {
+      recorded.calls.push(`grants ${url}`);
+      return Promise.resolve();
+    },
     say: (message) => {
       recorded.said.push(message);
     },
@@ -225,13 +229,44 @@ describe(runProduction, () => {
     );
   });
 
-  it("dumps first, then migrates, for migrate", async () => {
+  it("dumps first, then migrates, then grants, for migrate", async () => {
     const { deps, recorded } = fakes();
 
     await runProduction("migrate", deps);
 
-    expect(recorded.calls).toStrictEqual(["mkdir", "dump", "migrate"]);
+    expect(recorded.calls).toStrictEqual([
+      "mkdir",
+      "dump",
+      "migrate",
+      `grants ${PRODUCTION}`,
+    ]);
     expect(recorded.migrated).toStrictEqual([PRODUCTION]);
+  });
+
+  it("reports a failed grant and still reports the migration done", async () => {
+    const { deps, recorded } = fakes({
+      applyGrants: () => Promise.reject(new Error("permission denied")),
+    });
+
+    await expect(runProduction("migrate", deps)).resolves.toBeUndefined();
+
+    expect(recorded.migrated).toStrictEqual([PRODUCTION]);
+    const said = recorded.said.join("\n");
+    expect(said).toContain("Migrated acme_shop_production.");
+    expect(said).toMatch(
+      /read-only grants failed \(permission denied\).*migration stands.*pnpm db:prod:readonly-grants/
+    );
+  });
+
+  it("runs no grants when the migration fails", async () => {
+    const { deps, recorded } = fakes({ migrate: () => false });
+
+    await expect(runProduction("migrate", deps)).rejects.toThrow(
+      /drizzle-kit migrate failed/
+    );
+    expect(
+      recorded.calls.filter((call) => call.startsWith("grants"))
+    ).toStrictEqual([]);
   });
 
   it("checks the target before anything runs", async () => {

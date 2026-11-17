@@ -1,6 +1,6 @@
 ---
 name: saasaloy-deploy
-description: Runbook for an AI agent that releases and deploys this project to production with pnpm release and pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "cut a release", "bump the version", "update the changelog", "put this live", "hotfix production", "roll back production", "what is live", or "what will the next deploy ship", when a release or a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, the release and its changelog, the dry-run report, the gates and what clears each one, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
+description: Runbook for an AI agent that releases and deploys this project to production with pnpm release and pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "cut a release", "bump the version", "update the changelog", "put this live", "hotfix production", "roll back production", "what is live", "what will the next deploy ship", "is this fix live", "make the first superadmin", or "set up the first deploy", when a question about production behavior needs the live code, when a release or a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, answering a production question against the last deploy tag, the first superadmin before the first deploy, the release and its changelog, the dry-run report, the gates and what clears each one, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
 ---
 
 # saasaloy-deploy
@@ -30,6 +30,7 @@ You may run these without asking:
 - `pnpm deploy:production --dry-run`, any number of times. It runs the env check and builds, uploads, migrates and tags nothing.
 - Read-only git: `git describe --tags --match 'deploy-*' --abbrev=0`, `git log <tag>..HEAD`, `git show <tag>`.
 - `pnpm --filter <package> exec env-deploy --run <service> -- wrangler deployments list`, for each deploy target.
+- `pnpm logs:prod`, and on Postgres `pnpm db:prod:query`. Both are read-only, and both refuse until the owner has written their credential file. The `saasaloy-prod-debug` skill covers them when `database-postgres` is installed.
 
 Only the owner decides these, each in its own message:
 
@@ -45,6 +46,7 @@ Never do these:
 - Move, delete or re-create a deploy tag or a release tag.
 - Edit a released `CHANGELOG.md` entry, or the root `package.json` `version`, by hand. `pnpm release` writes both.
 - Edit `packages/env/.env.prod`, or print a value from it.
+- Query production through `env-deploy --run api`, `psql` with the owner URL, or anything else that loads `packages/env/.env.prod`. That is the owner role, which can write. Read production with `pnpm db:prod:query` only.
 - Commit with `--no-verify`, stash or discard files to pass the tree gate.
 - Deploy a Worker with `pnpm --filter <package> run deploy` or `wrangler deploy`. Both skip the gates, the order and the tag. Use `pnpm deploy:production --only <service>` for one Worker.
 - Push to `main` without the owner's approval.
@@ -80,6 +82,37 @@ Never do these:
    ```
 9. Check what the smoke checks do not cover, such as a sign-in flow, in a browser. Use `playwright-cli` when `command -v playwright-cli` finds it. Otherwise list the pages for the owner.
 10. Report the result. Use the template below.
+
+## Answer a production question against the last deploy tag
+
+Production runs the commit the newest `deploy-*` tag names, not `main`. `main` may hold commits that are not live, and a hotfix tag may name a commit `main` does not have. So when the owner asks how production behaves, why a user saw something, or whether a fix is live, read the code at the tag:
+
+```sh
+tag="$(git describe --tags --match 'deploy-*' --abbrev=0)"
+git show "$tag":<path>          # a file as production runs it
+git log --oneline "$tag"..main  # what main has that production does not
+git merge-base --is-ancestor "$tag" main && echo "main holds the live commit"
+```
+
+Name the tag in your answer. With no `deploy-*` tag, nothing has deployed through `pnpm deploy:production` yet: say so rather than answer from `main`. For production data and logs, follow the `saasaloy-prod-debug` skill on Postgres. On D1, `pnpm logs:prod` reads the api logs, and there is no read-only database tool.
+
+## The first superadmin, before the first deploy
+
+No sign-up promotes an account: every sign-up gets `user`, the first one included. A project with `auth` needs its first superadmin made by hand, or nobody can open the admin app. The owner does this, because it needs their password and their production credentials.
+
+- **Postgres:** run the migrations, then the superadmin command, then the first deploy. `db:prod:superadmin` writes the `users` and `accounts` tables, so they must exist first. It asks for the password at the prompt.
+  ```sh
+  pnpm db:prod:migrate
+  pnpm db:prod:superadmin --email you@example.com
+  pnpm deploy:production --migrate
+  ```
+  The migration gate still counts every migration file on the first deploy, because there is no tag yet. `--migrate` then finds nothing pending and applies nothing.
+- **D1:** deploy, sign up on a client app with the owner's email, then promote that account from `apps/api`. `<db>` is the `database_name` in `apps/api/wrangler.jsonc`:
+  ```sh
+  wrangler d1 execute <db> --remote --command "update users set role = 'superadmin' where email = 'you@example.com'"
+  ```
+
+Then sign in on the admin app with that email. The `saasaloy-auth` skill covers the roles.
 
 ## The dry-run report
 
@@ -172,7 +205,7 @@ A failure after the gates:
 
 - `--dry-run` prints the last deploy tag, the commits since it, the new migration files, every gate, the deploy order and the smoke checks, then runs the env check. It exits 0 and ends with the list of what would stop a real run.
 - `--migrate` runs `pnpm --filter @repo/db run db:prod:migrate` after the env check and before the first Worker, so a new migration lands before the code that reads it. A project with no `@repo/db` workspace refuses the flag. Keep each migration additive (a new table, a nullable or defaulted column), so old code runs on the new schema and a code rollback stays safe.
-  - `database-postgres`: `db:prod:migrate` checks that `DATABASE_URL` names `<project>_production` on a server other than the development one in `apps/api/.env`. It then dumps the database with `pg_dump` and applies the migrations with `drizzle-kit migrate`. No migration runs without a good dump.
+  - `database-postgres`: `db:prod:migrate` checks that `DATABASE_URL` names `<project>_production` on a server other than the development one in `apps/api/.env`. It then dumps the database with `pg_dump` and applies the migrations with `drizzle-kit migrate`. No migration runs without a good dump. After the migration it re-applies the read-only role's grants, as `pnpm db:prod:readonly-grants` does. A failed grant step prints its error and the migration stands.
   - `database-d1`: `db:prod:migrate` runs `wrangler d1 migrations apply DB --remote`, and creates the database first when the account has none by its `database_name`. Before it migrates an existing database, it dumps it with `wrangler d1 export --remote`. No migration runs without a good dump. A database it has just created gets no dump, because it holds nothing.
 - `--skip-ci "<reason>"` passes the CI gate. The reason goes into the tag message. Every other gate still runs.
 - `--only <service>` deploys one Worker after the same gates, and runs only its smoke checks. It writes no tag, because the tag means "this commit is live on every Worker".

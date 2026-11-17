@@ -16,6 +16,12 @@ import {
   readMode,
   runProduction,
 } from "./lib/production.ts";
+import {
+  applyReadonlyGrants,
+  loadColumnClasses,
+  reportGrants,
+} from "./lib/readonly-grants.ts";
+import { readonlyRoleName } from "./lib/readonly.ts";
 
 // `pnpm db:prod:dump` and `pnpm db:prod:migrate`: back up the production database, and
 // apply the pending migrations to it, from a developer machine.
@@ -34,6 +40,10 @@ import {
 // 0700, outside the repository. pg_dump comes from the `postgres:<major>` image through
 // Docker, with the major version the root `compose.yaml` runs. Set `PG_DUMP=local` to use
 // a `pg_dump` on PATH instead.
+//
+// After the migration, `migrate` brings the read-only role's grants to the column classes,
+// as `pnpm db:prod:readonly-grants` does. A failed grant is reported and the migration
+// stands.
 //
 // `pnpm deploy:production --migrate` runs `db:prod:migrate` before the first Worker
 // uploads. Nothing else does: a production migration is its own step.
@@ -96,6 +106,15 @@ await run(async () => {
       runPnpm(context.root, ["--filter", "@repo/db", "db:migrate"], {
         DATABASE_URL: url,
       }),
+    applyGrants: async (url) => {
+      const classes = await loadColumnClasses(context.root);
+      reportGrants(
+        await applyReadonlyGrants(url, {
+          role: readonlyRoleName(context.prefix),
+          classes,
+        })
+      );
+    },
     say,
   });
 });

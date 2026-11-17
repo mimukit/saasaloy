@@ -71,6 +71,10 @@
     {
       "path": "files/db/seed/waitlist-entries.ts",
       "target": "@db/seed/slices/waitlist-entries.ts"
+    },
+    {
+      "path": "files/db/column-classes/waitlist-entries.ts",
+      "target": "@db/column-classes/waitlist-entries.ts"
     }
   ],
   "agent": {

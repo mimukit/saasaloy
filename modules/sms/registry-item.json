@@ -102,6 +102,13 @@
       }
     },
     {
+      "path": "files/db/column-classes/sms-messages.ts",
+      "target": "@db/column-classes/sms-messages.ts",
+      "when": {
+        "installed": ["database"]
+      }
+    },
+    {
       "path": "files/api/routes/admin-sms.ts",
       "target": "@api/routes/admin-sms.ts",
       "when": {
