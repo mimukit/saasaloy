@@ -45,6 +45,67 @@
       "section": "dependencies",
       "name": "@repo/ecommerce",
       "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/shop",
+      "call": "ecommerce",
+      "import": {
+        "name": "ecommerce",
+        "from": "./routes/ecommerce"
+      }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/admin/shop",
+      "call": "adminEcommerce",
+      "import": {
+        "name": "adminEcommerce",
+        "from": "./routes/admin-ecommerce"
+      }
+    },
+    {
+      "file": "apps/api/src/lib/audit-actions.ts",
+      "kind": "plugin-array",
+      "exportName": "AUDIT_ACTIONS",
+      "arrayProp": "actions",
+      "call": "ecommerceAuditActions",
+      "import": {
+        "name": "ecommerceAuditActions",
+        "from": "../audit/ecommerce"
+      }
+    },
+    {
+      "file": "packages/payment/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/ecommerce",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/payment/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "payment",
+      "arrayProp": "listeners",
+      "call": "orderPaymentListener",
+      "import": {
+        "name": "orderPaymentListener",
+        "from": "@repo/ecommerce"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav-counts.ts",
+      "kind": "const-array",
+      "constName": "NAV_COUNTS",
+      "key": "to",
+      "entry": {
+        "to": "/shop/orders",
+        "path": "/admin/shop/orders/awaiting-call-count"
+      }
     }
   ],
   "files": [
@@ -149,6 +210,54 @@
       "target": "@validators/ecommerce.ts"
     },
     {
+      "path": "files/db/repositories/ecommerce/zones.ts",
+      "target": "@db/repositories/ecommerce/zones.ts"
+    },
+    {
+      "path": "files/db/repositories/ecommerce/customers.ts",
+      "target": "@db/repositories/ecommerce/customers.ts"
+    },
+    {
+      "path": "files/db/repositories/ecommerce/reports.ts",
+      "target": "@db/repositories/ecommerce/reports.ts"
+    },
+    {
+      "path": "files/api/routes/ecommerce.ts",
+      "target": "@api/routes/ecommerce.ts"
+    },
+    {
+      "path": "files/api/routes/admin-ecommerce.ts",
+      "target": "@api/routes/admin-ecommerce.ts"
+    },
+    {
+      "path": "files/api/audit/ecommerce.ts",
+      "target": "@api/audit/ecommerce.ts"
+    },
+    {
+      "path": "files/api/lib/ecommerce/http.ts",
+      "target": "@api/lib/ecommerce/http.ts"
+    },
+    {
+      "path": "files/api/lib/ecommerce/scope.ts",
+      "target": "@api/lib/ecommerce/scope.ts"
+    },
+    {
+      "path": "files/api/lib/ecommerce/order-flow.ts",
+      "target": "@api/lib/ecommerce/order-flow.ts"
+    },
+    {
+      "path": "files/api/lib/ecommerce/payment-listener.ts",
+      "target": "@api/lib/ecommerce/payment-listener.ts"
+    },
+    {
+      "path": "files/api/lib/ecommerce/catalog-view.ts",
+      "target": "@api/lib/ecommerce/catalog-view.ts"
+    },
+    {
+      "path": "files/api/lib/ecommerce/report-range.ts",
+      "target": "@api/lib/ecommerce/report-range.ts"
+    },
+    {
       "path": "files/api/lib/ecommerce/catalog.vitest.ts",
       "target": "@api/lib/ecommerce/catalog.test.ts",
       "when": {
@@ -181,6 +290,45 @@
       "target": "@api/lib/ecommerce/fixtures.ts",
       "when": {
         "testing": true
+      }
+    },
+    {
+      "path": "files/api/lib/ecommerce/admin-data.vitest.ts",
+      "target": "@api/lib/ecommerce/admin-data.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/routes/ecommerce.vitest.ts",
+      "target": "@api/routes/ecommerce.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["payment-manual", "payment-console"]
+      }
+    },
+    {
+      "path": "files/api/routes/ecommerce-payments.vitest.ts",
+      "target": "@api/routes/ecommerce-payments.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["payment-manual", "payment-console"]
+      }
+    },
+    {
+      "path": "files/api/routes/admin-ecommerce.vitest.ts",
+      "target": "@api/routes/admin-ecommerce.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["payment-manual", "payment-console"]
+      }
+    },
+    {
+      "path": "files/api/routes/ecommerce-fixtures.ts",
+      "target": "@api/routes/ecommerce-fixtures.ts",
+      "when": {
+        "testing": true,
+        "installed": ["payment-manual", "payment-console"]
       }
     }
   ],
@@ -226,6 +374,14 @@
         {
           "path": "files/src/types.ts",
           "target": "src/types.ts"
+        },
+        {
+          "path": "files/src/notify.ts",
+          "target": "src/notify.ts"
+        },
+        {
+          "path": "files/src/payment-listener.ts",
+          "target": "src/payment-listener.ts"
         }
       ]
     }

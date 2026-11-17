@@ -30,6 +30,11 @@ export function ecommerceConfig() {
     guestCartDays: 30,
     /** Available stock at or below this shows the low-stock tone in the admin. */
     lowStockThreshold: 5,
+    /**
+     * The IANA time zone a report day starts in, such as `Asia/Dhaka`. "Today" in the
+     * Reports screen is today here, not in UTC.
+     */
+    timeZone: "Asia/Dhaka" as string,
     /** Put before the sequence number: prefix `"ORD-"` makes order `ORD-1001`. */
     orderNumberPrefix: "ORD-" as string,
     /** Send the buyer an SMS when the order moves to `confirmed`. */

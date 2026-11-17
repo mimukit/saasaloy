@@ -37,6 +37,19 @@ export {
   mergedQuantity,
 } from "./rules";
 export type { HoldKind, HoldLike, PriceLike } from "./rules";
+export { fillOrderMessage, formatOrderNumber } from "./notify";
+export type { OrderMessageValues } from "./notify";
+export {
+  ORDER_REFERENCE_TYPE,
+  orderPaymentListener,
+  setOrderPaymentHandler,
+} from "./payment-listener";
+export type {
+  OrderPaymentChange,
+  OrderPaymentHandler,
+  OrderPaymentListener,
+  OrderPaymentView,
+} from "./payment-listener";
 export { PRODUCT_STATUSES, STOCK_MOVEMENT_REASONS } from "./types";
 export type {
   Address,

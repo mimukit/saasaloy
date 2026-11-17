@@ -39,9 +39,17 @@ Available stock is `inventory_levels.on_hand` minus the variant's `stock_reserva
 
 The status machine is `ORDER_TRANSITIONS` in `@repo/ecommerce`: `placed` to `confirmed` or `cancelled`, `confirmed` to `shipped` or `cancelled`, `shipped` to `delivered` or `returned`. `transitionOrder` refuses every other move with `invalid_transition` and writes one `order_events` row per move. `cancelExpiredOrders` cancels a `placed` order whose holds have all lapsed, with a `system` event.
 
+## API routes
+
+`apps/api/src/routes/ecommerce.ts` serves the shop at `/shop`: the active catalog, zones, payment methods, the cart (a guest cart on the `shop_cart` cookie merges into the user's cart at sign-in, capped at available stock), `POST /shop/checkout`, the buyer's own orders, "Pay again" and a manual payment's submission. Checkout needs a client session (401) whose user has a verified phone, or a verified email while `requirePhoneOtp` is false (403 `phone_unverified`). No body carries a price: every figure comes from the catalog and the zone.
+
+`apps/api/src/routes/admin-ecommerce.ts` serves staff at `/admin/shop`, open to `ADMIN_APP_ROLES`. Every write runs through `adminWrite` and names its action in `apps/api/src/audit/ecommerce.ts`. `POST /admin/shop/orders` is the "New order" page: a known phone links to its user, a new phone becomes a client user with an unverified phone.
+
+The payment listener moves orders: a successful online payment confirms the order, a submitted one makes its hold untimed, a failed or cancelled one makes it timed again, and a COD payment rejected with `delivery_refused` or `delivery_failed` returns a shipped order. `orderPaymentListener()` from `@repo/ecommerce` sits in `packages/payment/src/index.ts`; the work is `apps/api/src/lib/ecommerce/payment-listener.ts`.
+
 ## Settings
 
-The `ecommerce` config section holds the store currency (`BDT`), the shop name, the base path (`/shop`), the page size, `requirePhoneOtp`, `unpaidHoldHours` (24), `guestCartDays` (30), `lowStockThreshold`, `orderNumberPrefix`, and the buyer SMS switches and templates. Override any key in `packages/config/src/project.ts`. The module declares no env var.
+The `ecommerce` config section holds the store currency (`BDT`), the shop name, the base path (`/shop`), the page size, `requirePhoneOtp`, `unpaidHoldHours` (24), `guestCartDays` (30), `lowStockThreshold`, `orderNumberPrefix`, the report `timeZone` (`Asia/Dhaka`), and the buyer SMS switches and templates. Override any key in `packages/config/src/project.ts`. The module declares no env var.
 
 ## Next
 

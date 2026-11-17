@@ -14,9 +14,11 @@ import {
   products,
   productVariants,
   shippingZones,
+  stockMovements,
   stockReservations,
   variantPrices,
 } from "../../schema/ecommerce";
+import { payments } from "../../schema/payment";
 import { newId } from "./shared";
 import type { Executor, Tx } from "./shared";
 import {
@@ -450,4 +452,91 @@ export async function orderReservations(
     .select()
     .from(stockReservations)
     .where(eq(stockReservations.orderId, orderId));
+}
+
+export type OrderPaymentRow = typeof payments.$inferSelect;
+
+/**
+ * The payments that name an order, oldest first. The order keeps no "paid" flag of its
+ * own; this is what the order page and the staff detail read (payment SKILL rule).
+ */
+export async function orderPayments(
+  db: Executor,
+  orderId: string
+): Promise<OrderPaymentRow[]> {
+  return db
+    .select()
+    .from(payments)
+    .where(
+      and(
+        eq(payments.referenceType, "order"),
+        eq(payments.referenceId, orderId)
+      )
+    )
+    .orderBy(asc(payments.createdAt), asc(payments.id));
+}
+
+/** Point an order at another payment method, as "Pay again" with a new method does. */
+export async function setOrderPaymentMethod(
+  db: Executor,
+  orderId: string,
+  paymentMethod: string
+): Promise<void> {
+  await db.update(orders).set({ paymentMethod }).where(eq(orders.id, orderId));
+}
+
+/** True once a returned order's items went back on the shelf. */
+export async function wasRestocked(
+  db: Executor,
+  orderId: string
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: stockMovements.id })
+    .from(stockMovements)
+    .where(
+      and(
+        eq(stockMovements.orderId, orderId),
+        eq(stockMovements.reason, "restock")
+      )
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * Put a returned order's items back on the shelf, once (grill Q8). For an order the
+ * payment listener returned, which had no "Restock items" checkbox to tick. Locks the order
+ * row, so two clicks restock once: the second gets `conflict`. A non-returned order gets
+ * `invalid_transition`.
+ */
+export async function restockReturnedOrder(
+  db: Executor,
+  orderId: string,
+  actor: OrderActor
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [order] = await tx
+      .select({ status: orders.status })
+      .from(orders)
+      .where(eq(orders.id, orderId))
+      .for("update");
+    if (!order) {
+      throw new EcommerceError("not_found", `No order ${orderId}.`);
+    }
+    if (order.status !== "returned") {
+      throw new EcommerceError(
+        "invalid_transition",
+        `Only a returned order is restocked; this one is ${order.status}.`
+      );
+    }
+    if (await wasRestocked(tx, orderId)) {
+      throw new EcommerceError(
+        "conflict",
+        "This order's items are already back in stock."
+      );
+    }
+    await restockOrder(tx, orderId, {
+      actorUserId: actor.type === "staff" ? actor.userId : null,
+    });
+  });
 }

@@ -186,6 +186,8 @@ export const checkoutInput = z
     zoneId: id,
     paymentMethod,
     note: z.string().trim().max(500).optional(),
+    /** Where a hosted checkout sends the buyer back. `payment` checks its origin. */
+    returnUrl: z.url().max(2000).optional(),
   })
   .refine(
     (body) => (body.addressId === undefined) !== (body.address === undefined),
@@ -207,9 +209,15 @@ export const manualOrderInput = z.object({
   address: addressInput,
   zoneId: id,
   paymentMethod,
-  /** For a method with submit fields: the payment is already in, so confirm it at once. */
+  /**
+   * For a method with submit fields: the payment is already in, so confirm it at once.
+   * `senderAccount` defaults to the order's phone, the usual sender of a wallet payment.
+   */
   paymentReceived: z
-    .object({ transactionId: z.string().trim().min(1).max(100) })
+    .object({
+      transactionId: z.string().trim().min(1).max(100),
+      senderAccount: z.string().trim().min(1).max(64).optional(),
+    })
     .optional(),
   note: z.string().trim().max(500).optional(),
 });
@@ -239,3 +247,62 @@ export const orderListQuery = z.object({
     .optional(),
 });
 export type OrderListQuery = z.infer<typeof orderListQuery>;
+
+/** Body of "Pay again" on a placed order whose last payment failed (grill Q11). */
+export const payAgainInput = z.object({
+  /** Another method, or the order's own when left out. */
+  paymentMethod: paymentMethod.optional(),
+  returnUrl: z.url().max(2000).optional(),
+});
+export type PayAgainInput = z.infer<typeof payAgainInput>;
+
+/** Body of a buyer's payment submission: what a manual method's fields ask for. */
+export const paymentSubmitInput = z.object({
+  transactionId: z.string().trim().min(1).max(100).optional(),
+  senderAccount: z.string().trim().min(1).max(64).optional(),
+  amount: minorAmount.optional(),
+});
+export type PaymentSubmitInput = z.infer<typeof paymentSubmitInput>;
+
+/** Body of a category create. */
+export const categoryInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  slug: productSlug,
+  position: z.number().int().min(0).default(0),
+});
+export type CategoryInput = z.infer<typeof categoryInput>;
+
+/** Body of an image added to a product: an uploaded `file-uploads` object. */
+export const productImageInput = z.object({
+  storageObjectId: id,
+  variantId: id.nullable().default(null),
+  alt: z.string().trim().max(200).default(""),
+  position: z.number().int().min(0).default(0),
+});
+export type ProductImageInput = z.infer<typeof productImageInput>;
+
+/** Query of the staff customer list. `q` matches the name, the email or the phone. */
+export const customerListQuery = z.object({
+  page,
+  q: z.string().trim().max(120).optional(),
+});
+export type CustomerListQuery = z.infer<typeof customerListQuery>;
+
+/** Query of the "New order" page's phone lookup (Q34). */
+export const customerLookupQuery = z.object({ phone: shopPhone });
+export type CustomerLookupQuery = z.infer<typeof customerLookupQuery>;
+
+/** Query of the Reports screen: a preset, or a custom pair of dates, both included. */
+export const reportQuery = z
+  .object({
+    range: z.enum(["today", "7d", "30d", "custom"]).default("7d"),
+    from: z.iso.date().optional(),
+    to: z.iso.date().optional(),
+  })
+  .refine(
+    (query) =>
+      query.range !== "custom" ||
+      (query.from !== undefined && query.to !== undefined),
+    { message: "A custom range needs from and to.", path: ["from"] }
+  );
+export type ReportQuery = z.infer<typeof reportQuery>;
