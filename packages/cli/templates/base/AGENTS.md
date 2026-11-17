@@ -33,6 +33,7 @@ The `apps/admin`, `apps/app`, preview and `apps/api` rows apply once you run `sa
 
 - **`.devports.json`** at the checkout root records the block, the host, the cookie prefix and each service's port. It is gitignored. Read a worktree's ports there, or in the table `pnpm dev:ports` prints.
 - **`DEV_HOST`** in `packages/env/.env` names the host the browser uses. Set it to a remote dev box's name (`DEV_HOST=devaloy`), or pass `pnpm dev:ports --host <name>` for one run. The URLs then use that host, and `CORS_ORIGINS` lists both the `localhost` and the `DEV_HOST` origin of each browser service. With `auth` installed, a `DEV_HOST` other than `localhost` makes `BETTER_AUTH_URL` a non-loopback origin, so `BETTER_AUTH_SECRET` must have a value.
+- **`DEV_PORTS_BLOCK`** in the shell environment, a whole number from 0 to 999, sets the block in any checkout, the main one included, and gives it a cookie prefix. A harness that runs the project beside other dev servers sets it. Leave it unset otherwise.
 - **Restart `pnpm dev` after `pnpm dev:ports` changes a value.** A dev server does not watch `.env.local`, so it keeps the old port and origins until a restart. The command prints "restart pnpm dev to load the new ports" when that happens.
 - **`wrangler dev` does not read `DEV_PORT`.** `pnpm dev` runs `vite dev` in `apps/api`, which does. If you run `wrangler dev` in a linked worktree, pass `--port <DEV_PORT>` with the port from `apps/api/.env.local` or `.devports.json`.
 

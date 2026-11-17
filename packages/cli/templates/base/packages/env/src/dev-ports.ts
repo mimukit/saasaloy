@@ -34,6 +34,13 @@ export const BLOCK_COUNT = 1000;
 const BLOCK_BASE = 10_000;
 const BLOCK_SIZE = 10;
 
+/**
+ * The environment variable that sets the block in any checkout, the main one included. A
+ * harness that runs a project beside other dev servers sets it, so the project's servers
+ * stay off the pinned ports.
+ */
+export const BLOCK_ENV = "DEV_PORTS_BLOCK";
+
 /** The browser services: a page served on one of these ports calls the api. */
 const BROWSER_PORTS = new Set([3000, 3001, 3002]);
 
@@ -132,6 +139,24 @@ export async function chooseBlock(options: {
   throw new Error(
     "pnpm dev:ports found every block taken by another worktree or a listening port. Stop the dev servers you no longer need, or remove stale worktrees with git worktree prune."
   );
+}
+
+/**
+ * The block `value` names, from the `DEV_PORTS_BLOCK` variable, or undefined when it is
+ * unset or blank. Any value but a whole number from 0 to 999 throws.
+ */
+export function forcedBlock(value?: string): number | undefined {
+  const text = value?.trim() ?? "";
+  if (text === "") {
+    return undefined;
+  }
+  const block = /^\d+$/.test(text) ? Number(text) : Number.NaN;
+  if (!Number.isInteger(block) || block >= BLOCK_COUNT) {
+    throw new Error(
+      `${BLOCK_ENV} is "${text}". It must be a whole number from 0 to ${String(BLOCK_COUNT - 1)}, or unset.`
+    );
+  }
+  return block;
 }
 
 /** Every worktree path in `git worktree list --porcelain` output. */

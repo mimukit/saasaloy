@@ -6,6 +6,7 @@ import type { Server } from "node:net";
 import { describe, it } from "node:test";
 import {
   BLOCK_END,
+  BLOCK_ENV,
   BLOCK_START,
   blockPorts,
   browserOrigins,
@@ -13,6 +14,7 @@ import {
   checkoutHash,
   chooseBlock,
   cookiePrefixFor,
+  forcedBlock,
   homeBlock,
   isPortListening,
   parseRecord,
@@ -130,6 +132,30 @@ describe("blockPorts", () => {
       api: 14_235,
     });
     assert.deepEqual(blockPorts(999, [API]), { api: 19_995 });
+  });
+});
+
+describe("forcedBlock", () => {
+  it("reads DEV_PORTS_BLOCK", () => {
+    assert.equal(BLOCK_ENV, "DEV_PORTS_BLOCK");
+  });
+
+  it("is undefined when the variable is unset or empty", () => {
+    assert.equal(forcedBlock(), undefined);
+    assert.equal(forcedBlock(""), undefined);
+    assert.equal(forcedBlock("  "), undefined);
+  });
+
+  it("takes a whole number from 0 to 999", () => {
+    assert.equal(forcedBlock("0"), 0);
+    assert.equal(forcedBlock("417"), 417);
+    assert.equal(forcedBlock("999"), 999);
+  });
+
+  it("names the variable for any other value", () => {
+    for (const value of ["1000", "-1", "4.5", "abc", "12a"]) {
+      assert.throws(() => forcedBlock(value), /DEV_PORTS_BLOCK/);
+    }
   });
 });
 
