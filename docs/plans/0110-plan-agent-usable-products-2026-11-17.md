@@ -69,7 +69,7 @@ Rejected, one line each:
 - UI SDK's in-page bridge as the agent surface: it needs a browser with WebMCP and a rewrite of the design layer.
 - A chat agent inside the product: a different product, and a possible later module.
 
-### Phase 1: mockup of the "Agents" page
+### Phase 1: mockup of the "Agents" page (#231)
 
 Attended: the owner approves the screenshots before any build.
 
@@ -79,7 +79,7 @@ Attended: the owner approves the screenshots before any build.
 
 Done when: the "Mockup approved" row above holds the date, the round, the gist URL with the file prefix and the issue comment URL.
 
-### Phase 2: prove the route declaration and MCP on Workers
+### Phase 2: prove the route declaration and MCP on Workers (#348)
 
 A throwaway prototype in the playground, on one sample entity.
 
@@ -91,7 +91,7 @@ A throwaway prototype in the playground, on one sample entity.
 
 Done when: `curl /openapi.json` lists the sample route, an MCP `tools/list` call returns its tool for both client revisions, `pnpm typecheck` passes with the client call unchanged, and an ADR draft records the library picks and the reason. If the SDK cannot run on `workerd`, the phase stops and the owner decides.
 
-### Phase 3: the route contract in `api`
+### Phase 3: the route contract in `api` (#348)
 
 - Add the declaration to the `api` module: description, output schema, and the agent flags (callable or not, read only, needs a person).
 - Declare every api route that the modules ship today: 21 `chained-route` patches in 15 modules. A product read is callable. Each other route states that agents may not call it.
@@ -100,7 +100,7 @@ Done when: `curl /openapi.json` lists the sample route, an MCP `tools/list` call
 
 Done when: the guard test fails on a module route file with the statement removed and passes with it, and a full scaffold of both drivers passes `pnpm typecheck`.
 
-### Phase 4: the `agent` module with key sign-in
+### Phase 4: the `agent` module with key sign-in (#348)
 
 - A new module `agent` (capability, stage `mvp`), with the skill `saasaloy-agent`. It depends on `api`, `validators`, `auth`, `app` and `api-keys`.
 - `GET /openapi.json` on the api, built from the declarations.
@@ -113,7 +113,7 @@ Done when: the guard test fails on a module route file with the statement remove
 
 Done when: in the playground with a seeded key, `tools/list` on `/mcp` returns the sample entity's tools, a `tools/call` create followed by a list returns the new row, a key without the scope gets the refusal in the shared envelope, a request with no key gets 401, and `pnpm test` fails in a project that adds a route with no statement.
 
-### Phase 5: public files for agents on the web app
+### Phase 5: public files for agents on the web app (#348)
 
 - The base web app serves `/llms.txt`, `/llms-full.txt` and a Markdown copy of each public page (`/index.md`, `/privacy.md`, `/terms.md`), made at build time. `robots.txt` stays as it is.
 - A registration table lets a module add entries. `agent` adds the api description and the MCP address. `cms` adds its published pages.
@@ -122,21 +122,21 @@ Done when: in the playground with a seeded key, `tools/list` on `/mcp` returns t
 
 Done when: the built site returns 200 and `text/plain` for `/llms.txt`, `/index.md` holds the headline from `landing.ts`, the file names the MCP address when `agent` is installed and does not when it is absent, and the audit command exits 0 on a full product and non-zero after `llms.txt` is removed.
 
-### Phase 6: the "Agents" page in `app`
+### Phase 6: the "Agents" page in `app` (#231)
 
 - Build the page from the approved mockup: the connect text, and the key list with create, show one time, and revoke. This closes issue #231.
 - The scope picker reads the vocabulary without a server import in the browser bundle, which #231 lists as open.
 
 Done when: a signed-in user creates a key in `app` with the default scopes, sees the plaintext one time, calls a read tool and a write tool on `/mcp` with it, gets a refusal on a delete tool, and gets 401 after a revoke. The screenshots in the pull request match the approved mockup.
 
-### Phase 7: on by default, and measured
+### Phase 7: on by default, and measured (#348) (#350)
 
 Attended: the owner starts each scored benchmark run on this box. This phase needs phases 2 and 8 of plan 0109: a path that runs, and a benchmark with three briefs.
 
 - `saasaloy-build` adds `agent`, `api-keys` and `api-keys-user` in the MVP stage.
 - `saasaloy-feature` gets a four-part rule for each entity: the screen, the route with its agent statement, the scope words in `API_KEY_SCOPES`, and the entry in the agent documents. Idea from agent-native's `adding-a-feature` skill. The read-back of plan 0109's interview says that each entity action is callable by agents.
 - The module catalogue and the wiki get the new module, and the README says what a built product gives to agents.
-- File one `needs-planning` issue: OAuth sign-in for MCP clients, with a link to research 0012 and the two decisions it left open (the registration method, and products with organizations).
+- File one `needs-planning` issue: OAuth sign-in for MCP clients, with a link to research 0012 and the two decisions it left open (the registration method, and products with organizations). Filed as #351.
 - New benchmark lines: the audit command exits 0, and a second agent that gets only the product's address and a seeded key creates one entity and reads it back through MCP.
 
 Done when: `node scripts/agent-bench.ts` prints PASS on every bar line, the new agent-use lines included, for each of the three briefs, and the OAuth issue exists.

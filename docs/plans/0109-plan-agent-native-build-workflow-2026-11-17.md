@@ -70,7 +70,7 @@ Rejected, one line each:
 - A scheduled benchmark on a GitHub runner: the owner chose a hand run before a release.
 - A production deploy by an agent: the owner limited the scope to a preview.
 
-### Phase 1: owner inputs and the cookie spike
+### Phase 1: owner inputs and the cookie spike (#349) (#350)
 
 Attended: the owner supplies a Cloudflare token, approves two benchmark briefs, and starts the spike deploy.
 
@@ -82,7 +82,7 @@ This phase is first so the later phases can run with nobody at the keyboard, exc
 
 Done when: `stat -c %a` on the token file prints `600`, `scripts/agent-bench/` holds three brief folders the owner approved, and a note in this plan records whether a session cookie works across the four `workers.dev` hosts and which settings it needed.
 
-### Phase 2: make the path run on `main`
+### Phase 2: make the path run on `main` (#347)
 
 - Fix the 44 type-aware lint errors in the eight base template files that research 0011 names.
 - The local env source reads a missing `packages/env/.env` as empty. `saasaloy env --from-file` counts the base's own keys (such as `PUBLIC_SITE_URL`) as declared.
@@ -94,7 +94,7 @@ Done when: `stat -c %a` on the token file prints `600`, `scripts/agent-bench/` h
 
 Done when: in a fresh folder, `saasaloy init . --force --yes --testing=tests-after` leaves one commit on `main`, `pnpm check` exits 0 right after it with no env step, the Validate `add`, the MVP `add` and the database steps all exit 0 in the order the build skill gives, and `pnpm check` exits 0 after each `add`.
 
-### Phase 3: check a scaffold on every pull request
+### Phase 3: check a scaffold on every pull request (#347)
 
 - Add a `scaffold` job to `ci.yml`: build the CLI, scaffold the MVP module set for `database-d1` from the local registry, run `pnpm check`.
 - Extend the nightly full-scaffold checks in `scripts/release-smoke.ts` from `lint` and `typecheck` to `test` and `build`, on both drivers.
@@ -102,7 +102,7 @@ Done when: in a fresh folder, `saasaloy init . --force --yes --testing=tests-aft
 
 Done when: a test pull request that adds one type-aware lint error to a base template file fails the `scaffold` job, the same pull request without the error passes it, and the nightly smoke run is green on two days in a row.
 
-### Phase 4: one version for the CLI, the base and the modules
+### Phase 4: one version for the CLI, the base and the modules (#347)
 
 - The default registry resolves at the tag `v<version>` of the CLI that runs. `@main` on a module name still reads `main`. Write the ADR that changes ADR 0012's default.
 - A lock that names a `main` commit still resolves, and `saasaloy update` moves it to the tag.
@@ -112,7 +112,7 @@ Done when: a test pull request that adds one type-aware lint error to a base tem
 
 Done when: a CLI built at a test tag fetches every module at that tag (the lock records the tag's commit), a module merged to `main` after the tag is absent from `list --json` and present with `@main`, and the preflight test fails on an `llms.txt` that names a skill the package lacks.
 
-### Phase 5: release, and record a baseline
+### Phase 5: release, and record a baseline (#350)
 
 Attended: the owner publishes to npm and starts the benchmark run. This phase follows phases 2 to 4 because it ships their fixes.
 
@@ -122,7 +122,7 @@ Attended: the owner publishes to npm and starts the benchmark run. This phase fo
 
 Done when: `npm view saasaloy version` equals `packages/cli/package.json`, a project from `npx saasaloy@latest init` holds `.agents/skills/saasaloy-build/SKILL.md`, `npx saasaloy@latest list --json` exits 0, and the score report exists with its date and run id.
 
-### Phase 6: join the interview to the build
+### Phase 6: join the interview to the build (#347)
 
 - `saasaloy-setup` gets a product part after the ten questions, for about 15 questions in total. The agent proposes one table for each entity from the earlier answers: the fields, who may see it, and its actions. The owner corrects the tables. The skill asks which optional capabilities the product needs, with choices from `saasaloy list --json`, and recommends one database driver from those picks. Each new question carries sample answers, as the present ones do.
 - The last question asks for a preview deploy. With a Postgres pick, it says that the preview runs on a temporary database.
@@ -134,7 +134,7 @@ Done when: `npm view saasaloy version` equals `packages/cli/package.json`, a pro
 
 Done when: an agent that starts in an empty folder with one sentence and a scripted owner reaches the Handover stage, the transcript shows no question after the read-back, `docs/build-log.md` names one commit for each entity of the spec, the wiki page lists zero manual steps before the prompt, and the build output of `apps/web` holds `llms.txt`.
 
-### Phase 7: the optional preview deploy
+### Phase 7: the optional preview deploy (#349)
 
 Attended: the live check at the end deploys into the owner's Cloudflare account, and the owner starts it. The other tasks run unattended, and a builder may create temporary neon.new databases in their tests.
 
@@ -146,7 +146,7 @@ Attended: the live check at the end deploys into the owner's Cloudflare account,
 
 Done when: with `deploy: preview` and the token file, the build log ends with the preview addresses and the name of the credentials file, `curl` gets 200 from the web address, a sign-up and a sign-in by HTTP against the preview api both succeed, and a sign-in as `superadmin@example.test` with the seed password is refused. The same holds for a `database-postgres` project, whose log also states the day the database ends. With `deploy: none`, the transcript holds no `wrangler` call.
 
-### Phase 8: measure the whole workflow
+### Phase 8: measure the whole workflow (#347) (#350)
 
 Attended: the owner starts each scored run on this box.
 
