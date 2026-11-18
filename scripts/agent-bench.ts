@@ -43,6 +43,12 @@
 // `CLAUDECODE*` variables are removed, so the agent does not run as a child of whatever
 // session started the benchmark.
 //
+// The second agent. With the dev servers up, the scorer seeds a key for the spec's first
+// entity and starts one more call of the same agent command, in an empty folder, with only
+// the site's address and that key (`./agent-bench/second-agent.ts`). It must create one
+// row and read it back through MCP. `./agent-bench/agent-use.ts` says how the key is
+// seeded; `--score` starts the agent command that `run.json` records.
+//
 // The report. `score.md` starts with the brief, the mode, the revision, the turns, the
 // time and the cost, then the bar table. The turns and the cost are the sum of what each
 // agent call reported, or "unknown" when a call reported none. `release-preflight` reads
@@ -71,6 +77,7 @@ import { join, resolve } from "node:path";
 
 import {
   absolutePaths,
+  cleanEnv,
   formatHeader,
   isInside,
   parseArgs,
@@ -95,27 +102,13 @@ import {
   untrackGroup,
 } from "./agent-bench/score.ts";
 import type { Exchange, Expect, InterviewRecord } from "./agent-bench/score.ts";
+import { secondAgent } from "./agent-bench/second-agent.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const benchDir = join(root, "scripts/agent-bench");
 const MAX_TURNS = "400";
 const MAX_CALLS = 40;
 const AGENT_TIMEOUT_MS = 4 * 60 * 60_000;
-
-// Variables that tie a child to the parent Claude Code session, or that would let the
-// agent push. The OAuth token stays: it is how a run on this box authenticates.
-const STRIP = [
-  /^CLAUDECODE$/,
-  /^CLAUDE_CODE_(?!OAUTH_TOKEN$)/,
-  /^CLAUDE_PID$/,
-  /^CLAUDE_EFFORT$/,
-  /^CLAUDE_AGENT_SDK_VERSION$/,
-  /^CLAUDE_CONFIG_DIR$/,
-  /^AI_AGENT$/,
-  /^GITHUB_TOKEN$/,
-  /^GH_TOKEN$/,
-  /^DEV_PORTS_BLOCK$/,
-];
 
 /**
  * Stops every process group the benchmark started, and every process left in the run
@@ -158,7 +151,13 @@ function freeBlock(seed: string): Promise<number> {
 
 async function score(
   runDir: string,
-  options: { brief: string; mode: Mode; staticOnly: boolean; header?: string }
+  options: {
+    brief: string;
+    mode: Mode;
+    staticOnly: boolean;
+    agent: string[];
+    header?: string;
+  }
 ): Promise<number> {
   const outDir = `${runDir.replace(/\/+$/, "")}.out`;
   const block = await freeBlock(`${runDir}#score`);
@@ -169,6 +168,7 @@ async function score(
     mode: options.mode,
     block,
     staticOnly: options.staticOnly,
+    secondAgent: secondAgent({ command: options.agent, env: process.env }),
   });
   const report = [options.header, result.table].filter(Boolean).join("\n\n");
   writeFileSync(join(outDir, "score.md"), `${report}\n`);
@@ -183,14 +183,8 @@ function agentEnv(
   registry: string,
   extra: Record<string, string>
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (!STRIP.some((pattern) => pattern.test(key))) {
-      env[key] = value;
-    }
-  }
   return {
-    ...env,
+    ...cleanEnv(process.env),
     PATH: `${bin}:${process.env.PATH ?? ""}`,
     SAASALOY_REGISTRY_DIR: registry,
     GIT_CEILING_DIRECTORIES: runs,
@@ -383,6 +377,13 @@ function callOf(
   return call;
 }
 
+/** The agent command: `--agent` with its paths made absolute, else the claude adapter. */
+function agentCommand(options: Options): string[] {
+  return options.agent
+    ? absolutePaths(options.agent, process.cwd(), existsSync)
+    : [process.execPath, join(benchDir, "agents", "claude.ts")];
+}
+
 async function runAgent(options: Options): Promise<number> {
   if (isInside(root, options.runs)) {
     fatal(
@@ -394,9 +395,7 @@ async function runAgent(options: Options): Promise<number> {
   if (expect.status) {
     console.log(`agent-bench: brief ${options.brief} is a ${expect.status}`);
   }
-  const command = options.agent
-    ? absolutePaths(options.agent, process.cwd(), existsSync)
-    : [process.execPath, join(benchDir, "agents", "claude.ts")];
+  const command = agentCommand(options);
 
   if (options.build) {
     console.log("agent-bench: building the local CLI");
@@ -475,6 +474,7 @@ async function runAgent(options: Options): Promise<number> {
     brief: options.brief,
     mode: options.mode,
     staticOnly: options.staticOnly,
+    agent: command,
     header: formatHeader(run),
   });
   const strays = await killStrays(runDir);
@@ -503,6 +503,7 @@ async function rescore(options: Options): Promise<number> {
     brief: run?.brief ?? options.brief,
     mode: run?.mode ?? options.mode,
     staticOnly: options.staticOnly,
+    agent: run?.agent ?? agentCommand(options),
     header: run ? formatHeader(run) : undefined,
   });
   const strays = await killStrays(runDir);

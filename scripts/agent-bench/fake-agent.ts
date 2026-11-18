@@ -7,8 +7,13 @@
 //
 // It records what it saw in `$AGENT_BENCH_STATE/fake-agent.jsonl`, so the test can check
 // the turn numbers, the session, the stdin and the environment the harness passed.
+//
+// It also plays the second agent of the agent-use line (issue #348): a message that asks
+// for a `READ BACK:` line gets one Bash call that sends an MCP `tools/call`, and the reply
+// `READ BACK: fake_1`. It contacts nothing. FAKE_AGENT_EXIT makes that call exit with
+// the given code.
 
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const chunks: Buffer[] = [];
@@ -26,6 +31,7 @@ appendFileSync(
     session: process.env.AGENT_BENCH_SESSION,
     message,
     cwd: process.cwd(),
+    empty: readdirSync(process.cwd()).length === 0,
     block: process.env.DEV_PORTS_BLOCK,
     registry: process.env.SAASALOY_REGISTRY_DIR,
     path: process.env.PATH,
@@ -56,7 +62,28 @@ function result(reply: string): string {
   });
 }
 
-if (turn <= 10) {
+if (message.includes("READ BACK")) {
+  console.log(
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            name: "Bash",
+            input: {
+              command: `curl -s -X POST <api>/mcp -d '{"jsonrpc":"2.0","id":1,"method":"tools/call"}'`,
+            },
+          },
+        ],
+      },
+    })
+  );
+  console.log(
+    result("I created one item and read it back.\n\nREAD BACK: fake_1")
+  );
+  process.exit(Number(process.env.FAKE_AGENT_EXIT ?? "0"));
+} else if (turn <= 10) {
   console.log(
     JSON.stringify({
       type: "assistant",

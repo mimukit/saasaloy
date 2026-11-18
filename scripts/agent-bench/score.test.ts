@@ -16,6 +16,8 @@ import {
   findConsoleMail,
   findProject,
   formatTable,
+  judgeAgentUse,
+  judgeAudit,
   judgeEntities,
   judgeInterview,
   judgeLanding,
@@ -211,14 +213,16 @@ describe("formatTable", () => {
     assert.equal(rows.length, MVP_BAR.length);
     assert.match(table, /^FAIL 4: stop point: stage "Stage 3" is stopped$/m);
     assert.doesNotMatch(table, /^FAIL 1:/m);
-    assert.match(table, /8\/10 MVP bar lines pass, 1 N\/A, 1 FAIL\./);
+    assert.match(table, /10\/12 MVP bar lines pass, 1 N\/A, 1 FAIL\./);
   });
 
-  it("holds the three bar lines of plan 0109", () => {
-    assert.deepEqual(MVP_BAR.map((line) => line.id).slice(-3), [
+  it("holds the three bar lines of plan 0109, then the two agent lines of plan 0110", () => {
+    assert.deepEqual(MVP_BAR.map((line) => line.id).slice(-5), [
       "interview",
       "entities",
       "preview",
+      "agent-audit",
+      "agent-use",
     ]);
   });
 
@@ -644,5 +648,182 @@ describe("portsFromRecord", () => {
       app: 10_072,
       api: 10_075,
     });
+  });
+});
+
+describe("the agent audit line", () => {
+  const report = (agent: boolean, failed?: { id: string; detail: string }) =>
+    [
+      "> shelfnote@0.0.0 agent:audit /run/shelfnote",
+      "> node packages/tooling/src/agent-audit.ts",
+      "",
+      JSON.stringify(
+        {
+          ok: failed === undefined,
+          site: "http://localhost:10000",
+          api: "http://localhost:10005",
+          agent,
+          checks: [
+            { id: "web/llms.txt", status: "PASS", detail: "200 text/plain" },
+            {
+              id: "api/tools-list",
+              status: failed ? "FAIL" : "PASS",
+              detail: failed?.detail ?? "4 tools",
+            },
+          ],
+        },
+        null,
+        2
+      ),
+    ].join("\n");
+
+  it("fails when the audit did not run, and says why", () => {
+    const result = judgeAudit(undefined, "no key: sign-up returned 500");
+    assert.equal(result.id, "agent-audit");
+    assert.equal(result.verdict, "FAIL");
+    assert.match(result.detail, /no key: sign-up returned 500/);
+  });
+
+  it("passes on exit 0 with agent installed, counting the checks", () => {
+    const result = judgeAudit({ code: 0, output: report(true) });
+    assert.equal(result.verdict, "PASS");
+    assert.match(result.detail, /2 checks pass/);
+  });
+
+  it("fails on exit 0 when agent is not installed", () => {
+    const result = judgeAudit({ code: 0, output: report(false) });
+    assert.equal(result.verdict, "FAIL");
+    assert.match(result.detail, /agent is not installed/);
+  });
+
+  it("fails on exit 1 and names the first failed check", () => {
+    const result = judgeAudit({
+      code: 1,
+      output: report(true, { id: "api/tools-list", detail: "401" }),
+    });
+    assert.equal(result.verdict, "FAIL");
+    assert.match(result.detail, /exited 1; api\/tools-list: 401/);
+  });
+
+  it("fails on a usage error, a timeout, and output that is not the JSON report", () => {
+    assert.match(
+      judgeAudit({ code: 2, output: "agent-audit: unknown flag --x" }).detail,
+      /exited 2.*unknown flag --x/
+    );
+    assert.match(
+      judgeAudit({ code: null, output: "", timedOut: true }).detail,
+      /timed out/
+    );
+    const missing = judgeAudit({
+      code: 1,
+      output: 'ERR_PNPM_NO_SCRIPT Missing script: "agent:audit"',
+    });
+    assert.equal(missing.verdict, "FAIL");
+    assert.match(missing.detail, /no JSON report.*Missing script/);
+  });
+});
+
+describe("the second agent line", () => {
+  const bash = (command: string) =>
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", name: "Bash", input: { command } }],
+      },
+    });
+  const transcript = [
+    bash("curl -s http://localhost:10000/llms.txt"),
+    bash(
+      `curl -s -X POST http://localhost:10005/mcp -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"books_create"}}'`
+    ),
+    bash(
+      `curl -s -X POST http://localhost:10005/mcp -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"books_list"}}'`
+    ),
+  ].join("\n");
+  const run = {
+    code: 0,
+    timedOut: false,
+    transcript,
+    reply: "I created a book and read it back.\n\nREAD BACK: bk_123",
+  };
+  const read = { tool: "books_list", rows: [{ id: "bk_123", title: "Dune" }] };
+
+  it("fails with the reason when no key was seeded or no agent ran", () => {
+    const noKey = judgeAgentUse({
+      table: "books",
+      problem: "no key: api-key/create returned 403",
+    });
+    assert.equal(noKey.id, "agent-use");
+    assert.equal(noKey.verdict, "FAIL");
+    assert.match(noKey.detail, /api-key\/create returned 403/);
+    assert.match(
+      judgeAgentUse({ table: "books" }).detail,
+      /the second agent did not run/
+    );
+  });
+
+  it("fails when the second agent exits non-zero or times out", () => {
+    assert.match(
+      judgeAgentUse({ table: "books", run: { ...run, code: 1 }, read }).detail,
+      /exited 1/
+    );
+    assert.match(
+      judgeAgentUse({
+        table: "books",
+        run: { ...run, code: null, timedOut: true },
+        read,
+      }).detail,
+      /timed out/
+    );
+  });
+
+  it("fails when the transcript holds no MCP tools/call", () => {
+    const result = judgeAgentUse({
+      table: "books",
+      run: { ...run, transcript: bash("curl -s http://localhost:10005/books") },
+      read,
+    });
+    assert.equal(result.verdict, "FAIL");
+    assert.match(result.detail, /no MCP tools\/call/);
+  });
+
+  it("fails when the key's user has no row, so nothing was created", () => {
+    const result = judgeAgentUse({
+      table: "books",
+      run,
+      read: { tool: "books_list", rows: [] },
+    });
+    assert.equal(result.verdict, "FAIL");
+    assert.match(result.detail, /no `books` row/);
+    assert.match(
+      judgeAgentUse({
+        table: "books",
+        run,
+        read: { problem: "no read tool for books:read" },
+      }).detail,
+      /no read tool for books:read/
+    );
+  });
+
+  it("fails when the reply names no row, or a row the scorer cannot find", () => {
+    assert.match(
+      judgeAgentUse({ table: "books", run: { ...run, reply: "Done." }, read })
+        .detail,
+      /no `READ BACK: <id>` line/
+    );
+    assert.match(
+      judgeAgentUse({
+        table: "books",
+        run: { ...run, reply: "READ BACK: bk_999" },
+        read,
+      }).detail,
+      /bk_999 is not among the 1 `books` rows/
+    );
+  });
+
+  it("passes when the agent created a row and named it, and the scorer reads it back", () => {
+    const result = judgeAgentUse({ table: "books", run, read });
+    assert.equal(result.verdict, "PASS");
+    assert.match(result.detail, /bk_123.*books_list.*2 MCP tools\/call/);
   });
 });
