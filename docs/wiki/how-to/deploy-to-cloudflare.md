@@ -100,13 +100,12 @@ Two kinds of setup stay manual:
 | `logger` | `LOGGER_PROVIDER`, `LOG_LEVEL` |
 | `queue` | `QUEUE_PROVIDER` |
 | `kv` | `KV_PROVIDER`, `KV_KEY_PREFIX` |
-| `storage` | `STORAGE_PROVIDER`, `STORAGE_URL_SECRET`, `STORAGE_MAX_UPLOAD_BYTES`, `STORAGE_PROXY_URL` |
+| `storage` | `STORAGE_PROVIDER`, `STORAGE_URL_SECRET`, `STORAGE_PROXY_URL` |
 | `storage-cloudflare` | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` |
 | `email-plunk` | `PLUNK_API_KEY`, `PLUNK_API_URL` |
-| `subscription` | `SUBSCRIPTION_PROVIDER`, `SUBSCRIPTION_LOCKOUT_DAYS`, `SUBSCRIPTION_APP_URL` |
+| `subscription` | `SUBSCRIPTION_PROVIDER`, `SUBSCRIPTION_APP_URL` |
 | `subscription-stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `database-postgres` | `DATABASE_URL` |
-| `feature-flags` | `FLAGS_ISOLATE_TTL_SECONDS` |
 | `waitlist` | `PUBLIC_API_URL` |
 
 `BETTER_AUTH_SECRET` is marked blank on purpose, because local dev on a loopback `BETTER_AUTH_URL` runs without one, so the check lets it through. In production it is required: `auth` throws while the Worker initializes when it is unset, and `wrangler deploy` reports that startup failure. Set it in the production values.

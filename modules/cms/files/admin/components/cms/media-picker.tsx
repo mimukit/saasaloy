@@ -27,7 +27,7 @@ export const IMAGE_TYPES = [
   "image/gif",
 ] as const;
 
-/** The per-image cap the picker checks. The api checks `STORAGE_MAX_UPLOAD_BYTES` again. */
+/** The per-image cap the picker checks. The api checks `config.storage.maxUploadBytes` again. */
 export const IMAGE_MAX_BYTES = 10_485_760;
 
 export const IMAGE_LABELS: FileDropLabels = {

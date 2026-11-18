@@ -190,9 +190,9 @@ The `shell` module writes the UI kit this app uses into `packages/ui/src/{compon
 `src/routes/users.tsx` is the worked example, and every row in it is real data from `GET /admin/users`.
 
 - `usersQuery` in `src/lib/users-query.ts` is a `queryOptions` over `api.admin.users.$get({ query: {} })`, keyed `["admin", "users"]`. `newestUsersQuery` beside it asks `?limit=5&sortBy=createdAt&sortDirection=desc` for the overview and is keyed `["admin", "users", "newest"]`, so invalidating `usersQuery.queryKey` refreshes both.
-- `GET /admin/users` takes `limit` (1 to 100, default 100), `sortBy` (`createdAt` or `name`) and `sortDirection` (`asc` or `desc`), validated after `adminGate`, and passes them to `listUsers`. `total` is always the count of every account.
+- `GET /admin/users` takes `limit` (1 to `config.admin.userListLimit`, which is also the default; 100 as shipped, changed in `packages/config/src/project.ts`), `sortBy` (`createdAt` or `name`) and `sortDirection` (`asc` or `desc`), validated after `adminGate`, and passes them to `listUsers`. `total` is always the count of every account.
 - The row type is derived from the query's own return type, so a field dropped in `apps/api` lands as a typecheck failure here.
-- `PageHeader` shows `data.total`, the api's count. The endpoint caps its answer at 100 users, so the loaded page and the real total can differ.
+- `PageHeader` shows `data.total`, the api's count. The endpoint caps its answer at `config.admin.userListLimit` users, so the loaded page and the real total can differ.
 - `FilterChips` narrows the loaded rows by role, in the component, with no refetch.
 - `DataTable` renders name with an avatar, email, role as a `StatusPill`, verified as an `ok` or `warn` `StatusPill`, and created. The columns are a module-scope constant.
 - An empty list shows one `EmptyState`, and a list filtered to nothing shows another with a "Show all users" button.

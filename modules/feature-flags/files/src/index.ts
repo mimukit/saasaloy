@@ -8,7 +8,7 @@ import {
 import type { FlagsEnv } from "./define";
 import type { FlagSource } from "./source";
 
-export { DEFAULT_ISOLATE_TTL_SECONDS, forgetCache } from "./cache";
+export { forgetCache } from "./cache";
 export {
   defineFlag,
   defineFlags,

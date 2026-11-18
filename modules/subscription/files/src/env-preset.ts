@@ -23,14 +23,6 @@ export const subscriptionPreset = definePreset({
       .describe(
         "Which installed provider takes payments: stripe or console. Always required — there is no default."
       ),
-    SUBSCRIPTION_LOCKOUT_DAYS: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(14)
-      .describe(
-        "How many days a subscription may stay past_due before the lockout job runs. 14 when unset."
-      ),
     SUBSCRIPTION_APP_URL: z
       .url()
       .default("http://localhost:3001/subscription")

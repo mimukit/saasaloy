@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 
+import { config } from "@repo/config";
 import { Badge } from "@repo/ui/components/badge";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import {
@@ -40,9 +41,6 @@ import { cn } from "@repo/ui/lib/utils";
 // Several files go up in one submit. The block calls `onUpload` once per file, in order,
 // and waits for each before it starts the next, so a failure stops the run with the
 // remaining files still in the list. `FileDrop` comes from the `storage` module.
-
-/** `STORAGE_MAX_UPLOAD_BYTES`'s default, 100 MiB. */
-const DEFAULT_MAX_BYTES = 104_857_600;
 
 /** The FileDrop copy for this screen. */
 const dropLabels: FileDropLabels = {
@@ -99,7 +97,7 @@ export interface FileUploadsProps {
   publicUploads?: boolean;
   /** `STORAGE_IMAGE_TRANSFORMS`, passed down so the avatar below can resize on the CDN. */
   imageTransforms?: boolean;
-  /** The per-file cap the picker checks. The api checks `STORAGE_MAX_UPLOAD_BYTES` again. */
+  /** The per-file cap the picker checks. Defaults to `config.storage.maxUploadBytes`, which the api checks again. */
   maxBytes?: number;
   /** The most files one submit takes. */
   maxFiles?: number;
@@ -114,7 +112,7 @@ export function FileUploads({
   error = null,
   publicUploads = false,
   imageTransforms = false,
-  maxBytes = DEFAULT_MAX_BYTES,
+  maxBytes = config.storage.maxUploadBytes,
   maxFiles = 10,
 }: FileUploadsProps) {
   const [visibility, setVisibility] = useState<"private" | "public">("private");

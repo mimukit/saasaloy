@@ -57,7 +57,7 @@ export const subscriptions = pgTable(
     id: text("id").primaryKey(),
     /**
      * Core-only. The lockout job sets it once a row has been `past_due` for longer than
-     * SUBSCRIPTION_LOCKOUT_DAYS, and `payment.succeeded` clears it. A locked row keeps its
+     * `config.subscription.lockoutDays`, and `payment.succeeded` clears it. A locked row keeps its
      * status but stops entitling its plan. No provider ever writes this column.
      */
     lockedAt: timestamptz("locked_at"),

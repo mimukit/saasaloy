@@ -8,6 +8,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { config } from "@repo/config";
 import {
   API_KEY_OPTIONS,
   GUARDED_PATHS,
@@ -51,6 +52,17 @@ describe("scopeOf", () => {
       scopeOf({ permissions: { project: ["read", 7], team: "read" } }),
       { project: ["read"] }
     );
+  });
+});
+
+describe("API_KEY_OPTIONS.keyExpiration", () => {
+  it('caps a client-set expiry at config["api-keys"].maxExpiryDays', () => {
+    assert.equal(config["api-keys"].maxExpiryDays, 365);
+    assert.equal(
+      API_KEY_OPTIONS.keyExpiration.maxExpiresIn,
+      config["api-keys"].maxExpiryDays
+    );
+    assert.equal(API_KEY_OPTIONS.keyExpiration.defaultExpiresIn, null);
   });
 });
 

@@ -8,12 +8,11 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./flags/*": "./src/flags/*.ts",
-    "./env-preset": "./src/env-preset.ts"
+    "./flags/*": "./src/flags/*.ts"
   },
   "dependencies": {
-    "@repo/kv": "workspace:*",
-    "@repo/env": "workspace:*"
+    "@repo/config": "workspace:*",
+    "@repo/kv": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20261001.1",

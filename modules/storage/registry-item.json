@@ -11,14 +11,24 @@
   "envVars": {
     "STORAGE_PROVIDER": "Which installed provider stores objects: `cloudflare` (add storage-cloudflare) or `memory` (add storage-memory). Always required — there is no default, so nothing writes to a real bucket by accident and nothing stops writing silently.",
     "STORAGE_URL_SECRET": "HMAC key that signs the upload and download links the proxy route accepts. Required — nothing generates one. Make it with `openssl rand -base64 32`, put it in `packages/env/.env` for local dev and run `pnpm env:setup`, and set it in production with `wrangler secret put STORAGE_URL_SECRET`.",
-    "STORAGE_MAX_UPLOAD_BYTES": "Per-file upload cap in bytes. Defaults to 104857600 (100 MiB), which is the Free-plan Worker request body limit. This is the only limit v1 enforces: a tenant can still accumulate objects without bound.",
     "STORAGE_PROXY_URL": "Absolute origin the proxy route answers on (e.g. https://api.x.com), for a caller on another origin. Optional: with it unset a proxy link is root-relative."
   },
   "envServices": {
     "default": ["api"]
   },
-  "envOptional": ["STORAGE_MAX_UPLOAD_BYTES", "STORAGE_PROXY_URL"],
+  "envOptional": ["STORAGE_PROXY_URL"],
   "patches": [
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "storageConfig",
+      "import": {
+        "name": "storageConfig",
+        "from": "./sections/storage"
+      }
+    },
     {
       "file": "apps/api/src/index.ts",
       "kind": "chained-route",
@@ -57,6 +67,10 @@
     }
   ],
   "files": [
+    {
+      "path": "files/config/storage.ts",
+      "target": "@config/sections/storage.ts"
+    },
     {
       "path": "files/api/routes/storage.ts",
       "target": "@api/routes/storage.ts"

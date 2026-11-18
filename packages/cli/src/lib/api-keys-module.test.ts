@@ -65,12 +65,17 @@ describe("the api-keys core", () => {
     expect(satisfies(cli.version, range ?? "")).toBeTruthy();
   });
 
-  it("keeps the auth.ts and client.ts patches, importing from the owner's fixed path", async () => {
+  it("registers its config section and keeps the auth.ts and client.ts patches, importing from the owner's fixed path", async () => {
     const patches = (await readDescriptor("api-keys")).patches as PatchEntry[];
 
     expect(
       patches.map((patch) => [patch.file, patch.kind, patch.import?.from])
     ).toStrictEqual([
+      [
+        "packages/config/src/sections.ts",
+        "plugin-array",
+        "./sections/api-keys",
+      ],
       ["packages/auth/package.json", "package-json-dependency", undefined],
       ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
       ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
@@ -89,10 +94,11 @@ describe("the api-keys core", () => {
     ]);
   });
 
-  it("ships the shared options and the client plugin, and no owner file", async () => {
+  it("ships its config section, the shared options and the client plugin, and no owner file", async () => {
     const files = (await readDescriptor("api-keys")).files as FileEntry[];
 
     expect(files.map((file) => file.target)).toStrictEqual([
+      "@config/sections/api-keys.ts",
       "@auth/plugins/api-key-options.ts",
       "@auth/plugins/api-key-client.ts",
     ]);

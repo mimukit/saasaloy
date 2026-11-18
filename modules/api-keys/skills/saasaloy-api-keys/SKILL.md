@@ -184,7 +184,7 @@ Both functions throw `HTTPException`, so `apps/api`'s `onError` renders their re
 
 The plaintext exists in the create response and nowhere else. Only a SHA-256 hash is stored, and the plugin has no endpoint that returns a key again. A lost key is reissued, not recovered.
 
-`expiresIn` is in **seconds**, with a floor of one day and a ceiling of 365 days. Leave it out and the key stays valid until it is revoked.
+`expiresIn` is in **seconds**, with a floor of one day and a ceiling of `config["api-keys"].maxExpiryDays` days (365 by default). Change the ceiling in `packages/config/src/project.ts`: the leaf sets the plugin's `keyExpiration.maxExpiresIn` and the create form's `max` together. Leave it out and the key stays valid until it is revoked.
 
 ### What is off, and why
 

@@ -2,13 +2,6 @@ import { defineSubscription } from "./define";
 import type { SubscriptionEnv } from "./provider";
 
 export {
-  subscriptionConfig,
-  DEFAULT_LOCKOUT_DAYS,
-  readLockoutDays,
-  setSubscriptionConfig,
-} from "./config";
-export type { SubscriptionConfigValues } from "./config";
-export {
   defaultPlan,
   defineSubscription,
   definePlans,

@@ -29,12 +29,6 @@ export const storagePreset = definePreset({
       .describe(
         "HMAC key that signs the upload and download links the proxy route accepts. Make it with openssl rand -base64 32."
       ),
-    STORAGE_MAX_UPLOAD_BYTES: z.coerce
-      .number()
-      .int()
-      .positive()
-      .default(104_857_600)
-      .describe("Per-file upload cap in bytes. 100 MiB when unset."),
     STORAGE_PROXY_URL: z
       .string()
       .optional()

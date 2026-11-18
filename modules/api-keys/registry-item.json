@@ -15,6 +15,17 @@
   ],
   "patches": [
     {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "apiKeysConfig",
+      "import": {
+        "name": "apiKeysConfig",
+        "from": "./sections/api-keys"
+      }
+    },
+    {
       "file": "packages/auth/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -89,6 +100,10 @@
     }
   ],
   "files": [
+    {
+      "path": "files/config/api-keys.ts",
+      "target": "@config/sections/api-keys.ts"
+    },
     {
       "path": "files/auth/plugins/api-key-options.ts",
       "target": "@auth/plugins/api-key-options.ts"

@@ -13,8 +13,9 @@
 // content — rather than once per colo per request. Write-back on every read would scale
 // KV writes with traffic, and Workers KV's free plan allows 1,000 writes a day.
 
+import { config as projectConfig } from "@repo/config";
 import { createKv } from "@repo/kv";
-import { forgetCache, isolateTtlSeconds, readCache, writeCache } from "./cache";
+import { forgetCache, readCache, writeCache } from "./cache";
 import {
   evaluate,
   FLAGS_NAMESPACE,
@@ -70,10 +71,11 @@ export interface FlagContext {
 export type KillSwitchName<K extends string> =
   K extends `${typeof KILL_PREFIX}${infer N}` ? N : never;
 
-export interface FlagsEnv extends KvEnv {
-  /** Seconds the isolate cache serves a document. Default 10; `0` disables the layer. */
-  FLAGS_ISOLATE_TTL_SECONDS?: string;
-}
+/**
+ * What `create` reads off the Worker environment: the kv selection and nothing else. The
+ * isolate cache TTL is `config["feature-flags"].isolateTtlSeconds`, a checked-in value.
+ */
+export type FlagsEnv = KvEnv;
 
 /** Thrown by `assertEnabled` when the switch is off. Carries a `code` for api's envelope. */
 export class KillSwitchError extends Error {
@@ -108,6 +110,12 @@ export interface FlagsClient<K extends string> {
 
 export interface FlagsConfig<F extends readonly FlagDefinition[]> {
   flags: F;
+  /**
+   * Seconds the isolate cache serves a document; `0` disables the layer. Leave it out:
+   * the default is `config["feature-flags"].isolateTtlSeconds`, which is where a project
+   * changes it. A registry that must measure the kv layer alone, such as a test, passes `0`.
+   */
+  isolateTtlSeconds?: number;
 }
 
 export interface FlagsRegistry<F extends readonly FlagDefinition[]> {
@@ -149,6 +157,9 @@ export function defineFlags<F extends readonly FlagDefinition[]>(
   config: FlagsConfig<F>
 ): FlagsRegistry<F> {
   const { flags } = config;
+  const ttlSeconds =
+    config.isolateTtlSeconds ??
+    projectConfig["feature-flags"].isolateTtlSeconds;
   type Key = F[number]["key"];
 
   const byKey = new Map<string, FlagDefinition>();
@@ -165,7 +176,6 @@ export function defineFlags<F extends readonly FlagDefinition[]>(
   return {
     create(env: FlagsEnv, source: FlagSource): FlagsClient<Key> {
       const store = createKv(env);
-      const ttlSeconds = isolateTtlSeconds(env.FLAGS_ISOLATE_TTL_SECONDS);
 
       function documentKey(scope: FlagScope): string {
         return store.key({

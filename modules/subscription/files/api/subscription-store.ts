@@ -9,12 +9,9 @@ import type {
 } from "@repo/subscription";
 import {
   SUBSCRIPTION_EVENT_JOB,
-  subscriptionConfig,
   defaultPlan,
   findPlan,
   plans,
-  readLockoutDays,
-  setSubscriptionConfig,
   setSubscriptionEnqueuer,
   setSubscriptionNotifier,
   setSubscriptionStoreResolver,
@@ -108,17 +105,6 @@ setSubscriptionEnqueuer(async (event) => {
   );
 });
 
-// The third registration, for the third thing a job handler cannot reach: `env`. A handler
-// signature is `(payload, ctx)` (packages/queue/src/provider.ts), so the daily lockout job
-// has no way to read `SUBSCRIPTION_LOCKOUT_DAYS` for itself, and the core never reads
-// `process.env`. Read once here, where the importable Workers `env` already is.
-setSubscriptionConfig({
-  lockoutDays: readLockoutDays(
-    (env as unknown as { SUBSCRIPTION_LOCKOUT_DAYS?: string })
-      .SUBSCRIPTION_LOCKOUT_DAYS
-  ),
-});
-
 // What the subscription emails call the project, and where they send the reader.
 //
 // The name is a `config` value: two deployments of this project call it the same thing, so
@@ -176,7 +162,7 @@ function content(notification: SubscriptionNotification) {
         lockoutOn: day(
           new Date(
             subscription.updatedAt.getTime() +
-              subscriptionConfig().lockoutDays * 24 * 60 * 60 * 1000
+              config.subscription.lockoutDays * 24 * 60 * 60 * 1000
           )
         ),
         name,

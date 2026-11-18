@@ -21,6 +21,17 @@
   ],
   "patches": [
     {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "adminConfig",
+      "import": {
+        "name": "adminConfig",
+        "from": "./sections/admin"
+      }
+    },
+    {
       "file": "apps/api/src/index.ts",
       "kind": "chained-route",
       "exportName": "default",
@@ -115,6 +126,10 @@
     }
   ],
   "files": [
+    {
+      "path": "files/config/admin.ts",
+      "target": "@config/sections/admin.ts"
+    },
     {
       "path": "files/api/routes/admin-users.ts",
       "target": "@api/routes/admin-users.ts"
