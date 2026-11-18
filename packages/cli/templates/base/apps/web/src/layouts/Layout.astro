@@ -6,9 +6,11 @@
 import { config } from "@repo/config";
 import "@repo/ui/styles/web.css";
 import { siteName } from "@repo/ui";
-import { ui } from "@repo/ui/content/landing";
+import { landing, ui } from "@repo/ui/content/landing";
+import { interpolate } from "@repo/ui/lib/interpolate";
 import { THEME_INIT_SCRIPT } from "@repo/ui/lib/theme";
 import { webEnv } from "@web/env";
+import { siteJsonLd } from "@web/lib/llms";
 
 interface Props {
   title: string;
@@ -42,6 +44,15 @@ const canonical = new URL(
   canonicalPath ?? Astro.url.pathname,
   webEnv().PUBLIC_SITE_URL
 ).href;
+
+// The JSON-LD for the organization and the site: the name and the logo from
+// `config.app`, the origin from `PUBLIC_SITE_URL`, the description from landing.meta.
+const jsonLd = siteJsonLd({
+  name: config.app.name,
+  site: new URL(webEnv().PUBLIC_SITE_URL),
+  logoPath: config.app.logoPath,
+  description: interpolate(landing.meta.description, { siteName }),
+});
 ---
 
 <!doctype html>
@@ -80,6 +91,7 @@ const canonical = new URL(
       A page's own extra head tags, such as the blog's RSS `<link rel="alternate">`. Pass
       them with `<Fragment slot="head">`.
     */}
+    <script is:inline type="application/ld+json" set:html={jsonLd} />
     <slot name="head" />
     {/*
       Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser

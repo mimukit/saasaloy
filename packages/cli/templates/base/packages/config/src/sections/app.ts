@@ -23,5 +23,11 @@ export function app() {
      * change one.
      */
     legal: { termsPath: "/terms", privacyPath: "/privacy" },
+    /**
+     * The logo's path on the web app, which the JSON-LD for the organization names. It
+     * ships as the favicon; point it at a square PNG of at least 112 pixels in
+     * `apps/web/public/` when you have one.
+     */
+    logoPath: "/favicon.svg",
   });
 }

@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import { withDb } from "@repo/db/client";
 import type { DbBindings } from "@repo/db/client";
 import { waitlistEntries as waitlistTable } from "@repo/db/schema/waitlist";
@@ -22,6 +22,11 @@ import { Hono } from "hono";
 // middleware and overwrite those headers with its own permissive defaults.
 export const waitlist = new Hono<{ Bindings: DbBindings }>().post(
   "/",
+  declare({
+    name: "waitlist_join",
+    description: "Put an email address on the launch waitlist.",
+    agent: { callable: false, reason: "A public form for people, not agents." },
+  }),
   // The third argument is the failure hook. Without it `zValidator` answers with Hono's
   // default body; with it, a rejected address gets the shared `{ error: { code, message } }`
   // envelope, and `hc` sees a 400 whose shape a caller can branch on.

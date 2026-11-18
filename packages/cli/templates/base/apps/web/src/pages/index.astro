@@ -35,6 +35,8 @@ import Layout from "../layouts/Layout.astro";
       points at a section that is gone.
     - Reorder: move the lines. The blocks share one spacing rhythm, so any order works.
     - Add one back: copy the block file in, then add the import and the line.
+    - Each of the three: make the same change to LANDING_SECTIONS in
+      src/lib/landing-markdown.ts, which builds this page's Markdown copy at /index.md.
 
   The page is composed from @repo/ui/blocks/*, each reached by its own subpath export.
   Blocks render to static HTML by default; only the two that need browser state carry a

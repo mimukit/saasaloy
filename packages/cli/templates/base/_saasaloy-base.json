@@ -6,7 +6,9 @@
     "apps/web/src/pages/index.astro",
     "packages/ui/src/content/landing.ts",
     "docs/runbook-deploy.md",
-    "packages/config/src/project.ts"
+    "packages/config/src/project.ts",
+    "apps/web/src/legal/privacy.md",
+    "apps/web/src/legal/terms.md"
   ],
   "retiredSeedFiles": ["DESIGN.md"],
   "ownedFiles": [

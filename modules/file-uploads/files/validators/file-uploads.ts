@@ -59,3 +59,31 @@ export const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 export type ListQuery = z.infer<typeof listQuery>;
+
+/**
+ * Body of `GET /files`, the one files route an agent may call. The route's `declare(...)`
+ * names it as `output`, and the `agent` module turns it into the tool's output schema.
+ * The route still builds its own body; a change to it changes this schema too.
+ */
+export const fileList = z.object({
+  cursor: z.string().optional(),
+  objects: z.array(
+    z.object({
+      completedAt: z.string().nullable(),
+      contentType: z.string(),
+      createdAt: z.string(),
+      filename: z.string(),
+      id: z.string(),
+      key: z.string(),
+      ownerId: z.string(),
+      size: z.number().int(),
+      status: objectStatus,
+      url: z.string().optional(),
+      visibility,
+    })
+  ),
+  settings: z.object({
+    imageTransforms: z.boolean(),
+    publicUploads: z.boolean(),
+  }),
+});

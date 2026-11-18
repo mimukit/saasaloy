@@ -26,6 +26,7 @@ import {
   createSubscriptionStore,
   withSubscriptionStore,
 } from "../subscription-store";
+import { declare } from "../contract";
 
 // The seven subscription endpoints, mounted at `/subscription` by this module's `chained-route`
 // patch. Paths here are relative to that mount, so `post("/checkout")` serves
@@ -89,174 +90,244 @@ export const subscriptionRoute = new Hono<{
   // Start a purchase. Refuses a second live subscription rather than letting a subject
   // stack two: one live subscription per subject is the settled rule, and add-ons are a
   // later issue.
-  .post("/checkout", (c) =>
-    guard(c, async ({ client, host, store, subject }) => {
-      const body = await readJson(c);
-      const planId = requireString(body, "planId");
-      const interval = requireInterval(body);
-      const successUrl = requireUrl(c, body, "successUrl");
-      const cancelUrl = requireUrl(c, body, "cancelUrl");
+  .post(
+    "/checkout",
+    declare({
+      name: "subscription_checkout",
+      description: "Start a checkout for a plan.",
+      agent: {
+        callable: false,
+        reason: "Billing moves money and stays with a person in the app.",
+      },
+    }),
+    (c) =>
+      guard(c, async ({ client, host, store, subject }) => {
+        const body = await readJson(c);
+        const planId = requireString(body, "planId");
+        const interval = requireInterval(body);
+        const successUrl = requireUrl(c, body, "successUrl");
+        const cancelUrl = requireUrl(c, body, "cancelUrl");
 
-      // Throws `not_found` naming the registered ids, so a typo in the plan picker is a
-      // 404 with the answer in it rather than an empty price id reaching the vendor.
-      findPlan(plans, planId);
+        // Throws `not_found` naming the registered ids, so a typo in the plan picker is a
+        // 404 with the answer in it rather than an empty price id reaching the vendor.
+        findPlan(plans, planId);
 
-      const live = await currentSubscription(store, subject);
-      if (live) {
-        throw new SubscriptionError(
-          "invalid_request",
-          `Already subscribed to "${live.plan}". Change or cancel it through the subscription portal (POST /subscription/portal) — a second live subscription is not supported.`
-        );
-      }
+        const live = await currentSubscription(store, subject);
+        if (live) {
+          throw new SubscriptionError(
+            "invalid_request",
+            `Already subscribed to "${live.plan}". Change or cancel it through the subscription portal (POST /subscription/portal) — a second live subscription is not supported.`
+          );
+        }
 
-      const result = await client.createCheckout(host, {
-        cancelUrl,
-        interval,
-        planId,
-        subject,
-        successUrl,
-      });
+        const result = await client.createCheckout(host, {
+          cancelUrl,
+          interval,
+          planId,
+          subject,
+          successUrl,
+        });
 
-      await enqueue(c, result.event);
+        await enqueue(c, result.event);
 
-      return c.json({ url: result.url }, 200);
-    })
+        return c.json({ url: result.url }, 200);
+      })
   )
 
   // Hand the subject to the vendor's own portal. Payment methods, receipts and dunning
   // pages are the vendor's job and nothing this project should re-implement.
-  .post("/portal", (c) =>
-    guard(c, async ({ client, host, subject }) => {
-      const body = await readJson(c);
-      const returnUrl = requireUrl(c, body, "returnUrl");
+  .post(
+    "/portal",
+    declare({
+      name: "subscription_portal",
+      description: "Open the billing portal.",
+      agent: {
+        callable: false,
+        reason: "Billing moves money and stays with a person in the app.",
+      },
+    }),
+    (c) =>
+      guard(c, async ({ client, host, subject }) => {
+        const body = await readJson(c);
+        const returnUrl = requireUrl(c, body, "returnUrl");
 
-      const { url } = await client.createPortal(host, { returnUrl, subject });
+        const { url } = await client.createPortal(host, { returnUrl, subject });
 
-      return c.json({ url }, 200);
-    })
+        return c.json({ url }, 200);
+      })
   )
 
   // The live subscription and the plan it entitles, or the default plan and `null`. This
   // is the one read the admin page opens with.
-  .get("/subscription", (c) =>
-    guard(c, async ({ store, subject }) => {
-      const live = await currentSubscription(store, subject);
-      const plan = live ? findPlan(plans, live.plan) : defaultPlan(plans);
+  .get(
+    "/subscription",
+    declare({
+      name: "subscription_read",
+      description: "Read the caller's subscription.",
+      agent: {
+        callable: false,
+        reason: "Billing moves money and stays with a person in the app.",
+      },
+    }),
+    (c) =>
+      guard(c, async ({ store, subject }) => {
+        const live = await currentSubscription(store, subject);
+        const plan = live ? findPlan(plans, live.plan) : defaultPlan(plans);
 
-      return c.json(
-        {
-          plan: {
-            features: plan.features,
-            id: plan.id,
-            limits: plan.limits,
-            name: plan.name,
+        return c.json(
+          {
+            plan: {
+              features: plan.features,
+              id: plan.id,
+              limits: plan.limits,
+              name: plan.name,
+            },
+            // The whole plan table rides along, so the admin page's picker needs no second
+            // request and no copy of `plans.ts` in the browser bundle. Price ids stay out:
+            // they are the provider's business and belong nowhere near a client.
+            plans: plans.map((candidate) => ({
+              id: candidate.id,
+              intervals: [
+                ...new Set(
+                  Object.values(candidate.providerIds).flatMap((byInterval) =>
+                    Object.keys(byInterval)
+                  )
+                ),
+              ],
+              isDefault: candidate.isDefault,
+              name: candidate.name,
+              trialDays: candidate.trialDays ?? null,
+            })),
+            subscription: live
+              ? {
+                  cancelAtPeriodEnd: live.cancelAtPeriodEnd ?? false,
+                  plan: live.plan,
+                  status: live.status,
+                  trialEnd: live.trialEnd ?? null,
+                }
+              : null,
           },
-          // The whole plan table rides along, so the admin page's picker needs no second
-          // request and no copy of `plans.ts` in the browser bundle. Price ids stay out:
-          // they are the provider's business and belong nowhere near a client.
-          plans: plans.map((candidate) => ({
-            id: candidate.id,
-            intervals: [
-              ...new Set(
-                Object.values(candidate.providerIds).flatMap((byInterval) =>
-                  Object.keys(byInterval)
-                )
-              ),
-            ],
-            isDefault: candidate.isDefault,
-            name: candidate.name,
-            trialDays: candidate.trialDays ?? null,
-          })),
-          subscription: live
-            ? {
-                cancelAtPeriodEnd: live.cancelAtPeriodEnd ?? false,
-                plan: live.plan,
-                status: live.status,
-                trialEnd: live.trialEnd ?? null,
-              }
-            : null,
-        },
-        200
-      );
-    })
+          200
+        );
+      })
   )
 
   // Cancel at period end. The row stays live until the vendor says otherwise, which is why
   // nothing here writes the table: the `subscription.changed` event does.
-  .post("/cancel", (c) =>
-    guard(c, async ({ client, host, store, subject }) => {
-      // Read first, so a provider with no webhook of its own can mint an event against the
-      // row that is actually there rather than against a guess. `stripeSubscription` ignores it.
-      const current = await currentSubscription(store, subject);
-      const result = await client.cancel(host, {
-        subject,
-        ...(current === undefined ? {} : { current }),
-      });
-      await enqueue(c, result?.event);
+  .post(
+    "/cancel",
+    declare({
+      name: "subscription_cancel",
+      description: "Cancel the subscription at the period end.",
+      agent: {
+        callable: false,
+        reason: "Billing moves money and stays with a person in the app.",
+      },
+    }),
+    (c) =>
+      guard(c, async ({ client, host, store, subject }) => {
+        // Read first, so a provider with no webhook of its own can mint an event against the
+        // row that is actually there rather than against a guess. `stripeSubscription` ignores it.
+        const current = await currentSubscription(store, subject);
+        const result = await client.cancel(host, {
+          subject,
+          ...(current === undefined ? {} : { current }),
+        });
+        await enqueue(c, result?.event);
 
-      return c.json({ url: result?.url ?? null }, 200);
-    })
+        return c.json({ url: result?.url ?? null }, 200);
+      })
   )
 
   // Undo a pending cancellation.
-  .post("/restore", (c) =>
-    guard(c, async ({ client, host, store, subject }) => {
-      const current = await currentSubscription(store, subject);
-      const result = await client.restore(host, {
-        subject,
-        ...(current === undefined ? {} : { current }),
-      });
-      await enqueue(c, result?.event);
+  .post(
+    "/restore",
+    declare({
+      name: "subscription_restore",
+      description: "Undo a pending cancel.",
+      agent: {
+        callable: false,
+        reason: "Billing moves money and stays with a person in the app.",
+      },
+    }),
+    (c) =>
+      guard(c, async ({ client, host, store, subject }) => {
+        const current = await currentSubscription(store, subject);
+        const result = await client.restore(host, {
+          subject,
+          ...(current === undefined ? {} : { current }),
+        });
+        await enqueue(c, result?.event);
 
-      return c.json({ url: result?.url ?? null }, 200);
-    })
+        return c.json({ url: result?.url ?? null }, 200);
+      })
   )
 
   // Move a live subscription to another plan. A vendor may answer with a hosted page
   // rather than applying it directly, so the response carries a url either way.
-  .post("/change-plan", (c) =>
-    guard(c, async ({ client, host, store, subject }) => {
-      const body = await readJson(c);
-      const planId = requireString(body, "planId");
-      const interval = requireInterval(body);
-      const successUrl = requireUrl(c, body, "successUrl");
-      const cancelUrl = requireUrl(c, body, "cancelUrl");
+  .post(
+    "/change-plan",
+    declare({
+      name: "subscription_change_plan",
+      description: "Move the subscription to another plan.",
+      agent: {
+        callable: false,
+        reason: "Billing moves money and stays with a person in the app.",
+      },
+    }),
+    (c) =>
+      guard(c, async ({ client, host, store, subject }) => {
+        const body = await readJson(c);
+        const planId = requireString(body, "planId");
+        const interval = requireInterval(body);
+        const successUrl = requireUrl(c, body, "successUrl");
+        const cancelUrl = requireUrl(c, body, "cancelUrl");
 
-      findPlan(plans, planId);
+        findPlan(plans, planId);
 
-      // The live row travels with the change for the same reason `cancel` and `restore`
-      // carry it: a provider gets no database, and a local one has to keep what the change
-      // does not touch — the trial above all.
-      const current = await currentSubscription(store, subject);
+        // The live row travels with the change for the same reason `cancel` and `restore`
+        // carry it: a provider gets no database, and a local one has to keep what the change
+        // does not touch — the trial above all.
+        const current = await currentSubscription(store, subject);
 
-      const result = await client.changePlan(host, {
-        cancelUrl,
-        interval,
-        planId,
-        subject,
-        successUrl,
-        ...(current === undefined ? {} : { current }),
-      });
+        const result = await client.changePlan(host, {
+          cancelUrl,
+          interval,
+          planId,
+          subject,
+          successUrl,
+          ...(current === undefined ? {} : { current }),
+        });
 
-      await enqueue(c, result.event);
+        await enqueue(c, result.event);
 
-      return c.json({ url: result.url }, 200);
-    })
+        return c.json({ url: result.url }, 200);
+      })
   )
 
   // Invoices come from the vendor, not from a table here. The projection holds the
   // subscription state and nothing else, so there is no second copy to fall out of step.
-  .get("/invoices", (c) =>
-    guard(c, async ({ client, host, store, subject }) => {
-      // The vendor keys invoices by customer, and the row is where the customer id lives.
-      const current = await currentSubscription(store, subject);
-      const invoices = await client.listInvoices(host, {
-        subject,
-        ...(current === undefined ? {} : { current }),
-      });
+  .get(
+    "/invoices",
+    declare({
+      name: "subscription_invoices_list",
+      description: "List the caller's invoices.",
+      agent: {
+        callable: false,
+        reason: "Billing moves money and stays with a person in the app.",
+      },
+    }),
+    (c) =>
+      guard(c, async ({ client, host, store, subject }) => {
+        // The vendor keys invoices by customer, and the row is where the customer id lives.
+        const current = await currentSubscription(store, subject);
+        const invoices = await client.listInvoices(host, {
+          subject,
+          ...(current === undefined ? {} : { current }),
+        });
 
-      return c.json({ invoices }, 200);
-    })
+        return c.json({ invoices }, 200);
+      })
   );
 
 /**

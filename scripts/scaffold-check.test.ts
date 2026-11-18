@@ -18,6 +18,9 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { MVP_MODULES, parseArgs } from "./scaffold-check.ts";
 
+/** The two `scale` modules the build adds for `agent`'s key sign-in (plan 0110). */
+const AGENT_KEY_MODULES = ["api-keys", "api-keys-user"] as const;
+
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const BUILD_SKILL = join(
   ROOT,
@@ -49,11 +52,23 @@ describe("MVP_MODULES", () => {
     );
   });
 
-  it("holds only Validate and MVP stage modules that need no account", () => {
+  it("adds agent with its key modules, which stay scale modules (plan 0110)", () => {
+    const names = new Set<string>(MVP_MODULES);
+    for (const name of ["agent", ...AGENT_KEY_MODULES]) {
+      assert.ok(names.has(name), `${name} is not in MVP_MODULES`);
+    }
+    for (const name of AGENT_KEY_MODULES) {
+      assert.equal(descriptor(name).stage, "scale", `${name} is not scale`);
+    }
+  });
+
+  it("holds only Validate and MVP stage modules that need no account, and the key modules", () => {
     for (const name of MVP_MODULES) {
       const item = descriptor(name);
       assert.ok(
-        item.stage === "validate" || item.stage === "mvp",
+        item.stage === "validate" ||
+          item.stage === "mvp" ||
+          (AGENT_KEY_MODULES as readonly string[]).includes(name),
         `${name} is a ${String(item.stage)} module`
       );
       assert.deepEqual(item.needs ?? [], [], `${name} needs an account`);

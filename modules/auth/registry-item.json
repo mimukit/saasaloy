@@ -253,6 +253,14 @@
           "target": "src/server.ts"
         },
         {
+          "path": "files/src/user-caller.ts",
+          "target": "src/user-caller.ts"
+        },
+        {
+          "path": "files/src/user-caller-rules.ts",
+          "target": "src/user-caller-rules.ts"
+        },
+        {
           "path": "files/src/client.ts",
           "target": "src/client.ts"
         },

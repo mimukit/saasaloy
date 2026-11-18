@@ -7,6 +7,7 @@ import {
 } from "@repo/db/repositories/login-codes";
 import { maskCodes } from "@repo/sms/mask-codes";
 import { Hono } from "hono";
+import { declare } from "../contract";
 
 // The admin api behind the login codes screen: every code the api sent in the last 30
 // minutes, newest first, with its state and the tries left. Read only. This module's
@@ -22,6 +23,11 @@ import { Hono } from "hono";
 
 export const adminLoginCodes = new Hono<{ Bindings: AuthDbBindings }>().get(
   "/",
+  declare({
+    name: "admin_login_codes_list",
+    description: "List recent phone sign-in codes for the admin console.",
+    agent: { callable: false, reason: "Admin routes are never callable." },
+  }),
   (c) =>
     withAuthScope(c, async () => {
       // First, before anything reads a code: 401 with no admin session, 403 for a

@@ -20,6 +20,7 @@
     "hono": "4.13.12",
     "zod": "4.6.5",
     "@hono/zod-validator": "0.9.1",
+    "hono-openapi": "1.6.0",
     "@repo/logger": "workspace:*",
     "@repo/env": "workspace:*"
   },

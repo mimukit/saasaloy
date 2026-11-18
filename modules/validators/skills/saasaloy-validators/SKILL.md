@@ -15,17 +15,22 @@ One file per feature, directly under `src/`. A file named `src/waitlist.ts` is i
 
 ## Using a schema in an api route
 
-An api route validates with `zValidator` from `@hono/zod-validator` and reads the parsed value with `c.req.valid("json")`, naming the same target `zValidator` was given. That call carries the schema's inferred type into the handler. Pass a hook as the third argument so the failure reply uses the shared envelope instead of Hono's default body.
+An api route validates with `zValidator` from `apps/api/src/contract.ts` (imported as `../contract`), which is `@hono/zod-validator`'s with the same signature and also records the schema for the agent surfaces. It reads the parsed value with `c.req.valid("json")`, naming the same target `zValidator` was given. That call carries the schema's inferred type into the handler. Pass a hook as the third argument so the failure reply uses the shared envelope instead of Hono's default body.
 
 ```ts
 // apps/api/src/routes/signup.ts
-import { zValidator } from "@hono/zod-validator";
 import { errorBody } from "@repo/validators/common";
 import { signupInput } from "@repo/validators/signup";
 import { Hono } from "hono";
+import { declare, zValidator } from "../contract";
 
 export const signup = new Hono().post(
   "/",
+  declare({
+    name: "signup_create",
+    description: "Sign a person up for the beta.",
+    agent: { callable: false, reason: "A public form for people, not agents." },
+  }),
   zValidator("json", signupInput, (result, c) => {
     if (!result.success) {
       const issue = result.error.issues[0];
@@ -40,7 +45,7 @@ export const signup = new Hono().post(
 );
 ```
 
-One named export, one chained expression. Split the `.post()` into its own `signup.post(...)` statement and the exported type forgets the route, which empties it out of `AppType`. The name has to be an `export const`: the `chained-route` codemod writes `import { signup } from "./routes/signup"` and refuses a default import. See the `saasaloy-api` skill for the full route contract.
+One named export, one chained expression. Split the `.post()` into its own `signup.post(...)` statement and the exported type forgets the route, which empties it out of `AppType`. The name has to be an `export const`: the `chained-route` codemod writes `import { signup } from "./routes/signup"` and refuses a default import. Every route also carries one `declare({...})` link, its agent statement, and a callable route names its output schema there; keep that schema in this package next to the input one. See the `saasaloy-api` skill for the full route contract.
 
 `result.error.issues[0]` is possibly undefined under the template's tsconfig, so guard it rather than indexing straight into `.message`.
 

@@ -48,7 +48,7 @@ Rules for a new app or service:
 
 No code lives at the repository root. The root holds configuration only: `package.json`, `turbo.json`, the lint and format configs, `vitest.config.ts`. A tool, a script or a codemod goes into a workspace, where it gets a `tsconfig.json`, a `typecheck` script, the type-aware lint pass and the root Vitest run. A root `scripts/` folder gets none of them.
 
-`packages/tooling` (`@repo/tooling`) is the workspace for the repository's own tooling. It holds the deploy command (`src/deploy-production.ts`), the production log reader (`src/logs-prod.ts`, `pnpm logs:prod`) and the skill linker (`src/link-skills.ts`). A root script that runs one of them names the file: `node packages/tooling/src/<name>.ts`. Two of its files are yours: `src/deploy.config.ts` and `src/targets.ts`. `saasaloy update` never writes them again after `saasaloy init`. The other files are managed.
+`packages/tooling` (`@repo/tooling`) is the workspace for the repository's own tooling. It holds the deploy command (`src/deploy-production.ts`), the production log reader (`src/logs-prod.ts`, `pnpm logs:prod`), the agent audit (`src/agent-audit.ts`, `pnpm agent:audit`) and the skill linker (`src/link-skills.ts`). A root script that runs one of them names the file: `node packages/tooling/src/<name>.ts`. Two of its files are yours: `src/deploy.config.ts` and `src/targets.ts`. `saasaloy update` never writes them again after `saasaloy init`. The other files are managed.
 
 ### Workspace Commands
 
@@ -135,6 +135,15 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 - **Compare before you copy a kit component.** Before you copy a component from a kit (coss ui, Tailark, a licensed dashboard kit), compare it with the source this project already owns in `src/components/` and `src/blocks/`, and recommend one to the owner. When the kit's version wins, copy it as source this project owns. Do not install the kit's package.
 - **A field with more than 7 options uses a combobox, not a select.** A person types to find one of many; a select makes them scroll.
 - **Mockup and QA images stay out of the repo.** Save them in the gitignored `.artifacts/mockups/` and `.artifacts/qa/` at the project root, and link the published copies from the PR.
+
+### Public Files for Agents
+
+`apps/web` serves files an AI agent reads, all built at build time: `/llms.txt` (the site's summary and a link to each Markdown copy), `/llms-full.txt` (every page in one file), and a Markdown copy of each public page at `/index.md`, `/privacy.md` and `/terms.md`. Every page also carries JSON-LD for the organization and the site, with the name and `logoPath` from `config.app`.
+
+- **`/index.md` reads `landing.ts`.** `src/lib/landing-markdown.ts` builds it, and its `LANDING_SECTIONS` must follow the block order in `src/pages/index.astro`.
+- **The legal pages are Markdown in `src/legal/`.** The page and its Markdown copy read the same file. Write your policy there.
+- **A module adds a section through `src/lib/agent-entries.ts`.** `agent` adds the MCP address, the OpenAPI document and the api's own `llms.txt`; `cms` adds the blog. Add a section of your own the same way.
+- **`pnpm agent:audit` checks the running product.** It reads the files above, and with `agent` installed also `/openapi.json`, the Server Card and an MCP `tools/list` and one scoped tool call with the key in `AGENT_AUDIT_KEY`. It exits 1 on a gap.
 
 ### The Base Skills
 

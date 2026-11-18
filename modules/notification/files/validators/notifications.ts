@@ -37,3 +37,44 @@ export const notificationPreferencesInput = z.object({
 export type NotificationPreferencesInput = z.infer<
   typeof notificationPreferencesInput
 >;
+
+// The bodies of the three reads an agent may call. Each route's `declare(...)` names its
+// schema as `output`, and the `agent` module turns it into the tool's output schema. The
+// route still builds its own body; a change to one of those bodies changes the schema
+// here too, in the same commit.
+
+/** One row as `GET /notifications` answers it. Dates are ISO strings. */
+export const notificationPayload = z.object({
+  body: z.string().nullable(),
+  category: z.string(),
+  createdAt: z.string(),
+  href: z.string().nullable(),
+  id: z.string(),
+  read: z.boolean(),
+  readAt: z.string().nullable(),
+  title: z.string(),
+});
+
+/** Body of `GET /notifications`. A null `nextCursor` means this was the last page. */
+export const notificationList = z.object({
+  nextCursor: z.string().nullable(),
+  notifications: z.array(notificationPayload),
+});
+
+/** Body of `GET /notifications/unread-count`. */
+export const notificationUnreadCount = z.object({
+  count: z.number().int().min(0),
+});
+
+/** Body of `GET /notifications/preferences`: every configured category, on or off. */
+export const notificationPreferences = z.object({
+  categories: z.array(
+    z.object({
+      description: z.string(),
+      enabled: z.boolean(),
+      id: z.string(),
+      label: z.string(),
+      required: z.boolean(),
+    })
+  ),
+});

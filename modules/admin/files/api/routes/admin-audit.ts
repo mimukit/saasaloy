@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import {
   ADMIN_ROLES,
   adminGate,
@@ -84,82 +84,103 @@ const validListQuery = zValidator("query", listQuery, (result, c) => {
 });
 
 export const adminAudit = new Hono<{ Bindings: AuthDbBindings }>()
-  .get("/", adminGate, validListQuery, async (c) => {
-    await withAuthScope(c, () => requireAdmin(c));
-    const query = c.req.valid("query");
-    const cursor =
-      query.cursor === undefined ? null : decodeCursor(query.cursor);
-    if (query.cursor !== undefined && cursor === null) {
-      return c.json(
-        {
-          error: {
-            code: "invalid_request",
-            message: "cursor: not a cursor this api gave",
+  .get(
+    "/",
+    declare({
+      name: "admin_audit_events_list",
+      description: "List audit events for the admin console.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validListQuery,
+    async (c) => {
+      await withAuthScope(c, () => requireAdmin(c));
+      const query = c.req.valid("query");
+      const cursor =
+        query.cursor === undefined ? null : decodeCursor(query.cursor);
+      if (query.cursor !== undefined && cursor === null) {
+        return c.json(
+          {
+            error: {
+              code: "invalid_request",
+              message: "cursor: not a cursor this api gave",
+            },
           },
-        },
-        400
+          400
+        );
+      }
+      // The chips count across every area, so their filter is the page's minus the area.
+      const base: AuditFilter = {
+        actorUserId: query.actor,
+        from: query.from === undefined ? undefined : new Date(query.from),
+        search: query.q,
+        to: query.to === undefined ? undefined : new Date(query.to),
+      };
+      const areas = auditAreas();
+      return withDb(c, async (db) => {
+        const [page, byAction] = await Promise.all([
+          listAuditEvents(
+            db,
+            {
+              ...base,
+              actions:
+                query.area === undefined
+                  ? undefined
+                  : actionsOfArea(query.area),
+            },
+            cursor,
+            query.limit
+          ),
+          countAuditEventsByAction(db, base),
+        ]);
+        return c.json(
+          {
+            areas,
+            counts: areaCounts(
+              byAction,
+              areas.map((area) => area.id),
+              (action) => areaOfAction(action)
+            ),
+            events: page.rows.map((row) => ({
+              action: row.action,
+              actor: {
+                email: row.actorEmail,
+                id: row.actorUserId,
+                name: row.actorName,
+                role: row.actorRole,
+              },
+              after: row.after,
+              area: areaOfAction(row.action),
+              before: row.before,
+              createdAt: row.createdAt.toISOString(),
+              id: row.id,
+              label: labelOfAction(row.action),
+              target: {
+                id: row.targetId,
+                label: row.targetLabel,
+                type: row.targetType,
+              },
+            })),
+            nextCursor:
+              page.nextCursor === null ? null : encodeCursor(page.nextCursor),
+          },
+          200
+        );
+      });
+    }
+  )
+  .get(
+    "/people",
+    declare({
+      name: "admin_audit_people_list",
+      description: "List the people who appear in the audit log.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    async (c) => {
+      await withAuthScope(c, () => requireAdmin(c));
+      return withDb(c, async (db) =>
+        c.json({ people: await listAuditActors(db, ADMIN_ROLES) }, 200)
       );
     }
-    // The chips count across every area, so their filter is the page's minus the area.
-    const base: AuditFilter = {
-      actorUserId: query.actor,
-      from: query.from === undefined ? undefined : new Date(query.from),
-      search: query.q,
-      to: query.to === undefined ? undefined : new Date(query.to),
-    };
-    const areas = auditAreas();
-    return withDb(c, async (db) => {
-      const [page, byAction] = await Promise.all([
-        listAuditEvents(
-          db,
-          {
-            ...base,
-            actions:
-              query.area === undefined ? undefined : actionsOfArea(query.area),
-          },
-          cursor,
-          query.limit
-        ),
-        countAuditEventsByAction(db, base),
-      ]);
-      return c.json(
-        {
-          areas,
-          counts: areaCounts(
-            byAction,
-            areas.map((area) => area.id),
-            (action) => areaOfAction(action)
-          ),
-          events: page.rows.map((row) => ({
-            action: row.action,
-            actor: {
-              email: row.actorEmail,
-              id: row.actorUserId,
-              name: row.actorName,
-              role: row.actorRole,
-            },
-            after: row.after,
-            area: areaOfAction(row.action),
-            before: row.before,
-            createdAt: row.createdAt.toISOString(),
-            id: row.id,
-            label: labelOfAction(row.action),
-            target: {
-              id: row.targetId,
-              label: row.targetLabel,
-              type: row.targetType,
-            },
-          })),
-          nextCursor:
-            page.nextCursor === null ? null : encodeCursor(page.nextCursor),
-        },
-        200
-      );
-    });
-  })
-  .get("/people", adminGate, async (c) => {
-    await withAuthScope(c, () => requireAdmin(c));
-    return withDb(c, async (db) =>
-      c.json({ people: await listAuditActors(db, ADMIN_ROLES) }, 200)
-    );
-  });
+  );

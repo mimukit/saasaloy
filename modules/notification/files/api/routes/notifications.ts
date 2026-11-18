@@ -1,6 +1,7 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import { config } from "@repo/config";
 import { requireSession, withAuthScope } from "@repo/auth/server";
+import { requireUser } from "@repo/auth/user-caller";
 import { withDb } from "@repo/db/client";
 import {
   countUnread,
@@ -15,13 +16,16 @@ import {
   notificationListQuery,
   notificationParam,
   notificationPreferencesInput,
+  notificationList,
+  notificationPreferences,
+  notificationUnreadCount,
 } from "@repo/validators/notifications";
 import { Hono } from "hono";
 import type { AuthDbBindings } from "@repo/auth/server";
 import type { Db } from "@repo/db/client";
 import type { NotificationRow } from "@repo/db/repositories/notifications";
 
-// The signed-in user's notifications: six routes behind `requireSession`, for the bell,
+// The signed-in user's notifications: six routes behind the session gate, for the bell,
 // the sidebar badge and the page in `apps/app`. Nothing here writes a notification; a
 // route that has news for a user calls `notify` from `../lib/notify`.
 //
@@ -37,6 +41,12 @@ import type { NotificationRow } from "@repo/db/repositories/notifications";
 // No CORS and no `onError`: `modules/api`'s spine applies the credentialed `CORS_ORIGINS`
 // allowlist before this sub-app is mounted, and an unset `onError` inherits api's, which
 // renders the `HTTPException` `requireSession` throws as the shared error envelope.
+
+// The three reads an agent may call open with `requireUser` and this demand, not with
+// `requireSession`: a signed-in person passes as before, and a user's key (with
+// `api-keys-user` installed) passes when it holds `notifications:read`. The writes stay on
+// `requireSession`, so no key reaches them.
+const READ = { notifications: ["read"] } as const;
 
 // The three validators share one failure hook body, so a rejected input gets the
 // `{ error: { code, message } }` envelope the rest of the api uses rather than Hono's
@@ -126,75 +136,152 @@ function preferencesProblem(
 export const notifications = new Hono<{ Bindings: AuthDbBindings }>()
   // One page of the user's rows, newest first. Pass `nextCursor` back as `?cursor=` for
   // the next page; `null` means this was the last one.
-  .get("/", validateList, (c) =>
-    withAuthScope(c, async () => {
-      const { user } = await requireSession(c);
-      const { cursor } = c.req.valid("query");
-      const page = await withDb(c, (db) =>
-        listNotifications(db, user.id, cursor)
-      );
-      return c.json(
-        {
-          nextCursor: page.nextCursor,
-          notifications: page.rows.map(toPayload),
-        },
-        200
-      );
-    })
+  .get(
+    "/",
+    declare({
+      name: "notifications_list",
+      description:
+        "List one page of the caller's notifications, newest first. Pass nextCursor back as cursor for the next page; null means the last page.",
+      output: notificationList,
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "notifications:read",
+      },
+    }),
+    validateList,
+    (c) =>
+      withAuthScope(c, async () => {
+        const { userId } = await requireUser(c, READ);
+        const { cursor } = c.req.valid("query");
+        const page = await withDb(c, (db) =>
+          listNotifications(db, userId, cursor)
+        );
+        return c.json(
+          {
+            nextCursor: page.nextCursor,
+            notifications: page.rows.map(toPayload),
+          },
+          200
+        );
+      })
   )
   // The bell's and the sidebar badge's number. It answers `{ count }`, the shape
   // `NAV_COUNTS` in `apps/app` reads.
-  .get("/unread-count", (c) =>
-    withAuthScope(c, async () => {
-      const { user } = await requireSession(c);
-      const unread = await withDb(c, (db) => countUnread(db, user.id));
-      return c.json({ count: unread }, 200);
-    })
+  .get(
+    "/unread-count",
+    declare({
+      name: "notifications_unread_count",
+      description: "Count the caller's unread notifications.",
+      output: notificationUnreadCount,
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "notifications:read",
+      },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        const { userId } = await requireUser(c, READ);
+        const unread = await withDb(c, (db) => countUnread(db, userId));
+        return c.json({ count: unread }, 200);
+      })
   )
   // Mark every unread row read. Registered before `/:id/read` only for the reader; the two
   // paths have a different number of segments, so neither can shadow the other.
-  .post("/read-all", (c) =>
-    withAuthScope(c, async () => {
-      const { user } = await requireSession(c);
-      const marked = await withDb(c, (db) => markAllRead(db, user.id));
-      return c.json({ marked, ok: true }, 200);
-    })
+  .post(
+    "/read-all",
+    declare({
+      name: "notifications_read_all",
+      description: "Mark every unread notification read.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        const { user } = await requireSession(c);
+        const marked = await withDb(c, (db) => markAllRead(db, user.id));
+        return c.json({ marked, ok: true }, 200);
+      })
   )
   // Mark one row read. A second call is a 200 that changes nothing. Another user's row
   // answers the same 404 as a row that does not exist, so an id reveals nothing.
-  .post("/:id/read", validateId, (c) =>
-    withAuthScope(c, async () => {
-      const { user } = await requireSession(c);
-      const { id } = c.req.valid("param");
-      const found = await withDb(c, (db) => markRead(db, user.id, id));
-      if (!found) {
-        return c.json(errorBody("not_found", "No such notification."), 404);
-      }
-      return c.json({ ok: true }, 200);
-    })
+  .post(
+    "/:id/read",
+    declare({
+      name: "notification_mark_read",
+      description: "Mark one notification read.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    validateId,
+    (c) =>
+      withAuthScope(c, async () => {
+        const { user } = await requireSession(c);
+        const { id } = c.req.valid("param");
+        const found = await withDb(c, (db) => markRead(db, user.id, id));
+        if (!found) {
+          return c.json(errorBody("not_found", "No such notification."), 404);
+        }
+        return c.json({ ok: true }, 200);
+      })
   )
   // Each configured category, with its copy and whether it is on for this user.
-  .get("/preferences", (c) =>
-    withAuthScope(c, async () => {
-      const { user } = await requireSession(c);
-      const body = await withDb(c, (db) => preferencesOf(db, user.id));
-      return c.json(body, 200);
-    })
+  .get(
+    "/preferences",
+    declare({
+      name: "notification_preferences_read",
+      description:
+        "List every notification category with whether the caller has it on.",
+      output: notificationPreferences,
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "notifications:read",
+      },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        const { userId } = await requireUser(c, READ);
+        const body = await withDb(c, (db) => preferencesOf(db, userId));
+        return c.json(body, 200);
+      })
   )
   // Turn categories on or off. The whole body is checked before anything is written, so
   // a refused body changes nothing. Answers the same shape as the GET.
-  .put("/preferences", validatePreferences, (c) =>
-    withAuthScope(c, async () => {
-      const { user } = await requireSession(c);
-      const { categories } = c.req.valid("json");
-      const problem = preferencesProblem(categories);
-      if (problem !== undefined) {
-        return c.json(errorBody("invalid_input", problem), 400);
-      }
-      const body = await withDb(c, async (db) => {
-        await setPreferences(db, user.id, categories);
-        return preferencesOf(db, user.id);
-      });
-      return c.json(body, 200);
-    })
+  .put(
+    "/preferences",
+    declare({
+      name: "notification_preferences_update",
+      description: "Turn notification categories on or off.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    validatePreferences,
+    (c) =>
+      withAuthScope(c, async () => {
+        const { user } = await requireSession(c);
+        const { categories } = c.req.valid("json");
+        const problem = preferencesProblem(categories);
+        if (problem !== undefined) {
+          return c.json(errorBody("invalid_input", problem), 400);
+        }
+        const body = await withDb(c, async (db) => {
+          await setPreferences(db, user.id, categories);
+          return preferencesOf(db, user.id);
+        });
+        return c.json(body, 200);
+      })
   );

@@ -1,6 +1,7 @@
 // Scores one agent benchmark run against the MVP bar of plan 0074 (issue #222), with the
 // three lines plan 0109 adds (issue #347): the interview, each entity of the spec, and the
-// preview.
+// preview; and the two lines plan 0110 adds (issue #348): the agent audit command, and a
+// second agent that uses the product through MCP with only its address and a key.
 //
 // `scripts/agent-bench.ts` calls `scoreRun()` after the agent exits, or on its own with
 // `--score <run-dir>`. Each MVP bar line becomes one PASS, FAIL or N/A row. N/A is for a
@@ -18,12 +19,25 @@
 // `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawn } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  readFileSync,
+  readlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { join, relative } from "node:path";
 
 import { specEntities } from "../product-spec.ts";
+import {
+  mcpToolCalls,
+  readBackId,
+  readEntityRows,
+  seedAgentKey,
+} from "./agent-use.ts";
+import type { Read } from "./agent-use.ts";
 import { isReadBack, looksLikeQuestion } from "./interview.ts";
 import type { Mode } from "./harness.ts";
 
@@ -58,6 +72,11 @@ export const MVP_BAR = [
   },
   { id: "entities", text: "Each entity of the spec end to end" },
   { id: "preview", text: "Preview answers when the brief asks for one" },
+  { id: "agent-audit", text: "`pnpm agent:audit` exits 0 with a seeded key" },
+  {
+    id: "agent-use",
+    text: "A second agent with the address and a key creates and reads back one entity through MCP",
+  },
 ] as const;
 
 export type LineId = (typeof MVP_BAR)[number]["id"];
@@ -639,6 +658,181 @@ export function judgePreview(
       );
 }
 
+// --- The agent lines (plan 0110) ------------------------------------------------------
+
+/** What the audit command printed and how it exited. */
+export interface AuditRun {
+  code: number | null;
+  output: string;
+  timedOut?: boolean;
+}
+
+interface AuditReport {
+  agent?: unknown;
+  checks?: { id?: unknown; status?: unknown; detail?: unknown }[];
+}
+
+/** The `--json` report in the audit's output: from the first line that opens an object. */
+function auditReport(output: string): AuditReport | undefined {
+  const lines = output.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.startsWith("{"));
+  if (start === -1) {
+    return undefined;
+  }
+  try {
+    const report: unknown = JSON.parse(lines.slice(start).join("\n"));
+    return typeof report === "object" && report !== null ? report : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Judges `pnpm agent:audit --require-key --json` against the running product. It passes
+ * on exit 0 with `agent` installed: an audit with no `agent` skips every api check and
+ * still exits 0, which proves nothing about the agent surface. `problem` says why the
+ * audit did not run.
+ */
+export function judgeAudit(
+  ran: AuditRun | undefined,
+  problem?: string
+): LineResult {
+  if (!ran) {
+    return fail("agent-audit", `not run: ${problem ?? "no reason recorded"}`);
+  }
+  if (ran.timedOut) {
+    return fail("agent-audit", "the audit timed out");
+  }
+  const report = auditReport(ran.output);
+  const tail = ran.output.trim().split("\n").slice(-2).join(" ").slice(0, 160);
+  if (ran.code === 2) {
+    return fail("agent-audit", `the audit exited 2 (usage or setup): ${tail}`);
+  }
+  if (!report) {
+    return fail(
+      "agent-audit",
+      `the audit exited ${String(ran.code)} with no JSON report: ${tail}`
+    );
+  }
+  const checks = report.checks ?? [];
+  if (ran.code !== 0) {
+    const first = checks.find((check) => check.status === "FAIL");
+    const id = typeof first?.id === "string" ? first.id : "no check";
+    const detail =
+      typeof first?.detail === "string"
+        ? first.detail
+        : "no failed check named";
+    return fail(
+      "agent-audit",
+      `the audit exited ${String(ran.code)}; ${id}: ${detail}`
+    );
+  }
+  if (report.agent !== true) {
+    return fail(
+      "agent-audit",
+      "the audit exited 0, but agent is not installed, so no api check ran"
+    );
+  }
+  const passed = checks.filter((check) => check.status === "PASS").length;
+  return pass(
+    "agent-audit",
+    `exit 0; ${String(passed)} checks pass, tools/list with the seeded key included`
+  );
+}
+
+/** What the second agent did: its exit, its transcript and its last reply. */
+export interface SecondAgentRun {
+  code: number | null;
+  timedOut: boolean;
+  transcript: string;
+  reply: string;
+}
+
+/**
+ * Starts the second agent with only the product's address and the key, and waits for it.
+ * `scripts/agent-bench/second-agent.ts` is the harness's; a test passes a fake.
+ */
+export type SecondAgent = (input: {
+  site: string;
+  key: string;
+  outDir: string;
+}) => Promise<SecondAgentRun>;
+
+/** The evidence of the second agent line. `problem` is why it could not run. */
+export interface AgentUseEvidence {
+  table: string;
+  problem?: string;
+  run?: SecondAgentRun;
+  read?: Read;
+}
+
+/**
+ * Judges the second agent: it ran to the end, it sent MCP `tools/call` requests, the key's
+ * user (a fresh user, so it owned no row before) now has a row of the entity that the
+ * scorer reads back through MCP, and the agent's reply names that row's id on a
+ * `READ BACK: <id>` line.
+ */
+export function judgeAgentUse(evidence: AgentUseEvidence): LineResult {
+  const { table, run: agentRun } = evidence;
+  if (evidence.problem) {
+    return fail("agent-use", evidence.problem);
+  }
+  if (!agentRun) {
+    return fail("agent-use", "the second agent did not run");
+  }
+  if (agentRun.timedOut) {
+    return fail("agent-use", "the second agent timed out");
+  }
+  if (agentRun.code !== 0) {
+    return fail(
+      "agent-use",
+      `the second agent exited ${String(agentRun.code)}`
+    );
+  }
+  const calls = mcpToolCalls(agentRun.transcript);
+  if (calls === 0) {
+    return fail(
+      "agent-use",
+      "the second agent's transcript holds no MCP tools/call"
+    );
+  }
+  const rowsRead = evidence.read;
+  if (!rowsRead) {
+    return fail("agent-use", "the scorer did not read the rows back");
+  }
+  if ("problem" in rowsRead) {
+    return fail("agent-use", `read back with the key: ${rowsRead.problem}`);
+  }
+  if (rowsRead.rows.length === 0) {
+    return fail(
+      "agent-use",
+      `the key's user has no \`${table}\` row, so the second agent created nothing`
+    );
+  }
+  const id = readBackId(agentRun.reply);
+  if (id === undefined) {
+    return fail(
+      "agent-use",
+      "the second agent's reply has no `READ BACK: <id>` line"
+    );
+  }
+  const found = rowsRead.rows.some(
+    (row) =>
+      typeof row === "object" &&
+      row !== null &&
+      String((row as { id?: unknown }).id) === id
+  );
+  return found
+    ? pass(
+        "agent-use",
+        `row ${id} created and read back; the scorer read it with ${rowsRead.tool}; ${String(calls)} MCP tools/call in the transcript`
+      )
+    : fail(
+        "agent-use",
+        `${id} is not among the ${String(rowsRead.rows.length)} \`${table}\` rows the key reads`
+      );
+}
+
 function escape(text: string): string {
   return text.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -945,6 +1139,11 @@ export interface ScoreOptions {
   block?: number;
   /** Skip the lines that run commands or start servers. */
   staticOnly?: boolean;
+  /**
+   * Starts the second agent of the agent-use line. Without one that line fails: the
+   * scorer never plays the second agent itself.
+   */
+  secondAgent?: SecondAgent;
 }
 
 export interface Score {
@@ -1020,7 +1219,14 @@ export async function scoreRun(options: ScoreOptions): Promise<Score> {
   );
 
   if (options.staticOnly) {
-    for (const id of ["landing", "auth", "reset", "check"] as const) {
+    for (const id of [
+      "landing",
+      "auth",
+      "reset",
+      "check",
+      "agent-audit",
+      "agent-use",
+    ] as const) {
       results.push(fail(id, "not run (static scoring only)"));
     }
     results.push(
@@ -1035,7 +1241,8 @@ export async function scoreRun(options: ScoreOptions): Promise<Score> {
       outDir,
       expect,
       options.block,
-      tables
+      tables,
+      options.secondAgent
     );
     results.push(
       ...runtime.results,
@@ -1239,7 +1446,8 @@ async function checkRuntime(
   outDir: string,
   expect: Expect,
   block: number | undefined,
-  tables: string[]
+  tables: string[],
+  secondAgent: SecondAgent | undefined
 ): Promise<Runtime> {
   const results: LineResult[] = [];
   const pkg = existsSync(join(project, "package.json"))
@@ -1301,6 +1509,8 @@ async function checkRuntime(
       fail("landing", detail),
       fail("auth", detail),
       fail("reset", detail),
+      fail("agent-audit", detail),
+      fail("agent-use", detail),
     ],
   });
   const { ports, problem } = await devPorts(project, outDir, block, scripts);
@@ -1348,10 +1558,22 @@ async function checkRuntime(
         await checkReset(`reset-${email}`, devLog, origins)
       );
       http = await listRouteStatus(origins.api, tables);
-    } else {
       results.push(
-        fail("auth", `api did not answer on ${ports.api}`),
-        fail("reset", `api did not answer on ${ports.api}`)
+        ...(await checkAgentLines({
+          project,
+          outDir,
+          origins,
+          table: tables[0] ?? expect.entity.table,
+          secondAgent,
+        }))
+      );
+    } else {
+      const down = `api did not answer on ${ports.api}`;
+      results.push(
+        fail("auth", down),
+        fail("reset", down),
+        fail("agent-audit", down),
+        fail("agent-use", down)
       );
     }
   } finally {
@@ -1527,6 +1749,78 @@ async function checkReset(
   return /reset/i.test(mail)
     ? pass("reset", "reset mail logged by email-console")
     : fail("reset", "a mail was logged, but it is not a reset mail");
+}
+
+/**
+ * The two agent lines, with the dev servers up. The scorer seeds a key for the spec's first
+ * entity (`./agent-use.ts` says how), runs the audit command with it, starts the second
+ * agent with only the site's address and the key, then reads the entity's rows back
+ * through MCP with the same key. `agent-key.json` in the out folder records the seed.
+ */
+async function checkAgentLines(input: {
+  project: string;
+  outDir: string;
+  origins: Origins;
+  table: string;
+  secondAgent: SecondAgent | undefined;
+}): Promise<LineResult[]> {
+  const { project, outDir, origins, table, secondAgent } = input;
+  const seeded = await seedAgentKey({
+    api: origins.api,
+    appOrigin: origins.app,
+    table,
+    email: `agent-${String(Date.now())}@bench.test`,
+    password: PASSWORD,
+  });
+  writeFileSync(
+    join(outDir, "agent-key.json"),
+    `${JSON.stringify(
+      "key" in seeded
+        ? { table, scopes: seeded.scopes, keyStart: seeded.key.slice(0, 6) }
+        : { table, problem: seeded.problem },
+      null,
+      2
+    )}\n`
+  );
+  if (!("key" in seeded)) {
+    const problem = `no key: ${seeded.problem}`;
+    return [judgeAudit(undefined, problem), judgeAgentUse({ table, problem })];
+  }
+  const audit = await run(
+    "pnpm",
+    [
+      "--silent",
+      "agent:audit",
+      "--site",
+      origins.web,
+      "--api",
+      origins.api,
+      "--require-key",
+      "--json",
+    ],
+    {
+      cwd: project,
+      logFile: join(outDir, "agent-audit.log"),
+      timeoutMs: 5 * 60_000,
+      env: { ...process.env, AGENT_AUDIT_KEY: seeded.key },
+    }
+  );
+  if (!secondAgent) {
+    return [
+      judgeAudit(audit),
+      judgeAgentUse({
+        table,
+        problem: "no second agent command was given to the scorer",
+      }),
+    ];
+  }
+  const second = await secondAgent({
+    site: origins.web,
+    key: seeded.key,
+    outDir,
+  });
+  const rows = await readEntityRows(origins.api, seeded.key, table);
+  return [judgeAudit(audit), judgeAgentUse({ table, run: second, read: rows })];
 }
 
 /** The project path relative to the run folder, for the report. */

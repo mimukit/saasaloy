@@ -232,7 +232,7 @@ describe("the api-keys-user owner", () => {
     ]);
   });
 
-  it("patches one guard into adminAuth alone, so keys live on /auth only (ADR 0050)", async () => {
+  it("patches one guard into adminAuth alone, and its key into requireUser's resolvers (ADR 0050, ADR 0063)", async () => {
     const patches = (await readDescriptor("api-keys-user"))
       .patches as (PatchEntry & {
       exportName?: string;
@@ -247,6 +247,13 @@ describe("the api-keys-user owner", () => {
         patch.import?.from,
       ])
     ).toStrictEqual([
+      [
+        "packages/auth/src/user-caller.ts",
+        "plugin-array",
+        "userResolvers",
+        "apiKeyUser",
+        "./caller",
+      ],
       [
         "packages/auth/src/auth.ts",
         "plugin-array",

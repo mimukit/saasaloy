@@ -122,6 +122,15 @@
           "target": "src/client.ts"
         },
         {
+          "path": "files/src/contract.ts",
+          "target": "src/contract.ts"
+        },
+        {
+          "path": "files/src/contract.vitest.ts",
+          "target": "src/contract.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/routes/health.ts",
           "target": "src/routes/health.ts"
         }

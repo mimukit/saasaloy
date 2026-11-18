@@ -79,12 +79,18 @@ Full walkthrough: [Getting started](docs/wiki/getting-started.md), then [Make th
 
 To have an AI agent interview you once and then build the MVP with no more questions, see [Build with an agent](docs/wiki/how-to/build-with-an-agent.md). An agent starts from [`llms.txt`](llms.txt).
 
+## What a built product gives to agents
+
+A product that the build makes is usable by AI agents as well as by people. Its api serves an OpenAPI document at `/openapi.json`, an MCP server at `/mcp`, a Server Card at `/mcp/server-card` and an `llms.txt` that names them. The web app serves its own `/llms.txt`, `/llms-full.txt` and a Markdown copy of each public page.
+
+Each action of each entity the build makes is an MCP tool. An agent signs in with an API key that the product issues to a user, and the key's scopes limit it: `books:read`, `books:write`, and a separate `books:delete` that a new key leaves off. A call runs the same route a screen calls, with the same checks. Admin, auth and payment callback routes are never tools. `pnpm agent:audit` checks these files and the MCP server on the running product. The `agent` module does this, and you can remove it.
+
 ## A project through its stages
 
 | Stage | What you need | What you add |
 |---|---|---|
 | Validate the idea | a landing page and a waitlist | `init`, then `waitlist` |
-| Build the MVP | sign-in, a customer app, an admin app, transactional email | `auth`, `app`, `admin`, `email` + a provider |
+| Build the MVP | sign-in, a customer app, an admin app, transactional email, access for AI agents | `auth`, `app`, `admin`, `email` + a provider, `agent` + `api-keys-user` |
 | Onboard teams | organizations, tenant isolation, roles | `teams`, `multitenant` |
 | Charge money | subscriptions, plan limits, webhooks | `subscription`, `subscription-stripe` |
 | Scale the backend | jobs, caching, files, rate limits, API access | `queue`, `kv`, `storage`, `ratelimit`, `api-keys` |
@@ -113,7 +119,7 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 
 | Tier | Modules |
 |---|---|
-| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `subscription`, `payment` |
+| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `agent`, `email`, `sms`, `queue`, `kv`, `storage`, `subscription`, `payment` |
 | Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `email-react`, `ratelimit`, `feature-flags`, `command`, `notification` |
 | Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-upstash`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe`, `payment-console`, `payment-manual`, `payment-bkash`, `payment-sslcommerz` |
 | Driver | `database-d1`, `database-postgres`, `api-keys-organization`, `api-keys-user` |

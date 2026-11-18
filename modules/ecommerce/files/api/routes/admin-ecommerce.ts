@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import {
   ADMIN_APP_ROLES,
   requireAdmin,
@@ -356,367 +356,505 @@ const validReport = zValidator("query", reportQuery, invalidInput);
 export const adminEcommerce = new Hono<{ Bindings: Bindings }>()
   // Products ------------------------------------------------------------------------
 
-  .get("/products", shopGate, validProductList, (c) =>
-    staff(c, async (db) => {
-      const query = c.req.valid("query");
-      const page = await listProducts(db, {
-        categorySlug: query.category,
-        currency: shop().currency,
-        page: query.page,
-        pageSize: shop().pageSize,
-        search: query.q,
-        status: query.status,
-      });
-      const images = await imagesOf(
-        db,
-        c.env,
-        page.products.map((product) => product.id)
-      );
-      return c.json(
-        {
+  .get(
+    "/products",
+    declare({
+      name: "admin_shop_products_list",
+      description: "List products for the shop admin.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validProductList,
+    (c) =>
+      staff(c, async (db) => {
+        const query = c.req.valid("query");
+        const page = await listProducts(db, {
+          categorySlug: query.category,
           currency: shop().currency,
-          lowStockThreshold: shop().lowStockThreshold,
-          page: page.page,
-          pageCount: page.pageCount,
-          products: page.products.map((product) => ({
-            ...product,
-            image: images.get(product.id)?.[0] ?? null,
-            lowStock: product.available <= shop().lowStockThreshold,
-          })),
-          total: page.total,
-        },
-        200
-      );
-    })
+          page: query.page,
+          pageSize: shop().pageSize,
+          search: query.q,
+          status: query.status,
+        });
+        const images = await imagesOf(
+          db,
+          c.env,
+          page.products.map((product) => product.id)
+        );
+        return c.json(
+          {
+            currency: shop().currency,
+            lowStockThreshold: shop().lowStockThreshold,
+            page: page.page,
+            pageCount: page.pageCount,
+            products: page.products.map((product) => ({
+              ...product,
+              image: images.get(product.id)?.[0] ?? null,
+              lowStock: product.available <= shop().lowStockThreshold,
+            })),
+            total: page.total,
+          },
+          200
+        );
+      })
   )
 
-  .post("/products", shopGate, validProduct, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const body = c.req.valid("json");
-      try {
-        const product = await createProduct(db, {
-          categoryId: body.categoryId,
-          description: body.description,
-          descriptionHtml: renderDescription(c, body.description),
-          slug: body.slug,
-          title: body.title,
-        });
-        audit({
-          action: "ecommerce.product.create",
-          after: {
-            slug: product.slug,
-            status: product.status,
-            title: product.title,
-          },
-          target: { id: product.id, label: product.title },
-        });
-        return c.json(await productBody(c, db, product.id), 201);
-      } catch (error) {
-        return writeError(c, error);
-      }
-    })
+  .post(
+    "/products",
+    declare({
+      name: "admin_shop_product_create",
+      description: "Create a draft product.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validProduct,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const body = c.req.valid("json");
+        try {
+          const product = await createProduct(db, {
+            categoryId: body.categoryId,
+            description: body.description,
+            descriptionHtml: renderDescription(c, body.description),
+            slug: body.slug,
+            title: body.title,
+          });
+          audit({
+            action: "ecommerce.product.create",
+            after: {
+              slug: product.slug,
+              status: product.status,
+              title: product.title,
+            },
+            target: { id: product.id, label: product.title },
+          });
+          return c.json(await productBody(c, db, product.id), 201);
+        } catch (error) {
+          return writeError(c, error);
+        }
+      })
   )
 
-  .get("/products/:id", shopGate, (c) =>
-    staff(c, async (db) =>
-      c.json(await productBody(c, db, c.req.param("id")), 200)
-    )
+  .get(
+    "/products/:id",
+    declare({
+      name: "admin_shop_product_read",
+      description: "Read one product for the editor.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staff(c, async (db) =>
+        c.json(await productBody(c, db, c.req.param("id")), 200)
+      )
   )
 
-  .patch("/products/:id", shopGate, validProductPatch, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const body = c.req.valid("json");
-      const id = c.req.param("id");
-      try {
-        const before = await mustGetProduct(db, id);
-        const after = await updateProduct(db, id, {
-          ...(body.title === undefined ? {} : { title: body.title }),
-          ...(body.slug === undefined ? {} : { slug: body.slug }),
-          ...(body.categoryId === undefined
-            ? {}
-            : { categoryId: body.categoryId }),
-          ...(body.description === undefined
-            ? {}
-            : {
-                description: body.description,
-                descriptionHtml: renderDescription(c, body.description),
-              }),
-        });
-        audit({
-          action: "ecommerce.product.update",
-          after: {
-            categoryId: after.categoryId,
-            descriptionHtml: after.descriptionHtml,
-            slug: after.slug,
-            title: after.title,
-          },
-          before: {
-            categoryId: before.categoryId,
-            descriptionHtml: before.descriptionHtml,
-            slug: before.slug,
-            title: before.title,
-          },
-          target: { id, label: after.title },
-        });
-        return c.json(await productBody(c, db, id), 200);
-      } catch (error) {
-        return writeError(c, error);
-      }
-    })
+  .patch(
+    "/products/:id",
+    declare({
+      name: "admin_shop_product_update",
+      description: "Change a product's fields.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validProductPatch,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const body = c.req.valid("json");
+        const id = c.req.param("id");
+        try {
+          const before = await mustGetProduct(db, id);
+          const after = await updateProduct(db, id, {
+            ...(body.title === undefined ? {} : { title: body.title }),
+            ...(body.slug === undefined ? {} : { slug: body.slug }),
+            ...(body.categoryId === undefined
+              ? {}
+              : { categoryId: body.categoryId }),
+            ...(body.description === undefined
+              ? {}
+              : {
+                  description: body.description,
+                  descriptionHtml: renderDescription(c, body.description),
+                }),
+          });
+          audit({
+            action: "ecommerce.product.update",
+            after: {
+              categoryId: after.categoryId,
+              descriptionHtml: after.descriptionHtml,
+              slug: after.slug,
+              title: after.title,
+            },
+            before: {
+              categoryId: before.categoryId,
+              descriptionHtml: before.descriptionHtml,
+              slug: before.slug,
+              title: before.title,
+            },
+            target: { id, label: after.title },
+          });
+          return c.json(await productBody(c, db, id), 200);
+        } catch (error) {
+          return writeError(c, error);
+        }
+      })
   )
 
   // Publish or unpublish. Active needs one or more active variants (grill Q4).
-  .post("/products/:id/status", shopGate, validProductStatus, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const { status } = c.req.valid("json");
-      const before = await mustGetProduct(db, id);
-      const after = await setProductStatus(db, id, status);
-      audit({
-        action:
-          status === "active"
-            ? "ecommerce.product.publish"
-            : "ecommerce.product.unpublish",
-        after: { status: after.status },
-        before: { status: before.status },
-        target: { id, label: after.title },
-      });
-      return c.json(await productBody(c, db, id), 200);
-    })
+  .post(
+    "/products/:id/status",
+    declare({
+      name: "admin_shop_product_status_set",
+      description: "Activate or draft a product.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validProductStatus,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const { status } = c.req.valid("json");
+        const before = await mustGetProduct(db, id);
+        const after = await setProductStatus(db, id, status);
+        audit({
+          action:
+            status === "active"
+              ? "ecommerce.product.publish"
+              : "ecommerce.product.unpublish",
+          after: { status: after.status },
+          before: { status: before.status },
+          target: { id, label: after.title },
+        });
+        return c.json(await productBody(c, db, id), 200);
+      })
   )
 
-  .delete("/products/:id", shopGate, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const before = await mustGetProduct(db, id);
-      await deleteProduct(db, id);
-      audit({
-        action: "ecommerce.product.delete",
-        before: {
-          slug: before.slug,
-          status: before.status,
-          title: before.title,
-        },
-        target: { id, label: before.title },
-      });
-      return c.json({ id }, 200);
-    })
+  .delete(
+    "/products/:id",
+    declare({
+      name: "admin_shop_product_delete",
+      description: "Delete a product.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const before = await mustGetProduct(db, id);
+        await deleteProduct(db, id);
+        audit({
+          action: "ecommerce.product.delete",
+          before: {
+            slug: before.slug,
+            status: before.status,
+            title: before.title,
+          },
+          target: { id, label: before.title },
+        });
+        return c.json({ id }, 200);
+      })
   )
 
   // Replace the options and regenerate the variant grid. A kept combination keeps its
   // variant, SKU, prices and stock; a new one starts inactive and unpriced.
-  .put("/products/:id/options", shopGate, validOptions, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const before = await mustGetProduct(db, id);
-      const after = await setProductOptions(
-        db,
-        id,
-        c.req.valid("json").options
-      );
-      audit({
-        action: "ecommerce.product.options",
-        after: {
-          options: after.options.map((option) => ({
-            name: option.name,
-            values: option.values.map((value) => value.value),
-          })),
-          variantCount: after.variants.length,
-        },
-        before: {
-          options: before.options.map((option) => ({
-            name: option.name,
-            values: option.values.map((value) => value.value),
-          })),
-          variantCount: before.variants.length,
-        },
-        target: { id, label: after.title },
-      });
-      return c.json(await productBody(c, db, id), 200);
-    })
+  .put(
+    "/products/:id/options",
+    declare({
+      name: "admin_shop_product_options_set",
+      description: "Replace a product's options and variants.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validOptions,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const before = await mustGetProduct(db, id);
+        const after = await setProductOptions(
+          db,
+          id,
+          c.req.valid("json").options
+        );
+        audit({
+          action: "ecommerce.product.options",
+          after: {
+            options: after.options.map((option) => ({
+              name: option.name,
+              values: option.values.map((value) => value.value),
+            })),
+            variantCount: after.variants.length,
+          },
+          before: {
+            options: before.options.map((option) => ({
+              name: option.name,
+              values: option.values.map((value) => value.value),
+            })),
+            variantCount: before.variants.length,
+          },
+          target: { id, label: after.title },
+        });
+        return c.json(await productBody(c, db, id), 200);
+      })
   )
 
   // One row of the variant grid: SKU, store-currency price and active flag. A variant
   // needs a store price to be active, and an active one keeps it.
-  .put("/variants/:id", shopGate, validVariant, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const body = c.req.valid("json");
-      const productId = await productOfVariant(db, id);
-      const product = await mustGetProduct(db, productId);
-      const before = product.variants.find((variant) => variant.id === id);
-      const { currency } = shop();
-      const options = { storeCurrency: currency };
-      if (body.price !== null) {
-        await setVariantPrice(db, id, { amount: body.price, currency });
-      }
-      await updateVariant(
-        db,
-        id,
-        { active: body.active, sku: body.sku },
-        options
-      );
-      if (body.price === null) {
-        await removeVariantPrice(db, id, currency, options);
-      }
-      const fresh = await mustGetProduct(db, productId);
-      const after = fresh.variants.find((variant) => variant.id === id);
-      const priceOf = (variant: typeof before) =>
-        variant?.prices.find((price) => price.currency === currency)?.amount ??
-        null;
-      audit({
-        action: "ecommerce.variant.update",
-        after: {
-          active: after?.active,
-          price: priceOf(after),
-          sku: after?.sku,
-        },
-        before: {
-          active: before?.active,
-          price: priceOf(before),
-          sku: before?.sku,
-        },
-        target: {
+  .put(
+    "/variants/:id",
+    declare({
+      name: "admin_shop_variant_update",
+      description: "Change a variant's prices and fields.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validVariant,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const body = c.req.valid("json");
+        const productId = await productOfVariant(db, id);
+        const product = await mustGetProduct(db, productId);
+        const before = product.variants.find((variant) => variant.id === id);
+        const { currency } = shop();
+        const options = { storeCurrency: currency };
+        if (body.price !== null) {
+          await setVariantPrice(db, id, { amount: body.price, currency });
+        }
+        await updateVariant(
+          db,
           id,
-          label: [product.title, after?.title].filter(Boolean).join(" / "),
-        },
-      });
-      return c.json(await productBody(c, db, productId), 200);
-    })
+          { active: body.active, sku: body.sku },
+          options
+        );
+        if (body.price === null) {
+          await removeVariantPrice(db, id, currency, options);
+        }
+        const fresh = await mustGetProduct(db, productId);
+        const after = fresh.variants.find((variant) => variant.id === id);
+        const priceOf = (variant: typeof before) =>
+          variant?.prices.find((price) => price.currency === currency)
+            ?.amount ?? null;
+        audit({
+          action: "ecommerce.variant.update",
+          after: {
+            active: after?.active,
+            price: priceOf(after),
+            sku: after?.sku,
+          },
+          before: {
+            active: before?.active,
+            price: priceOf(before),
+            sku: before?.sku,
+          },
+          target: {
+            id,
+            label: [product.title, after?.title].filter(Boolean).join(" / "),
+          },
+        });
+        return c.json(await productBody(c, db, productId), 200);
+      })
   )
 
   // A staff stock edit: a delta or a counted figure. Writes a `stock_movements` row.
-  .post("/variants/:id/stock", shopGate, validStock, (c) =>
-    staffWrite(c, async ({ db, actor, audit }) => {
-      const id = c.req.param("id");
-      const body = c.req.valid("json");
-      const productId = await productOfVariant(db, id);
-      const product = await mustGetProduct(db, productId);
-      const before = product.variants.find((variant) => variant.id === id);
-      const onHand = await adjustStock(
-        db,
-        id,
-        "delta" in body ? { delta: body.delta } : { onHand: body.onHand },
-        { actorUserId: actor.id, note: body.note ?? null }
-      );
-      audit({
-        action: "ecommerce.stock.adjust",
-        after: { onHand },
-        before: { onHand: before?.stock.onHand ?? 0 },
-        target: {
+  .post(
+    "/variants/:id/stock",
+    declare({
+      name: "admin_shop_variant_stock_adjust",
+      description: "Adjust a variant's stock.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validStock,
+    (c) =>
+      staffWrite(c, async ({ db, actor, audit }) => {
+        const id = c.req.param("id");
+        const body = c.req.valid("json");
+        const productId = await productOfVariant(db, id);
+        const product = await mustGetProduct(db, productId);
+        const before = product.variants.find((variant) => variant.id === id);
+        const onHand = await adjustStock(
+          db,
           id,
-          label: [product.title, before?.title].filter(Boolean).join(" / "),
-        },
-      });
-      return c.json(await productBody(c, db, productId), 200);
-    })
+          "delta" in body ? { delta: body.delta } : { onHand: body.onHand },
+          { actorUserId: actor.id, note: body.note ?? null }
+        );
+        audit({
+          action: "ecommerce.stock.adjust",
+          after: { onHand },
+          before: { onHand: before?.stock.onHand ?? 0 },
+          target: {
+            id,
+            label: [product.title, before?.title].filter(Boolean).join(" / "),
+          },
+        });
+        return c.json(await productBody(c, db, productId), 200);
+      })
   )
 
-  .post("/products/:id/images", shopGate, validImage, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const body = c.req.valid("json");
-      const product = await mustGetProduct(db, id);
-      const image = await addProductImage(db, { ...body, productId: id });
-      audit({
-        action: "ecommerce.image.create",
-        after: { imageId: image.id, storageObjectId: image.storageObjectId },
-        target: { id, label: product.title },
-      });
-      return c.json(await productBody(c, db, id), 201);
-    })
+  .post(
+    "/products/:id/images",
+    declare({
+      name: "admin_shop_product_image_add",
+      description: "Attach an image to a product.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validImage,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const body = c.req.valid("json");
+        const product = await mustGetProduct(db, id);
+        const image = await addProductImage(db, { ...body, productId: id });
+        audit({
+          action: "ecommerce.image.create",
+          after: { imageId: image.id, storageObjectId: image.storageObjectId },
+          target: { id, label: product.title },
+        });
+        return c.json(await productBody(c, db, id), 201);
+      })
   )
 
-  .delete("/images/:id", shopGate, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const [image] = await db
-        .select()
-        .from(productImages)
-        .where(eq(productImages.id, id));
-      if (!image) {
-        throw new EcommerceError("not_found", `No image ${id}.`);
-      }
-      const product = await mustGetProduct(db, image.productId);
-      await removeProductImage(db, id);
-      audit({
-        action: "ecommerce.image.delete",
-        before: { imageId: id, storageObjectId: image.storageObjectId },
-        target: { id: product.id, label: product.title },
-      });
-      return c.json(await productBody(c, db, product.id), 200);
-    })
+  .delete(
+    "/images/:id",
+    declare({
+      name: "admin_shop_image_delete",
+      description: "Remove a product image.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const [image] = await db
+          .select()
+          .from(productImages)
+          .where(eq(productImages.id, id));
+        if (!image) {
+          throw new EcommerceError("not_found", `No image ${id}.`);
+        }
+        const product = await mustGetProduct(db, image.productId);
+        await removeProductImage(db, id);
+        audit({
+          action: "ecommerce.image.delete",
+          before: { imageId: id, storageObjectId: image.storageObjectId },
+          target: { id: product.id, label: product.title },
+        });
+        return c.json(await productBody(c, db, product.id), 200);
+      })
   )
 
   // Categories ----------------------------------------------------------------------
 
-  .get("/categories", shopGate, (c) =>
-    staff(c, async (db) =>
-      c.json({ categories: await listCategories(db) }, 200)
-    )
+  .get(
+    "/categories",
+    declare({
+      name: "admin_shop_categories_list",
+      description: "List product categories for the shop admin.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staff(c, async (db) =>
+        c.json({ categories: await listCategories(db) }, 200)
+      )
   )
 
-  .post("/categories", shopGate, validCategory, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const category = await createCategory(db, c.req.valid("json"));
-      audit({
-        action: "ecommerce.category.create",
-        after: { name: category.name, slug: category.slug },
-        target: { id: category.id, label: category.name },
-      });
-      return c.json(category, 201);
-    })
+  .post(
+    "/categories",
+    declare({
+      name: "admin_shop_category_create",
+      description: "Create a product category.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validCategory,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const category = await createCategory(db, c.req.valid("json"));
+        audit({
+          action: "ecommerce.category.create",
+          after: { name: category.name, slug: category.slug },
+          target: { id: category.id, label: category.name },
+        });
+        return c.json(category, 201);
+      })
   )
 
   // Orders --------------------------------------------------------------------------
 
-  .get("/orders", shopGate, validOrderList, (c) =>
-    staff(c, async (db) => {
-      const query = c.req.valid("query");
-      await cancelExpiredOrders(db);
-      const page = await listOrders(db, {
-        page: query.page,
-        pageSize: shop().pageSize,
-        paymentMethod: query.cod === true ? "cod" : undefined,
-        status: query.status === "all" ? undefined : query.status,
-      });
-      const [extras, counts] = await Promise.all([
-        orderListExtras(
-          db,
-          page.orders.map((order) => order.id)
-        ),
-        countOrdersByStatus(db),
-      ]);
-      return c.json(
-        {
-          counts,
-          orders: page.orders.map((order) =>
-            orderRow(order, extras.get(order.id))
+  .get(
+    "/orders",
+    declare({
+      name: "admin_shop_orders_list",
+      description: "List orders for the shop admin.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validOrderList,
+    (c) =>
+      staff(c, async (db) => {
+        const query = c.req.valid("query");
+        await cancelExpiredOrders(db);
+        const page = await listOrders(db, {
+          page: query.page,
+          pageSize: shop().pageSize,
+          paymentMethod: query.cod === true ? "cod" : undefined,
+          status: query.status === "all" ? undefined : query.status,
+        });
+        const [extras, counts] = await Promise.all([
+          orderListExtras(
+            db,
+            page.orders.map((order) => order.id)
           ),
-          page: page.page,
-          pageCount: page.pageCount,
-          total: page.total,
-        },
-        200
-      );
-    })
+          countOrdersByStatus(db),
+        ]);
+        return c.json(
+          {
+            counts,
+            orders: page.orders.map((order) =>
+              orderRow(order, extras.get(order.id))
+            ),
+            page: page.page,
+            pageCount: page.pageCount,
+            total: page.total,
+          },
+          200
+        );
+      })
   )
 
   // The sidebar badge on Orders: placed COD orders awaiting a call (`nav-counts`).
-  .get("/orders/awaiting-call-count", shopGate, (c) =>
-    staff(c, async (db) => c.json({ count: await countPlacedCod(db) }, 200))
+  .get(
+    "/orders/awaiting-call-count",
+    declare({
+      name: "admin_shop_orders_awaiting_call_count",
+      description: "Count the orders that wait on a confirmation call.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staff(c, async (db) => c.json({ count: await countPlacedCod(db) }, 200))
   )
 
-  .get("/orders/:id", shopGate, (c) =>
-    staff(c, async (db) => {
-      const id = c.req.param("id");
-      await cancelExpiredOrders(db, { orderIds: [id] });
-      const order = await getOrder(db, id);
-      if (!order) {
-        throw new EcommerceError("not_found", `No order ${id}.`);
-      }
-      return c.json(await orderDetail(db, order), 200);
-    })
+  .get(
+    "/orders/:id",
+    declare({
+      name: "admin_shop_order_read",
+      description: "Read one order for the shop admin.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staff(c, async (db) => {
+        const id = c.req.param("id");
+        await cancelExpiredOrders(db, { orderIds: [id] });
+        const order = await getOrder(db, id);
+        if (!order) {
+          throw new EcommerceError("not_found", `No order ${id}.`);
+        }
+        return c.json(await orderDetail(db, order), 200);
+      })
   )
 
   // The "New order" page (Q33 to Q35). A phone that belongs to a user links the order to
@@ -728,292 +866,390 @@ export const adminEcommerce = new Hono<{ Bindings: Bindings }>()
   // `ADMIN_APP_ROLES`, and writes the `payment.review.confirm` audit row that route writes.
   // The submit, the confirm, both audit rows and the listener's move to `confirmed` all
   // commit in this write's transaction.
-  .post("/orders", shopGate, validManualOrder, (c) =>
-    staffWrite(c, async ({ db, actor, audit }) => {
-      const body = c.req.valid("json");
-      if (body.paymentReceived) {
-        // Throws 403 for a shop role outside admin and superadmin, before anything is written.
-        await withAuthScope(c, () => requireAdmin(c));
-      }
-      const known = await findUserByPhone(db, body.phone);
-      const customer =
-        known ??
-        (await createPhoneCustomer(db, {
-          email: placeholderEmail(body.phone),
-          name: body.name,
-          phone: body.phone,
-        }));
-      const placed = await placeOrder(db, env(c), {
-        actor: { type: "staff", userId: actor.id },
-        contactName: body.name,
-        contactPhone: body.phone,
-        lines: body.lines,
-        note: body.note ?? null,
-        paymentMethod: body.paymentMethod,
-        shippingAddress: body.address,
-        userId: customer.id,
-        zoneId: body.zoneId,
-      });
-      if (body.paymentReceived) {
-        if (takesNoSubmission(placed.payment)) {
-          return c.json(
-            errorBody(
-              "invalid_input",
-              `paymentReceived: ${body.paymentMethod} takes no transaction id. Confirm it from the order when the cash comes in.`
-            ),
-            400
-          );
+  .post(
+    "/orders",
+    declare({
+      name: "admin_shop_order_create",
+      description: "Create a manual order.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validManualOrder,
+    (c) =>
+      staffWrite(c, async ({ db, actor, audit }) => {
+        const body = c.req.valid("json");
+        if (body.paymentReceived) {
+          // Throws 403 for a shop role outside admin and superadmin, before anything is written.
+          await withAuthScope(c, () => requireAdmin(c));
         }
-        const payments = createPayment(env(c));
-        await payments.submit(placed.payment.id, {
-          amount: placed.order.total,
-          senderAccount: body.paymentReceived.senderAccount ?? body.phone,
-          transactionId: body.paymentReceived.transactionId,
+        const known = await findUserByPhone(db, body.phone);
+        const customer =
+          known ??
+          (await createPhoneCustomer(db, {
+            email: placeholderEmail(body.phone),
+            name: body.name,
+            phone: body.phone,
+          }));
+        const placed = await placeOrder(db, env(c), {
+          actor: { type: "staff", userId: actor.id },
+          contactName: body.name,
+          contactPhone: body.phone,
+          lines: body.lines,
+          note: body.note ?? null,
+          paymentMethod: body.paymentMethod,
+          shippingAddress: body.address,
+          userId: customer.id,
+          zoneId: body.zoneId,
         });
-        const note = "Received when the order was taken.";
-        const submitted = await payments.get(placed.payment.id);
-        const confirmed = await payments.confirm(placed.payment.id, {
-          actorUserId: actor.id,
-          note,
-        });
-        // The row `/admin/payment/payments/:id/review` writes for a confirm, target and
-        // label alike, so the payments audit trail shows who confirmed this payment.
+        if (body.paymentReceived) {
+          if (takesNoSubmission(placed.payment)) {
+            return c.json(
+              errorBody(
+                "invalid_input",
+                `paymentReceived: ${body.paymentMethod} takes no transaction id. Confirm it from the order when the cash comes in.`
+              ),
+              400
+            );
+          }
+          const payments = createPayment(env(c));
+          await payments.submit(placed.payment.id, {
+            amount: placed.order.total,
+            senderAccount: body.paymentReceived.senderAccount ?? body.phone,
+            transactionId: body.paymentReceived.transactionId,
+          });
+          const note = "Received when the order was taken.";
+          const submitted = await payments.get(placed.payment.id);
+          const confirmed = await payments.confirm(placed.payment.id, {
+            actorUserId: actor.id,
+            note,
+          });
+          // The row `/admin/payment/payments/:id/review` writes for a confirm, target and
+          // label alike, so the payments audit trail shows who confirmed this payment.
+          audit({
+            action: "payment.review.confirm",
+            after: { note, status: confirmed.status },
+            before: { status: submitted.status },
+            target: {
+              id: confirmed.id,
+              label: `${confirmed.referenceType} · ${confirmed.referenceId}`,
+            },
+          });
+        }
+        const order = await mustGetOrder(db, placed.order.id);
         audit({
-          action: "payment.review.confirm",
-          after: { note, status: confirmed.status },
-          before: { status: submitted.status },
-          target: {
-            id: confirmed.id,
-            label: `${confirmed.referenceType} · ${confirmed.referenceId}`,
+          action: "ecommerce.order.create",
+          after: {
+            customer: { existing: known !== null, userId: customer.id },
+            paymentMethod: order.paymentMethod,
+            paymentReceived: body.paymentReceived !== undefined,
+            status: order.status,
+            total: order.total,
           },
+          target: { id: order.id, label: orderLabel(order) },
         });
-      }
-      const order = await mustGetOrder(db, placed.order.id);
-      audit({
-        action: "ecommerce.order.create",
-        after: {
-          customer: { existing: known !== null, userId: customer.id },
-          paymentMethod: order.paymentMethod,
-          paymentReceived: body.paymentReceived !== undefined,
-          status: order.status,
-          total: order.total,
-        },
-        target: { id: order.id, label: orderLabel(order) },
-      });
-      return c.json(
-        {
-          customer: { existing: known !== null, id: customer.id },
-          next: placed.next,
-          order: await orderDetail(db, order),
-        },
-        201
-      );
-    })
+        return c.json(
+          {
+            customer: { existing: known !== null, id: customer.id },
+            next: placed.next,
+            order: await orderDetail(db, order),
+          },
+          201
+        );
+      })
   )
 
   // A staff status action: confirm, ship, deliver, cancel or return. Ship converts the
   // holds into stock movements; return restocks when `restock` is set (grill Q8).
-  .post("/orders/:id/status", shopGate, validOrderStatus, (c) =>
-    staffWrite(c, async ({ db, actor, audit }) => {
-      const id = c.req.param("id");
-      const body = c.req.valid("json");
-      const before = await mustGetOrder(db, id);
-      const to: OrderStatus = body.status;
-      const after = await moveOrder(db, env(c), {
-        actor: { type: "staff", userId: actor.id },
-        note: body.note ?? null,
-        orderId: id,
-        restock: to === "returned" ? body.restock : undefined,
-        to,
-      });
-      audit({
-        action: STATUS_ACTIONS[body.status],
-        after: {
-          status: after.status,
-          ...(to === "returned" ? { restock: body.restock } : {}),
-        },
-        before: { status: before.status },
-        target: { id, label: orderLabel(after) },
-      });
-      return c.json(await orderDetail(db, after), 200);
-    })
+  .post(
+    "/orders/:id/status",
+    declare({
+      name: "admin_shop_order_status_set",
+      description: "Move an order to its next status.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validOrderStatus,
+    (c) =>
+      staffWrite(c, async ({ db, actor, audit }) => {
+        const id = c.req.param("id");
+        const body = c.req.valid("json");
+        const before = await mustGetOrder(db, id);
+        const to: OrderStatus = body.status;
+        const after = await moveOrder(db, env(c), {
+          actor: { type: "staff", userId: actor.id },
+          note: body.note ?? null,
+          orderId: id,
+          restock: to === "returned" ? body.restock : undefined,
+          to,
+        });
+        audit({
+          action: STATUS_ACTIONS[body.status],
+          after: {
+            status: after.status,
+            ...(to === "returned" ? { restock: body.restock } : {}),
+          },
+          before: { status: before.status },
+          target: { id, label: orderLabel(after) },
+        });
+        return c.json(await orderDetail(db, after), 200);
+      })
   )
 
   // Put a returned order's items back, for an order the payment listener returned.
-  .post("/orders/:id/restock", shopGate, (c) =>
-    staffWrite(c, async ({ db, actor, audit }) => {
-      const id = c.req.param("id");
-      await restockReturnedOrder(db, id, { type: "staff", userId: actor.id });
-      const order = await mustGetOrder(db, id);
-      audit({
-        action: "ecommerce.order.restock",
-        after: { restocked: true },
-        before: { restocked: false },
-        target: { id, label: orderLabel(order) },
-      });
-      return c.json(await orderDetail(db, order), 200);
-    })
+  .post(
+    "/orders/:id/restock",
+    declare({
+      name: "admin_shop_order_restock",
+      description: "Put a returned order's items back in stock.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staffWrite(c, async ({ db, actor, audit }) => {
+        const id = c.req.param("id");
+        await restockReturnedOrder(db, id, { type: "staff", userId: actor.id });
+        const order = await mustGetOrder(db, id);
+        audit({
+          action: "ecommerce.order.restock",
+          after: { restocked: true },
+          before: { restocked: false },
+          target: { id, label: orderLabel(order) },
+        });
+        return c.json(await orderDetail(db, order), 200);
+      })
   )
 
   // Customers -----------------------------------------------------------------------
 
-  .get("/customers", shopGate, validCustomerList, (c) =>
-    staff(c, async (db) => {
-      const query = c.req.valid("query");
-      const page = await listCustomers(db, {
-        page: query.page,
-        pageSize: shop().pageSize,
-        query: query.q,
-      });
-      return c.json(page, 200);
-    })
+  .get(
+    "/customers",
+    declare({
+      name: "admin_shop_customers_list",
+      description: "List customers for the shop admin.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validCustomerList,
+    (c) =>
+      staff(c, async (db) => {
+        const query = c.req.valid("query");
+        const page = await listCustomers(db, {
+          page: query.page,
+          pageSize: shop().pageSize,
+          query: query.q,
+        });
+        return c.json(page, 200);
+      })
   )
 
   // The "New order" page's phone lookup (Q34): the user who owns the number, or null.
-  .get("/customers/lookup", shopGate, validLookup, (c) =>
-    staff(c, async (db) => {
-      const user = await findUserByPhone(db, c.req.valid("query").phone);
-      if (!user) {
-        return c.json({ customer: null }, 200);
-      }
-      return c.json(
-        { customer: { ...user, ...(await customerStats(db, user.id)) } },
-        200
-      );
-    })
+  .get(
+    "/customers/lookup",
+    declare({
+      name: "admin_shop_customer_lookup",
+      description: "Find the user who owns a phone number.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validLookup,
+    (c) =>
+      staff(c, async (db) => {
+        const user = await findUserByPhone(db, c.req.valid("query").phone);
+        if (!user) {
+          return c.json({ customer: null }, 200);
+        }
+        return c.json(
+          { customer: { ...user, ...(await customerStats(db, user.id)) } },
+          200
+        );
+      })
   )
 
-  .get("/customers/:id", shopGate, (c) =>
-    staff(c, async (db) => {
-      const id = c.req.param("id");
-      const customer = await getCustomer(db, id);
-      if (!customer) {
-        throw new EcommerceError("not_found", `No customer ${id}.`);
-      }
-      const orders = await listOrders(db, {
-        pageSize: 50,
-        userId: id,
-      });
-      const extras = await orderListExtras(
-        db,
-        orders.orders.map((order) => order.id)
-      );
-      return c.json(
-        {
-          ...customer,
-          orders: orders.orders.map((order) =>
-            orderRow(order, extras.get(order.id))
-          ),
-        },
-        200
-      );
-    })
+  .get(
+    "/customers/:id",
+    declare({
+      name: "admin_shop_customer_read",
+      description: "Read one customer with their orders.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staff(c, async (db) => {
+        const id = c.req.param("id");
+        const customer = await getCustomer(db, id);
+        if (!customer) {
+          throw new EcommerceError("not_found", `No customer ${id}.`);
+        }
+        const orders = await listOrders(db, {
+          pageSize: 50,
+          userId: id,
+        });
+        const extras = await orderListExtras(
+          db,
+          orders.orders.map((order) => order.id)
+        );
+        return c.json(
+          {
+            ...customer,
+            orders: orders.orders.map((order) =>
+              orderRow(order, extras.get(order.id))
+            ),
+          },
+          200
+        );
+      })
   )
 
   // Zones ---------------------------------------------------------------------------
 
-  .get("/zones", shopGate, (c) =>
-    staff(c, async (db) => c.json({ zones: await listZones(db) }, 200))
+  .get(
+    "/zones",
+    declare({
+      name: "admin_shop_zones_list",
+      description: "List delivery zones for the shop admin.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) => staff(c, async (db) => c.json({ zones: await listZones(db) }, 200))
   )
 
-  .post("/zones", shopGate, validZone, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const zone = await createZone(db, {
-        ...c.req.valid("json"),
-        currency: shop().currency,
-      });
-      audit({
-        action: "ecommerce.zone.create",
-        after: { active: zone.active, name: zone.name, rate: zone.rate },
-        target: { id: zone.id, label: zone.name },
-      });
-      return c.json(zone, 201);
-    })
+  .post(
+    "/zones",
+    declare({
+      name: "admin_shop_zone_create",
+      description: "Create a delivery zone.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validZone,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const zone = await createZone(db, {
+          ...c.req.valid("json"),
+          currency: shop().currency,
+        });
+        audit({
+          action: "ecommerce.zone.create",
+          after: { active: zone.active, name: zone.name, rate: zone.rate },
+          target: { id: zone.id, label: zone.name },
+        });
+        return c.json(zone, 201);
+      })
   )
 
-  .patch("/zones/:id", shopGate, validZonePatch, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const before = await getZone(db, id);
-      if (!before) {
-        throw new EcommerceError("not_found", `No zone ${id}.`);
-      }
-      const zone = await updateZone(db, id, c.req.valid("json"));
-      audit({
-        action: "ecommerce.zone.update",
-        after: {
-          active: zone.active,
-          name: zone.name,
-          position: zone.position,
-          rate: zone.rate,
-        },
-        before: {
-          active: before.active,
-          name: before.name,
-          position: before.position,
-          rate: before.rate,
-        },
-        target: { id, label: zone.name },
-      });
-      return c.json(zone, 200);
-    })
+  .patch(
+    "/zones/:id",
+    declare({
+      name: "admin_shop_zone_update",
+      description: "Change a delivery zone.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validZonePatch,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const before = await getZone(db, id);
+        if (!before) {
+          throw new EcommerceError("not_found", `No zone ${id}.`);
+        }
+        const zone = await updateZone(db, id, c.req.valid("json"));
+        audit({
+          action: "ecommerce.zone.update",
+          after: {
+            active: zone.active,
+            name: zone.name,
+            position: zone.position,
+            rate: zone.rate,
+          },
+          before: {
+            active: before.active,
+            name: before.name,
+            position: before.position,
+            rate: before.rate,
+          },
+          target: { id, label: zone.name },
+        });
+        return c.json(zone, 200);
+      })
   )
 
-  .delete("/zones/:id", shopGate, (c) =>
-    staffWrite(c, async ({ db, audit }) => {
-      const id = c.req.param("id");
-      const before = await getZone(db, id);
-      if (!before) {
-        throw new EcommerceError("not_found", `No zone ${id}.`);
-      }
-      await deleteZone(db, id);
-      audit({
-        action: "ecommerce.zone.delete",
-        before: { active: before.active, name: before.name, rate: before.rate },
-        target: { id, label: before.name },
-      });
-      return c.json({ id }, 200);
-    })
+  .delete(
+    "/zones/:id",
+    declare({
+      name: "admin_shop_zone_delete",
+      description: "Delete a delivery zone.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    (c) =>
+      staffWrite(c, async ({ db, audit }) => {
+        const id = c.req.param("id");
+        const before = await getZone(db, id);
+        if (!before) {
+          throw new EcommerceError("not_found", `No zone ${id}.`);
+        }
+        await deleteZone(db, id);
+        audit({
+          action: "ecommerce.zone.delete",
+          before: {
+            active: before.active,
+            name: before.name,
+            rate: before.rate,
+          },
+          target: { id, label: before.name },
+        });
+        return c.json({ id }, 200);
+      })
   )
 
   // Reports -------------------------------------------------------------------------
 
   // Sales by day, top products, orders by status and the COD figures, for one range.
-  .get("/reports", shopGate, validReport, (c) =>
-    staff(c, async (db) => {
-      const query = c.req.valid("query");
-      let range;
-      try {
-        range = reportRange(query, new Date(), shop().timeZone);
-      } catch (error) {
+  .get(
+    "/reports",
+    declare({
+      name: "admin_shop_report_read",
+      description: "Read the sales report for a range.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    shopGate,
+    validReport,
+    (c) =>
+      staff(c, async (db) => {
+        const query = c.req.valid("query");
+        let range;
+        try {
+          range = reportRange(query, new Date(), shop().timeZone);
+        } catch (error) {
+          return c.json(
+            errorBody(
+              "invalid_input",
+              error instanceof Error ? error.message : String(error)
+            ),
+            400
+          );
+        }
+        const [sales, top, statuses, cod] = await Promise.all([
+          salesByDay(db, { ...range, timeZone: shop().timeZone }),
+          topProducts(db, range),
+          ordersByStatus(db, range),
+          codReport(db, range),
+        ]);
+        const byDay = new Map(sales.map((day) => [day.day, day]));
         return c.json(
-          errorBody(
-            "invalid_input",
-            error instanceof Error ? error.message : String(error)
-          ),
-          400
+          {
+            cod,
+            currency: shop().currency,
+            from: range.from.toISOString(),
+            ordersByStatus: statuses,
+            salesByDay: range.days.map(
+              (day) => byDay.get(day) ?? { day, orders: 0, total: 0 }
+            ),
+            to: range.to.toISOString(),
+            topProducts: top,
+          },
+          200
         );
-      }
-      const [sales, top, statuses, cod] = await Promise.all([
-        salesByDay(db, { ...range, timeZone: shop().timeZone }),
-        topProducts(db, range),
-        ordersByStatus(db, range),
-        codReport(db, range),
-      ]);
-      const byDay = new Map(sales.map((day) => [day.day, day]));
-      return c.json(
-        {
-          cod,
-          currency: shop().currency,
-          from: range.from.toISOString(),
-          ordersByStatus: statuses,
-          salesByDay: range.days.map(
-            (day) => byDay.get(day) ?? { day, orders: 0, total: 0 }
-          ),
-          to: range.to.toISOString(),
-          topProducts: top,
-        },
-        200
-      );
-    })
+      })
   );

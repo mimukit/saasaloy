@@ -148,6 +148,17 @@
       "kind": "package-json-script",
       "name": "cms:rerender",
       "value": "pnpm --filter @repo/cms cms:rerender"
+    },
+    {
+      "file": "apps/web/src/lib/agent-entries.ts",
+      "kind": "plugin-array",
+      "exportName": "agentEntries",
+      "arrayProp": "entries",
+      "call": "cmsAgentEntry",
+      "import": {
+        "name": "cmsAgentEntry",
+        "from": "./agent-entries/cms"
+      }
     }
   ],
   "files": [
@@ -263,6 +274,10 @@
     {
       "path": "files/web/lib/cms.ts",
       "target": "@web/lib/cms.ts"
+    },
+    {
+      "path": "files/web/lib/agent-entry.ts",
+      "target": "@web/lib/agent-entries/cms.ts"
     },
     {
       "path": "files/web/pages/blog/index.astro",

@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 
 import { createPaymentStore, withPaymentStore } from "../payment-store";
+import { declare } from "../contract";
 
 // The public half of the payment capability, mounted at `/payment` by this module's
 // `chained-route` patch: the provider callback surface `/payment/callback/:provider/*`.
@@ -37,8 +38,30 @@ export const paymentRoute = new Hono<{ Bindings: PaymentBindings }>()
   // returns with a GET or a form POST. The core reads two things off the URL, the
   // `:provider` segment and the path after it, and hands the whole `Request` on. It never
   // parses the body: that is the vendor's wire format.
-  .get("/callback/:provider/*", (c) => callback(c))
-  .post("/callback/:provider/*", (c) => callback(c));
+  .get(
+    "/callback/:provider/*",
+    declare({
+      name: "payment_callback_get",
+      description: "A payment provider's redirect back after a payment.",
+      agent: {
+        callable: false,
+        reason: "A payment provider calls it, not an agent.",
+      },
+    }),
+    (c) => callback(c)
+  )
+  .post(
+    "/callback/:provider/*",
+    declare({
+      name: "payment_callback_post",
+      description: "A payment provider's server notice about a payment.",
+      agent: {
+        callable: false,
+        reason: "A payment provider calls it, not an agent.",
+      },
+    }),
+    (c) => callback(c)
+  );
 
 /**
  * One provider callback, whichever method it arrived on. `ignored` and `event` answer 204,

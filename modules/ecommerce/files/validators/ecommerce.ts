@@ -314,3 +314,70 @@ export const reportQuery = z
     { message: "A custom range needs from and to.", path: ["from"] }
   );
 export type ReportQuery = z.infer<typeof reportQuery>;
+
+// The bodies of the three catalog reads an agent may call. Each route's `declare(...)`
+// names its schema as `output`, and the `agent` module turns it into the tool's output
+// schema. The route still builds its own body (`apps/api/src/lib/ecommerce/catalog-view.ts`);
+// a change to one of those bodies changes the schema here too, in the same commit.
+
+/** One product image. A null `url`: the project serves no public bucket. */
+const shopImage = z.object({
+  alt: z.string(),
+  id: z.string(),
+  url: z.string().nullable(),
+  variantId: z.string().nullable(),
+});
+
+/** Body of `GET /shop/products`: one page of active products, in the store currency. */
+export const shopProductList = z.object({
+  currency: z.string(),
+  page: z.number().int(),
+  pageCount: z.number().int(),
+  products: z.array(
+    z.object({
+      available: z.number().int(),
+      id: z.string(),
+      image: shopImage.nullable(),
+      maxPrice: z.number().nullable(),
+      minPrice: z.number().nullable(),
+      slug: z.string(),
+      title: z.string(),
+    })
+  ),
+  total: z.number().int(),
+});
+
+/** Body of `GET /shop/products/:slug`: one active product with its active variants. */
+export const shopProduct = z.object({
+  categoryId: z.string().nullable(),
+  currency: z.string(),
+  descriptionHtml: z.string().nullable(),
+  id: z.string(),
+  images: z.array(shopImage),
+  options: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      values: z.array(z.object({ id: z.string(), value: z.string() })),
+    })
+  ),
+  slug: z.string(),
+  title: z.string(),
+  variants: z.array(
+    z.object({
+      available: z.number().int(),
+      id: z.string(),
+      optionValueIds: z.array(z.string()),
+      price: z.number().nullable(),
+      sku: z.string().nullable(),
+      title: z.string(),
+    })
+  ),
+});
+
+/** Body of `GET /shop/categories`. */
+export const shopCategoryList = z.object({
+  categories: z.array(
+    z.object({ id: z.string(), name: z.string(), slug: z.string() })
+  ),
+});

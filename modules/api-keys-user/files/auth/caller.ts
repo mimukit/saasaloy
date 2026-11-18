@@ -12,6 +12,7 @@ import {
 } from "./plugins/api-key-options";
 import { getSession } from "./server";
 import type { AuthRequestContext } from "./server";
+import type { UserResolver } from "./user-caller";
 
 export type {
   ApiKeyPrincipal,
@@ -117,6 +118,37 @@ async function keyCaller(c: AuthRequestContext): Promise<Caller> {
       // JSON, so this is already a permission map. It does NOT follow a later edit of
       // `API_KEY_SCOPES`, by decision — revoke and reissue to change what a key may do.
       statements: verified.permissions ?? {},
+    },
+  };
+}
+
+/**
+ * The key, as a caller kind of `requireUser` in `./user-caller.ts`.
+ *
+ * Registered into `userResolvers.resolvers` by this module's `plugin-array` patch, and
+ * never called directly. It runs the same verification `requireCaller` runs, so a key
+ * that fails gets the same 401, and a route an agent may call (`GET /notifications`,
+ * `GET /files`) accepts a user's key limited to its scope. `requireCaller` keeps working
+ * for the routes a project already wrote against it.
+ */
+export function apiKeyUser(): UserResolver {
+  return {
+    claims: (headers) => hasBearer(headers),
+    name: "api-key",
+    async resolve(c) {
+      const caller = await keyCaller(c);
+      if (caller.principal.kind !== "apiKey") {
+        throw invalidKeyError();
+      }
+      return {
+        activeOrganizationId: null,
+        principal: {
+          id: caller.principal.keyId,
+          kind: "apiKey",
+          statements: caller.principal.statements,
+        },
+        userId: caller.userId,
+      };
     },
   };
 }

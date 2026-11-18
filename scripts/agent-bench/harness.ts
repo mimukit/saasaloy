@@ -36,6 +36,35 @@ export interface Options {
   unknown: string[];
 }
 
+// Variables that tie a child to the parent Claude Code session, that would let the agent
+// push, or that would hand it the run's port block, the CLI's registry or the audit key.
+// The OAuth token stays: it is how a run on this box authenticates.
+const STRIP = [
+  /^CLAUDECODE$/,
+  /^CLAUDE_CODE_(?!OAUTH_TOKEN$)/,
+  /^CLAUDE_PID$/,
+  /^CLAUDE_EFFORT$/,
+  /^CLAUDE_AGENT_SDK_VERSION$/,
+  /^CLAUDE_CONFIG_DIR$/,
+  /^AI_AGENT$/,
+  /^GITHUB_TOKEN$/,
+  /^GH_TOKEN$/,
+  /^DEV_PORTS_BLOCK$/,
+  /^SAASALOY_REGISTRY_DIR$/,
+  /^AGENT_AUDIT_KEY$/,
+];
+
+/** `env` without the variables in `STRIP`. The harness adds back what each agent gets. */
+export function cleanEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const clean: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (!STRIP.some((pattern) => pattern.test(key))) {
+      clean[key] = value;
+    }
+  }
+  return clean;
+}
+
 /** The default folder for run folders: outside any repository, in the user's cache. */
 export function defaultRuns(home = homedir()): string {
   return join(home, ".cache", "saasaloy-bench");

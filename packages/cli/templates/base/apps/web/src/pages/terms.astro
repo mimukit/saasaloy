@@ -1,20 +1,24 @@
 ---
 // This file's name is the route. `config.app.legal.termsPath` is what the footer links, so rename
 // this page and that value in the same edit, or the link 404s.
+//
+// The words live in src/legal/terms.md, the one source for this page and for its Markdown
+// copy at `/terms.md` (src/pages/[page].md.ts). Write your policy there, as Markdown;
+// `{siteName}` in it becomes the product name.
 import { siteName } from "@repo/ui";
 import Layout from "../layouts/Layout.astro";
+import { legalHtml, legalTitle } from "../lib/agent-document";
+
+const html = await legalHtml("terms");
 ---
 
-<Layout title={`Terms of Service — ${siteName}`}>
+<Layout title={`${legalTitle("terms")} — ${siteName}`}>
   <main
     id="main"
     tabindex="-1"
-    class="mx-auto my-16 max-w-2xl px-6 leading-[1.6]"
+    class="mx-auto my-16 max-w-2xl px-6 leading-[1.6] [&_a]:hover:underline [&_h1]:mb-6 [&_h1]:text-3xl [&_h1]:font-bold [&_h1]:tracking-tight [&_h2]:mt-10 [&_h2]:mb-4 [&_h2]:text-xl [&_h2]:font-semibold [&_li]:mb-2 [&_p]:mb-4 [&_ul]:mb-4 [&_ul]:list-disc [&_ul]:ps-6"
   >
-    <h1 class="mb-6 text-3xl font-bold tracking-tight">Terms of Service</h1>
-    <p class="mb-4">
-      Placeholder terms for {siteName}. Replace with your own before launch.
-    </p>
+    <Fragment set:html={html} />
     <p>
       <a href="/" class="hover:underline">
         ← Home

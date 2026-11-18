@@ -156,11 +156,23 @@ describe(
       const report = readFileSync(join(outDir, "score.md"), "utf-8");
       assert.match(
         report,
-        /\| Interview ends with one read-back, no question after it \| PASS/
+        /\| Interview ends with one read-back, no question after it +\| PASS/
       );
       assert.match(
         report,
         /\| Preview answers when the brief asks for one +\| N\/A/
+      );
+    });
+
+    it("lists the two agent lines, which a static run does not score", () => {
+      const report = readFileSync(join(outDir, "score.md"), "utf-8");
+      assert.match(
+        report,
+        /\| `pnpm agent:audit` exits 0 with a seeded key +\| FAIL +\| not run \(static scoring only\)/
+      );
+      assert.match(
+        report,
+        /\| A second agent with the address and a key creates and reads back one entity through MCP +\| FAIL +\| not run \(static scoring only\)/
       );
     });
   }

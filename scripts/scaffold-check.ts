@@ -40,7 +40,9 @@ const cliBin = join(root, "packages/cli/dist/index.js");
 /**
  * The modules an agent's build adds before its first feature: the Validate stage's set and
  * the MVP stage's, as the `saasaloy-build` skill names them, on the local driver and
- * providers. `scaffold-check.test.ts` holds this list to the skill. Exported for that test.
+ * providers. `api-keys` and `api-keys-user` are `scale` modules that the build adds with
+ * `agent` (plan 0110). `scaffold-check.test.ts` holds this list to the skill. Exported
+ * for that test.
  */
 export const MVP_MODULES = [
   "database",
@@ -55,6 +57,9 @@ export const MVP_MODULES = [
   "admin",
   "email",
   "email-console",
+  "agent",
+  "api-keys",
+  "api-keys-user",
 ] as const;
 
 /** The testing mode the build sets, so the module route tests ship and run. */
