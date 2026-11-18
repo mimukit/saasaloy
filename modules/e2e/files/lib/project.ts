@@ -43,6 +43,7 @@ export const SPEC_TAGS = [
   "app",
   "auth",
   "auth-phone",
+  "command",
   "ecommerce",
   "payment-manual",
   "sms-console",
@@ -212,4 +213,14 @@ export const READY: Record<App, string> = {
 export const SEED_ADMIN = {
   email: "superadmin@example.test",
   password: "saasaloy-dev-password",
+} as const;
+
+/**
+ * The customer the app specs sign in as, the `member` row of the same seed slices. It is a
+ * plain user with no admin role, so it opens `apps/app` and is refused by admin. Change it
+ * only together with `packages/db/src/seed/slices/users.ts` and `accounts.ts`.
+ */
+export const SEED_MEMBER = {
+  email: "member@example.test",
+  password: SEED_ADMIN.password,
 } as const;
