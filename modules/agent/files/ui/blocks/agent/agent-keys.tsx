@@ -388,7 +388,7 @@ function ScopeChips({
     return <span className="text-muted-foreground">{agent.keys.noScope}</span>;
   }
   return (
-    <span className="flex flex-wrap gap-1">
+    <span className="flex flex-wrap gap-1 md:flex-nowrap md:whitespace-nowrap">
       {shown.map((pair) => (
         <Badge key={pair} variant="secondary" className="font-mono">
           {pair}
@@ -616,12 +616,13 @@ function IssuedKeyDialog({
   return (
     <Dialog
       open={plaintext !== null}
-      // The key shows once, so only "Done" closes it: a stray click outside or an
-      // Escape must not drop a key the user has not copied yet.
+      // The key shows once, so only "Done" closes it. The dialog is controlled, so a close
+      // request from Escape or a click outside is cancelled and the key stays on screen
+      // until the user has had the chance to copy it.
       disablePointerDismissal
-      onOpenChange={(next) => {
+      onOpenChange={(next, details) => {
         if (!next) {
-          onDone();
+          details.cancel();
         }
       }}
     >
