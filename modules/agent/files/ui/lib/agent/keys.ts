@@ -77,6 +77,9 @@ export function scopeChips(
 export function serverName(appName: string): string {
   const slug = appName
     .normalize("NFKD")
+    // NFKD splits an accented letter into the letter and a combining mark. Drop the mark,
+    // or the slug breaks "Müller" into "mu-ller".
+    .replaceAll(/\p{M}+/gu, "")
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-+|-+$/g, "");
@@ -118,7 +121,9 @@ export function setupText(
   if (client === "claude-code") {
     return `claude mcp add --transport http ${name} ${mcpAddress} --header "Authorization: Bearer ${KEY_PLACEHOLDER}"`;
   }
-  const variable = `${name.toUpperCase().replaceAll("-", "_")}_KEY`;
+  // A shell variable cannot start with a digit, so "3d-studio" becomes MCP_3D_STUDIO_KEY.
+  const stem = name.toUpperCase().replaceAll("-", "_");
+  const variable = `${/^\d/.test(stem) ? "MCP_" : ""}${stem}_KEY`;
   return [
     `[mcp_servers.${name}]`,
     `url = "${mcpAddress}"`,

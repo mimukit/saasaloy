@@ -80,6 +80,11 @@ describe("serverName", () => {
     assert.equal(serverName("Café Ledger"), "cafe-ledger");
   });
 
+  it("keeps a word whole around an accented letter", () => {
+    assert.equal(serverName("Müller"), "muller");
+    assert.equal(serverName("Résumé Builder"), "resume-builder");
+  });
+
   it("falls back to app for a name with no letter or digit", () => {
     assert.equal(serverName("***"), "app");
   });
@@ -117,5 +122,11 @@ describe("setupText", () => {
     const text = setupText("codex", "acme-books", address);
     assert.match(text, /^\[mcp_servers\.acme-books\]$/m);
     assert.match(text, /^bearer_token_env_var = "ACME_BOOKS_KEY"$/m);
+  });
+
+  it("gives Codex a valid shell variable when the name starts with a digit", () => {
+    const text = setupText("codex", "3d-studio", address);
+    assert.match(text, /^bearer_token_env_var = "MCP_3D_STUDIO_KEY"$/m);
+    assert.match(text, /export MCP_3D_STUDIO_KEY=/);
   });
 });

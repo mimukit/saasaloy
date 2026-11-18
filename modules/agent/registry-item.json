@@ -92,9 +92,7 @@
         "name": "BotIcon",
         "from": "lucide-react"
       },
-      "when": {
-        "installed": ["api-keys-user"]
-      }
+      "when": { "installed": ["api-keys-user"] }
     }
   ],
   "files": [
@@ -105,9 +103,7 @@
     {
       "path": "files/api/routes/agent.vitest.ts",
       "target": "@api/routes/agent.test.ts",
-      "when": {
-        "testing": true
-      }
+      "when": { "testing": true }
     },
     {
       "path": "files/api/agent/document.ts",
@@ -132,16 +128,12 @@
     {
       "path": "files/api/agent/ratelimit.ts",
       "target": "@api/agent/ratelimit.ts",
-      "when": {
-        "installed": ["ratelimit"]
-      }
+      "when": { "installed": ["ratelimit"] }
     },
     {
       "path": "files/api/agent/statements.vitest.ts",
       "target": "@api/agent/statements.test.ts",
-      "when": {
-        "testing": true
-      }
+      "when": { "testing": true }
     },
     {
       "path": "files/config/agent.ts",
@@ -154,30 +146,22 @@
     {
       "path": "files/ui/lib/agent/keys.ts",
       "target": "@ui/lib/agent/keys.ts",
-      "when": {
-        "installed": ["api-keys-user"]
-      }
+      "when": { "installed": ["api-keys-user"] }
     },
     {
       "path": "files/ui/content/agent.ts",
       "target": "@ui/content/agent.ts",
-      "when": {
-        "installed": ["api-keys-user"]
-      }
+      "when": { "installed": ["api-keys-user"] }
     },
     {
       "path": "files/ui/blocks/agent/agent-keys.tsx",
       "target": "@ui/blocks/agent/agent-keys.tsx",
-      "when": {
-        "installed": ["api-keys-user"]
-      }
+      "when": { "installed": ["api-keys-user"] }
     },
     {
       "path": "files/app/routes/agents.tsx",
       "target": "@app/routes/agents.tsx",
-      "when": {
-        "installed": ["api-keys-user"]
-      }
+      "when": { "installed": ["api-keys-user"] }
     }
   ],
   "agent": {

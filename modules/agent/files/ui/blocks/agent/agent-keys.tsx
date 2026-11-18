@@ -451,6 +451,24 @@ function KeysEmpty({
   );
 }
 
+/**
+ * The value a dialog renders. The parent clears its value to close the dialog, and the
+ * popup keeps the last one until the exit transition ends, so the closing popup does not
+ * flash an empty key or "Unnamed key". The caller clears it in `onOpenChangeComplete`.
+ */
+function useHeldWhileClosing<T>(value: T | null): [T | null, () => void] {
+  const [held, setHeld] = useState<T | null>(value);
+  if (value !== null && value !== held) {
+    setHeld(value);
+  }
+  return [
+    value ?? held,
+    () => {
+      setHeld(null);
+    },
+  ];
+}
+
 function CreateKeyDialog({
   open,
   onOpenChange,
@@ -475,10 +493,6 @@ function CreateKeyDialog({
     setPending(true);
     setFailure(null);
     onCreate({ name: name.trim(), scope })
-      .then(() => {
-        setName("");
-        setScope(defaultScope(vocabulary));
-      })
       .catch((error: unknown) => {
         setFailure(error instanceof Error ? error.message : String(error));
       })
@@ -490,10 +504,13 @@ function CreateKeyDialog({
   return (
     <Dialog
       open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        // A fresh dialog starts without the last attempt's error.
-        if (next) {
+      onOpenChange={onOpenChange}
+      // Every close resets the form once the exit transition ends: a cancelled draft must
+      // not carry a ticked delete scope or an old error into the next key.
+      onOpenChangeComplete={(next) => {
+        if (!next) {
+          setName("");
+          setScope(defaultScope(vocabulary));
           setFailure(null);
         }
       }}
@@ -613,9 +630,15 @@ function IssuedKeyDialog({
   plaintext: string | null;
   onDone: () => void;
 }) {
+  const [shown, clearShown] = useHeldWhileClosing(plaintext);
   return (
     <Dialog
       open={plaintext !== null}
+      onOpenChangeComplete={(next) => {
+        if (!next) {
+          clearShown();
+        }
+      }}
       // The key shows once, so only "Done" closes it. The dialog is controlled, so a close
       // request from Escape or a click outside is cancelled and the key stays on screen
       // until the user has had the chance to copy it.
@@ -633,10 +656,10 @@ function IssuedKeyDialog({
         <DialogPanel className="grid gap-4">
           <div className="bg-muted flex items-start gap-2 rounded-lg border p-3">
             <code className="min-w-0 flex-1 font-mono text-sm break-all">
-              {plaintext}
+              {shown}
             </code>
-            {plaintext === null ? null : (
-              <CopyButton text={plaintext} label={agent.created.copyLabel} />
+            {shown === null ? null : (
+              <CopyButton text={shown} label={agent.created.copyLabel} />
             )}
           </div>
           <Alert variant="warning">
@@ -663,10 +686,16 @@ function RevokeDialog({
 }) {
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [shown, clearShown] = useHeldWhileClosing(row);
 
   return (
     <AlertDialog
       open={row !== null}
+      onOpenChangeComplete={(next) => {
+        if (!next) {
+          clearShown();
+        }
+      }}
       onOpenChange={(next) => {
         if (!next) {
           setFailure(null);
@@ -678,7 +707,7 @@ function RevokeDialog({
         <AlertDialogHeader>
           <AlertDialogTitle>
             {interpolate(agent.revoke.title, {
-              name: row?.name ?? agent.keys.unnamed,
+              name: shown?.name ?? agent.keys.unnamed,
             })}
           </AlertDialogTitle>
           <AlertDialogDescription>
