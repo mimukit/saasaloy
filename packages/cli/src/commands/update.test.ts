@@ -64,6 +64,7 @@ const BASE_NOTE_IDS = [
   "base/0002-ui-primitives-and-date-logic",
   "base/0003-dev-stop-and-dev-plugins",
   "base/0004-dev-ports",
+  "base/0005-ci-gate-job-steps",
 ];
 
 let dir: string;

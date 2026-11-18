@@ -49,7 +49,7 @@ Rejected:
 
 The gate keeps its shape. `readCi` and `ciState` gain the job-step rule, `readFacts` gains a parent fallback, and `deployProduction` gains a poll loop after the non-CI gates. Everything goes through the existing `Io` (`git`, `gh`, `sleep`, `now`, `say`), so the tests stay on the fake `Io`.
 
-### Phase 1: read job steps for a lagging run
+### Phase 1: read job steps for a lagging run (built 2026-11-18)
 
 - Add `CiStep` and `CiJob` types. Add `jobs?: CiJob[]` to `CiRun`.
 - Add an exported `jobState(job)` and a private `runState(run)` with the rule in Design decisions. Rewrite `ciState` on top of `runState`.
@@ -60,7 +60,7 @@ The gate keeps its shape. `readCi` and `ciState` gain the job-step rule, `readFa
 
 Done when: `pnpm --filter @repo/tooling test` passes in a scaffold, and the new dry-run test shows the gate `ok` for a `queued` run whose steps are all `completed`/`success`.
 
-### Phase 2: pass a release commit on its parent's green run
+### Phase 2: pass a release commit on its parent's green run (built 2026-11-18)
 
 - Export `CHANGELOG_FILE` from `deploy-production.ts`. `release.ts` imports it and passes it as `infile`.
 - Add an exported `isReleaseOnly(files, packageDiff)` and a private `releaseParent(io)` that reads `git rev-list --parents -n 1 HEAD` and the two diffs.
@@ -71,7 +71,7 @@ Done when: `pnpm --filter @repo/tooling test` passes in a scaffold, and the new 
 
 Done when: the tooling tests pass, and the dry-run test for a release commit prints `ci.yml passed on <parent short sha>, and HEAD changes only the release version and CHANGELOG.md.` while HEAD's own run shows `in_progress`.
 
-### Phase 3: `--wait-ci` polls the gate
+### Phase 3: `--wait-ci` polls the gate (built 2026-11-18)
 
 - `parseArgs` accepts `--wait-ci`. `--wait-ci` with `--skip-ci` throws, because the two contradict. `USAGE` lists the flag.
 - Add the constants `CI_POLL_MS`, `CI_MISSING_MS` and `CI_WAIT_MS` beside `SMOKE_TRIES`.
@@ -83,7 +83,7 @@ Done when: the tooling tests pass, and the dry-run test for a release commit pri
 
 Done when: the tooling tests pass, the green-on-third-poll test records two `sleep(15000)` calls and the gate `ok`, which shows the 15 s target, and the dirty-tree test records no `sleep` call.
 
-### Phase 4: the skill, the workflow and the update note
+### Phase 4: the skill, the workflow and the update note (built 2026-11-18)
 
 Depends on: #286 merged to `main`, because this phase edits its `deploy.yml`.
 
