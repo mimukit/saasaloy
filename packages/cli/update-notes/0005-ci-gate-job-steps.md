@@ -14,7 +14,7 @@ GitHub can show a CI run as queued or in progress for many minutes after its job
   - The `is still running` and `has no run on HEAD` messages name `pnpm deploy:production --wait-ci` in place of `gh run watch`.
   - The file exports `CHANGELOG_FILE`, and `isReleaseOnly` and `jobState` for the tests.
 - `packages/tooling/src/release.ts` imports `CHANGELOG_FILE` and passes it to release-it as `infile`.
-- `.agents/skills/saasaloy-deploy/SKILL.md`: the CI row of the gates table, the flag list and the hotfix steps describe the new gate and `--wait-ci`. Procedure step 3 saves each dry run's output to a file under `.artifacts/deploy/`. Step 7 runs `pnpm deploy:production --dry-run --wait-ci` as a background task after `pnpm release`, and drafts the result report during the wait.
+- `.agents/skills/saasaloy-deploy/SKILL.md`: the CI row of the gates table, the flag list and the hotfix steps describe the new gate and `--wait-ci`. Procedure step 3 saves each dry run's output to a file under `.artifacts/deploy/`. Step 7 runs `pnpm deploy:production --dry-run --wait-ci` with the approved flags as a background task after `pnpm release`, and drafts the result report during the wait.
 
 A project that never changed these files gets them from `saasaloy update` as they are.
 

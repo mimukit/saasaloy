@@ -73,12 +73,12 @@ Never do these:
 4. When the deploy dry run lists migration files, print each `.sql` file it names and read it.
 5. Write the report. Use the template below.
 6. Stop. Wait for the owner's go-ahead.
-7. Run the release the owner approved. Then start a dry run that waits for CI, as a background task:
+7. Run the release the owner approved. Then start a dry run that waits for CI, as a background task, with the flags the owner approved for the deploy:
    ```sh
    pnpm release                      # or pnpm release minor, major, <version>
-   pnpm deploy:production --dry-run --wait-ci > .artifacts/deploy/deploy-wait.log 2>&1
+   pnpm deploy:production --dry-run --wait-ci > .artifacts/deploy/deploy-wait.log 2>&1   # add --migrate, --only <service> when approved
    ```
-   While it runs, draft the result report from the release notes `pnpm release` printed. When it ends, read the log. When the CI gate is `ok`, go to step 8. A release commit that changes only the root `version` and `CHANGELOG.md` passes on its parent's green run at once, so it usually does not wait. When the CI gate fails, report the line it printed and stop.
+   Pass the approved flags, because `--wait-ci` waits only when every other gate passes: without an approved `--migrate`, a new migration file fails its gate and nothing waits. With an approved `--skip-ci`, skip this wait, because the two flags conflict. While it runs, draft the result report from the release notes `pnpm release` printed. When it ends, read the log. When every gate is `ok`, go to step 8. A release commit that changes only the root `version` and `CHANGELOG.md` passes on its parent's green run at once, so it usually does not wait. When a gate fails, report the line it printed and stop.
 8. Run the deploy the owner approved, with exactly the flags in the report:
    ```sh
    pnpm deploy:production            # or with --migrate, --skip-ci "<reason>", --only <service>
@@ -255,7 +255,7 @@ Use this when live code needs a fix and `main` holds commits that must not go li
    ```sh
    git push -u origin hotfix-<slug>
    ```
-4. Wait for CI on the branch when the config names a workflow: run `pnpm deploy:production --dry-run --wait-ci > .artifacts/deploy/deploy-wait.log 2>&1` as a background task, and read the log when it ends. Then follow "Procedure" from step 2 on this branch. `pnpm release` on the branch makes a patch release such as `v0.3.1`. When the fix cannot wait for the release, the owner may deploy first and release after.
+4. Wait for CI on the branch when the config names a workflow: run `pnpm deploy:production --dry-run --wait-ci > .artifacts/deploy/deploy-wait.log 2>&1` as a background task, and read the log when it ends. Add `--migrate` when the fix adds a migration file, so the migration gate passes and the run waits. A gate other than CI that fails stops the run with no wait: report it. Then follow "Procedure" from step 2 on this branch. `pnpm release` on the branch makes a patch release such as `v0.3.1`. When the fix cannot wait for the release, the owner may deploy first and release after.
 5. After the deploy, ask the owner to merge the fix into `main`, so the next deploy keeps it. Merge, never rebase: a rebase rewrites the commit the release tag names.
    ```sh
    git switch main && git merge hotfix-<slug>
