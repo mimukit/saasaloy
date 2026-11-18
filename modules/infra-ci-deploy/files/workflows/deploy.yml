@@ -76,27 +76,15 @@ jobs:
         if: env.ENV_SOURCE == 'infisical'
         run: npm install --global @infisical/cli@0.44.9
 
-      # With the ci module installed, the deploy's CI gate needs ci.yml to have passed on
-      # this commit, and that run started with this push. Wait for it.
-      - name: Wait for the ci workflow
-        if: hashFiles('.github/workflows/ci.yml') != ''
-        run: |
-          for attempt in $(seq 1 30); do
-            run=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json databaseId -q '.[0].databaseId')
-            if [ -n "$run" ]; then
-              gh run watch "$run" --exit-status --interval 15 > /dev/null
-              exit $?
-            fi
-            sleep 10
-          done
-          echo "::error::ci.yml has no run on $GITHUB_SHA after five minutes."
-          exit 1
-
       # The deploy writes an annotated tag, and git refuses one with no identity.
       - name: Set the git identity for the deploy tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      # With the ci module installed, the CI gate needs ci.yml to pass on this commit, and
+      # that run started with this push. --wait-ci checks the other gates, then reads the
+      # run's job steps every 15 s until they pass or fail. A gate that reads only the run
+      # status can wait many minutes after the jobs end.
       - name: pnpm deploy:production
-        run: pnpm deploy:production ${{ inputs.migrate && '--migrate' || '' }}
+        run: pnpm deploy:production --wait-ci ${{ inputs.migrate && '--migrate' || '' }}
