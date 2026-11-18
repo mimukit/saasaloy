@@ -147,7 +147,7 @@ export const files = new Hono<{ Bindings: Bindings }>()
           return c.json(
             errorBody(
               "too_large",
-              `File is ${input.size} bytes, over the ${storage.maxUploadBytes}-byte limit STORAGE_MAX_UPLOAD_BYTES sets.`
+              `File is ${input.size} bytes, over the ${storage.maxUploadBytes}-byte limit config.storage.maxUploadBytes sets.`
             ),
             413
           );

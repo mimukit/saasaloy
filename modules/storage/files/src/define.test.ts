@@ -5,9 +5,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { config } from "@repo/config";
 import {
   defineStorage,
-  DEFAULT_MAX_UPLOAD_BYTES,
   MAX_URL_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,
 } from "./define.ts";
@@ -85,30 +85,31 @@ describe("STORAGE_PROVIDER selection", () => {
   it("selects the named provider and reports its name", () => {
     const client = defineStorage({ providers: [fake()] }).create(env);
     assert.equal(client.provider, "fake");
-    assert.equal(client.maxUploadBytes, DEFAULT_MAX_UPLOAD_BYTES);
+    assert.equal(client.maxUploadBytes, config.storage.maxUploadBytes);
   });
 });
 
-describe("STORAGE_MAX_UPLOAD_BYTES", () => {
-  it("reads a configured cap", () => {
-    const client = defineStorage({ providers: [fake()] }).create({
-      ...env,
-      STORAGE_MAX_UPLOAD_BYTES: "512",
-    });
+describe("maxUploadBytes", () => {
+  it("defaults to config.storage.maxUploadBytes, 100 MiB as shipped", () => {
+    const client = defineStorage({ providers: [fake()] }).create(env);
+    assert.equal(config.storage.maxUploadBytes, 104_857_600);
+    assert.equal(client.maxUploadBytes, config.storage.maxUploadBytes);
+  });
+
+  it("takes a registry's own cap over the config leaf", () => {
+    const client = defineStorage({
+      maxUploadBytes: 512,
+      providers: [fake()],
+    }).create(env);
     assert.equal(client.maxUploadBytes, 512);
   });
 
-  it("throws on a value that is not a positive whole number", () => {
-    for (const value of ["big", "-1", "1.5"]) {
-      assert.throws(
-        () =>
-          defineStorage({ providers: [fake()] }).create({
-            ...env,
-            STORAGE_MAX_UPLOAD_BYTES: value,
-          }),
-        /STORAGE_MAX_UPLOAD_BYTES/
-      );
-    }
+  it("ignores a leftover STORAGE_MAX_UPLOAD_BYTES in the environment", () => {
+    const client = defineStorage({ providers: [fake()] }).create({
+      ...env,
+      STORAGE_MAX_UPLOAD_BYTES: "512",
+    } as StorageEnv);
+    assert.equal(client.maxUploadBytes, config.storage.maxUploadBytes);
   });
 });
 
@@ -141,7 +142,7 @@ describe("createUploadUrl", () => {
     const claims = await verifyToken(env, token);
     assert.equal(claims.key, KEY);
     assert.equal(claims.method, "PUT");
-    assert.equal(claims.maxBytes, DEFAULT_MAX_UPLOAD_BYTES);
+    assert.equal(claims.maxBytes, config.storage.maxUploadBytes);
     assert.equal(claims.contentType, "text/plain");
   });
 

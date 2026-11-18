@@ -8,13 +8,10 @@
 // daily reads, and a toggle lands within roughly 70 seconds worldwide once KV's own
 // propagation window is added on top.
 //
-// Raise `FLAGS_ISOLATE_TTL_SECONDS` to spend fewer reads and wait longer for a toggle; drop
-// it to 0 to skip this layer entirely and pay a KV read per request.
+// Raise `config["feature-flags"].isolateTtlSeconds` to spend fewer reads and wait longer
+// for a toggle; drop it to 0 to skip this layer entirely and pay a KV read per request.
 
 import type { FlagDocument, FlagScope } from "./document";
-
-/** Seconds a cached document is served before it is re-read. */
-export const DEFAULT_ISOLATE_TTL_SECONDS = 10;
 
 interface CacheEntry {
   document: FlagDocument;
@@ -57,26 +54,4 @@ export function forgetCache(scope?: FlagScope): void {
     return;
   }
   entries.delete(scope);
-}
-
-/**
- * Read the TTL off the environment.
- *
- * A value that is not a whole number of seconds throws rather than falling back to the
- * default: a typo in `FLAGS_ISOLATE_TTL_SECONDS` that silently kept the default would be
- * found months later, by someone wondering why a toggle takes 70 seconds after they set it
- * to 1.
- */
-export function isolateTtlSeconds(raw: string | undefined): number {
-  if (raw === undefined || raw === "") {
-    return DEFAULT_ISOLATE_TTL_SECONDS;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    throw new Error(
-      `FLAGS_ISOLATE_TTL_SECONDS is ${JSON.stringify(raw)}, which is not a whole number ` +
-        `of seconds. Use 0 to disable the isolate cache.`
-    );
-  }
-  return parsed;
 }

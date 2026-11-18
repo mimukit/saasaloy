@@ -4,6 +4,7 @@
 // the wrap that keeps one error shape at the boundary — so a provider module only ever
 // ships the operations that differ per vendor.
 
+import { config as projectConfig } from "@repo/config";
 import { assertValidKey } from "./keys";
 import { StorageError } from "./provider";
 import { signToken } from "./token";
@@ -29,14 +30,18 @@ export const DOWNLOAD_URL_TTL_SECONDS = 3600;
  * expires, so the cap is the only control the capability has over a forwarded link.
  */
 export const MAX_URL_TTL_SECONDS = 86_400;
-/** The per-file cap when `STORAGE_MAX_UPLOAD_BYTES` is unset: 100 MiB. */
-export const DEFAULT_MAX_UPLOAD_BYTES = 104_857_600;
 
 /** Where the proxy route is mounted, by `modules/storage`'s `chained-route` patch. */
 const PROXY_PATH = "/storage/objects";
 
 export interface StorageConfig {
   providers: StorageProvider[];
+  /**
+   * The per-file cap in bytes. Leave it out: the default is
+   * `config.storage.maxUploadBytes`, which is where a project changes it. A registry that
+   * must test another cap, such as a test, passes its own.
+   */
+  maxUploadBytes?: number;
 }
 
 /**
@@ -83,7 +88,7 @@ export interface DownloadUrlOptions {
 export interface StorageClient {
   /** The selected provider's name — handy in logs, in a record, and in a `doctor` check. */
   provider: string;
-  /** The resolved per-file cap in bytes, from `STORAGE_MAX_UPLOAD_BYTES`. */
+  /** The per-file cap in bytes, from `config.storage.maxUploadBytes`. */
   maxUploadBytes: number;
 
   put(
@@ -132,11 +137,12 @@ export interface StorageRegistry {
  */
 export function defineStorage(config: StorageConfig): StorageRegistry {
   const { providers } = config;
+  const maxUploadBytes =
+    config.maxUploadBytes ?? projectConfig.storage.maxUploadBytes;
 
   return {
     create(env: StorageEnv): StorageClient {
       const provider = selectProvider(providers, env.STORAGE_PROVIDER);
-      const maxUploadBytes = resolveMaxUploadBytes(env);
 
       /**
        * Every provider call goes through here. A provider is contractually responsible
@@ -410,21 +416,6 @@ function selectProvider(
     );
   }
   return provider;
-}
-
-/** An unreadable cap is a deploy-time mistake, so it throws where the provider does. */
-function resolveMaxUploadBytes(env: StorageEnv): number {
-  const raw = env.STORAGE_MAX_UPLOAD_BYTES;
-  if (raw === undefined || raw === "") {
-    return DEFAULT_MAX_UPLOAD_BYTES;
-  }
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(
-      `STORAGE_MAX_UPLOAD_BYTES is "${String(raw)}", which is not a positive whole number of bytes.`
-    );
-  }
-  return parsed;
 }
 
 function clampTtl(seconds: number): number {

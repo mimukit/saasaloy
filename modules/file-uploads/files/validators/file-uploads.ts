@@ -7,9 +7,9 @@ import { z } from "zod";
 // route validates against it with `zValidator`, and a browser bundle can import the same
 // file.
 //
-// What is NOT here: the per-file size cap. `STORAGE_MAX_UPLOAD_BYTES` is read from the
-// Worker environment, and a schema that baked a number in would be wrong the moment a
-// project changed it. The route compares `size` against the client's own cap instead.
+// What is NOT here: the per-file size cap. It is `config.storage.maxUploadBytes`, which a
+// project changes in `packages/config/src/project.ts`, and a schema that baked a number in
+// would be wrong the moment it did. The route compares `size` against the client's own cap.
 
 /** `private` keeps the signed-link path; `public` gets a world-readable CDN URL. */
 export const visibility = z.enum(["private", "public"]);

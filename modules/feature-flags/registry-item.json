@@ -8,18 +8,22 @@
   "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api", "database", "validators", "auth", "admin", "kv"],
   "dependencies": [],
-  "envVars": {
-    "FLAGS_ISOLATE_TTL_SECONDS": "Seconds a Worker isolate serves its cached copy of the flag document before re-reading it from kv. Default 10, which puts a toggle in front of every location in about 70 seconds once Workers KV's own propagation window is added. Raise it to spend fewer KV reads and wait longer for a toggle; set it to 0 to skip the isolate cache and pay a KV read per request. A value that is not a whole number throws while the Worker initializes."
-  },
-  "envServices": {
-    "default": ["api"]
-  },
-  "envOptional": ["FLAGS_ISOLATE_TTL_SECONDS"],
   "removeWarnings": [
     "The deployed feature_flags and feature_flag_overrides tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
     "The published flag documents survive it too. They have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the KV namespace until you delete them with `wrangler kv key delete`."
   ],
   "patches": [
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "featureFlagsConfig",
+      "import": {
+        "name": "featureFlagsConfig",
+        "from": "./sections/feature-flags"
+      }
+    },
     {
       "file": "apps/api/src/index.ts",
       "kind": "chained-route",
@@ -55,17 +59,6 @@
       "icon": { "name": "FlagIcon", "from": "lucide-react" }
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
-      "call": "featureFlagsEnv",
-      "import": {
-        "name": "featureFlagsEnv",
-        "from": "@repo/feature-flags/env-preset"
-      }
-    },
-    {
       "file": "apps/api/src/lib/audit-actions.ts",
       "kind": "plugin-array",
       "exportName": "AUDIT_ACTIONS",
@@ -78,6 +71,10 @@
     }
   ],
   "files": [
+    {
+      "path": "files/config/feature-flags.ts",
+      "target": "@config/sections/feature-flags.ts"
+    },
     {
       "path": "files/api/audit/feature-flags.ts",
       "target": "@api/audit/feature-flags.ts"
@@ -179,10 +176,6 @@
         {
           "path": "files/src/flags/system.ts",
           "target": "src/flags/system.ts"
-        },
-        {
-          "path": "files/src/env-preset.ts",
-          "target": "src/env-preset.ts"
         }
       ]
     }

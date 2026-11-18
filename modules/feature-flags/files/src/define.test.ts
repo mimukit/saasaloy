@@ -50,22 +50,25 @@ kv.providers.push({
   },
 });
 
-/** No isolate cache, so every test measures the kv layer rather than a leftover `Map`. */
-const ENV = { FLAGS_ISOLATE_TTL_SECONDS: "0", KV_PROVIDER: "counting" };
-/** The default 10 second cache, for the tests that are about the cache itself. */
-const CACHED_ENV = { KV_PROVIDER: "counting" };
+const ENV = { KV_PROVIDER: "counting" };
 
-const registry = defineFlags({
-  flags: [
-    defineFlag({
-      default: false,
-      key: "subscription.new-checkout",
-      type: "boolean",
-    }),
-    defineFlag({ default: true, key: "kill.payments", type: "boolean" }),
-    defineFlag({ default: false, key: "ui.redesign", type: "percentage" }),
-  ],
-});
+const FLAGS = [
+  defineFlag({
+    default: false,
+    key: "subscription.new-checkout",
+    type: "boolean",
+  }),
+  defineFlag({ default: true, key: "kill.payments", type: "boolean" }),
+  defineFlag({ default: false, key: "ui.redesign", type: "percentage" }),
+] as const;
+
+/** No isolate cache, so every test measures the kv layer rather than a leftover `Map`. */
+const registry = defineFlags({ flags: FLAGS, isolateTtlSeconds: 0 });
+/**
+ * The cache `config["feature-flags"].isolateTtlSeconds` ships, for the tests that are
+ * about the cache itself.
+ */
+const cachedRegistry = defineFlags({ flags: FLAGS });
 
 /** A stand-in for the database. `global` and `tenants` are what the tables would hold. */
 function source(
@@ -246,7 +249,7 @@ describe("writes", () => {
     const { source: db } = source({
       "subscription.new-checkout": { enabled: true },
     });
-    const client = registry.create(CACHED_ENV, db);
+    const client = cachedRegistry.create(ENV, db);
 
     await client.flag("subscription.new-checkout");
     const readsAfterFirst = counts.get;
@@ -265,7 +268,7 @@ describe("writes", () => {
       loadGlobal: () => Promise.resolve(values),
       loadTenant: () => Promise.resolve({}),
     };
-    const client = registry.create(CACHED_ENV, db);
+    const client = cachedRegistry.create(ENV, db);
 
     assert.equal(await client.flag("subscription.new-checkout"), false);
 

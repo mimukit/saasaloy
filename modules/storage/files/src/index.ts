@@ -3,7 +3,6 @@ import type { StorageEnv } from "./provider";
 
 export { defineStorage } from "./define";
 export {
-  DEFAULT_MAX_UPLOAD_BYTES,
   DOWNLOAD_URL_TTL_SECONDS,
   MAX_URL_TTL_SECONDS,
   UPLOAD_URL_TTL_SECONDS,

@@ -25,7 +25,7 @@ The database is the source of truth. `kv` is a **published read cache**, and the
 
 A read walks three levels, cheapest first:
 
-1. the isolate's `Map`, for `FLAGS_ISOLATE_TTL_SECONDS` (default 10),
+1. the isolate's `Map`, for `config["feature-flags"].isolateTtlSeconds` seconds (default 10),
 2. the published kv document for the scope — `flags:v1:global`, or `flags:v1:t:<tenantId>`,
 3. the database, which also publishes the missing document.
 
@@ -86,11 +86,11 @@ A toggle in the admin app reaches every location in **about 70 seconds**, and th
 | Layer | Delay | Why |
 |---|---|---|
 | Workers KV propagation | up to ~60 s | KV is eventually consistent between locations |
-| the isolate `Map` | up to `FLAGS_ISOLATE_TTL_SECONDS`, default 10 s | expiry with no invalidation — nothing can reach into another colo's isolate |
+| the isolate `Map` | up to `config["feature-flags"].isolateTtlSeconds`, default 10 s | expiry with no invalidation — nothing can reach into another colo's isolate |
 
 The isolate that served the toggle drops its own copy immediately, so *you* see the change on your next request. Everyone else waits.
 
-Raise `FLAGS_ISOLATE_TTL_SECONDS` to spend fewer KV reads and wait longer; set it to `0` to skip that layer and pay a KV read per request. At the default a warm isolate costs about 8,640 reads a day, well inside the free plan's 100,000. A value that is not a whole number throws while the Worker initializes rather than falling back to 10.
+Raise `isolateTtlSeconds` in `packages/config/src/project.ts` to spend fewer KV reads and wait longer; set it to `0` to skip that layer and pay a KV read per request. At the default a warm isolate costs about 8,640 reads a day, well inside the free plan's 100,000. The value is checked in, not an env var, so every deployment of the project uses the same one.
 
 **The published document has no TTL.** The admin routes republish on every change, so there is nothing an expiry would fix.
 
@@ -167,9 +167,13 @@ Three ship: `kill.payments`, `kill.ai`, `kill.email`. All three **default to on*
 
 ## Settings
 
-| Key | Default | What it does |
+The module adds the `feature-flags` config section. Override a leaf in `packages/config/src/project.ts`:
+
+| Leaf | Default | What it does |
 |---|---|---|
-| `FLAGS_ISOLATE_TTL_SECONDS` | `10` | Seconds an isolate serves its cached document. `0` disables the layer. |
+| `config["feature-flags"].isolateTtlSeconds` | `10` | Seconds an isolate serves its cached document. `0` disables the layer. |
+
+Until #162 this was the `FLAGS_ISOLATE_TTL_SECONDS` env var. Nothing reads that key now, and `saasaloy doctor` reports a `.env` that still sets it.
 
 The kv settings apply too: `KV_PROVIDER` selects the store and `KV_KEY_PREFIX` prefixes the document keys. Two environments sharing one namespace need different prefixes, or they share their flags.
 
@@ -182,7 +186,6 @@ The kv settings apply too: `KV_PROVIDER` selects the store and `KV_KEY_PREFIX` p
 | A percentage flag is off for everyone | No `subjectId` is being passed. There is nothing to bucket, so it resolves false. |
 | A tenant sees the global value | No override row exists for that tenant, or `tenantId` is not being passed to `flag()`. |
 | `Flag "x.y" is not registered` | The key is not in the `flags` array in `packages/feature-flags/src/index.ts`. A new key needs a deploy. |
-| `FLAGS_ISOLATE_TTL_SECONDS is "10s"` at startup | Whole seconds, no unit. Use `10`. |
 | The admin screen shows a value a live route does not | Expected for about a minute after a toggle. The screen reads the database; the route reads the published document. |
 
 ## Upgrading from singular table names

@@ -14,8 +14,6 @@ export interface StorageEnv {
   STORAGE_PROVIDER?: string;
   /** HMAC key for the signed proxy links. Generate with `openssl rand -base64 32`. */
   STORAGE_URL_SECRET?: string;
-  /** Per-file upload cap in bytes. Defaults to 104857600 (100 MiB). */
-  STORAGE_MAX_UPLOAD_BYTES?: string | number;
   /**
    * Absolute origin the proxy route answers on (e.g. `https://api.x.com`). Optional:
    * with it unset a proxy target is a root-relative URL, which is right whenever the
