@@ -20,6 +20,7 @@ A project gets one keyboard model for every signed-in SPA on the shell. Cmd+K (C
 | `files/ui/blocks/command/command-palette.tsx` | `packages/ui/src/blocks/command/command-palette.tsx`: the palette |
 | `files/ui/blocks/command/shortcut-help.tsx` | `packages/ui/src/blocks/command/shortcut-help.tsx`: the `?` sheet |
 | `files/ui/containers/command/command-root.tsx` | `packages/ui/src/containers/command/command-root.tsx`: the provider, the two bindings that open the views, the key hints it puts in the shell's `ShortcutHintsContext`, the header trigger, and `commandExtension()` |
+| `files/e2e/specs/command-keyboard.spec.ts` | `packages/e2e/specs/command-keyboard.spec.ts`, only when `e2e` is installed: the keyboard flow in admin and app. See "The keyboard e2e flow" below |
 
 It also adds two exact-pinned dependencies to `packages/ui/package.json`: `@tanstack/react-hotkeys` and `@leeoniya/ufuzzy`. Run `pnpm install` after `add`.
 
@@ -141,6 +142,10 @@ In your project the development-mode throw is the check: open the app with `pnpm
 The palette follows the approved mockup in plan 0084, Phase 1: 576 px wide, 12vh from the top (8 px below 640 px), a 48 px search row, a list capped at `min(480px, 60vh)`, 34 px rows and a 40 px footer of key hints. Matched letters are semibold and underlined. Keycaps inside both popups take a 1 px `input` hairline with no fill. The sheet groups the bindings under General, one heading per page that binds keys, Navigation, and Data table, in two columns from 640 px.
 
 The trigger sits in the header: a 240 px "Search commands…" field with the palette's keycaps from 640 px up, and a 32 px search icon button below.
+
+## The keyboard e2e flow
+
+With `e2e` installed, `pnpm e2e` runs `command-keyboard.spec.ts` in each SPA the project has. It signs in once, then uses the keyboard only. It reads the nav rows from the sidebar at run time, so a row a module adds is covered with no change to the spec. It fails when a row cannot be reached through its "Go to" palette row, when a row's `G` sequence in the `?` sheet does not move to the row, when no row has a `G` sequence, or when a palette row with keycaps is missing from the sheet or has other keys there. In admin it also drives the users table with J, K, Enter and Escape. A nav row with no `shortcut` is checked through the palette only.
 
 ## Swapping the engine
 

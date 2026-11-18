@@ -85,7 +85,7 @@ Four rules, each one load-bearing:
 
 ## The seeded admin and the rows a spec writes
 
-The admin specs sign in as `superadmin@example.test` with the password `saasaloy-dev-password`, `SEED_ADMIN` in `lib/project.ts`. The suite creates no account of its own. The `auth` module's seed slices write that user, and `pnpm db:seed` upserts it back to its slice values before every run, so a password changed by hand is reset and the account is always a superadmin. Change `SEED_ADMIN` only together with `packages/db/src/seed/slices/users.ts` and `accounts.ts`.
+The admin specs sign in as `superadmin@example.test` with the password `saasaloy-dev-password`, `SEED_ADMIN` in `lib/project.ts`. A spec on `apps/app` signs in as the seeded customer `member@example.test` with the same password, `SEED_MEMBER`. The suite creates no account of its own. The `auth` module's seed slices write that user, and `pnpm db:seed` upserts it back to its slice values before every run, so a password changed by hand is reset and the account is always a superadmin. Change `SEED_ADMIN` only together with `packages/db/src/seed/slices/users.ts` and `accounts.ts`.
 
 A spec that needs a signed-in admin but is not about the login screen signs in at the start of the test through the same form `admin-login.spec.ts` drives. `admin-login.spec.ts` itself starts from no cookie on purpose: a login flow that starts from a saved session tests the session.
 
@@ -100,6 +100,7 @@ Every **other** row a spec writes is unique, with `uniqueEmail()` from `lib/fixt
 | `admin-login.spec.ts` | `@admin` `@auth` | The login form signs the seeded admin in, the guard redirects, and `GET /admin/users` answers 200. |
 | `admin-unauthenticated.spec.ts` | `@admin` `@auth` | The same guarded route answers 401 with the api's error envelope when nobody is signed in. |
 | `auth-phone-journey.spec.ts` | `@app` `@auth-phone` `@sms-console` | Shipped by `auth-phone`. A new number signs up with the SMS code, sets a password, signs in, and resets the password with a code, on `apps/app`. |
+| `command-keyboard.spec.ts` | `@command` with `@admin` `@auth`, or with `@app` `@auth` | Shipped by `command`. In admin and in app, Mod+K opens and closes the palette, every sidebar row is reached through its "Go to" row and through its `G` sequence when it has one, and the `?` sheet lists every keyed palette row. Admin also walks the users table with J and K, opens a row with Enter and closes it with Escape. The app half signs in as `SEED_MEMBER`. |
 
 `admin-unauthenticated.spec.ts` is its own flow rather than a second assertion, because the admin SPA's guard runs in the browser and would hide a server that stopped checking.
 

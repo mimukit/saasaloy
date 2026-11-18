@@ -54,6 +54,13 @@
     {
       "path": "files/ui/containers/command/command-root.tsx",
       "target": "@ui/containers/command/command-root.tsx"
+    },
+    {
+      "path": "files/e2e/specs/command-keyboard.spec.ts",
+      "target": "@e2e/specs/command-keyboard.spec.ts",
+      "when": {
+        "installed": ["e2e"]
+      }
     }
   ],
   "agent": {
