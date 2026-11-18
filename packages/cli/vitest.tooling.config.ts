@@ -27,9 +27,11 @@ import { defineConfig } from "vitest/config";
 //   and import the template source by relative path. The source imports its neighbours as
 //   `@repo/ui/<layer>/<name>`, which nothing links here either, so the alias below points
 //   each one at the template's `packages/ui/src/<layer>/<name>.ts`.
-// - `web`: the base template's `apps/web` tests: the sitemap page list, and the guard that
-//   every primitive the site renders has an `@source` line. They import only Vitest, Node
-//   and the files beside them, and the guard reads the template's files by path.
+// - `web`: the base template's `apps/web` tests: the sitemap page list, the agent files
+//   (`llms.txt` and the Markdown copy of the landing page), and the guard that
+//   every primitive the site renders has an `@source` line. They import Vitest, Node, the
+//   files beside them and the `landing.ts` copy, which the alias below points at the
+//   template's `packages/ui/src`. The guard reads the template's files by path.
 // - `module-files`: a module's shipped Vitest tests outside the database drivers, stored as
 //   `*.vitest.ts` for the same reason as `db-scripts`, and importing only Vitest and Node.
 //
@@ -84,6 +86,14 @@ export default defineConfig({
       {
         root: `${base}apps/web`,
         oxc: { tsconfig: false },
+        resolve: {
+          alias: [
+            {
+              find: /^@repo\/ui\/(content|lib)\/(.*)$/,
+              replacement: `${base}packages/ui/src/$1/$2.ts`,
+            },
+          ],
+        },
         test: {
           name: "web",
           environment: "node",
