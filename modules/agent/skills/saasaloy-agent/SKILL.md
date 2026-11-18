@@ -116,6 +116,16 @@ export const project: ProjectOverride = {
 
 `description` is the OpenAPI `info.description`, the MCP server's instructions, the first line of `llms.txt` and the Server Card's description (first 100 characters). `version` goes on all of them; raise it when a tool changes its input or its output. The product name comes from `app.name`.
 
+The web app's own `/llms.txt` names the api too. `agent` installs `apps/web/src/lib/agent-entries/agent.ts` and registers it in `apps/web/src/lib/agent-entries.ts`, so the site's `/llms.txt` gets an "API for agents" section with the `description` above and the addresses of `/mcp`, `/openapi.json`, the api's `/llms.txt` and the Server Card, on `PUBLIC_API_URL`. Rebuild the web app after you change `description`.
+
+## Check it end to end
+
+`pnpm agent:audit` checks the running product: the site's `/llms.txt`, `/llms-full.txt` and Markdown copies, the JSON-LD, then `/openapi.json`, the api's `/llms.txt`, the Server Card, a 401 from `/mcp` with no key, and `tools/list` with a key. It reads the origins from `--site` and `--api`, else from `PUBLIC_SITE_URL` and `PUBLIC_API_URL`, else from `apps/web/.env.local`. Put a key in `AGENT_AUDIT_KEY` to run `tools/list`; with no key that check is skipped, and `--require-key` makes it fail instead. It exits 1 on a gap.
+
+```sh
+AGENT_AUDIT_KEY=<key> pnpm agent:audit --require-key
+```
+
 ## Before a public launch
 
 - **Add `ratelimit`.** `saasaloy add ratelimit` puts one budget on `/mcp`: the `default` policy, counted per client address, answered with api's `429 rate_limited` envelope and `Retry-After` before the body is read. `agent` ships `apps/api/src/agent/ratelimit.ts` and appends `mcpRateLimit()` to `agentGuards` in `apps/api/src/agent/guards.ts` only while `ratelimit` is installed; without it `/mcp` has no limit.

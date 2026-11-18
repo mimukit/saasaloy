@@ -65,6 +65,17 @@
       "when": {
         "installed": ["ratelimit"]
       }
+    },
+    {
+      "file": "apps/web/src/lib/agent-entries.ts",
+      "kind": "plugin-array",
+      "exportName": "agentEntries",
+      "arrayProp": "entries",
+      "call": "agentApiEntry",
+      "import": {
+        "name": "agentApiEntry",
+        "from": "./agent-entries/agent"
+      }
     }
   ],
   "files": [
@@ -110,6 +121,10 @@
     {
       "path": "files/config/agent.ts",
       "target": "@config/sections/agent.ts"
+    },
+    {
+      "path": "files/web/agent-entry.ts",
+      "target": "@web/lib/agent-entries/agent.ts"
     }
   ],
   "agent": {
