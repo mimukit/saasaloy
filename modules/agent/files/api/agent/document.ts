@@ -110,6 +110,7 @@ interface Operation {
   description?: string;
   parameters?: Parameter[];
   requestBody?: { content?: Record<string, { schema?: unknown }> };
+  security?: Record<string, string[]>[];
   [AGENT_EXTENSION]?: AgentStatement;
 }
 
@@ -119,6 +120,9 @@ const METHODS = ["get", "put", "post", "delete", "patch"] as const;
  * A path parameter that no validator checks (`/cms/{collection}/entries`) is in the path
  * and missing from the operation. Add it as a required string, so a tool still asks for
  * it.
+ *
+ * A callable route with `scope: null` is public and demands no key, so its operation
+ * clears the document-wide `security` with an empty list.
  */
 function addPathParameters(document: OpenApiDocument): OpenApiDocument {
   for (const [path, item] of Object.entries(document.paths)) {
@@ -144,6 +148,10 @@ function addPathParameters(document: OpenApiDocument): OpenApiDocument {
       }
       if (parameters.length > 0) {
         operation.parameters = parameters;
+      }
+      const agent = operation[AGENT_EXTENSION];
+      if (agent?.callable === true && agent.scope === null) {
+        operation.security = [];
       }
     }
   }

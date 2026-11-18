@@ -16,7 +16,7 @@ description: Runbook for the agent module, which makes the product usable by AI 
 
 ## One code path
 
-A tool call is an in-process request to the route the tool came from, with the caller's own `Authorization` header: `app.fetch(new Request(...), c.env, c.executionCtx)`. The route's validator, its gate, its scope check and its error envelope answer, exactly as over HTTP. So:
+A tool call is an in-process request to the route the tool came from, with the caller's own `Authorization` header and Cloudflare's `CF-Connecting-IP` and `CF-Ray`, and no cookie: `app.fetch(new Request(...), c.env, c.executionCtx)`. The route's validator, its gate, its scope check and its error envelope answer, exactly as over HTTP. So:
 
 - A wrong argument gets the route's `400 invalid_input` envelope. The MCP server passes every object argument through to the route and checks nothing of its own.
 - A key without the scope gets the route's `403 forbidden`, `permission required: notes:write`, as the tool result with `isError: true`.
@@ -89,7 +89,7 @@ Under `api-keys-organization` the words go into `statements` in `packages/auth/s
 | `cms_entries_list`, `cms_entry_read` | `GET /cms/:collection/entries[/:slug]` | public |
 | `shop_products_list`, `shop_product_read`, `shop_categories_list` | `GET /shop/...` | public |
 
-`API_KEY_SCOPES` ships empty, so a user's key reads notifications or files only after you add `notifications: ["read"]` or `files: ["read"]` to it. Every shipped write stays closed.
+`API_KEY_SCOPES` ships empty, so a user's key reads notifications or files only after you add `notifications: ["read"]` or `files: ["read"]` to it. Every shipped write stays closed. `saasaloy-build` adds the words of the installed reads in its MVP stage; after a later `saasaloy add notification` or `file-uploads`, add the word yourself.
 
 ## Connect an agent
 
@@ -120,7 +120,7 @@ The web app's own `/llms.txt` names the api too. `agent` installs `apps/web/src/
 
 ## Check it end to end
 
-`pnpm agent:audit` checks the running product: the site's `/llms.txt`, `/llms-full.txt` and Markdown copies, the JSON-LD, then `/openapi.json`, the api's `/llms.txt`, the Server Card, a 401 from `/mcp` with no key, and `tools/list` with a key. It reads the origins from `--site` and `--api`, else from `PUBLIC_SITE_URL` and `PUBLIC_API_URL`, else from `apps/web/.env.local`. Put a key in `AGENT_AUDIT_KEY` to run `tools/list`; with no key that check is skipped, and `--require-key` makes it fail instead. It exits 1 on a gap.
+`pnpm agent:audit` checks the running product: the site's `/llms.txt`, `/llms-full.txt` and Markdown copies, the JSON-LD, then `/openapi.json`, the api's `/llms.txt`, the Server Card, a 401 from `/mcp` with no key, `tools/list` with a key, and a key check. The key check calls one read-only tool that has a scope and no required argument. A wrong key must get `unauthorized`, and your key must not. `/mcp` itself only checks that a bearer header is there, so this call is the proof that the key works. It reads the origins from `--site` and `--api`, else from `PUBLIC_SITE_URL` and `PUBLIC_API_URL`, else from `apps/web/.env.local`. Put a key in `AGENT_AUDIT_KEY` to run `tools/list` and the key check; with no key both are skipped, and `--require-key` makes it fail instead. It exits 1 on a gap.
 
 ```sh
 AGENT_AUDIT_KEY=<key> pnpm agent:audit --require-key
@@ -136,8 +136,10 @@ AGENT_AUDIT_KEY=<key> pnpm agent:audit --require-key
 
 With testing on, `agent` ships two route tests into `apps/api`:
 
-- `src/routes/agent.test.ts` adds a sample entity to the app and calls `/openapi.json`, `/llms.txt`, `/mcp/server-card` and `/mcp` (no key, a foreign host, a malformed body, `tools/list`, a create then a list, a missing scope, a failed key, a wrong argument).
+- `src/routes/agent.test.ts` adds a sample entity to the app and calls `/openapi.json`, `/llms.txt`, `/mcp/server-card` and `/mcp` (no key, a foreign host, a malformed body, `tools/list`, a create then a list, a missing scope, a failed key, a path value of `..`, a wrong argument), and checks the in-process request's headers.
 - `src/agent/statements.test.ts` fails `pnpm test` when any api route has no `declare(...)` statement, names one twice, writes a scope that is not `resource:action`, or opens an admin route. It also builds the tool list, so a tool whose path, query and body share a field name fails here.
+
+With testing `off`, neither file ships, so nothing fails on a route with no statement. Run `saasaloy testing tests-after` to get the guard, or check each new route against the four-part rule by hand.
 
 ## Troubleshooting
 

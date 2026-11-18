@@ -1,4 +1,7 @@
-import { createMcpHonoApp } from "@modelcontextprotocol/hono";
+import {
+  hostHeaderValidation,
+  originValidation,
+} from "@modelcontextprotocol/hono";
 import {
   DEFAULT_MAX_REQUEST_BODY_SIZE,
   createMcpHandler,
@@ -7,7 +10,6 @@ import {
   validateHostHeader,
   validateOriginHeader,
 } from "@modelcontextprotocol/server";
-import { env } from "cloudflare:workers";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { MiddlewareHandler } from "hono";
@@ -17,7 +19,9 @@ import { llmsText, serverCard } from "../agent/discovery";
 import { agentTools, openApiDocument, withServer } from "../agent/document";
 import type { RoutedApp } from "../agent/document";
 import { mcpHostnames } from "../agent/hosts";
+import type { McpHostnames } from "../agent/hosts";
 import { mcpServer } from "../agent/mcp";
+import { apiEnv } from "../env";
 import type { Bindings } from "../index";
 
 // The agent surface of the api: the OpenAPI document, `llms.txt`, the MCP Server Card and
@@ -43,9 +47,20 @@ function originOf(url: string): string {
   return new URL(url).origin;
 }
 
-// The hostnames `/mcp` answers on, from the api's own origin (`./agent/hosts.ts`). Read
-// once, when the module loads: a Worker's bindings do not change inside an isolate.
-const HOSTNAMES = mcpHostnames(env as unknown as Record<string, unknown>);
+// The hostnames `/mcp` answers on, from the api's own origin (`./agent/hosts.ts`), read
+// through `apiEnv` and kept per `env` object: a Worker's bindings do not change inside an
+// isolate.
+const hostnames = new WeakMap<object, McpHostnames>();
+
+function hostnamesOf(bindings: Bindings): McpHostnames {
+  let found = hostnames.get(bindings);
+  if (found === undefined) {
+    const { BETTER_AUTH_URL, CORS_ORIGINS } = apiEnv(bindings);
+    found = mcpHostnames({ BETTER_AUTH_URL, CORS_ORIGINS });
+    hostnames.set(bindings, found);
+  }
+  return found;
+}
 
 interface AgentEnv {
   Bindings: Bindings;
@@ -55,7 +70,9 @@ interface AgentEnv {
 /**
  * No key, no work. A request with no bearer credential is refused before the host check,
  * the rate limit, the body or any server. The key itself is checked by each route's own
- * gate when a tool runs, so a key that fails gets that route's 401.
+ * gate when a tool runs, so a key that fails gets that route's 401. Until then a wrong key
+ * sees only what is already public: the tool list, which `/openapi.json` and `/llms.txt`
+ * also give, and the public reads with `scope: null` (ADR 0063).
  */
 const requireKey: MiddlewareHandler<AgentEnv> = async (c, next) => {
   if (!/^bearer\s+\S/i.test(c.req.header("authorization") ?? "")) {
@@ -72,14 +89,12 @@ const requireKey: MiddlewareHandler<AgentEnv> = async (c, next) => {
  * it stays as the second line.
  */
 const checkHost: MiddlewareHandler<AgentEnv> = async (c, next) => {
-  const host = validateHostHeader(c.req.header("host"), HOSTNAMES.hosts);
+  const { hosts, origins } = hostnamesOf(c.env);
+  const host = validateHostHeader(c.req.header("host"), hosts);
   if (!host.ok) {
     throw new HTTPException(403, { message: host.message });
   }
-  const origin = validateOriginHeader(
-    c.req.header("origin"),
-    HOSTNAMES.origins
-  );
+  const origin = validateOriginHeader(c.req.header("origin"), origins);
   if (!origin.ok) {
     throw new HTTPException(403, { message: origin.message });
   }
@@ -114,6 +129,23 @@ const readBody: MiddlewareHandler<AgentEnv> = async (c, next) => {
     });
   }
   return next();
+};
+
+/**
+ * `@modelcontextprotocol/hono`'s own Host and Origin middleware, with this environment's
+ * lists. It runs after the checks above, which answer every refusal it would make, so in
+ * practice it only passes requests on; it stays as the second line. The lists come from
+ * the request's bindings, so the adapter's middleware runs per request rather than from a
+ * `createMcpHonoApp` built when the module loads. `readBody` above is its body parser.
+ */
+const adapterChecks: MiddlewareHandler<AgentEnv> = async (c, next) => {
+  const { hosts, origins } = hostnamesOf(c.env);
+  // The two run nested, so a refusal from the inner one is kept and returned.
+  let refused: Response | undefined;
+  const answer = await hostHeaderValidation(hosts)(c, async () => {
+    refused = (await originValidation(origins)(c, next)) ?? undefined;
+  });
+  return answer ?? refused;
 };
 
 export const agent = new Hono<AgentEnv>()
@@ -166,16 +198,13 @@ export const agent = new Hono<AgentEnv>()
         "Content-Type": "application/mcp-server-card+json",
       })
   )
-  .use("/mcp", requireKey, checkHost, ...agentGuards.guards, readBody)
-  // `@modelcontextprotocol/hono`: Host and Origin validation and the bounded JSON body
-  // parser, as plain Hono middleware. It runs after the checks above, which answer every
-  // refusal it would make, so in practice it only passes requests on.
-  .route(
+  .use(
     "/mcp",
-    createMcpHonoApp({
-      allowedHosts: HOSTNAMES.hosts,
-      allowedOrigins: HOSTNAMES.origins,
-    })
+    requireKey,
+    checkHost,
+    ...agentGuards.guards,
+    readBody,
+    adapterChecks
   )
   .on(
     ["GET", "POST", "DELETE"],

@@ -1,8 +1,11 @@
+import { env as workerEnv } from "cloudflare:workers";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { declare, zValidator } from "../contract";
+import type { AgentTool } from "../agent/document";
+import { ToolArgumentError, toolRequest } from "../agent/mcp";
 import app from "../index";
 
 // The agent surface: `/openapi.json`, `/llms.txt`, `/mcp/server-card` and `/mcp`.
@@ -19,8 +22,11 @@ import app from "../index";
 // In the saasaloy repo this file is named `.vitest.ts`, so `pnpm test:modules`, which runs
 // `node --test` over `*.test.ts`, does not collect it. The descriptor renames it.
 
-// `KV_PROVIDER` is read only when `ratelimit` is installed: `/mcp` then spends a budget.
+// The Worker's own environment, which the test stand-in reads from `apps/api/.env` and
+// `apiEnv` validates. `KV_PROVIDER` is read only when `ratelimit` is installed: `/mcp` then
+// spends a budget.
 const ENV = {
+  ...(workerEnv as object),
   CORS_ORIGINS: "http://localhost:3000",
   KV_PROVIDER: "memory",
   LOGGER_PROVIDER: "console",
@@ -360,6 +366,19 @@ describe("the agent surface", () => {
       });
     });
 
+    it("refuses a path value that would leave the route", async () => {
+      for (const id of ["..", ".", ""]) {
+        const refused = await callTool("test_note_delete", { id });
+        expect(refused.isError).toBeTruthy();
+        expect(refused.structuredContent).toStrictEqual({
+          error: {
+            code: "invalid_input",
+            message: "id: a path value is required",
+          },
+        });
+      }
+    });
+
     it("leaves a wrong argument to the route's validator", async () => {
       const refused = await callTool("test_note_create", { title: "" });
       expect(refused.isError).toBeTruthy();
@@ -367,5 +386,60 @@ describe("the agent surface", () => {
         error: { code: "invalid_input", message: "title" },
       });
     });
+  });
+});
+
+describe(toolRequest, () => {
+  const tool: AgentTool = {
+    agent: { callable: true, confirm: false, readOnly: true, scope: null },
+    description: "Read one item.",
+    hasBody: false,
+    inputSchema: { properties: {}, required: [], type: "object" },
+    method: "GET",
+    name: "test_item_read",
+    path: "/orgs/{org}/items/{id}",
+    pathParams: ["org", "id"],
+    queryParams: ["tag"],
+  };
+  const from = new Headers({
+    authorization: "Bearer test-read",
+    "cf-connecting-ip": "203.0.113.7",
+    "cf-ray": "8f00000000000000-DAC",
+    cookie: "client.session_token=secret",
+  });
+
+  it("keeps the key, the client address and the ray, and drops the cookie", () => {
+    const request = toolRequest(
+      tool,
+      { id: "7", org: "acme" },
+      "http://localhost:4000",
+      from
+    );
+    expect(request.headers.get("authorization")).toBe("Bearer test-read");
+    expect(request.headers.get("cf-connecting-ip")).toBe("203.0.113.7");
+    expect(request.headers.get("cf-ray")).toBe("8f00000000000000-DAC");
+    expect(request.headers.get("cookie")).toBeNull();
+    expect(new URL(request.url).pathname).toBe("/orgs/acme/items/7");
+  });
+
+  it("refuses a dot segment and an absent value", () => {
+    for (const org of ["..", ".", undefined]) {
+      expect(() =>
+        toolRequest(tool, { id: "7", org }, "http://localhost:4000", from)
+      ).toThrow(ToolArgumentError);
+    }
+  });
+
+  it("sends an array as a repeated query parameter", () => {
+    const request = toolRequest(
+      tool,
+      { id: "7", org: "acme", tag: ["a", "b"] },
+      "http://localhost:4000",
+      from
+    );
+    expect(new URL(request.url).searchParams.getAll("tag")).toStrictEqual([
+      "a",
+      "b",
+    ]);
   });
 });
