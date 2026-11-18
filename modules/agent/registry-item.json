@@ -1,0 +1,118 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "agent",
+  "type": "saasaloy:capability",
+  "description": "Makes the product usable by AI agents: an OpenAPI document, an MCP server with key sign-in, a Server Card and llms.txt, all built from the route statements.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.9"
+  },
+  "dependsOn": ["api", "validators", "auth", "app", "api-keys"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "The @modelcontextprotocol/server and @modelcontextprotocol/hono dependencies stay in apps/api/package.json. A package-json-dependency patch has no removal inverse, so drop both lines by hand and run pnpm install.",
+    "Agents that saved the /mcp address or the OpenAPI document get 404 from now on. The api-keys tables and every issued key stay; remove the api-keys owner module to drop them."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "base",
+      "path": "/",
+      "call": "agent",
+      "import": {
+        "name": "agent",
+        "from": "./routes/agent"
+      }
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@modelcontextprotocol/server",
+      "range": "2.4.0"
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@modelcontextprotocol/hono",
+      "range": "2.0.2"
+    },
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "agentConfig",
+      "import": {
+        "name": "agentConfig",
+        "from": "./sections/agent"
+      }
+    },
+    {
+      "file": "apps/api/src/agent/guards.ts",
+      "kind": "plugin-array",
+      "exportName": "agentGuards",
+      "arrayProp": "guards",
+      "call": "mcpRateLimit",
+      "import": {
+        "name": "mcpRateLimit",
+        "from": "./ratelimit"
+      },
+      "when": {
+        "installed": ["ratelimit"]
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/agent.ts",
+      "target": "@api/routes/agent.ts"
+    },
+    {
+      "path": "files/api/routes/agent.vitest.ts",
+      "target": "@api/routes/agent.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/api/agent/document.ts",
+      "target": "@api/agent/document.ts"
+    },
+    {
+      "path": "files/api/agent/mcp.ts",
+      "target": "@api/agent/mcp.ts"
+    },
+    {
+      "path": "files/api/agent/hosts.ts",
+      "target": "@api/agent/hosts.ts"
+    },
+    {
+      "path": "files/api/agent/discovery.ts",
+      "target": "@api/agent/discovery.ts"
+    },
+    {
+      "path": "files/api/agent/guards.ts",
+      "target": "@api/agent/guards.ts"
+    },
+    {
+      "path": "files/api/agent/ratelimit.ts",
+      "target": "@api/agent/ratelimit.ts",
+      "when": { "installed": ["ratelimit"] }
+    },
+    {
+      "path": "files/api/agent/statements.vitest.ts",
+      "target": "@api/agent/statements.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/config/agent.ts",
+      "target": "@config/sections/agent.ts"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-agent"]
+  }
+}
