@@ -14,7 +14,12 @@ import type { ZodType } from "zod";
 //       name: "notifications_list",
 //       description: "One page of the caller's notifications, newest first.",
 //       output: notificationList,
-//       agent: { callable: true, readOnly: true, confirm: false },
+//       agent: {
+//         callable: true,
+//         readOnly: true,
+//         confirm: false,
+//         scope: "notifications:read",
+//       },
 //     }),
 //     validateList,
 //     (c) => ...
@@ -56,10 +61,21 @@ import type { ZodType } from "zod";
  * - `callable: true` makes it a tool. `readOnly` says it changes nothing, and `confirm`
  *   says a person must agree before an agent runs it (the MCP client asks its user; the
  *   server keeps no approval queue). A delete or a payment is `confirm: true`.
+ *
+ * `scope` is the key scope the route's own gate demands, written `resource:action`
+ * (`books:read`, `books:write`, `books:delete`), one word from the project's key
+ * vocabulary (`API_KEY_SCOPES`). `null` says the route is public and demands none, as the
+ * public CMS and catalog reads do. The statement only names the scope, for the tool list
+ * and `llms.txt`; the route's gate is what enforces it, so the two are written together.
  */
 export type AgentStatement =
   | { callable: false; reason: string }
-  | { callable: true; readOnly: boolean; confirm: boolean };
+  | {
+      callable: true;
+      readOnly: boolean;
+      confirm: boolean;
+      scope: string | null;
+    };
 
 interface Described {
   /**

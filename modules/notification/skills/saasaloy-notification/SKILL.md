@@ -107,7 +107,7 @@ The same section holds `menuSize` (5 rows under the bell), `pageSize` (20 rows a
 
 ## The api routes
 
-The `chained-route` patch mounts the sub-app at `/notifications`. Every route calls `requireSession`.
+The `chained-route` patch mounts the sub-app at `/notifications`. The three reads an agent may call (`GET /`, `GET /unread-count`, `GET /preferences`) open with `requireUser(c, { notifications: ["read"] })` from `@repo/auth/user-caller`, so a signed-in person and, with `api-keys-user`, a user's key holding `notifications:read` both pass. The three writes call `requireSession`, so no key reaches them. The `saasaloy-agent` skill has the gate.
 
 | Route | Answer |
 |---|---|

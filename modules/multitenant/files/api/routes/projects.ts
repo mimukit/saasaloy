@@ -1,6 +1,5 @@
 import type { AuthDbBindings } from "@repo/auth/server";
 import { requirePermission } from "@repo/auth/permissions";
-import { requireTenant } from "@repo/auth/tenant";
 import { withDb } from "@repo/db/client";
 import {
   createProject,
@@ -34,9 +33,10 @@ import { declare } from "../contract";
 // Never call both in one handler: the second call re-resolves the session and re-runs the
 // `organization_roles` query for an answer it already has.
 //
-// Read is left on `requireTenant`. `member` holds `project: ["read"]` in `access.ts`, so
-// gating the read would be the same check written twice, and a route that lists nothing
-// a member may see is a worse failure than one that lists what they may.
+// The read is gated too, because an agent may call it. `member` holds `project: ["read"]`
+// in `access.ts`, so every role that read the list before still reads it, and an
+// organization's key now needs `project:read` in its scope to list projects, which is
+// the scope word the route's statement names.
 //
 // The 403 body is `permission required: project:delete`, from `permission-rules.ts`. The
 // `/roles` screen hides the button for a caller `can()` refuses, and that hide is
@@ -71,10 +71,15 @@ export const projects = new Hono<{ Bindings: AuthDbBindings }>()
       name: "projects_list",
       description: "List the projects of the caller's organization.",
       output: projectList,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "project:read",
+      },
     }),
     async (c) => {
-      const tenant = await requireTenant(c);
+      const tenant = await requirePermission(c, { project: ["read"] });
       const rows = await withDb(c, (db) =>
         listProjects(db, tenant.organizationId)
       );

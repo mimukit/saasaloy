@@ -19,7 +19,12 @@ const sub = new Hono()
   .get(
     "/",
     declare({
-      agent: { callable: true, confirm: false, readOnly: true },
+      agent: {
+        callable: true,
+        confirm: false,
+        readOnly: true,
+        scope: "items:read",
+      },
       description: "List the items that match a search.",
       name: "items_list",
       output: z.object({ items: z.array(item) }),
@@ -76,6 +81,7 @@ describe("the route contract", () => {
       callable: true,
       confirm: false,
       readOnly: true,
+      scope: "items:read",
     });
     expect(list?.input.query).toBe(query);
   });
@@ -119,7 +125,12 @@ describe("the route contract", () => {
     const lazy = new Hono().get(
       "/",
       declare({
-        agent: { callable: true, confirm: false, readOnly: true },
+        agent: {
+          callable: true,
+          confirm: false,
+          readOnly: true,
+          scope: null,
+        },
         description: "A route whose output schema no converter knows.",
         name: "lazy_read",
         output: opaque,
@@ -138,6 +149,7 @@ describe("the route contract", () => {
       callable: true,
       confirm: false,
       readOnly: true,
+      scope: "items:read",
     });
     expect(list?.parameters).toStrictEqual([
       {

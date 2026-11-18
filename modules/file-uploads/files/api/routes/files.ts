@@ -1,5 +1,6 @@
 import { declare, zValidator } from "../contract";
 import { requireSession, withAuthScope } from "@repo/auth/server";
+import { requireUser } from "@repo/auth/user-caller";
 import { withDb } from "@repo/db/client";
 import {
   createObject,
@@ -103,13 +104,28 @@ export const files = new Hono<{ Bindings: Bindings }>()
       description:
         "List the caller's uploaded files, newest first, with each public file's URL. Pass the returned cursor for the next page.",
       output: fileList,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "files:read",
+      },
     }),
     validateList,
     (c) =>
       withAuthScope(c, async () => {
-        const session = await requireSession(c);
-        const scope = resolveScope(session);
+        // The one route here an agent may call: a person passes as before, and a user's
+        // key (with `api-keys-user`) passes when it holds `files:read`. A key has no
+        // active organization, so it lists the objects its user uploaded.
+        const caller = await requireUser(c, { files: ["read"] });
+        // `resolveScope` reads no session id, and a key caller has none.
+        const scope = resolveScope({
+          session: {
+            activeOrganizationId: caller.activeOrganizationId,
+            id: "",
+          },
+          user: { id: caller.userId },
+        });
         const settings = apiEnv(c.env);
         const { cursor, limit } = c.req.valid("query");
 

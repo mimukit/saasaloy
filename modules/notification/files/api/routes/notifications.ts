@@ -1,6 +1,7 @@
 import { declare, zValidator } from "../contract";
 import { config } from "@repo/config";
 import { requireSession, withAuthScope } from "@repo/auth/server";
+import { requireUser } from "@repo/auth/user-caller";
 import { withDb } from "@repo/db/client";
 import {
   countUnread,
@@ -24,7 +25,7 @@ import type { AuthDbBindings } from "@repo/auth/server";
 import type { Db } from "@repo/db/client";
 import type { NotificationRow } from "@repo/db/repositories/notifications";
 
-// The signed-in user's notifications: six routes behind `requireSession`, for the bell,
+// The signed-in user's notifications: six routes behind the session gate, for the bell,
 // the sidebar badge and the page in `apps/app`. Nothing here writes a notification; a
 // route that has news for a user calls `notify` from `../lib/notify`.
 //
@@ -40,6 +41,12 @@ import type { NotificationRow } from "@repo/db/repositories/notifications";
 // No CORS and no `onError`: `modules/api`'s spine applies the credentialed `CORS_ORIGINS`
 // allowlist before this sub-app is mounted, and an unset `onError` inherits api's, which
 // renders the `HTTPException` `requireSession` throws as the shared error envelope.
+
+// The three reads an agent may call open with `requireUser` and this demand, not with
+// `requireSession`: a signed-in person passes as before, and a user's key (with
+// `api-keys-user` installed) passes when it holds `notifications:read`. The writes stay on
+// `requireSession`, so no key reaches them.
+const READ = { notifications: ["read"] } as const;
 
 // The three validators share one failure hook body, so a rejected input gets the
 // `{ error: { code, message } }` envelope the rest of the api uses rather than Hono's
@@ -136,15 +143,20 @@ export const notifications = new Hono<{ Bindings: AuthDbBindings }>()
       description:
         "List one page of the caller's notifications, newest first. Pass nextCursor back as cursor for the next page; null means the last page.",
       output: notificationList,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "notifications:read",
+      },
     }),
     validateList,
     (c) =>
       withAuthScope(c, async () => {
-        const { user } = await requireSession(c);
+        const { userId } = await requireUser(c, READ);
         const { cursor } = c.req.valid("query");
         const page = await withDb(c, (db) =>
-          listNotifications(db, user.id, cursor)
+          listNotifications(db, userId, cursor)
         );
         return c.json(
           {
@@ -163,12 +175,17 @@ export const notifications = new Hono<{ Bindings: AuthDbBindings }>()
       name: "notifications_unread_count",
       description: "Count the caller's unread notifications.",
       output: notificationUnreadCount,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "notifications:read",
+      },
     }),
     (c) =>
       withAuthScope(c, async () => {
-        const { user } = await requireSession(c);
-        const unread = await withDb(c, (db) => countUnread(db, user.id));
+        const { userId } = await requireUser(c, READ);
+        const unread = await withDb(c, (db) => countUnread(db, userId));
         return c.json({ count: unread }, 200);
       })
   )
@@ -225,12 +242,17 @@ export const notifications = new Hono<{ Bindings: AuthDbBindings }>()
       description:
         "List every notification category with whether the caller has it on.",
       output: notificationPreferences,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: "notifications:read",
+      },
     }),
     (c) =>
       withAuthScope(c, async () => {
-        const { user } = await requireSession(c);
-        const body = await withDb(c, (db) => preferencesOf(db, user.id));
+        const { userId } = await requireUser(c, READ);
+        const body = await withDb(c, (db) => preferencesOf(db, userId));
         return c.json(body, 200);
       })
   )

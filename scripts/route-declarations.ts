@@ -40,6 +40,8 @@ export interface Statement {
   confirm: boolean | undefined;
   hasOutput: boolean;
   hasReason: boolean;
+  /** The scope word as written, `null` for `scope: null`, `undefined` when absent. */
+  scope: string | null | undefined;
 }
 
 /** One method link on a route chain. */
@@ -274,7 +276,16 @@ export function readStatement(arg: string): Statement {
     hasReason: /\breason\s*:\s*["'`]/.test(arg),
     name: /\bname\s*:\s*["'`]([^"'`]*)["'`]/.exec(arg)?.[1],
     readOnly: flag(arg, "readOnly"),
+    scope: scopeOf(arg),
   };
+}
+
+function scopeOf(text: string): string | null | undefined {
+  const found = /\bscope\s*:\s*(?:(null)\b|["'`]([^"'`]*)["'`])/.exec(text);
+  if (!found) {
+    return undefined;
+  }
+  return found[1] === "null" ? null : found[2];
 }
 
 /**

@@ -188,7 +188,7 @@ export const widgets = new Hono()
       name: "widgets_list",
       description: "List the caller's widgets, newest first.",
       output: widgetList,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: { callable: true, readOnly: true, confirm: false, scope: "widgets:read" },
     }),
     validList,
     (c) => c.json({ widgets: [] }, 200)
@@ -199,7 +199,7 @@ export const widgets = new Hono()
       name: "widget_delete",
       description: "Delete one of the caller's widgets.",
       output: widgetDeleted,
-      agent: { callable: true, readOnly: false, confirm: true },
+      agent: { callable: true, readOnly: false, confirm: true, scope: "widgets:delete" },
     }),
     (c) => c.json({ id: c.req.param("id") }, 200)
   );
@@ -209,7 +209,7 @@ The fields:
 
 - `name` is the tool name and the OpenAPI `operationId`. Write it in snake_case, lead with the resource, and keep it unique across the api: `widgets_list`, `widget_delete`.
 - `description` is what an agent reads to pick the tool. Say what the route does and what it returns, in one or two sentences.
-- `agent` is the statement. `{ callable: false, reason }` keeps the route out of every agent surface. `{ callable: true, readOnly, confirm }` makes it a tool. `readOnly` says it changes nothing. `confirm` says a person must agree first, which the MCP client asks its user; set it on a delete and on anything that moves money.
+- `agent` is the statement. `{ callable: false, reason }` keeps the route out of every agent surface. `{ callable: true, readOnly, confirm, scope }` makes it a tool. `readOnly` says it changes nothing. `confirm` says a person must agree first, which the MCP client asks its user; set it on a delete and on anything that moves money. `scope` names the key scope the route's gate demands, as `resource:action` from the project's key vocabulary: `widgets:read`, `widgets:write`, and a separate `widgets:delete`. Write `scope: null` only on a public route that demands no key. The statement names the scope and the gate enforces it, so write both in the same change; the `saasaloy-agent` skill has the gate.
 - `output` is the zod schema of the success body, and a callable route must give it. Put it in `@repo/validators/<feature>` next to the input schemas. `status` names the success status when it is not 200.
 
 **The input schema is written once, in the validator.** `zValidator` from `../contract` is `@hono/zod-validator`'s, with the same signature, hook and failure response, and it also records its target and schema on the middleware. The `agent` module reads the route's input from there, so `declare` takes no input schema and two copies cannot drift. Import `zValidator` from `../contract` in a route file, not from `@hono/zod-validator`. A path parameter that no validator checks reaches an agent as a plain string.

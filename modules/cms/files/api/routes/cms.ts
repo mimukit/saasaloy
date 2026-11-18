@@ -779,7 +779,12 @@ export const cms = new Hono<{ Bindings: Bindings }>()
       description:
         "List the published entries of a collection, such as the blog, newest first, with each entry's excerpt and cover. Pages hold the configured page size.",
       output: cmsPublicList,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: null,
+      },
     }),
     validatePublicList,
     async (c) => {
@@ -817,7 +822,12 @@ export const cms = new Hono<{ Bindings: Bindings }>()
       description:
         "Read one published entry of a collection by its slug, with its rendered html and SEO values. An old slug answers 301 with the current one.",
       output: cmsPublicEntry,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: null,
+      },
     }),
     async (c) => {
       const name = c.req.param("collection");

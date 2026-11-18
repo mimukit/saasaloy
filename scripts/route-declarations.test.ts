@@ -9,8 +9,9 @@
 // - every method link on a mounted route chain carries exactly one `declare(...)`;
 // - a statement names the route (snake_case, unique across every module) and says
 //   `callable: true` or `callable: false`;
-// - a closed route gives its `reason`, and a callable one gives its `output` schema and
-//   both marks, `readOnly` and `confirm`;
+// - a closed route gives its `reason`, and a callable one gives its `output` schema,
+//   both marks, `readOnly` and `confirm`, and its `scope`: a `resource:action` word, or
+//   `null` for a public read that demands no key;
 // - admin, auth and payment callback routes are never callable (plan 0110, "Shipped
 //   module routes");
 // - the product reads the plan names, the notification list and the public CMS pages,
@@ -73,7 +74,7 @@ describe("the route reader", () => {
       // .get("/commented", declare({ name: "x", agent: { callable: false } }))
       export const things = new Hono<{ Bindings: { A: string } }>()
         .get("/", declare({ name: "things_list", description: "List.", output: list,
-          agent: { callable: true, readOnly: true, confirm: false } }), (c) => c.json([], 200))
+          agent: { callable: true, readOnly: true, confirm: false, scope: "things:read" } }), (c) => c.json([], 200))
         .post("/", validate, (c) => c.json({ ok: /a,(b/.test("x") }, 201))
         .on(["GET", "POST"], "/*", declare({ name: "things_auth", description: "Auth.",
           agent: { callable: false, reason: "Sign-in." } }), (c) => c.text(\`\${"a"})\`));
@@ -94,6 +95,7 @@ describe("the route reader", () => {
       hasReason: false,
       name: "things_list",
       readOnly: true,
+      scope: "things:read",
     });
     assert.equal(links[2]?.statements[0]?.hasReason, true);
   });
@@ -118,9 +120,10 @@ describe("the route reader", () => {
 
 describe("every shipped api route states whether agents may call it", () => {
   it("finds the mounted route files", () => {
-    // 21 chained-route patches in 15 modules (plan 0110 phase 3), and api's own /health.
-    assert.equal(chains.length, 22);
-    assert.equal(new Set(chains.map((c) => c.module)).size, 16);
+    // 22 chained-route patches in 16 modules: the 21 of plan 0110 phase 3 and the agent
+    // module's own surface, plus api's own /health.
+    assert.equal(chains.length, 23);
+    assert.equal(new Set(chains.map((c) => c.module)).size, 17);
     assert.ok(routes.length > 100, `only ${String(routes.length)} routes read`);
   });
 
@@ -165,12 +168,40 @@ describe("every shipped api route states whether agents may call it", () => {
         s.hasOutput ? "" : "output",
         s.readOnly === undefined ? "readOnly" : "",
         s.confirm === undefined ? "confirm" : "",
+        s.scope === undefined ? "scope" : "",
       ].filter(Boolean);
       return gaps.length > 0
         ? [`${where(route)}: callable with no ${gaps.join(", ")}`]
         : [];
     });
     assert.deepEqual(problems, []);
+  });
+
+  it("writes each scope as resource:action, or null for a public read", () => {
+    const wrong = routes
+      .filter((r) => {
+        const scope = r.statements[0]?.scope;
+        return (
+          r.statements[0]?.callable === true &&
+          typeof scope === "string" &&
+          !/^[a-z][a-z0-9_-]*:[a-z][a-z0-9_-]*$/.test(scope)
+        );
+      })
+      .map((r) => `${where(r)}: scope ${String(r.statements[0]?.scope)}`);
+    assert.deepEqual(wrong, []);
+  });
+
+  it("gives every callable read of a signed-in caller a scope word", () => {
+    for (const [method, path, scope] of [
+      ["get", "/notifications", "notifications:read"],
+      ["get", "/notifications/unread-count", "notifications:read"],
+      ["get", "/notifications/preferences", "notifications:read"],
+      ["get", "/files", "files:read"],
+      ["get", "/projects", "project:read"],
+      ["get", "/cms/:collection/entries", null],
+    ] as const) {
+      assert.equal(find(method, path).statements[0]?.scope, scope, path);
+    }
   });
 
   it("never opens an admin, auth or payment callback route", () => {

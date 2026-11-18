@@ -360,7 +360,12 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
       description:
         "List the store's active products, newest first by default, with price range and available stock in the store currency. Filter by category slug and sort.",
       output: shopProductList,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: null,
+      },
     }),
     validProductList,
     (c) =>
@@ -402,7 +407,12 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
       description:
         "Read one active product by its slug, with its options, images and active variants with price and available stock.",
       output: shopProduct,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: null,
+      },
     }),
     (c) =>
       scoped(c, async (db) => {
@@ -424,7 +434,12 @@ export const ecommerce = new Hono<{ Bindings: Bindings }>()
       name: "shop_categories_list",
       description: "List the store's product categories.",
       output: shopCategoryList,
-      agent: { callable: true, readOnly: true, confirm: false },
+      agent: {
+        callable: true,
+        readOnly: true,
+        confirm: false,
+        scope: null,
+      },
     }),
     (c) =>
       scoped(c, async (db) => {
