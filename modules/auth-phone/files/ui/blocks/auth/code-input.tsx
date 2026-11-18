@@ -9,6 +9,7 @@ import {
   FieldDescription,
   FieldLabel,
 } from "@repo/ui/components/shell/field";
+// oxlint-disable-next-line no-restricted-imports -- InputOTP is the base code field, and the shell set has no twin of it
 import {
   InputOTP,
   InputOTPGroup,

@@ -74,7 +74,7 @@ match `^[a-z0-9][a-z0-9-]*$`. Omit it and the CLI prompts.
 | `--force` | scaffold into a directory that already has files in it. Without it, a non-empty target cancels with exit 2. A `.git` directory alone does not count as non-empty. |
 | `--yes`, `-y` | answer the "Install dependencies now?" prompt with yes: run `pnpm install` with no prompt. Passing it with `--no-install` exits 2. |
 | `--no-install` | skip the "Install dependencies now?" prompt and never run `pnpm install`. |
-| `--no-git` | do not run `git init` in the new project. |
+| `--no-git` | do not run `git init` in the new project, and make no commit. |
 | `--testing=<mode>` | the project's [testing mode](#saasaloy-testing): `off`, `tests-after` or `tdd`. An unknown value exits 2 before anything is written. |
 
 `init` always writes `testing.mode` into `saasaloy.json`, and fills the testing block in the root `AGENTS.md` for that mode. With no `--testing` flag, an attended run (a terminal on stdin and stdout) asks once, and a run with no terminal writes `off`. `off` is the opt-in default, not a guess.
@@ -85,6 +85,10 @@ them into. It is skipped when the target already sits inside a working tree that
 `saasaloy init .` in an existing repo does not nest a second one. A target the outer repository ignores gets its own repository. A failure warns rather
 than aborting the scaffold.
 
+After a successful install in a repository it created, `init` runs `pnpm env:setup`, which writes each service's `.env` from the local defaults in `packages/env/.env.example`. So `pnpm check` and `pnpm dev` pass with no env step. A failure warns and leaves the exit code at 0.
+
+Last, in a repository it created, `init` commits the scaffold on `main` with the subject `chore(repo): initial commit`. The commit runs with `--no-verify`: the hooks would run lint-staged over every scaffold file, and `pnpm check` is the gate for those files. With no git identity (`user.name` and `user.email`), `init` warns and makes no commit. In a repository that existed before, and under `--no-git`, it makes none.
+
 Like every other command, `init` rejects a flag it does not know with exit 2.
 
 With no terminal, `init` refuses with exit 2 before it writes a file: with no `<name>` it names `<name>`, and with neither `--yes` nor `--no-install` it names both. A `pnpm install` that fails prints pnpm's output and exits 1. The scaffold stays on disk, so run `pnpm install` in it once the cause is fixed.
@@ -92,8 +96,10 @@ With no terminal, `init` refuses with exit 2 before it writes a file: with no `<
 ## `saasaloy add`
 
 ```text
-saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
+saasaloy add [<module>[@ref]...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
 ```
+
+A bare module name reads the default registry at the tag `v<version>` of the CLI that runs, so the CLI and its modules come from one release ([ADR 0062](../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)). The lock records that tag as `ref` and its commit as `resolved`. `saasaloy add <module>@main` reads `main` instead, for a module merged after the release. A CLI whose tag the registry lacks, such as a development build or a version bumped ahead of its release, exits 2 and names `@main` and `SAASALOY_REGISTRY_DIR` as the ways out; it never falls back to `main` by itself.
 
 With no module named, `add` shows a multi-select over the source, listing only modules this project has not installed. With no terminal it exits 2 and prints the usage line. Unknown flags are rejected before any work happens, with exit 2.
 
@@ -204,7 +210,7 @@ Use `--from-file` for a secret. A `--set` value stays in your shell history.
 
 With no flag, `env` fills blanks only. It prompts for every declared variable that has no value (a `KEY=` placeholder counts as no value) and never rewrites a value already in the file, whatever the descriptor's `devVars` suggests. The prompt's message is the descriptor's own wording, and its `devVars` entry becomes the default. A filled placeholder keeps its line, a new key goes on the end, and every other line stays byte for byte.
 
-With `--set` or `--from-file`, `env` opens no prompt, with or without a terminal. A value passed this way replaces the value the file holds for that key, because you chose it. Each key is checked against the installed modules' declarations first: one key that no installed module declares refuses the whole run with exit 2, names every unknown key, and writes nothing. Any declared key still unset afterwards is listed as a warning, and the run exits 0. `--check` with either flag exits 2, because one promises to write nothing and the other writes.
+With `--set` or `--from-file`, `env` opens no prompt, with or without a terminal. A value passed this way replaces the value the file holds for that key, because you chose it. Each key is checked first against the installed modules' declarations and the keys `packages/env/.env.example` lists, which holds the base's own keys such as `PUBLIC_SITE_URL`. One key in neither refuses the whole run with exit 2, names every unknown key, and writes nothing. Any declared key still unset afterwards is listed as a warning, and the run exits 0. `--check` with either flag exits 2, because one promises to write nothing and the other writes.
 
 Before it writes or asks for a single value, `env` proves `packages/env/.env` is gitignored. A tracked file, or a project that is not a git repository, is refused with exit 2 and the message "packages/env/.env isn't gitignored — refusing to write a secret into a tracked file. Add it to .gitignore (the base template already does) and run again."
 
@@ -259,7 +265,7 @@ Two cases stop before anything is applied. A project with no usable base record 
 
 | Flag | Effect |
 |---|---|
-| `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
+| `--ref <ref>` | update one named module to this branch, tag or SHA instead of this CLI's release tag. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. Without it, every module from the default registry that is not pinned to a SHA moves to the tag `v<version>` of the running CLI, a lock entry an older CLI wrote at `main` included. A third-party module stays on the ref its lock names. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
 | `--resolved <path>` | record a file you merged, or keep a file you deleted deleted, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge) and [Keeping a deleted file deleted](#keeping-a-deleted-file-deleted). |
 | `--restore <path>` | bring back a file kept deleted: write the current upstream file and stop keeping it deleted. A path that is not kept deleted exits 2. Repeatable. |
@@ -360,10 +366,10 @@ See [Remove a module](how-to/remove-a-module.md), and read
 ## `saasaloy list`
 
 ```text
-saasaloy list [<owner/repo[@ref]>] [--installed] [--available] [--json]
+saasaloy list [<owner/repo[@ref]>|@<ref>] [--installed] [--available] [--json]
 ```
 
-One optional coordinate names a registry; with none it lists the default registry. Output
+One optional coordinate names a registry; with none it lists the default registry at this CLI's release tag, and `@main` lists it on `main`. The `--json` document's `registry` names the ref it read, such as `mimukit/saasaloy@v0.9.0`. Output
 is names only, read from one listing of the repo's git tree, which is why a module with an
 invalid descriptor still appears here and only fails at `add`. `--json` is the exception:
 it reads each listed module's descriptor, so an invalid one fails the run.
@@ -436,18 +442,16 @@ A path that does not exist exits 2, and so does a directory with no module folde
 ## Module coordinates
 
 ```text
-waitlist                → default registry (mimukit/saasaloy), module `waitlist`
-owner/repo/waitlist     → third-party repo, module `waitlist`
+waitlist                → default registry (mimukit/saasaloy) at this CLI's tag v<version>
+waitlist@main           → default registry at a branch, tag or SHA
+owner/repo/waitlist     → third-party repo at its default branch, module `waitlist`
 owner/repo@ref/waitlist → pinned to a branch, tag or SHA
 owner/repo              → no module named ⇒ picker over that repo
+@main                   → picker over the default registry at a branch, tag or SHA
 (nothing)               → picker over the default registry
 ```
 
-Two forms are not supported and produce a `Malformed coordinate` error:
-
-- a ref containing `/`, such as `owner/repo@feature/x/waitlist`. Pin that branch's tip SHA
-  instead.
-- a ref without an explicit `owner/repo`, such as `waitlist@v2`.
+A ref containing `/`, such as `owner/repo@feature/x/waitlist`, is not supported and produces a `Malformed coordinate` error. Pin that branch's tip SHA instead.
 
 Third-party module identity is expected to change with
 [#39](https://github.com/mimukit/saasaloy/issues/39).

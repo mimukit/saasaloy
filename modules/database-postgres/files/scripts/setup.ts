@@ -235,7 +235,7 @@ await run(async () => {
   // project that has not declared its first table would fail here for no reason.
   if (journalEntries(context.root) === 0) {
     say(
-      "No migrations yet, so db:migrate is skipped. Add a table, run pnpm db:generate, then run pnpm db:setup again."
+      "No migration exists yet, so db:migrate is skipped. Add a table under packages/db/src/schema/, run pnpm --filter @repo/db db:generate, then run pnpm db:setup again."
     );
   } else if (
     !runPnpm(context.root, ["--filter", "@repo/db", "db:migrate"], env)

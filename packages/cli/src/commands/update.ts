@@ -13,7 +13,7 @@ import pc from "picocolors";
 import {
   detectCliMismatches,
   formatCliMismatches,
-  UPGRADE_COMMAND,
+  upgradeCommand,
 } from "../lib/cli-requires.js";
 import {
   adoptBase,
@@ -77,6 +77,7 @@ import {
 import {
   createRegistrySource,
   REGISTRY_ENV,
+  releaseTag,
   RemoteRegistrySource,
 } from "../lib/registry.js";
 import type { LoadedModule, RegistrySource } from "../lib/registry.js";
@@ -198,7 +199,7 @@ const HELP: CommandHelp = {
   usage: USAGE,
   flags: {
     "--ref <ref>":
-      "update one module to this branch, tag, or SHA (not the base)",
+      "update one module to this branch, tag, or SHA instead of this CLI's release tag (not the base)",
     "--out <path>": "write the merge plan to a file instead of stdout",
     "--resolved <path>":
       "record a file you merged as it stands now, or keep a file you deleted deleted, so the next update stops offering it (repeatable)",
@@ -1083,7 +1084,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
       ) {
         cancel(
           `This project's base was recorded by saasaloy ${recorded}, and ${cliVersion} is running — ` +
-            `updating would move the base backwards. Upgrade with \`${UPGRADE_COMMAND}\`. Nothing was written.`,
+            `updating would move the base backwards. Upgrade with \`${upgradeCommand(`>=${recorded}`)}\`. Nothing was written.`,
           TUI_ON_STDERR
         );
         return EXIT_REFUSED;
@@ -1222,6 +1223,8 @@ export async function runUpdate(argv: string[]): Promise<number> {
             lock,
             overrideRef: opts.ref,
             registryOverride,
+            // A default-registry module follows the CLI that runs (ADR 0062).
+            releaseRef: releaseTag(cliVersion),
             resolveRef: (_name, entry, ref) =>
               remote(entry.source, ref).resolveSha(),
           })

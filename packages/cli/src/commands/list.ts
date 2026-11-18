@@ -18,9 +18,10 @@ import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
-// `saasaloy list [owner/repo[@ref]]` — enumerate the modules a registry offers, the same
-// seam `add`'s picker reads from. With no argument it lists the default repo (or the local
-// modules/ checkout when SAASALOY_REGISTRY_DIR is set); an `owner/repo` coordinate lists a
+// `saasaloy list [owner/repo[@ref] | @ref]` — enumerate the modules a registry offers, the
+// same seam `add`'s picker reads from. With no argument it lists the default repo at this
+// CLI's release tag (ADR 0062), or the local modules/ checkout when SAASALOY_REGISTRY_DIR
+// is set; `@main` lists the default repo on main; an `owner/repo` coordinate lists a
 // third-party registry. Names only — matching the picker — so it stays a cheap, one-call
 // lookup (no per-module descriptor fetch).
 //
@@ -52,7 +53,7 @@ const KNOWN_FLAGS = new Set([
   "-h",
 ]);
 const USAGE =
-  "saasaloy list [<owner/repo[@ref]>] [--installed] [--available] [--json]";
+  "saasaloy list [<owner/repo[@ref]>|@<ref>] [--installed] [--available] [--json]";
 const HELP: CommandHelp = {
   name: "list",
   describe: DESCRIPTIONS.list,

@@ -1258,7 +1258,8 @@ describe("runUpdate — the base template (#120)", { timeout: 30_000 }, () => {
     expect(code).toBe(2);
     expect(err).toContain("99.0.0");
     expect(err).toContain(cliVersion);
-    expect(err).toContain("Upgrade");
+    // A command that installs a CLI at least as new as the record, never @latest.
+    expect(err).toContain("pnpm add --global 'saasaloy@>=99.0.0'");
     expect((await lockOnDisk()).base?.cliVersion).toBe("99.0.0");
   });
 

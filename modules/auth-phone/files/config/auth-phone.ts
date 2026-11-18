@@ -35,6 +35,6 @@ export function authPhoneConfig() {
      * keep phone and password either way; checkout uses this. `false` answers 409
      * `PHONE_NUMBER_EXIST`, as a sign-up code does for a known number.
      */
-    codeSignIn: true as boolean,
+    codeSignIn: true,
   });
 }

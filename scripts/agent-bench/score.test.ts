@@ -9,13 +9,22 @@ import { after, describe, it } from "node:test";
 
 import {
   checkEntity,
+  deployCalls,
+  deployOf,
+  entityParts,
+  featureSections,
   findConsoleMail,
   findProject,
   formatTable,
+  judgeEntities,
+  judgeInterview,
   judgeLanding,
+  judgePreview,
   MVP_BAR,
   parseBuildLog,
   parseSeedCounts,
+  portsFromRecord,
+  previewUrls,
   sameCounts,
   stopPoint,
 } from "./score.ts";
@@ -193,7 +202,8 @@ describe("formatTable", () => {
   it("prints one row per MVP bar line and a stop point per FAIL row", () => {
     const results: LineResult[] = MVP_BAR.map((line) => ({
       id: line.id,
-      verdict: line.id === "entity" ? "FAIL" : "PASS",
+      verdict:
+        line.id === "entity" ? "FAIL" : line.id === "preview" ? "N/A" : "PASS",
       detail: "x",
     }));
     const table = formatTable(results, 'stage "Stage 3" is stopped');
@@ -201,7 +211,15 @@ describe("formatTable", () => {
     assert.equal(rows.length, MVP_BAR.length);
     assert.match(table, /^FAIL 4: stop point: stage "Stage 3" is stopped$/m);
     assert.doesNotMatch(table, /^FAIL 1:/m);
-    assert.match(table, /6\/7 MVP bar lines pass\./);
+    assert.match(table, /8\/10 MVP bar lines pass, 1 N\/A, 1 FAIL\./);
+  });
+
+  it("holds the three bar lines of plan 0109", () => {
+    assert.deepEqual(MVP_BAR.map((line) => line.id).slice(-3), [
+      "interview",
+      "entities",
+      "preview",
+    ]);
   });
 
   it("says there is no build log when no stop point was found", () => {
@@ -260,5 +278,371 @@ describe("filesystem checks", () => {
       "export function Books() {}"
     );
     assert.equal(checkEntity(project, expect).verdict, "PASS");
+  });
+});
+
+const SPEC = `# Product spec
+
+## Modules
+
+| Module | Stage | Why |
+|--------|-------|-----|
+| None. | | |
+
+## Database driver
+
+\`database-d1\`: the default.
+
+## Entities
+
+### 1. Stations
+
+| Part | Value |
+|------|-------|
+| Table | \`stations\` |
+| Fields | \`name\` text, required |
+| Who may see it | the organization |
+| Actions | \`list\`, \`create\`, \`update\` |
+| Screens | app: list |
+
+### 2. Prep tasks
+
+| Part | Value |
+|------|-------|
+| Table | \`prep_tasks\` |
+| Fields | \`title\` text, required |
+| Who may see it | the organization |
+| Actions | \`list\`, \`create\`, \`update\` |
+| Screens | app: list |
+
+## Not in this build
+
+- None.
+
+## Left for the owner
+
+- None.
+`;
+
+describe("judgeInterview", () => {
+  const exchange = (kind: string, reply: string) => ({
+    call: 1,
+    kind,
+    numbers: [],
+    sent: "",
+    reply,
+  });
+
+  it("is N/A in brief mode", () => {
+    assert.equal(judgeInterview("brief", undefined, []).verdict, "N/A");
+  });
+
+  it("passes one read-back and a build that asks nothing after it", () => {
+    const result = judgeInterview(
+      "interview",
+      {
+        exchanges: [
+          exchange("opening", "**1. Name?**"),
+          exchange("answers", "**Build it?**\na. Yes"),
+          exchange("read-back", "The build is done. See docs/build-log.md."),
+        ],
+        end: "the build call exited 0",
+      },
+      [""]
+    );
+    assert.equal(result.verdict, "PASS");
+  });
+
+  it("fails an interview that never reached the read-back", () => {
+    const result = judgeInterview(
+      "interview",
+      {
+        exchanges: [exchange("opening", "**1. Name?**")],
+        end: "the agent exited 1",
+      },
+      []
+    );
+    assert.equal(result.verdict, "FAIL");
+    assert.match(result.detail, /no read-back.*exited 1/);
+  });
+
+  it("fails a question after the read-back, in the reply or by the picker tool", () => {
+    const record = (last: string) => ({
+      exchanges: [
+        exchange("answers", "**Build it?**"),
+        exchange("read-back", last),
+      ],
+      end: "x",
+    });
+    assert.match(
+      judgeInterview("interview", record("Shall I start the Feature stage?"), [
+        "",
+      ]).detail,
+      /question after the read-back/
+    );
+    const picker = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "tool_use", name: "AskUserQuestion", input: {} }],
+      },
+    });
+    assert.equal(
+      judgeInterview("interview", record("Done."), ["", picker]).verdict,
+      "FAIL"
+    );
+  });
+
+  it("fails a second read-back", () => {
+    const result = judgeInterview(
+      "interview",
+      {
+        exchanges: [
+          exchange("answers", "**Build it?**"),
+          exchange("read-back", "Changed it. **Build it?**"),
+        ],
+        end: "x",
+      },
+      [""]
+    );
+    assert.match(result.detail, /2 read-backs/);
+  });
+});
+
+describe("featureSections", () => {
+  it("reads each ## Feature: <table> heading", () => {
+    assert.deepEqual(
+      featureSections(
+        "## Intake\n## Feature: stations\n## Feature: `prep_tasks`\n### Feature: no\n"
+      ),
+      ["stations", "prep_tasks"]
+    );
+  });
+});
+
+describe("entities end to end", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-bench-entities-"));
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const put = (path: string, text: string) => {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  };
+  put(
+    "packages/db/src/schema/stations.ts",
+    'export const stations = sqliteTable("stations", {});'
+  );
+  put("apps/api/src/routes/stations.ts", 'app.get("/stations", list);');
+  put("apps/app/src/routes/stations.tsx", "export function Stations() {}");
+  const ENTITY_LOG = "## Feature: stations\nCommit abc1234.\n";
+
+  it("names each part an entity has and lacks", () => {
+    const parts = entityParts(dir, "stations", ENTITY_LOG, [
+      "feat(build): feature stations",
+    ]);
+    assert.deepEqual(
+      parts.filter(([, ok]) => !ok).map(([name]) => name),
+      []
+    );
+    const missing = entityParts(dir, "prep_tasks", ENTITY_LOG, []);
+    assert.deepEqual(
+      missing.filter(([, ok]) => !ok).map(([name]) => name),
+      ["build log section", "commit", "table", "api route", "app screen"]
+    );
+  });
+
+  it("finds a route and a screen by the kebab-case name", () => {
+    put(
+      "packages/db/src/schema/prep.ts",
+      'export const prepTasks = sqliteTable("prep_tasks", {});'
+    );
+    put("apps/api/src/routes/prep.ts", 'app.get("/prep-tasks", list);');
+    put(
+      "apps/app/src/routes/prep-tasks/index.tsx",
+      "export function List() {}"
+    );
+    const parts = entityParts(dir, "prep_tasks", "## Feature: prep_tasks\n", [
+      "feat(build): feature prep_tasks",
+    ]);
+    assert.deepEqual(
+      parts.filter(([, ok]) => !ok).map(([name]) => name),
+      []
+    );
+  });
+
+  it("joins every spec table, and fails a route that answers 404", () => {
+    const passing = judgeEntities({
+      mode: "interview",
+      project: dir,
+      spec: SPEC,
+      log: "## Feature: stations\n## Feature: prep_tasks\n",
+      subjects: [
+        "feat(build): feature stations",
+        "feat(build): feature prep_tasks",
+      ],
+      http: new Map([
+        ["stations", 401],
+        ["prep_tasks", 401],
+      ]),
+    });
+    assert.equal(passing.verdict, "PASS");
+    assert.match(passing.detail, /2 entities/);
+    const failing = judgeEntities({
+      mode: "interview",
+      project: dir,
+      spec: SPEC,
+      log: "## Feature: stations\n## Feature: prep_tasks\n",
+      subjects: [
+        "feat(build): feature stations",
+        "feat(build): feature prep_tasks",
+      ],
+      http: new Map([
+        ["stations", 401],
+        ["prep_tasks", 404],
+      ]),
+    });
+    assert.equal(failing.verdict, "FAIL");
+    assert.match(failing.detail, /`prep_tasks` missing: http 404/);
+  });
+
+  it("is N/A in brief mode with no spec, and FAIL in interview mode", () => {
+    const input = { project: dir, spec: undefined, log: "", subjects: [] };
+    assert.equal(judgeEntities({ ...input, mode: "brief" }).verdict, "N/A");
+    assert.equal(
+      judgeEntities({ ...input, mode: "interview" }).verdict,
+      "FAIL"
+    );
+  });
+});
+
+describe("the preview line", () => {
+  it("reads deploy from the brief's frontmatter, none by default", () => {
+    assert.equal(
+      deployOf("---\nautonomy: afk\ndeploy: preview\n---\n# B"),
+      "preview"
+    );
+    assert.equal(deployOf("---\nautonomy: afk\n---\n# B"), "none");
+    assert.equal(deployOf(), "none");
+  });
+
+  it("finds wrangler and deploy commands in a stream-json transcript", () => {
+    const bash = (command: string) =>
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "Bash", input: { command } }],
+        },
+      });
+    const text = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: "I will not run wrangler." }],
+      },
+    });
+    assert.deepEqual(
+      deployCalls(
+        [
+          bash("pnpm check"),
+          text,
+          bash("npx wrangler deploy"),
+          bash("pnpm deploy:preview"),
+        ].join("\n")
+      ),
+      ["npx wrangler deploy", "pnpm deploy:preview"]
+    );
+  });
+
+  it("does not count a command that only names wrangler.jsonc or .wrangler/", () => {
+    const bash = (command: string) =>
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "Bash", input: { command } }],
+        },
+      });
+    const calls = deployCalls(
+      [
+        bash("grep -n d1_databases apps/api/wrangler.jsonc"),
+        bash("rm -rf apps/api/.wrangler/state"),
+        bash("pnpm --filter api exec wrangler d1 migrations apply DB --remote"),
+        bash("npx wrangler@4.40.0 deploy"),
+      ].join("\n")
+    );
+    assert.deepEqual(calls, [
+      "pnpm --filter api exec wrangler d1 migrations apply DB --remote",
+      "npx wrangler@4.40.0 deploy",
+    ]);
+    assert.equal(
+      judgePreview(
+        "none",
+        deployCalls(
+          [
+            bash("grep -n d1_databases apps/api/wrangler.jsonc"),
+            bash("rm -rf apps/api/.wrangler/state"),
+          ].join("\n")
+        )
+      ).verdict,
+      "N/A"
+    );
+  });
+
+  it("is N/A with deploy: none and no deploy call, and FAIL with one", () => {
+    assert.equal(judgePreview("none", []).verdict, "N/A");
+    const result = judgePreview("none", ["npx wrangler deploy"]);
+    assert.equal(result.verdict, "FAIL");
+    assert.match(result.detail, /wrangler deploy/);
+  });
+
+  it("passes deploy: preview when the web address answers 200", () => {
+    assert.equal(
+      judgePreview("preview", [], {
+        url: "https://web-preview.x.workers.dev",
+        status: 200,
+      }).verdict,
+      "PASS"
+    );
+    assert.equal(
+      judgePreview("preview", [], {
+        url: "https://web-preview.x.workers.dev",
+        status: 522,
+      }).verdict,
+      "FAIL"
+    );
+    assert.equal(judgePreview("preview", []).verdict, "FAIL");
+  });
+
+  it("reads the addresses from the build log's Preview section", () => {
+    assert.deepEqual(
+      previewUrls(
+        "## Handover\nhttps://example.test\n## Preview\n- web: https://web-preview.x.workers.dev\n- api: <https://api-preview.x.workers.dev>.\n"
+      ),
+      ["https://web-preview.x.workers.dev", "https://api-preview.x.workers.dev"]
+    );
+  });
+});
+
+describe("portsFromRecord", () => {
+  it("takes the block's ports from .devports.json", () => {
+    assert.deepEqual(
+      portsFromRecord(
+        JSON.stringify({
+          block: 7,
+          host: "localhost",
+          cookiePrefix: "wt1",
+          services: { web: 10_070, admin: 10_071, app: 10_072, api: 10_075 },
+        }),
+        7
+      ),
+      { web: 10_070, admin: 10_071, app: 10_072, api: 10_075 }
+    );
+  });
+
+  it("computes the block's ports when the record is missing", () => {
+    assert.deepEqual(portsFromRecord(undefined, 7), {
+      web: 10_070,
+      admin: 10_071,
+      app: 10_072,
+      api: 10_075,
+    });
   });
 });

@@ -20,16 +20,51 @@
 // runs before the gate because it costs one `git log` and one `git diff-tree` per breaking
 // commit, so a missing note fails in a second rather than after five minutes of gate.
 //
-// Imports node: builtins and two sibling scripts. Node 24 strips the types, so there is no
+// The llms.txt check builds the CLI, reads its help, and fails when the root `llms.txt` names
+// a skill, a command or a flag the release lacks (ADR 0062). It runs before the gate for the
+// same reason the update-note check does: it costs seconds, the gate costs minutes. What
+// "the release" holds is defined in `scripts/llms-txt.ts`.
+//
+// The benchmark check reads the changed paths since the last tag. When they touch a base
+// skill, the unattended CLI contract or a module of the MVP set, it refuses the release
+// unless a score report in `docs/research/` for every benchmark brief covers this revision
+// and holds no FAIL line (plan 0109). It costs a few `git` calls, so it runs before the
+// gate too. `scripts/bench-gate.ts` defines each term.
+//
+// Imports node: builtins and four sibling scripts. Node 24 strips the types, so there is no
 // build step; `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Git } from "./changelog-update-notes.ts";
+import {
+  benchBriefs,
+  benchmarkMessage,
+  checkBenchmark,
+  gatedPaths,
+  parseBenchReport,
+  REPORT_DIR,
+  REPORT_NAME,
+} from "./bench-gate.ts";
 import { addedUpdateNotes } from "./changelog-update-notes.ts";
+import { cliSurface, llmsSurfaceProblems, releaseSkills } from "./llms-txt.ts";
 import { updateNoteOptOut } from "./update-note-footer.ts";
 
+export type { BenchmarkCheck, BenchReport } from "./bench-gate.ts";
+export {
+  BASE_SKILLS,
+  benchBriefs,
+  benchmarkMessage,
+  checkBenchmark,
+  gatedPaths,
+  parseBenchReport,
+  REPORT_NAME,
+  UNATTENDED_CLI_CONTRACT,
+} from "./bench-gate.ts";
 export type { Git } from "./changelog-update-notes.ts";
+export type { CliSurface } from "./llms-txt.ts";
+export { cliSurface, llmsSurfaceProblems, releaseSkills } from "./llms-txt.ts";
 export { updateNoteOptOut } from "./update-note-footer.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -214,6 +249,30 @@ function capture(args: readonly string[], label: string): string {
   return result.stdout.trim();
 }
 
+/**
+ * Whether a score at `revision` covers HEAD: the revision is an ancestor of HEAD, and no
+ * path the benchmark gates changed between the two.
+ */
+function coversRelease(revision: string): boolean {
+  const ancestor = spawnSync(
+    "git",
+    ["merge-base", "--is-ancestor", revision, "HEAD"],
+    { cwd: root }
+  );
+  if (ancestor.status !== 0) {
+    return false;
+  }
+  const diff = spawnSync("git", ["diff", "--name-only", revision, "HEAD"], {
+    cwd: root,
+    encoding: "utf-8",
+  });
+  return (
+    diff.status === 0 &&
+    gatedPaths(diff.stdout.split("\n").filter((path) => path !== "")).length ===
+      0
+  );
+}
+
 async function main(): Promise<void> {
   // --- Can release-it reach the GitHub API? -------------------------------------------
 
@@ -257,6 +316,74 @@ async function main(): Promise<void> {
     );
   }
   step(`every breaking commit since ${tag} has an update note`);
+
+  // --- Does a benchmark score report clear this release? ----------------------------
+
+  const changed = capture(
+    ["diff", "--name-only", `${tag}..HEAD`],
+    "git diff --name-only"
+  )
+    .split("\n")
+    .filter((path) => path !== "");
+  const reportDir = join(root, REPORT_DIR);
+  const reports = readdirSync(reportDir)
+    .filter((file) => REPORT_NAME.test(file))
+    .map((file) =>
+      parseBenchReport(file, readFileSync(join(reportDir, file), "utf-8"))
+    );
+  const bench = checkBenchmark({
+    changed,
+    reports,
+    briefs: benchBriefs(root),
+    covers: (revision) => coversRelease(revision),
+  });
+  if (bench.problems.length > 0) {
+    fail(
+      "no benchmark score report clears this release",
+      benchmarkMessage(bench)
+    );
+  }
+  step(
+    bench.cleared
+      ? `the benchmark report ${bench.cleared} covers this release with no FAIL line`
+      : `no change since ${tag} needs a benchmark run`
+  );
+
+  // --- Does llms.txt name only what the release holds? ------------------------------
+
+  step("building the CLI to read its commands and flags");
+  run("pnpm", ["--filter", "saasaloy", "run", "build"], "pnpm build (cli)");
+  const cli = join(root, "packages", "cli", "dist", "index.js");
+  const help = (args: readonly string[]): string => {
+    const result = spawnSync(process.execPath, [cli, ...args, "--help"], {
+      cwd: root,
+      encoding: "utf-8",
+      env: { ...process.env, NO_COLOR: "1" },
+    });
+    if (result.error || result.status !== 0) {
+      fail(`saasaloy ${args.join(" ")} --help failed`, result.stderr);
+    }
+    return result.stdout;
+  };
+  const top = help([]);
+  const commands = [...cliSurface(top, {}).commands.keys()];
+  const surface = cliSurface(
+    top,
+    Object.fromEntries(commands.map((name) => [name, help([name])]))
+  );
+  const llmsProblems = llmsSurfaceProblems(
+    readFileSync(join(root, "llms.txt"), "utf-8"),
+    surface,
+    releaseSkills(root)
+  );
+  if (llmsProblems.length > 0) {
+    fail(
+      "llms.txt names what the release does not hold",
+      ...llmsProblems,
+      "Fix llms.txt, or ship what it names, then start the release again."
+    );
+  }
+  step("llms.txt names only skills, commands and flags the release holds");
 
   // --- The gate ----------------------------------------------------------------------
 

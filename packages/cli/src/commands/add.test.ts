@@ -993,9 +993,22 @@ describe(requestedModules, () => {
     );
   });
 
+  // ADR 0062: `@main` on a bare name reads the default registry on main.
+  it("reads several names at @main as one source on the default registry", () => {
+    const request = requestedModules(["waitlist@main", "admin@main"]);
+    expect(request.names).toStrictEqual(["waitlist", "admin"]);
+    expect(request.source).toStrictEqual({ module: "waitlist", ref: "main" });
+  });
+
+  it("refuses a name at @main beside a name at the release tag", () => {
+    expect(() => requestedModules(["waitlist@main", "admin"])).toThrow(
+      '"waitlist@main" reads mimukit/saasaloy@main and "admin" reads mimukit/saasaloy'
+    );
+  });
+
   it("refuses owner/repo with no module beside other names, with the usage line", () => {
     expect(() => requestedModules(["waitlist", "acme/kit"])).toThrow(
-      /"acme\/kit" names a registry and no module.*usage: `saasaloy add \[<module>\.\.\./
+      /"acme\/kit" names a registry and no module.*usage: `saasaloy add \[<module>\[@ref\]\.\.\./
     );
   });
 });
@@ -1549,7 +1562,7 @@ describe("runAdd — a descriptor's requires.saasaloy", () => {
     expect(out).toContain("widget");
     expect(out).toContain(">=999");
     expect(out).toContain(`${CLI_VERSION} is installed`);
-    expect(out).toContain("pnpm add --global saasaloy@latest");
+    expect(out).toContain("pnpm add --global 'saasaloy@>=999'");
     await expect(
       pathExists(join(project, "apps", "web", "widget.ts"))
     ).resolves.toBeFalsy();

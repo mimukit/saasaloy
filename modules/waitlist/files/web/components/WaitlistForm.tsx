@@ -1,3 +1,8 @@
+// `AppType` makes tsc read apps/api's whole source graph, which imports `cloudflare:workers`
+// and annotates a `D1Database`. The reference below gives this app those ambient types, as
+// `types` in apps/app's tsconfig does there. Types only: nothing of the Workers runtime
+// reaches this bundle.
+/// <reference types="@cloudflare/workers-types" />
 import { hc } from "hono/client";
 
 import type { AppType } from "@repo/api/client";

@@ -14,7 +14,7 @@ import { readEnvFile } from "./env-file.ts";
 import { SERVICES } from "./services.ts";
 import type { Service } from "./services.ts";
 import { setupServices } from "./setup.ts";
-import { EnvError } from "./sources.ts";
+import { EnvError, local } from "./sources.ts";
 import type { EnvSource } from "./sources.ts";
 
 // Every write lands in a temp directory, and the value source is a fake. Nothing here
@@ -174,6 +174,40 @@ describe("setupServices", () => {
         processEnv,
       }),
       /has no value for A, DATABASE_URL/
+    );
+    assert.equal(existsSync(path.join(root, "apps/api/.env")), false);
+  });
+
+  it("writes the example's defaults with the local source and no packages/env/.env", async () => {
+    const root = makeRoot(
+      ["# @services api", "A=local", "", "# Blank on purpose", "B=", ""].join(
+        "\n"
+      )
+    );
+    const report = await setupServices({
+      root,
+      environment: "dev",
+      services: [api],
+      source: local,
+      processEnv,
+    });
+    assert.equal(report.kind, "written");
+    const { values } = readEnvFile(path.join(root, "apps/api/.env"));
+    assert.equal(values.get("A"), "local");
+    assert.equal(values.get("B"), "");
+  });
+
+  it("names a key with no default when packages/env/.env is missing", async () => {
+    const root = makeRoot();
+    await assert.rejects(
+      setupServices({
+        root,
+        environment: "dev",
+        services: [api],
+        source: local,
+        processEnv,
+      }),
+      /api has no value for DATABASE_URL\./
     );
     assert.equal(existsSync(path.join(root, "apps/api/.env")), false);
   });

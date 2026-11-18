@@ -2,6 +2,11 @@
 // plugin's `writerOpts.finalizeContext` is a function, and it links each breaking item to
 // the update note its commit added (issue #298). The logic and its tests live in
 // `scripts/changelog-update-notes.ts`.
+//
+// npm publishes last (ADR 0062). The CLI reads the default registry at the tag of its own
+// version, so the tag must be on GitHub before npm offers that version to anyone.
+// `./release-npm-last.js` is release-it's npm plugin moved behind git and github; its
+// options go under the `npm` namespace exactly as the built-in plugin's did.
 
 import { finalizeUpdateNotes } from "../../scripts/changelog-update-notes.ts";
 
@@ -23,10 +28,6 @@ export default {
     release: true,
     releaseName: TAG,
   },
-  npm: {
-    publish: true,
-    allowSameVersion: true,
-  },
   hooks: {
     "before:init": ["pnpm -w run release:preflight"],
   },
@@ -40,5 +41,12 @@ export default {
         finalizeContext: (context) => finalizeUpdateNotes(context),
       },
     },
+    "./release-npm-last.js": [
+      "npm",
+      {
+        publish: true,
+        allowSameVersion: true,
+      },
+    ],
   },
 };

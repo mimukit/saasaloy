@@ -9,11 +9,13 @@ import {
 } from "node:fs";
 import path from "node:path";
 import {
+  BLOCK_ENV,
   blockPorts,
   checkHost,
   checkoutHash,
   chooseBlock,
   cookiePrefixFor,
+  forcedBlock,
   homeBlock,
   isPortListening,
   LOCAL_FILE,
@@ -27,6 +29,7 @@ import {
 } from "../src/dev-ports.ts";
 import type { DevPortsRecord, PortService } from "../src/dev-ports.ts";
 import { readEnvFile } from "../src/env-file.ts";
+import { projectRoot } from "../src/project-root.ts";
 import { LOCAL_VALUES, SERVICES } from "../src/services.ts";
 
 // `pnpm dev:ports [--host <name>] [--clean]`: give this checkout its own dev ports, and
@@ -35,7 +38,8 @@ import { LOCAL_VALUES, SERVICES } from "../src/services.ts";
 // The main checkout keeps the pinned ports and never probes. A linked worktree takes a
 // block hashed from its root, moved past any block another worktree records or a port of
 // which listens. `.devports.json` at the root records the result. `--clean` removes every
-// block and the record. `pnpm env:setup` runs this at the end.
+// block and the record. `pnpm env:setup` runs this at the end. `DEV_PORTS_BLOCK` in the
+// environment sets the block in any checkout, the main one included.
 
 function readOptions(args: string[]): { host?: string; clean: boolean } {
   let host: string | undefined;
@@ -59,8 +63,35 @@ function readOptions(args: string[]): { host?: string; clean: boolean } {
   return { host, clean };
 }
 
+/**
+ * Runs git and returns its output. Its stderr is captured, not printed: a project with no
+ * repository makes `isLinkedWorktree` fail on purpose, and a real failure still reaches
+ * the caller in the thrown error's message.
+ */
 function git(args: string[], cwd?: string): string {
-  return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+}
+
+/**
+ * Whether `root` is a linked git worktree. A project with no repository (`saasaloy init
+ * --no-git`) is not one, and takes the pinned ports like a main checkout.
+ */
+function isLinkedWorktree(root: string): boolean {
+  let dirs: string;
+  try {
+    dirs = git(
+      ["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"],
+      root
+    );
+  } catch {
+    return false;
+  }
+  const [gitDir, commonDir] = dirs.split("\n");
+  return path.resolve(gitDir ?? "") !== path.resolve(commonDir ?? "");
 }
 
 function readText(file: string): string | undefined {
@@ -141,13 +172,8 @@ async function assign(
       (readEnvFile(path.join(root, LOCAL_VALUES)).values.get("DEV_HOST") ||
         "localhost")
   );
-  const [gitDir, commonDir] = git([
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-dir",
-    "--git-common-dir",
-  ]).split("\n");
-  const linked = path.resolve(gitDir ?? "") !== path.resolve(commonDir ?? "");
+  const forced = forcedBlock(process.env[BLOCK_ENV]);
+  const linked = forced === undefined && isLinkedWorktree(root);
 
   // Fail on a devPort outside the two ranges before anything is probed or written.
   blockPorts(0, services);
@@ -155,7 +181,10 @@ async function assign(
   const recordFile = path.join(root, RECORD_FILE);
   let block: number | null = null;
   let cookiePrefix: string | null = null;
-  if (linked) {
+  if (forced !== undefined) {
+    block = forced;
+    cookiePrefix = cookiePrefixFor(checkoutHash(root));
+  } else if (linked) {
     const hash = checkoutHash(root);
     cookiePrefix = cookiePrefixFor(hash);
     block = await chooseBlock({
@@ -192,11 +221,15 @@ async function assign(
   };
   writeIfChanged(recordFile, `${JSON.stringify(record, null, 2)}\n`);
 
-  say(
-    linked
-      ? `Linked worktree: block ${block}, cookie prefix ${cookiePrefix}.`
-      : "Main checkout: the pinned ports."
-  );
+  if (forced === undefined) {
+    say(
+      linked
+        ? `Linked worktree: block ${block}, cookie prefix ${cookiePrefix}.`
+        : "Main checkout: the pinned ports."
+    );
+  } else {
+    say(`${BLOCK_ENV}: block ${block}, cookie prefix ${cookiePrefix}.`);
+  }
   const width = Math.max(...services.map((service) => service.name.length));
   for (const service of services) {
     const port = ports[service.name];
@@ -209,7 +242,7 @@ async function assign(
 
 try {
   const options = readOptions(process.argv.slice(2));
-  const root = git(["rev-parse", "--show-toplevel"]);
+  const root = projectRoot(import.meta.dirname);
   const services = portServices(SERVICES);
   if (options.clean) {
     removeBlocks(root, services);

@@ -170,7 +170,9 @@ export async function setup(project: TestProject): Promise<void> {
 export async function setupLocked(): Promise<void> {
   const context = loadContext(ROOT);
   const url = testDatabaseUrl(context);
+  // One worker: a file-level caller reads `<database>_test` itself, so it needs no copies.
   const project = {
+    config: { maxWorkers: 1 },
     provide: () => {
       // A file-level call has no project to hand the URL to; each file reads it itself.
     },

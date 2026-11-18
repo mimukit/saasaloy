@@ -527,9 +527,9 @@ One package is published — `packages/cli`, as [`saasaloy`](https://www.npmjs.c
 
 ### When to release
 
-After a merged pull request, if it changed `packages/cli/**` — source, templates, or schemas.
+After a merged pull request, if it changed `packages/cli/**` (source, templates, or schemas) or `modules/**`.
 
-- A PR that only touched `modules/**` needs **no release**. The CLI fetches the registry from this repo at run time, so a module change reaches users the moment it lands on `main`.
+- A PR that only touched `modules/**` needs a release too. The CLI reads the default registry at the tag of its own version ([ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)), so a module change reaches a plain `saasaloy add` at the next release. Until then it reaches only someone who asks for it with `saasaloy add <module>@main`. A module hotfix is a CLI patch release.
 - A PR whose commits are all `docs`, `chore`, or `refactor` gets **no release**. Nothing a user runs changed.
 
 Nothing enforces this. Read the diff and decide.
@@ -559,7 +559,14 @@ The changelog stays short. For each breaking item, `packages/cli/.release-it.js`
 
 ### Before you run it
 
-Run the agent benchmark when the release changes a base skill or the CLI's unattended contract (no-TTY refusals, `--json`, `env --from-file`): `node scripts/agent-bench.ts`. It runs an unattended agent from `scripts/agent-bench/brief.md` to an MVP in `.dev/bench/` and prints PASS or FAIL for each MVP bar line. Run it when no other dev server holds ports 3000 to 3003 or 4000, because the scorer starts the project's servers there. A FAIL line that was a PASS in the last report blocks the release until it is fixed or filed. Save the run as a research report beside `docs/research/0005-research-agent-bench-baseline-2026-10-24.md`.
+A release needs an agent benchmark run when its changes since the last tag touch a base skill, the unattended CLI contract or a module of the MVP set. The preflight reads `git diff --name-only <last tag>..HEAD` and refuses such a release unless a score report clears it. Any other release needs no report. `scripts/bench-gate.ts` holds each definition, and `scripts/release-preflight.test.ts` pins them:
+
+- A base skill is any file under `packages/cli/templates/base/_agents/skills/`.
+- The unattended CLI contract is the six files that hold the no-TTY refusals, the exit codes, the `--json` documents, `env --from-file` and `list --json` (ADR 0046): `packages/cli/src/lib/prompts.ts`, `tui.ts`, `exit.ts` and `json-output.ts`, and `packages/cli/src/commands/env.ts` and `list.ts`. Their tests do not count.
+- The MVP set is `MVP_MODULES` in `scripts/scaffold-check.ts`, the list the `scaffold` CI job builds. Any file under `modules/<name>/` of one of them counts.
+- A score report is a file in `docs/research/` named `NNNN-research-agent-bench-<slug>-YYYY-MM-DD.md`. It holds the `score.md` of one run for each folder under `scripts/agent-bench/briefs/` (Shelfnote, Prepline and Receiptbox). Each run must be in interview mode, and its `Revision:` must be an ancestor of HEAD with no gated change after it. The newest such report decides. It clears the release when it holds no FAIL line: no table cell that reads FAIL, and no line that starts with `FAIL`.
+
+To make the report, run each brief on this box: `node scripts/agent-bench.ts --interview --brief <name>`. The agent starts from one sentence (`scripts/agent-bench/opening.md`), and the harness answers each question of the interview from the brief's `answers.md`, one agent call per turn. The run folder goes to `~/.cache/saasaloy-bench/` (`--runs <dir>` moves it, never into the repo), and the run takes its own block of ports from 10000 up, so other dev servers may keep ports 3000 to 4004. `--agent "<command>"` swaps the agent; the default is `node scripts/agent-bench/agents/claude.ts`, which runs `claude -p` and passes on any extra flag, such as `--model`. Each `score.md` records the turns, the time and the cost the agent reported. Copy the three into one research report beside `docs/research/0005-research-agent-bench-baseline-2026-10-24.md`, and commit it on `main` before the release. The brief mode of the October baseline still runs without `--interview`: it hands the agent `brief.md` and `env`.
 
 ### Running it
 
@@ -572,6 +579,8 @@ pnpm release
 Both release scripts read `GITHUB_TOKEN` from your shell and fall back to `gh auth token`, so you do not pass it by hand. Without a token release-it does not stop; it falls back to a web release and puts the whole changelog in a `releases/new` query string, and GitHub answers 414. The preflight fails on an empty token for that reason.
 
 That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHANGELOG.md` written from the commits, commits it as `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, creates the GitHub Release, and publishes to npm. It prompts before each step.
+
+npm publishes last, after the push. A published CLI reads the modules at its own tag, so the tag must be on GitHub before npm offers the version to anyone. release-it's built-in order is npm first; `packages/cli/release-npm-last.js` moves its npm plugin behind git and github, and `scripts/release-order.test.ts` fails the gate when the push no longer comes first. See [ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md).
 
 To see the whole plan without doing any of it:
 
@@ -603,24 +612,25 @@ Before release-it writes anything it runs `pnpm release:preflight`, which:
 1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
 2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
 3. Fails if a breaking commit since the last tag adds no update note and carries no `Update-Note: none (<reason>)` footer, and prints each opt-out reason. See [Breaking changes need an update note](#breaking-changes-need-an-update-note).
-4. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
-5. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It checks the web app's development server and runs `pnpm lint` in each compatible combination of module choices, with testing on so the module tests reach that lint. Each database driver runs with each API key owner, and each project adds its driver first. The projects and the development server check run at the same time.
+4. Builds the CLI and fails if the root `llms.txt` names a skill, a command or a flag the release does not hold. The release is the npm package (the base skills under `packages/cli/templates/base/_agents/skills/`, and the commands and flags `saasaloy --help` and `saasaloy <command> --help` print) plus the registry at the release tag, which is this commit's `modules/`. `scripts/llms-txt.ts` reads the file.
+5. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as the `gate` job in `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree. The `scaffold` job there (`pnpm scaffold:check`) is left to step 6, whose projects hold its modules and more.
+6. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It runs `pnpm env:setup` and checks the web app's development server. Then it runs `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in each compatible combination of module choices, with testing on so the module tests run. Each database driver runs with each API key owner, and each project adds its driver first. A module that depends on a module the project's choice excludes stays out: `ecommerce` runs in the Postgres projects only. Before the checks each project runs `db:generate`, `db:setup` and `env:setup`, and fills each key with no default with a local value. The Postgres projects need Docker with the compose plugin, because `db:setup` starts their server with `docker compose`; the script stops it at the end. The projects and the development server check run at the same time.
 
-On a rerun after a transient failure you can skip step 4:
+On a rerun after a transient failure you can skip step 5:
 
 ```sh
 SAASALOY_RELEASE_SKIP_GATE=1 pnpm release
 ```
 
-Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2, 3 and 5 always run.
+Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2, 3, 4 and 6 always run.
 
 ### Modules that need a new CLI
 
-A module change reaches users the moment it merges, and a CLI change reaches them only at the next release, so the PR that teaches the CLI something a descriptor uses does three things in the same diff:
+A module change and a CLI change both reach a plain `saasaloy add` at the next release, because the CLI reads the modules at its own tag. A module on `main` still reaches anyone who reads `@main`, and a published CLI meets it there. So the PR that teaches the CLI something a descriptor uses does three things in the same diff:
 
 1. Bump `packages/cli/package.json` to the version that will ship the change, at least a **minor**.
 2. Set `requires.saasaloy` on every module that uses it to `>=` that version. See [Declaring the CLI a descriptor needs](#declaring-the-cli-a-descriptor-needs).
-3. Ask for a release in the PR body, because until it ships every published CLI refuses those modules.
+3. Ask for a release in the PR body, because until it ships every published CLI refuses those modules at `@main`, and no CLI reads them by default.
 
 `registry-floors.test.ts` fails the gate when step 1 or 2 is missing. Nothing enforces step 3, so release soon after the merge.
 
@@ -634,7 +644,7 @@ Replace `0.6.0` with the version in `packages/cli/package.json`. The explicit ve
 
 ### If it fails after the push
 
-release-it has no rollback. Once the commit, tag, and push exist, the version is spent.
+release-it has no rollback. Once the commit, tag, and push exist, the version is spent. npm publishes last, so a failed publish leaves a tag with no npm version. That is safe: no installed CLI names the tag until npm offers it.
 
 1. **Never rerun `pnpm release` for the same version**, and never rewrite pushed `main` history.
 2. Fix whatever failed.

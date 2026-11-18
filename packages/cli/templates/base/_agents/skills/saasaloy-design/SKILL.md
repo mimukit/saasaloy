@@ -127,7 +127,7 @@ Read `docs/product-brief.md` first. When its frontmatter holds `autonomy: afk`, 
 
 If the brief is absent, offer to run `saasaloy-setup`:
 
-> There's no `docs/product-brief.md`, so I'd be picking a theme for a product I know nothing about. `/saasaloy-setup` asks ten questions and leaves the brief behind; then this picks up where it stops. Want me to run it now?
+> There's no `docs/product-brief.md`, so I'd be picking a theme for a product I know nothing about. `/saasaloy-setup` interviews you once and leaves the brief behind; then this picks up where it stops. Want me to run it now?
 
 Invoke that skill rather than reading its files. Do **not** improvise your own interview, and do not write `docs/product-brief.md` yourself. `saasaloy-setup` owns the brief and its format, and two skills asking overlapping questions is how an owner answers the same thing twice.
 

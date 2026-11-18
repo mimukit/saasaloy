@@ -18,17 +18,29 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+  BASE_SKILLS,
+  benchBriefs,
+  benchmarkMessage,
+  checkBenchmark,
   checkUpdateNotes,
+  cliSurface,
   GATE_SCRIPTS,
+  gatedPaths,
   hasGitHubToken,
   isBreakingCommit,
+  llmsSurfaceProblems,
   missingTokenMessage,
   missingUpdateNotesMessage,
   optOutMessage,
+  parseBenchReport,
+  releaseSkills,
+  REPORT_NAME,
   shouldSkipGate,
   staleMainMessage,
+  UNATTENDED_CLI_CONTRACT,
   updateNoteOptOut,
 } from "./release-preflight.ts";
+import { MVP_MODULES } from "./scaffold-check.ts";
 import type { Git } from "./release-preflight.ts";
 
 describe("shouldSkipGate", () => {
@@ -62,7 +74,11 @@ describe("shouldSkipGate", () => {
  * points back here for that reason.
  */
 function gateStepsInCi(yaml: string): string[] {
-  return [...yaml.matchAll(/^\s*- run: pnpm ([\w:]+)(?: .*)?$/gm)]
+  // The gate job only: from its `gate:` key to the next job key at the same indent. The
+  // `scaffold` job runs a script the preflight leaves to `release:smoke`.
+  const gate =
+    /^ {2}gate:\n[\s\S]*?(?=^ {2}[\w-]+:\n|(?![\s\S]))/m.exec(yaml)?.[0] ?? "";
+  return [...gate.matchAll(/^\s*- run: pnpm ([\w:]+)(?: .*)?$/gm)]
     .map((match) => match[1]!)
     .filter((script) => script !== "install");
 }
@@ -319,5 +335,315 @@ describe("optOutMessage", () => {
       }),
       "aaaaaaa feat!: x: no update note (no project impact)"
     );
+  });
+});
+
+// ADR 0062: `llms.txt` is the first file an agent reads, and it must not name a skill, a
+// command or a flag the release lacks. The release is the npm package (the base skills
+// under its template, and the commands and flags the built CLI's help prints) plus the
+// registry at the release tag, which is this commit's `modules/`.
+describe("llmsSurfaceProblems", () => {
+  const TOP_HELP = [
+    "Usage: saasaloy <command> [options]",
+    "",
+    "Commands:",
+    "  init     scaffold a new Saasaloy project",
+    "  add      apply a module",
+    "  list     list the modules a registry offers",
+    "",
+    "Options:",
+    "  -h, --help     show this help, or a command's own usage",
+    "  -v, --version  print the installed saasaloy version",
+    "",
+  ].join("\n");
+  const surface = cliSurface(TOP_HELP, {
+    add: "Flags:\n  -y, --yes        skip the prompt\n  --with <module>  pick one\n  -h, --help       show this help\n",
+    init: "Flags:\n  --force           scaffold anyway\n  -y, --yes         install\n  --testing=<mode>  the mode\n  -h, --help        show this help\n",
+    list: "Flags:\n  --json  print JSON\n  -h, --help  show this help\n",
+  });
+  const skills = new Set(["saasaloy-build", "saasaloy-setup"]);
+  const BASE =
+    "https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills";
+
+  it("reads the commands and flags off the help text", () => {
+    assert.deepEqual([...surface.commands.keys()], ["init", "add", "list"]);
+    assert.deepEqual(
+      [...(surface.commands.get("init") ?? [])],
+      ["--force", "-y", "--yes", "--testing", "-h", "--help"]
+    );
+    assert.ok(surface.globalFlags.has("--version"));
+  });
+
+  it("passes a file that names only what the release holds", () => {
+    const markdown = [
+      "Run `npx saasaloy@latest init . --force --yes --testing=tests-after`, then `saasaloy add <module>@main` and `saasaloy list --json`.",
+      "`--yes` runs install. Read `.agents/skills/saasaloy-build/SKILL.md`, then the `saasaloy-setup` skill.",
+      `- [saasaloy-build](${BASE}/saasaloy-build/SKILL.md): the build.`,
+    ].join("\n");
+    assert.deepEqual(llmsSurfaceProblems(markdown, surface, skills), []);
+  });
+
+  it("fails a skill the release lacks, by link, by path and by name", () => {
+    const markdown = [
+      `- [saasaloy-gone](${BASE}/saasaloy-gone/SKILL.md): gone.`,
+      "Read `.agents/skills/saasaloy-old/SKILL.md` and the `saasaloy-missing` skill.",
+    ].join("\n");
+    assert.deepEqual(llmsSurfaceProblems(markdown, surface, skills), [
+      'the skill "saasaloy-gone" is not in the release',
+      'the skill "saasaloy-old" is not in the release',
+      'the skill "saasaloy-missing" is not in the release',
+    ]);
+  });
+
+  it("fails a command the CLI does not register", () => {
+    assert.deepEqual(
+      llmsSurfaceProblems("Run `saasaloy build --yes`.", surface, skills),
+      ['the command "saasaloy build" is not in the CLI']
+    );
+  });
+
+  it("fails a flag the command does not take, and a bare flag no command takes", () => {
+    assert.deepEqual(
+      llmsSurfaceProblems(
+        "Run `saasaloy list --all` and pass `--quiet`.",
+        surface,
+        skills
+      ),
+      [
+        'the flag "--all" is not a flag of "saasaloy list"',
+        'the flag "--quiet" is not a flag of any command',
+      ]
+    );
+  });
+
+  it("holds the real llms.txt to the skills this commit ships", async () => {
+    const root = join(import.meta.dirname, "..");
+    const markdown = await readFile(join(root, "llms.txt"), "utf-8");
+    const problems = llmsSurfaceProblems(
+      markdown,
+      { commands: new Map(), globalFlags: new Set() },
+      releaseSkills(root)
+    ).filter((problem) => problem.startsWith("the skill"));
+    assert.deepEqual(problems, []);
+  });
+});
+
+// Plan 0109, "Which releases need a run": a release that changes a base skill, the
+// unattended CLI contract or a module of the MVP set needs a score report for the three
+// benchmark briefs with no FAIL line. Any other release needs none.
+describe("gatedPaths", () => {
+  it("names a base skill, a contract file and a module of the MVP set", () => {
+    assert.deepEqual(
+      gatedPaths([
+        `${BASE_SKILLS}saasaloy-build/SKILL.md`,
+        "packages/cli/src/commands/env.ts",
+        "modules/auth/files/src/auth.ts",
+        "modules/database-d1/registry-item.json",
+      ]),
+      [
+        `${BASE_SKILLS}saasaloy-build/SKILL.md`,
+        "packages/cli/src/commands/env.ts",
+        "modules/auth/files/src/auth.ts",
+        "modules/database-d1/registry-item.json",
+      ]
+    );
+  });
+
+  it("passes over docs, other CLI files, other modules and a contract file's test", () => {
+    assert.deepEqual(
+      gatedPaths([
+        "docs/wiki/getting-started.md",
+        "packages/cli/src/commands/add.ts",
+        "packages/cli/src/commands/env.test.ts",
+        "modules/teams/files/src/teams.ts",
+        "modules/database-postgres/registry-item.json",
+        "modules/authx/README.md",
+        "packages/cli/templates/base/AGENTS.md",
+      ]),
+      []
+    );
+  });
+
+  it("takes the MVP set from scaffold-check and the contract from ADR 0046's files", () => {
+    assert.ok(MVP_MODULES.length > 0);
+    for (const name of MVP_MODULES) {
+      assert.deepEqual(gatedPaths([`modules/${name}/x`]), [
+        `modules/${name}/x`,
+      ]);
+    }
+    assert.deepEqual(
+      [...UNATTENDED_CLI_CONTRACT],
+      [
+        "packages/cli/src/lib/prompts.ts",
+        "packages/cli/src/lib/tui.ts",
+        "packages/cli/src/lib/exit.ts",
+        "packages/cli/src/lib/json-output.ts",
+        "packages/cli/src/commands/env.ts",
+        "packages/cli/src/commands/list.ts",
+      ]
+    );
+  });
+});
+
+describe("benchBriefs", () => {
+  it("lists the three brief folders of the benchmark", () => {
+    assert.deepEqual(benchBriefs(join(import.meta.dirname, "..")), [
+      "prepline",
+      "receiptbox",
+      "shelfnote",
+    ]);
+  });
+});
+
+const REV = "0123456789abcdef0123456789abcdef01234567";
+const score = (brief: string, rows: string, mode = "interview", rev = REV) =>
+  [
+    `# Agent benchmark: ${brief}`,
+    "",
+    `Brief: ${brief}`,
+    `Mode: ${mode}`,
+    `Revision: ${rev}`,
+    "",
+    "| #  | MVP bar line | Result | Detail |",
+    "| -- | ------------ | ------ | ------ |",
+    rows,
+    "",
+  ].join("\n");
+const PASS_ROW = "| 1  | Landing      | PASS   | ok     |";
+const FAIL_ROW = "| 4  | Entity       | FAIL   | no app |";
+
+describe("REPORT_NAME and parseBenchReport", () => {
+  it("matches a research report of the benchmark only", () => {
+    assert.match("0012-research-agent-bench-v0-10-2026-11-20.md", REPORT_NAME);
+    assert.doesNotMatch(
+      "0011-research-agent-native-readiness-2026-11-17.md",
+      REPORT_NAME
+    );
+  });
+
+  it("reads each brief's mode and revision, and each FAIL line", () => {
+    const report = parseBenchReport(
+      "0012-research-agent-bench-x-2026-11-20.md",
+      `# Report\n\n${score("shelfnote", PASS_ROW)}\n${score("prepline", FAIL_ROW, "brief")}\nFAIL 4: stop point: x\n`
+    );
+    assert.deepEqual(report.briefs, [
+      { brief: "shelfnote", mode: "interview", revision: REV },
+      { brief: "prepline", mode: "brief", revision: REV },
+    ]);
+    assert.deepEqual(report.fails, [FAIL_ROW, "FAIL 4: stop point: x"]);
+  });
+});
+
+describe("checkBenchmark", () => {
+  const briefs = ["prepline", "receiptbox", "shelfnote"];
+  const all = (rows: string) =>
+    briefs.map((brief) => score(brief, rows)).join("\n");
+  const report = (file: string, text: string) => parseBenchReport(file, text);
+  const covers = (revision: string) => revision === REV;
+  const SKILL = `${BASE_SKILLS}saasaloy-setup/SKILL.md`;
+
+  it("passes with no report when no gated path changed", () => {
+    const result = checkBenchmark({
+      changed: ["docs/wiki/reference.md", "packages/cli/src/commands/add.ts"],
+      reports: [],
+      briefs,
+      covers,
+    });
+    assert.deepEqual(result.needed, []);
+    assert.deepEqual(result.problems, []);
+  });
+
+  it("refuses a gated change with no report", () => {
+    const result = checkBenchmark({
+      changed: [SKILL],
+      reports: [],
+      briefs,
+      covers,
+    });
+    assert.deepEqual(result.needed, [SKILL]);
+    assert.match(result.problems.join("\n"), /no score report/);
+    assert.match(benchmarkMessage(result), /saasaloy-setup\/SKILL\.md/);
+  });
+
+  it("refuses a report that holds a FAIL line", () => {
+    const result = checkBenchmark({
+      changed: [SKILL],
+      reports: [
+        report("0012-research-agent-bench-a-2026-11-20.md", all(FAIL_ROW)),
+      ],
+      briefs,
+      covers,
+    });
+    assert.match(result.problems.join("\n"), /FAIL/);
+  });
+
+  it("passes a report for the three briefs with no FAIL line", () => {
+    const result = checkBenchmark({
+      changed: [SKILL],
+      reports: [
+        report("0012-research-agent-bench-a-2026-11-20.md", all(PASS_ROW)),
+      ],
+      briefs,
+      covers,
+    });
+    assert.deepEqual(result.problems, []);
+    assert.equal(result.cleared, "0012-research-agent-bench-a-2026-11-20.md");
+  });
+
+  it("refuses a report that misses a brief, ran brief mode, or scored an older revision", () => {
+    const missing = checkBenchmark({
+      changed: [SKILL],
+      reports: [
+        report(
+          "0012-research-agent-bench-a-2026-11-20.md",
+          score("shelfnote", PASS_ROW)
+        ),
+      ],
+      briefs,
+      covers,
+    });
+    assert.match(
+      missing.problems.join("\n"),
+      /no score for the brief prepline/
+    );
+    const briefMode = checkBenchmark({
+      changed: [SKILL],
+      reports: [
+        report(
+          "0012-research-agent-bench-a-2026-11-20.md",
+          briefs.map((b) => score(b, PASS_ROW, "brief")).join("\n")
+        ),
+      ],
+      briefs,
+      covers,
+    });
+    assert.match(briefMode.problems.join("\n"), /brief mode, not interview/);
+    const old = checkBenchmark({
+      changed: [SKILL],
+      reports: [
+        report(
+          "0012-research-agent-bench-a-2026-11-20.md",
+          briefs
+            .map((b) => score(b, PASS_ROW, "interview", "abcdef1"))
+            .join("\n")
+        ),
+      ],
+      briefs,
+      covers,
+    });
+    assert.match(old.problems.join("\n"), /abcdef1/);
+  });
+
+  it("takes the newest report that covers this release", () => {
+    const result = checkBenchmark({
+      changed: [SKILL],
+      reports: [
+        report("0012-research-agent-bench-a-2026-11-20.md", all(PASS_ROW)),
+        report("0013-research-agent-bench-b-2026-11-21.md", all(FAIL_ROW)),
+      ],
+      briefs,
+      covers,
+    });
+    assert.match(result.problems.join("\n"), /0013-research-agent-bench-b/);
   });
 });

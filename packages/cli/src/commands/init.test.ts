@@ -62,6 +62,12 @@ function capture(): { lines: string[]; restore: () => void } {
   };
 }
 
+/** The body of the "Next steps" note in `init`'s output, up to the closing line. */
+function nextSteps(out: string): string {
+  const start = out.lastIndexOf("Next steps");
+  return start === -1 ? "" : out.slice(start, out.indexOf("Created", start));
+}
+
 async function run(argv: string[]): Promise<{ code: number; out: string }> {
   const captured = capture();
   try {
@@ -599,5 +605,188 @@ describe("runInit — no terminal (#223)", () => {
     await expect(
       pathExists(join(dir, "install-fails", "package.json"))
     ).resolves.toBeTruthy();
+  });
+});
+
+// Plan 0109: `init` commits the scaffold on `main`, so a build branch has a base. Each test
+// points git at its own global config, so the machine's identity never leaks in.
+describe("runInit — the first commit", () => {
+  const ORIGINAL_ENV = { ...process.env };
+  const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
+  const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
+  let home: string;
+  let bin: string;
+
+  beforeAll(async () => {
+    home = await mkdtemp(join(tmpdir(), "saasaloy-init-home-"));
+    bin = await mkdtemp(join(tmpdir(), "saasaloy-init-commit-bin-"));
+    await writeFile(
+      join(home, "with-identity"),
+      "[user]\n\tname = Init Test\n\temail = init@example.test\n",
+      "utf-8"
+    );
+    await writeFile(join(home, "no-identity"), "", "utf-8");
+  });
+
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+    process.stdin.isTTY = ORIGINAL_STDIN_TTY;
+    process.stdout.isTTY = ORIGINAL_STDOUT_TTY;
+  });
+
+  afterAll(async () => {
+    await rm(home, { recursive: true, force: true });
+    await rm(bin, { recursive: true, force: true });
+  });
+
+  function useGitConfig(file: "with-identity" | "no-identity"): void {
+    for (const key of [
+      "GIT_AUTHOR_NAME",
+      "GIT_AUTHOR_EMAIL",
+      "GIT_COMMITTER_NAME",
+      "GIT_COMMITTER_EMAIL",
+    ]) {
+      delete process.env[key];
+    }
+    process.env.GIT_CONFIG_GLOBAL = join(home, file);
+    process.env.GIT_CONFIG_NOSYSTEM = "1";
+  }
+
+  function git(cwd: string, args: string[]): string {
+    return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
+  }
+
+  // A `pnpm` that logs each call's arguments and fails the one named in `failOn`.
+  async function fakePnpm(failOn?: string): Promise<string> {
+    const log = join(bin, "calls.log");
+    await rm(log, { force: true });
+    await writeFile(
+      join(bin, "pnpm"),
+      `#!/bin/sh\necho "$*" >> "${log}"\nif [ "$1" = "${failOn ?? "-"}" ]; then echo "ERR_FAKE $1 said no"; exit 1; fi\nexit 0\n`,
+      "utf-8"
+    );
+    await chmod(join(bin, "pnpm"), 0o755);
+    process.env.PATH = `${bin}${delimiter}${ORIGINAL_ENV.PATH ?? ""}`;
+    return log;
+  }
+
+  it("commits the scaffold on main as chore(repo): initial commit", async () => {
+    useGitConfig("with-identity");
+    const { code } = await run(["first-commit", "--no-install"]);
+    const target = join(dir, "first-commit");
+
+    expect(code).toBe(0);
+    expect(git(target, ["log", "--format=%s", "main"])).toBe(
+      "chore(repo): initial commit"
+    );
+    expect(git(target, ["symbolic-ref", "--short", "HEAD"])).toBe("main");
+    expect(git(target, ["status", "--porcelain"])).toBe("");
+  });
+
+  it("makes no commit under --no-git", async () => {
+    useGitConfig("with-identity");
+    const { code } = await run(["no-git-commit", "--no-install", "--no-git"]);
+
+    expect(code).toBe(0);
+    await expect(
+      pathExists(join(dir, "no-git-commit", ".git"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("warns and skips the commit with no git identity", async () => {
+    useGitConfig("no-identity");
+    const { code, out } = await run(["no-identity", "--no-install"]);
+    const target = join(dir, "no-identity");
+
+    expect(code).toBe(0);
+    expect(out).toContain("no git identity");
+    expect(out).toContain("chore(repo): initial commit");
+    await expect(pathExists(join(target, ".git"))).resolves.toBeTruthy();
+    expect(() => git(target, ["rev-parse", "--verify", "HEAD"])).toThrow(
+      /Command failed/
+    );
+  });
+
+  it("runs pnpm env:setup after the install, then commits", async () => {
+    useGitConfig("with-identity");
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+    const log = await fakePnpm();
+    const { code, out } = await run(["env-after-install", "--yes"]);
+    const target = join(dir, "env-after-install");
+
+    expect(code).toBe(0);
+    expect(out).toContain("pnpm env:setup");
+    await expect(readFile(log, "utf-8")).resolves.toBe("install\nenv:setup\n");
+    expect(git(target, ["log", "--format=%s", "main"])).toBe(
+      "chore(repo): initial commit"
+    );
+  });
+
+  it("warns, and still exits 0 and commits, when pnpm env:setup fails", async () => {
+    useGitConfig("with-identity");
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+    await fakePnpm("env:setup");
+    const { code, out } = await run(["env-fails", "--yes"]);
+    const target = join(dir, "env-fails");
+
+    expect(code).toBe(0);
+    expect(out).toContain("ERR_FAKE env:setup said no");
+    expect(git(target, ["log", "--format=%s", "main"])).toBe(
+      "chore(repo): initial commit"
+    );
+    expect(nextSteps(out)).toContain("pnpm env:setup");
+  });
+
+  it("lists only the interview once the install and env:setup ran", async () => {
+    useGitConfig("with-identity");
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+    await fakePnpm();
+    const { code, out } = await run(["steps-after-install", "--yes"]);
+    const steps = nextSteps(out);
+
+    expect(code).toBe(0);
+    expect(steps).toContain("/saasaloy-setup");
+    expect(steps).not.toContain("pnpm install");
+    expect(steps).not.toContain("pnpm env:setup");
+  });
+});
+
+// Plan 0109: the next steps give one path, `init`, the interview, the build, so a person
+// who follows them never starts a dev server with no env files.
+describe("runInit — the next steps (plan 0109)", () => {
+  let out: string;
+
+  beforeAll(async () => {
+    ({ out } = await run(["next-steps-app", "--no-install", "--no-git"]));
+  });
+
+  afterAll(async () => {
+    await rm(join(dir, "next-steps-app"), { recursive: true, force: true });
+  });
+
+  it("installs, writes the env files, then runs the interview, in that order", () => {
+    const steps = nextSteps(out);
+    const install = steps.indexOf("pnpm install");
+    const env = steps.indexOf("pnpm env:setup");
+    const setup = steps.indexOf("/saasaloy-setup");
+
+    expect(install).toBeGreaterThan(-1);
+    expect(env).toBeGreaterThan(install);
+    expect(setup).toBeGreaterThan(env);
+  });
+
+  it("names the build as what the interview starts", () => {
+    expect(nextSteps(out)).toMatch(/\/saasaloy-setup[^\n]*starts the build/);
+  });
+
+  it("offers no second path", () => {
+    const steps = nextSteps(out);
+
+    expect(steps).not.toContain("pnpm dev");
+    expect(steps).not.toContain("/saasaloy-landing-copy");
+    expect(steps).not.toContain("/saasaloy-build ");
   });
 });

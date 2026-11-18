@@ -1,8 +1,6 @@
 # A bad descriptor reached `main`
 
-The repo is the registry, so there is no build, no publish and no cache between a merge
-and a downstream install. The moment a broken `modules/<name>/registry-item.json` lands on
-`main`, it is what unpinned installs resolve. Treat it as an outage, not a stale artifact.
+The repo is the registry, so there is no build, no publish and no cache between a merge and a downstream install that reads `main`. A released CLI reads the default registry at the tag of its own version ([ADR 0062](../../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)), so a broken `modules/<name>/registry-item.json` on `main` reaches only an install that asks for `@main`, a development build pointed at `main`, and the next release cut from that commit. Treat it as an outage for those readers, and fix it before the next release.
 
 ## Symptoms
 
@@ -27,13 +25,12 @@ in that project's `saasaloy-lock.json`, for the same `owner/repo`, with no expli
 on the command line. That install rewrites the coordinate to the SHA the lock recorded and
 never sees `main`'s tip.
 
-**Not protected.** Everything else, which is most real traffic:
+**Also protected.** A plain `saasaloy add <name>` or `saasaloy list` with a released CLI. It reads the tag of its own version, and a tag never moves, so a break on `main` does not reach it. A break inside a released tag is not fixed by a revert: it needs a new patch release.
 
-- a **first-time** `saasaloy add <name>` in any project. There is no lock entry, so the
-  default branch resolves to its current tip.
-- any add carrying an explicit `@ref`, including one that names `main`. An explicit ref
-  skips the lock pin entirely.
-- `saasaloy list`, which never reads a lockfile.
+**Not protected.** Everything that reads `main`:
+
+- any add or list carrying `@main`, or an explicit `@ref` that names a branch. An explicit ref skips the lock pin entirely.
+- `saasaloy update <name> --ref main`.
 
 One more thing to know before you rely on `list` to detect this: `list` builds its names
 from the repo's git tree and reads no descriptors, so **a broken module still appears in
@@ -109,8 +106,8 @@ Anyone who hit this needs one of two things:
 
 ## Why there is no faster lever
 
-Merging is publishing
-([ADR 0012](../../adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md)),
+Merging publishes to every `@main` reader
+([ADR 0012](../../adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md), [ADR 0062](../../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)),
 and CI does not validate descriptors. `.github/workflows/ci.yml` runs `pnpm lint`,
 `pnpm typecheck`, `pnpm test` and `pnpm verify:content` on every push and pull request, and
 no step calls `saasaloy doctor` over `modules/`. Review is still the only thing between a

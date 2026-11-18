@@ -191,6 +191,10 @@
           "target": "scripts/lib/seed.ts"
         },
         {
+          "path": "files/scripts/lib/migrations.ts",
+          "target": "scripts/lib/migrations.ts"
+        },
+        {
           "path": "files/scripts/migrate-prod.ts",
           "target": "scripts/migrate-prod.ts"
         },

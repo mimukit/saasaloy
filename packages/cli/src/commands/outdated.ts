@@ -11,7 +11,11 @@ import {
   pendingNoteLines,
 } from "../lib/pending-notes.js";
 import { findProjectRoot } from "../lib/project.js";
-import { REGISTRY_ENV, RemoteRegistrySource } from "../lib/registry.js";
+import {
+  REGISTRY_ENV,
+  releaseTag,
+  RemoteRegistrySource,
+} from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
 import { loadConfig } from "../lib/saasaloy-config.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
@@ -260,11 +264,12 @@ export async function runOutdated(argv: string[]): Promise<number> {
     // The base first: it ships with the CLI, so its comparison needs no network and no
     // registry, and it is the one row every project has.
     const templateDir = await baseTemplateDir();
+    const runningVersion = await readVersion();
     const baseRow = compareBase({
       lock,
       manifest,
       runningHash: await templateHash(templateDir),
-      runningVersion: await readVersion(),
+      runningVersion,
       missingTargets: await missingBaseTargets(root, manifest, templateDir),
     });
 
@@ -295,6 +300,8 @@ export async function runOutdated(argv: string[]): Promise<number> {
         installed: config.installed,
         lock,
         registryOverride,
+        // The same target `update` moves to (ADR 0062): this CLI's release tag.
+        releaseRef: releaseTag(runningVersion),
         resolveRef: (_name, entry, ref) =>
           remote(entry.source, ref).resolveSha(),
       });

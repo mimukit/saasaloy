@@ -29,8 +29,12 @@ function fakeServer(configRoot: string) {
 
 function start(server: ReturnType<typeof fakeServer>): void {
   const plugin = restartOnLockfile();
-  const hook = plugin.configureServer as (server: unknown) => void;
-  hook(server);
+  const hook = plugin.configureServer;
+  if (typeof hook !== "function") {
+    throw new TypeError("restartOnLockfile() has no configureServer function.");
+  }
+  // The stand-in holds only the parts of a Vite dev server the plugin reads.
+  Reflect.apply(hook, undefined, [server]);
 }
 
 describe(findLockfile, () => {

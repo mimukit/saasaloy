@@ -3,7 +3,7 @@ import {
   describeInvalidDescriptor,
   detectCliMismatches,
   formatCliMismatches,
-  UPGRADE_COMMAND,
+  upgradeCommand,
 } from "./cli-requires.js";
 import type { LoadedModule } from "./registry.js";
 import type { Graph } from "./resolve.js";
@@ -130,7 +130,21 @@ describe(formatCliMismatches, () => {
     expect(message).toContain("api");
     expect(message).toContain(">=0.3");
     expect(message).toContain("0.0.0");
-    expect(message).toContain(UPGRADE_COMMAND);
+    expect(message).toContain(upgradeCommand(">=0.3"));
+  });
+
+  // Research 0011: `saasaloy@latest` reinstalled 0.8.0 under a `>=0.9.0` floor. The
+  // command names the floor, so it installs a version that meets it or fails by name.
+  it("prints a command that installs a version inside the floor, never @latest", () => {
+    const message = formatCliMismatches(
+      [{ declaredBy: "admin", range: ">=0.9.0", reason: "unsatisfied" }],
+      "admin",
+      "0.8.0"
+    );
+    expect(message).toContain(
+      "Upgrade with `pnpm add --global 'saasaloy@>=0.9.0'`."
+    );
+    expect(message).not.toContain("saasaloy@latest");
   });
 
   it("names the offending module in the chain when it is transitive", () => {
@@ -150,7 +164,7 @@ describe(formatCliMismatches, () => {
       "unknown"
     );
     expect(message).toContain("could not be read");
-    expect(message).toContain(UPGRADE_COMMAND);
+    expect(message).toContain(upgradeCommand("*"));
   });
 
   it("says a range is unparseable rather than blaming the CLI version", () => {
@@ -160,7 +174,7 @@ describe(formatCliMismatches, () => {
       "1.0.0"
     );
     expect(message).toContain("isn't a semver range");
-    expect(message).not.toContain(UPGRADE_COMMAND);
+    expect(message).not.toContain("pnpm add --global");
   });
 
   it("lists every mismatch under one heading", () => {
@@ -225,7 +239,7 @@ describe(describeInvalidDescriptor, () => {
       raw,
     });
     expect(message).toBe(
-      `Module "api" needs saasaloy >=0.6.0, and 0.5.2 is installed. Upgrade with \`${UPGRADE_COMMAND}\`.`
+      "Module \"api\" needs saasaloy >=0.6.0, and 0.5.2 is installed. Upgrade with `pnpm add --global 'saasaloy@>=0.6.0'`."
     );
   });
 
@@ -262,7 +276,7 @@ describe(describeInvalidDescriptor, () => {
     });
     expect(message).toMatch(/invalid descriptor/);
     expect(message).toContain(
-      `It may use a field newer than saasaloy 0.5.2. Upgrade with \`${UPGRADE_COMMAND}\` and retry.`
+      "It may use a field newer than saasaloy 0.5.2. Upgrade with `pnpm add --global 'saasaloy@>0.5.2'` and retry."
     );
   });
 

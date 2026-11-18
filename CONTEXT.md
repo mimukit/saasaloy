@@ -317,7 +317,7 @@ _Avoid: registry server, registry service._
 The built-in registry source (`mimukit/saasaloy`) a bare `saasaloy add <name>` resolves against. An explicit `owner/repo/name` [module coordinate](#module-coordinate) targets a third-party registry instead.
 
 ### Module coordinate
-How a module is addressed on the `saasaloy add` command line: `name` (default registry) | `owner/repo/name` | `owner/repo@ref/name` (pinned branch/tag/SHA) | `owner/repo` (no module ⇒ interactive picker over that repo).
+How a module is addressed on the `saasaloy add` command line: `name` (default registry at the release tag of the CLI that runs, ADR 0062) | `name@ref` (default registry at a branch/tag/SHA, such as `@main`) | `owner/repo/name` | `owner/repo@ref/name` (pinned branch/tag/SHA) | `owner/repo` (no module ⇒ interactive picker over that repo).
 
 ### `registry-item.json`
 A module descriptor, shadcn-shaped: `files[]` (path → alias target), `dependsOn[]`, `dependencies[]` (npm), `patches`, and an `agent` block.
@@ -410,11 +410,15 @@ A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasalo
 _Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`. Avoid an unprefixed module skill name (`api` → use `saasaloy-api`)._
 
 ### Product brief
-`docs/product-brief.md` in a generated project: what the product is, for whom, and in which language, written once through the attended `saasaloy-setup` interview. Every other skill reads it instead of asking the owner again, and an unattended run requires a complete one.
-_Avoid: PRD, spec._
+`docs/product-brief.md` in a generated project: what the product is, for whom, and in which language, written by the agent from the owner's answers in the `saasaloy-setup` interview. Its frontmatter holds the run settings, `autonomy` and `deploy`. Every other skill reads it instead of asking the owner again, and an unattended run requires a complete one; an answer the owner accepted at the read-back as thin is tagged `weak-accepted:` and counts as filled.
+_Avoid: PRD._
+
+### Product spec
+`docs/product-spec.md` in a generated project: the product part of the `saasaloy-setup` interview. It holds the module picks, the database driver, one table for each entity (its fields, who may see it, its actions and its screens) in the owner's order, the wishes that are not in this build, and the steps left for the owner. Its headings are fixed by `product-spec-template.md` beside the setup skill. `saasaloy-build` makes one Feature pass and one commit for each entity.
+_Avoid: PRD, data model._
 
 ### Unattended run
-A build in which an agent works from a complete product brief that carries `autonomy: afk` in its frontmatter, and asks no question after it starts. It commits once per stage on `build/mvp`, never pushes, and records what it could not do in the build log ([ADR 0046](docs/adr/0046-adr-the-cli-runs-unattended-by-refusing-never-by-guessing-2026-10-21.md) is the CLI half).
+A build in which an agent works from a complete product brief that carries `autonomy: afk` in its frontmatter, and asks no question after it starts. The owner sets the flag by confirming the interview's read-back, and the build starts in the same session. It commits once per stage on `build/mvp`, never pushes, and records what it could not do in the build log ([ADR 0046](docs/adr/0046-adr-the-cli-runs-unattended-by-refusing-never-by-guessing-2026-10-21.md) is the CLI half).
 _Avoid: AFK mode, autopilot. `afk` is only the field value._
 
 ### Build log
@@ -422,7 +426,7 @@ _Avoid: AFK mode, autopilot. `afk` is only the field value._
 _Avoid: progress file, stop report._
 
 ### MVP bar
-The fixed list of checks an unattended run must pass to count as a finished local MVP, scored by the agent benchmark (`scripts/agent-bench.ts`). Plan 0074 defines the list.
+The fixed list of checks an unattended run must pass to count as a finished local MVP, scored by the agent benchmark (`scripts/agent-bench.ts`). Plan 0074 defines the list, and plan 0109 adds three lines: the interview, each entity of the spec, and the preview.
 _Avoid: done criteria._
 
 ## Key-value, limits & flags

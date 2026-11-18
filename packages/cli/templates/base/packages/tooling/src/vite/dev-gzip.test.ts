@@ -1,7 +1,6 @@
 import { once } from "node:events";
-import { createServer, request } from "node:http";
-import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import type { AddressInfo } from "node:net";
+import { IncomingMessage, createServer, request } from "node:http";
+import type { Server, ServerResponse } from "node:http";
 import { gunzipSync } from "node:zlib";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -15,7 +14,7 @@ import { devGzip, gzipMiddleware, shouldGzip } from "./dev-gzip.ts";
 const SCRIPT = "export const value = 1;\n".repeat(200);
 
 function handle(req: IncomingMessage, res: ServerResponse): void {
-  switch (req.url) {
+  switch (req.url ?? "") {
     case "/end": {
       res.setHeader("content-type", "text/javascript");
       res.statusCode = 200;
@@ -32,6 +31,14 @@ function handle(req: IncomingMessage, res: ServerResponse): void {
       res.write(SCRIPT.slice(0, 1000));
       res.write(Buffer.from(SCRIPT.slice(1000)));
       res.end();
+      return;
+    }
+    case "/proxied": {
+      // The Cloudflare plugin copies a worker response's headers onto the reply, and
+      // Astro's pages come back with `transfer-encoding: chunked` among them.
+      res.setHeader("content-type", "text/html");
+      res.setHeader("transfer-encoding", "chunked");
+      res.end(SCRIPT);
       return;
     }
     case "/small": {
@@ -55,10 +62,16 @@ async function get(path: string, acceptEncoding = "gzip, br") {
     headers: { "accept-encoding": acceptEncoding },
   });
   req.end();
-  const [res] = (await once(req, "response")) as [IncomingMessage];
+  const events: unknown[] = await once(req, "response");
+  const res = events.at(0);
+  if (!(res instanceof IncomingMessage)) {
+    throw new TypeError("The request emitted no response.");
+  }
   const parts: Buffer[] = [];
   for await (const part of res) {
-    parts.push(part as Buffer);
+    if (Buffer.isBuffer(part)) {
+      parts.push(part);
+    }
   }
   const raw = Buffer.concat(parts);
   const encoding = res.headers["content-encoding"] ?? null;
@@ -66,6 +79,7 @@ async function get(path: string, acceptEncoding = "gzip, br") {
     status: res.statusCode ?? 0,
     encoding,
     length: res.headers["content-length"] ?? null,
+    transferEncoding: res.headers["transfer-encoding"] ?? null,
     raw,
     body: encoding === "gzip" ? gunzipSync(raw).toString() : raw.toString(),
   };
@@ -73,12 +87,18 @@ async function get(path: string, acceptEncoding = "gzip, br") {
 
 describe(gzipMiddleware, () => {
   beforeAll(async () => {
-    server = createServer((req, res) =>
-      gzipMiddleware(req, res, () => handle(req, res))
-    );
+    server = createServer((req, res) => {
+      gzipMiddleware(req, res, () => {
+        handle(req, res);
+      });
+    });
     server.listen(0, "127.0.0.1");
     await once(server, "listening");
-    origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const address = server.address();
+    if (address === null || typeof address === "string") {
+      throw new TypeError("The server has no TCP port.");
+    }
+    origin = `http://127.0.0.1:${address.port}`;
   });
 
   afterAll(() => {
@@ -97,6 +117,16 @@ describe(gzipMiddleware, () => {
       expect(res.raw.length).toBeLessThan(SCRIPT.length);
     }
   );
+
+  // A reply with both headers breaks the HTTP/1.1 framing, and Node's fetch refuses it:
+  // "Content-Length can't be present with Transfer-Encoding" (issue #347).
+  it("drops a copied transfer-encoding when it sets the length", async () => {
+    const res = await get("/proxied");
+
+    expect(res.encoding).toBe("gzip");
+    expect(res.transferEncoding).toBeNull();
+    expect(res.body).toBe(SCRIPT);
+  });
 
   it("sends a small file as it is", async () => {
     const res = await get("/small");

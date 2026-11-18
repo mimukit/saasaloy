@@ -7,6 +7,8 @@ description: Runbook for an AI agent that updates this project to a newer Saasal
 
 `saasaloy update` re-applies the base template and the installed modules at a newer version. It overwrites a file nobody edited. It does not overwrite a file with local edits: it puts that file in a **merge plan**, a Markdown document for you to work. The merge plan also carries **update notes**: work outside the files Saasaloy writes, such as an import path in this project's own code, a moved block, or a setting.
 
+The modules come from the default registry at the tag `v<version>` of the CLI that runs. To get newer modules, upgrade the CLI first, then run `saasaloy update`: each module that is not pinned to a commit moves to the new CLI's tag, a lock entry an older CLI wrote at `main` included. `saasaloy update <module> --ref main` reads one module from `main` for that run only.
+
 The update is done when `saasaloy update` exits `0`. Until then, the CLI records each unfinished merge and each unfinished note, and every later run prints them again.
 
 ## Exit codes

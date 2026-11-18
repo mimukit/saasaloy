@@ -63,9 +63,9 @@ scaffold into the current directory, or a path like `./apps/my-app` — the last
 segment becomes the project name. Omit the name entirely and the CLI asks for it.
 
 `init` copies the base template, then offers to run `pnpm install` for you. Say yes and it
-installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree that tracks it. An ignored directory inside a repository still gets its own.
+installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree that tracks it. An ignored directory inside a repository still gets its own. After the install it runs `pnpm env:setup` for the local defaults, and then it commits the scaffold on `main` as `chore(repo): initial commit`. With no git identity it warns and makes no commit.
 
-`init` takes three flags: `--force` scaffolds into a directory that is not empty, `--no-install` never runs `pnpm install` and never asks, and `--no-git` skips `git init`. Any other flag stops the command with an error instead of being ignored.
+`init` takes three flags: `--force` scaffolds into a directory that is not empty, `--no-install` never runs `pnpm install` and never asks, and `--no-git` skips `git init` and the first commit. Any other flag stops the command with an error instead of being ignored.
 
 If the target directory already has files in it, `init` stops and tells you to re-run with
 `--force`. A `.git` directory on its own doesn't count as non-empty, so you can scaffold
@@ -109,10 +109,9 @@ The page you are looking at still sells a placeholder product, under a `siteName
 just your directory name. Three of the ten skills in `.agents/skills/` exist to fix that,
 and the first two run in order:
 
-1. **`/saasaloy-setup`** interviews you about the product and writes
-   `docs/product-brief.md` — the context every other skill reads.
+1. **`/saasaloy-setup`** interviews you once, in about fifteen questions, and writes `docs/product-brief.md` (the landing answers) and `docs/product-spec.md` (the modules, the database driver and one table for each entity). It ends with one read-back. When you confirm it, the skill starts `saasaloy-build` in the same session, which builds the MVP with no more questions. [Build with an agent](how-to/build-with-an-agent.md) covers that path.
 2. **`/saasaloy-landing-copy`** turns that brief into the landing page's copy, through a
-   draft you review first.
+   draft you review first. The build runs it for you; run it yourself to rewrite only the page.
 3. **`/saasaloy-design theme`** swaps the default theme for a registry preset and keeps
    `DESIGN.md` true — run it whenever you want the look changed, not just now.
 

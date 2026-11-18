@@ -1,0 +1,6 @@
+{
+  "status": "draft, awaiting the owner's approval in #350",
+  "productName": "Receiptbox",
+  "entity": { "table": "receipts", "word": "receipt" },
+  "defaultLandingMarkers": ["not the scaffolding"]
+}

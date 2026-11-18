@@ -13,7 +13,17 @@
 //     heading that starts `## Wire-up`;
 //   - the eight capability skills the gap audit named have a removal section and a
 //     failure-mode section;
-//   - the base template ships `saasaloy-build`, `saasaloy-feature` and `saasaloy-update`.
+//   - the base template ships `saasaloy-build`, `saasaloy-feature` and `saasaloy-update`;
+//   - `saasaloy-build` names the steps a fresh scaffold needs (plan 0109): the install
+//     that tolerates a changed lockfile, `db:generate` before `db:setup`, the env step
+//     after each `add`, the first commit, and the resume rules, and the base `AGENTS.md`
+//     agrees with it on who runs `pnpm env:setup`;
+//   - the interview joins the build (plan 0109 phase 6): `saasaloy-setup` asks about
+//     fifteen questions, the preview one last, and ends with one read-back that starts
+//     `saasaloy-build`; the build commits once per spec entity; `saasaloy-feature` builds
+//     its screens from the four `shell` parts, which the `shell` module really writes;
+//     and `llms.txt`, the base `AGENTS.md` and the skills tell an agent with no brief and
+//     no person to stop. `scripts/product-spec.test.ts` checks the spec's headings.
 //
 // Run it with `pnpm test:scripts`.
 
@@ -246,4 +256,228 @@ describe("the base skills", () => {
       );
     });
   }
+});
+
+describe("saasaloy-build runs on a fresh scaffold (plan 0109)", () => {
+  const build = readFileSync(
+    join(BASE_SKILLS, "saasaloy-build", "SKILL.md"),
+    "utf-8"
+  );
+  const agents = readFileSync(
+    join(ROOT, "packages", "cli", "templates", "base", "AGENTS.md"),
+    "utf-8"
+  );
+  /** The body of the `### <title>` section, up to the next `##` or `###` heading. */
+  const subsection = (title: string): string => {
+    const lines = build.split("\n");
+    const start = lines.indexOf(`### ${title}`);
+    if (start === -1) {
+      return "";
+    }
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => /^#{2,3} /.test(line));
+    return (end === -1 ? rest : rest.slice(0, end)).join("\n");
+  };
+  const afterAdd = subsection("Stage: Validate and Stage: MVP");
+
+  it("installs with --no-frozen-lockfile after an add", () => {
+    assert.match(afterAdd, /pnpm install --no-frozen-lockfile/);
+  });
+
+  it("names db:generate before db:setup, and the env step after each add", () => {
+    const generate = afterAdd.indexOf("pnpm --filter @repo/db db:generate");
+    const setup = afterAdd.indexOf("pnpm db:setup");
+    assert.ok(generate !== -1, "db:generate is not named");
+    assert.ok(setup > generate, "db:setup is not after db:generate");
+    assert.match(afterAdd, /pnpm env:setup`, after every `add`/);
+  });
+
+  it("makes the first commit at Intake when init skipped it", () => {
+    const intake = subsection("Stage: Intake");
+    assert.match(intake, /chore\(repo\): initial commit/);
+    assert.match(intake, /git rev-parse --verify --quiet HEAD/);
+  });
+
+  it("has a rule for a dirty tree on resume, and reads stage commits from git", () => {
+    assert.match(subsection("A dirty tree on resume"), /git stash/);
+    assert.match(build, /git log --format='%h %s' main\.\.HEAD/);
+  });
+
+  it("agrees with AGENTS.md that the agent runs pnpm env:setup", () => {
+    assert.match(build, /The build runs `pnpm env:setup` itself/);
+    assert.match(agents, /The agent runs `pnpm env:setup` itself/);
+    assert.doesNotMatch(agents, /The person also runs `pnpm env:setup`/);
+  });
+});
+
+describe("the interview joins the build (plan 0109 phase 6)", () => {
+  const read = (name: string): string =>
+    readFileSync(join(BASE_SKILLS, name, "SKILL.md"), "utf-8");
+  const setup = read("saasaloy-setup");
+  const build = read("saasaloy-build");
+  const feature = read("saasaloy-feature");
+  const agents = readFileSync(
+    join(ROOT, "packages", "cli", "templates", "base", "AGENTS.md"),
+    "utf-8"
+  );
+  const llms = readFileSync(join(ROOT, "llms.txt"), "utf-8");
+
+  /** The numbered rows of the interview's question tables: `| 11 | **Entities** |`. */
+  const questions = [
+    ...setup.matchAll(/^\| (\d+) \| \*\*([^*]+)\*\* \|/gm),
+  ].map((match) => ({ number: Number(match[1]), name: match[2] ?? "" }));
+
+  it("asks about fifteen questions, numbered in order, with the preview last", () => {
+    assert.deepEqual(
+      questions.map((question) => question.number),
+      Array.from({ length: 15 }, (_, index) => index + 1)
+    );
+    assert.equal(questions.at(-1)?.name, "Preview deploy");
+  });
+
+  it("asks for the entities, the capabilities and the driver", () => {
+    const names = new Set(questions.map((question) => question.name));
+    for (const name of ["Entities", "Capabilities", "Database driver"]) {
+      assert.ok(names.has(name), `no ${name} question`);
+    }
+    assert.match(setup, /saasaloy list --json/);
+    assert.match(setup, /recommends one driver/);
+  });
+
+  it("records the preview choice in the frontmatter, and names the temporary database", () => {
+    assert.match(setup, /`deploy: preview`/);
+    assert.match(setup, /`deploy: none`/);
+    assert.match(setup, /preview runs on a temporary database/);
+  });
+
+  it("ends with one read-back that accepts thin answers and sets autonomy", () => {
+    const readBack = section(setup, /^Step 1/) ?? "";
+    assert.match(readBack, /### The read-back/);
+    assert.match(readBack, /`weak-accepted:`/);
+    assert.match(readBack, /Set `autonomy: afk`/);
+    assert.match(readBack, /Ask nothing after the confirmation/);
+    assert.doesNotMatch(setup, /Run the build unattended\?/);
+  });
+
+  it("starts saasaloy-build in the same session", () => {
+    assert.match(
+      section(setup, /^Start the build$/) ?? "",
+      /`\.agents\/skills\/saasaloy-build\/SKILL\.md` and follow it, in this session/
+    );
+  });
+
+  it("writes the brief and the spec, and no longer says a scaffold has no commit", () => {
+    assert.match(setup, /`docs\/product-spec\.md`/);
+    assert.doesNotMatch(setup, /a fresh scaffold has no commit yet/);
+  });
+
+  it("counts a weak-accepted answer as filled, in setup, the build and AGENTS.md", () => {
+    assert.match(setup, /and so does an answer tagged `weak-accepted:`/);
+    assert.match(build, /`weak-accepted:` counts as filled/);
+    assert.match(agents, /`weak-accepted:` counts as filled/);
+  });
+
+  it("builds each spec entity with its own commit, in order, with no limit", () => {
+    const featureStage = section(build, /^The stages$/) ?? "";
+    assert.match(featureStage, /with no limit on their number/);
+    assert.match(featureStage, /`feat\(build\): feature <table>`/);
+    assert.match(build, /`## Feature: <table>`/);
+    assert.match(build, /`feat\(build\): feature <table>` commit/);
+  });
+
+  it("takes the driver and the picks from the spec, and drops each optional extra", () => {
+    assert.match(build, /spec's `## Database driver`/);
+    assert.match(build, /spec's `## Modules`/);
+    for (const extra of [
+      "ci",
+      "infra-ci-deploy",
+      "auth-phone",
+      "notification",
+    ]) {
+      assert.match(
+        build,
+        new RegExp(`\`${extra}\``),
+        `${extra} is not handled`
+      );
+    }
+  });
+
+  it("gives a picked module that needs an account its local provider", () => {
+    assert.match(setup, /Put its capability's local provider there instead/);
+    assert.match(build, /add its capability's local provider instead/);
+    assert.match(build, /spec's `## Left for the owner`/);
+  });
+
+  it("records a preview choice and deploys nothing", () => {
+    assert.match(build, /With `deploy: preview`[^\n]*deploys nothing/);
+  });
+
+  it("builds the screens from the shell parts the shell module writes", () => {
+    const descriptor = JSON.parse(
+      readFileSync(join(MODULES, "shell", "registry-item.json"), "utf-8")
+    ) as { files: { target: string }[] };
+    const targets = new Set(descriptor.files.map((file) => file.target));
+    for (const part of [
+      "blocks/shell/data-table",
+      "blocks/shell/detail-panel",
+      "components/shell/form",
+      "components/shell/field",
+    ]) {
+      assert.match(
+        feature,
+        new RegExp(`@repo/ui/${part}\``),
+        `${part} is not named`
+      );
+      assert.ok(targets.has(`@ui/${part}.tsx`), `shell writes no ${part}.tsx`);
+    }
+  });
+
+  it("tells an agent with no brief and no person to stop and say why", () => {
+    assert.match(setup, /Stop when there is no brief and no person/);
+    assert.match(build, /With no brief and no person, stop/);
+    assert.match(agents, /No brief and no person: stop/);
+    assert.match(llms, /No brief and no person in the session: stop/);
+  });
+
+  it("stops only with no brief in docs/ or the folder, and counts a scripted owner as a person", () => {
+    const rule = (text: string, heading: RegExp): string =>
+      text.split("\n").find((line) => heading.test(line)) ?? "";
+    const rules = {
+      agents: rule(agents, /No brief and no person: stop/),
+      build: rule(build, /With no brief and no person, stop/),
+      setup: rule(setup, /Stop when there is no brief and no person/),
+      llms: rule(llms, /No brief and no person in the session: stop/),
+    };
+    for (const [name, line] of Object.entries(rules)) {
+      assert.match(
+        line,
+        /headless run whose prompt says the owner is here and answers[^.]*questions has a person/,
+        `${name} does not count a scripted owner as a person`
+      );
+      assert.match(
+        line,
+        /Never (?:invent|answer)|do not write a brief yourself/,
+        `${name} lets the agent answer the interview`
+      );
+    }
+    for (const name of ["agents", "build"] as const) {
+      assert.match(
+        rules[name],
+        /neither `docs\/product-brief\.md` nor `\.\/product-brief\.md` exists/,
+        `${name} stops while ./product-brief.md exists`
+      );
+    }
+    assert.match(rules.setup, /steps 1 and 2 found none/);
+    assert.match(setup, /`\.\/product-brief\.md` does/);
+    assert.match(rules.llms, /holds no `product-brief\.md`/);
+  });
+
+  it("gives one path in llms.txt and AGENTS.md: init, the interview, the build", () => {
+    assert.match(
+      llms,
+      /One path, in one session: `init`, the interview, the build/
+    );
+    assert.match(agents, /One path: `saasaloy init`, the interview, the build/);
+    assert.doesNotMatch(llms, /Do not write the brief yourself/);
+  });
 });

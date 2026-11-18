@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import cliPackage from "../../package.json" with { type: "json" };
 import {
   fixtureModule,
   startGithubFixture,
@@ -9,13 +10,19 @@ import {
 import type { GithubFixture } from "../../test/support/github-fixture.js";
 import { isRefusal } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
-import { GITHUB_API_ENV, RemoteRegistrySource } from "./registry.js";
+import {
+  GITHUB_API_ENV,
+  missingReleaseTagMessage,
+  RemoteRegistrySource,
+} from "./registry.js";
 
 // `RemoteRegistrySource` is the path every real user takes, and until #47 it was the one
 // registry source with no test at all. These run against a local fixture server rather
 // than GitHub: offline, fast, and immune to a rate limit somebody else is spending.
 
 const SHA = "1234567890abcdef1234567890abcdef12345678";
+// The release tag of the CLI under test: the default registry reads it (ADR 0062).
+const TAG = `v${cliPackage.version}`;
 const OTHER_SHA = "fedcba0987654321fedcba0987654321fedcba09";
 
 let fixture: GithubFixture;
@@ -64,6 +71,19 @@ afterEach(async () => {
   await rm(cache, { recursive: true, force: true });
 });
 
+/** What GitHub answers for `GET /repos/<o>/<r>/commits/<ref>` when the ref is missing. */
+function noCommit(ref: string): { status: number; body: string } {
+  return {
+    status: 422,
+    body: JSON.stringify({
+      message: `No commit found for SHA: ${ref}`,
+      documentation_url:
+        "https://docs.github.com/rest/commits/commits#get-a-commit",
+      status: "422",
+    }),
+  };
+}
+
 function source(ref?: string): RemoteRegistrySource {
   return new RemoteRegistrySource("mimukit", "saasaloy", ref);
 }
@@ -71,14 +91,100 @@ function source(ref?: string): RemoteRegistrySource {
 describe("RemoteRegistrySource — resolving a ref to a commit SHA", () => {
   beforeEach(() => start());
 
-  it("resolves the repo's default branch when no ref is given", async () => {
+  it("resolves the running CLI's release tag on the default registry when no ref is given", async () => {
     const remote = source();
 
     await expect(remote.resolveSha()).resolves.toBe(SHA);
     expect(fixture.requests).toStrictEqual([
-      "/repos/mimukit/saasaloy",
-      "/repos/mimukit/saasaloy/commits/main",
+      `/repos/mimukit/saasaloy/commits/${TAG}`,
     ]);
+  });
+
+  it("resolves a third-party repo's default branch when no ref is given", async () => {
+    await fixture.close();
+    await start({ owner: "acme", repo: "kit" });
+    const remote = new RemoteRegistrySource("acme", "kit");
+
+    await expect(remote.resolveSha()).resolves.toBe(SHA);
+    expect(fixture.requests).toStrictEqual([
+      "/repos/acme/kit",
+      "/repos/acme/kit/commits/main",
+    ]);
+  });
+
+  it("refuses with the way out when the registry has no tag for this CLI", async () => {
+    await fixture.close();
+    await start({
+      failure: (path) =>
+        path === `/repos/mimukit/saasaloy/commits/${TAG}`
+          ? noCommit(TAG)
+          : undefined,
+    });
+
+    const caught = await source()
+      .resolveSha()
+      .catch((error: unknown) => error);
+
+    expect(isRefusal(caught)).toBeTruthy();
+    const message = (caught as Error).message;
+    expect(message).toContain(
+      `mimukit/saasaloy has no tag ${TAG} for saasaloy ${cliPackage.version}`
+    );
+    expect(message).toContain("saasaloy add <module>@main");
+    expect(message).toContain("SAASALOY_REGISTRY_DIR");
+  });
+
+  it("says so when the CLI cannot read its own version, and still names @main", () => {
+    const message = missingReleaseTagMessage("unknown");
+
+    expect(message).toContain("cannot read its own version");
+    expect(message).toContain("saasaloy add <module>@main");
+  });
+
+  it("names the release tag when an explicit ref names it and it is missing", async () => {
+    await fixture.close();
+    await start({
+      failure: (path) =>
+        path === `/repos/mimukit/saasaloy/commits/${TAG}`
+          ? noCommit(TAG)
+          : undefined,
+    });
+
+    await expect(source(TAG).resolveSha()).rejects.toThrow(`has no tag ${TAG}`);
+  });
+
+  it("still refuses with the way out when GitHub answers 404 for the tag", async () => {
+    await fixture.close();
+    await start({
+      failure: (path) =>
+        path === `/repos/mimukit/saasaloy/commits/${TAG}`
+          ? { status: 404 }
+          : undefined,
+    });
+
+    await expect(source().resolveSha()).rejects.toThrow(
+      "saasaloy add <module>@main"
+    );
+  });
+
+  it("keeps a 422 for another cause an error, not a missing tag", async () => {
+    await fixture.close();
+    await start({
+      failure: (path) =>
+        path === `/repos/mimukit/saasaloy/commits/${TAG}`
+          ? {
+              status: 422,
+              body: JSON.stringify({ message: "Validation Failed" }),
+            }
+          : undefined,
+    });
+
+    const caught = await source()
+      .resolveSha()
+      .catch((error: unknown) => error);
+
+    expect(isRefusal(caught)).toBeFalsy();
+    expect((caught as Error).message).toContain("GitHub API error 422");
   });
 
   it("honours an explicit ref, and never asks for the default branch", async () => {
@@ -113,9 +219,10 @@ describe("RemoteRegistrySource — resolving a ref to a commit SHA", () => {
       );
 
       expect(resolves).toHaveLength(1);
+      // The tag needs no default-branch lookup at all.
       expect(
         fixture.requests.filter((path) => path === "/repos/mimukit/saasaloy")
-      ).toHaveLength(1);
+      ).toHaveLength(0);
     } finally {
       await remote.cleanup();
     }
@@ -124,6 +231,13 @@ describe("RemoteRegistrySource — resolving a ref to a commit SHA", () => {
   it("labels itself by coordinate, with and without a ref", () => {
     expect(source().label).toBe("mimukit/saasaloy");
     expect(source("v2").label).toBe("mimukit/saasaloy@v2");
+  });
+
+  it("names the ref it resolved in its label once it has one", async () => {
+    const remote = source();
+    await remote.resolveSha();
+
+    expect(remote.label).toBe(`mimukit/saasaloy@${TAG}`);
   });
 });
 
@@ -141,7 +255,7 @@ describe("RemoteRegistrySource — provenance", () => {
     await remote.resolveSha();
 
     expect(remote.provenance()).toStrictEqual({
-      ref: "main",
+      ref: TAG,
       resolved: SHA,
       source: "mimukit/saasaloy",
     });
@@ -253,7 +367,7 @@ describe("RemoteRegistrySource — the three error paths", () => {
   it("names the rate limit, and how to raise it", async () => {
     await start({
       failure: (path) =>
-        path === "/repos/mimukit/saasaloy"
+        path.includes("/commits/")
           ? { status: 403, headers: { "x-ratelimit-remaining": "0" } }
           : undefined,
     });
@@ -266,7 +380,7 @@ describe("RemoteRegistrySource — the three error paths", () => {
   it("takes a 404 as a refusal, not a failure — a retry cannot help", async () => {
     await start({ failure: () => ({ status: 404 }) });
 
-    const caught = await source()
+    const caught = await source("v2")
       .resolveSha()
       .catch((error: unknown) => error);
 

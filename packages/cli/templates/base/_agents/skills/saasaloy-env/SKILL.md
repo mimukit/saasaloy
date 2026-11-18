@@ -105,7 +105,7 @@ A new service with a dev server adds `devPort` to its `SERVICES` row: 3000 to 30
 
 `pnpm env:setup` reads its values from a source, selected by `ENV_SOURCE`:
 
-- **`local`** (the default, always installed) reads the gitignored `packages/env/.env`. `saasaloy env` prompts for each unset key and writes that file, so a project develops with no vendor account and no network. An agent with no terminal runs `saasaloy env --from-file <path>` instead, which writes the `KEY=VALUE` lines of a dotenv file with no prompt and refuses a key no installed module declares. Prefer it to `--set KEY=VALUE`, which leaves the value in shell history.
+- **`local`** (the default, always installed) reads the gitignored `packages/env/.env`. A missing file reads as an empty one, so every key takes the local default the key list gives it, and a key with no default fails `pnpm env:setup` by name. `saasaloy env` prompts for each unset key and writes that file, so a project develops with no vendor account and no network. An agent with no terminal runs `saasaloy env --from-file <path>` instead, which writes the `KEY=VALUE` lines of a dotenv file with no prompt. It takes a key an installed module declares or `packages/env/.env.example` lists, and refuses any other. Prefer it to `--set KEY=VALUE`, which leaves the value in shell history.
 - **`infisical`** arrives with `saasaloy add env-infisical`.
 
 A source that does not answer at all — no CLI, no network — is treated as offline: `env:setup` keeps every service file that is already complete and warns, and fails writing nothing when one is incomplete. A refusal the source *answered* with, such as no access, always fails.

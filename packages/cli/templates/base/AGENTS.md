@@ -33,6 +33,7 @@ The `apps/admin`, `apps/app`, preview and `apps/api` rows apply once you run `sa
 
 - **`.devports.json`** at the checkout root records the block, the host, the cookie prefix and each service's port. It is gitignored. Read a worktree's ports there, or in the table `pnpm dev:ports` prints.
 - **`DEV_HOST`** in `packages/env/.env` names the host the browser uses. Set it to a remote dev box's name (`DEV_HOST=devaloy`), or pass `pnpm dev:ports --host <name>` for one run. The URLs then use that host, and `CORS_ORIGINS` lists both the `localhost` and the `DEV_HOST` origin of each browser service. With `auth` installed, a `DEV_HOST` other than `localhost` makes `BETTER_AUTH_URL` a non-loopback origin, so `BETTER_AUTH_SECRET` must have a value.
+- **`DEV_PORTS_BLOCK`** in the shell environment, a whole number from 0 to 999, sets the block in any checkout, the main one included, and gives it a cookie prefix. A harness that runs the project beside other dev servers sets it. Leave it unset otherwise.
 - **Restart `pnpm dev` after `pnpm dev:ports` changes a value.** A dev server does not watch `.env.local`, so it keeps the old port and origins until a restart. The command prints "restart pnpm dev to load the new ports" when that happens.
 - **`wrangler dev` does not read `DEV_PORT`.** `pnpm dev` runs `vite dev` in `apps/api`, which does. If you run `wrangler dev` in a linked worktree, pass `--port <DEV_PORT>` with the port from `apps/api/.env.local` or `.devports.json`.
 
@@ -84,7 +85,7 @@ Run a command in one package with `pnpm --filter <package-name> <command>` (`pnp
 `packages/env` owns every environment value this project reads. One tracked key list, one command that distributes it, one typed gate in front of the capabilities.
 
 - **`packages/env/.env.example` is the key list**, and it is the only example file. It is tracked, and `saasaloy add` regenerates it from the installed modules' own descriptions. A value you type in it survives that, and nothing is ever removed.
-- **`packages/env/.env` holds the values**, and it is gitignored. `saasaloy env` prompts for each unset key and writes it.
+- **`packages/env/.env` holds the values**, and it is gitignored. `saasaloy env` prompts for each unset key and writes it. A missing file reads as an empty one, so each key takes its local default from the key list, and a key with no default fails `pnpm env:setup` by name.
 - **`pnpm env:setup` writes every service's own `.env`** from those two files. A *service* is a workspace that reads a `.env` — `api`, `web`, `admin` — and `packages/env/src/services.ts` is the table. The `deploy` row has no file: it holds the Cloudflare credentials a deploy loads in memory.
 - **`pnpm deploy:production` deploys every Worker.** It checks the git gates and every service's production values first, then deploys each Worker one at a time in the order `packages/tooling/src/targets.ts` gives. Each Worker runs its own `env-deploy <service>`: build with the production values in the environment, then `wrangler deploy --secrets-file`. The `local` source reads production values from the gitignored `packages/env/.env.prod`. Nothing writes a production value under `apps/`. The `saasaloy-deploy` skill covers the gates, the flags and the rollback.
 - **`createEnv` is the gate.** `apiEnv(c.env)` on the server, `webEnv()` in a frontend. It validates on the first call and throws once naming every failing key, its module and what the key is for.
@@ -139,13 +140,13 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 
 Ten skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
 
-1. **`saasaloy-setup`** interviews the owner once and writes `docs/product-brief.md`, then sets `config.app.name` and `config.app.locale`. Other skills read the brief rather than ask again.
+1. **`saasaloy-setup`** interviews the owner once, writes `docs/product-brief.md` and `docs/product-spec.md`, and ends with one read-back. On the owner's confirmation it starts `saasaloy-build` in the same session. Other skills read the brief and the spec rather than ask again.
 2. **`saasaloy-landing-copy`** writes `packages/ui/src/content/landing.ts` from the brief.
 
 Two build the product once modules are installed:
 
-- **`saasaloy-build`** runs the whole MVP build in stages from a complete brief, with one commit per stage on `build/mvp` and a resumable `docs/build-log.md`. Start here when you are asked to build the product.
-- **`saasaloy-feature`** builds one product entity across the stack: table, migration, seed slice, validator, route, `hc` client, an `app` screen, an `admin` list and a route test.
+- **`saasaloy-build`** runs the whole MVP build in stages from a complete brief and the spec, with one commit per stage, one commit per spec entity, on `build/mvp`, and a resumable `docs/build-log.md`. With no brief, start at `saasaloy-setup`, which starts the build when the interview ends.
+- **`saasaloy-feature`** builds one product entity across the stack from its table in the spec: table, migration, seed slice, validator, route, `hc` client, the `app` screens, an `admin` list and a route test.
 
 The other six run when the thing they own moves:
 
@@ -264,14 +265,16 @@ The database lines run through `pnpm run --if-present`, so the same blocks work 
 
 An agent may build this project with no person at the keyboard. These rules apply only then, and they override "Ask First" where they say so. The `saasaloy-build` skill runs the stages these rules describe.
 
-- **The signal is `autonomy: afk`** in the YAML frontmatter of `docs/product-brief.md`. Only a person sets it: `saasaloy-setup` asks "Run the build unattended?" as its last question. With no such field, every skill keeps its attended path and asks.
-- **A person supplies the two inputs**: the env values in `packages/env/.env`, and the brief, written through the attended `saasaloy-setup` interview. The person also runs `pnpm env:setup` before the first build. The brief is complete when all ten answers are filled (Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, Where "sign up" goes) and none is tagged `weak:`. With an incomplete brief, stop before the first module and list each missing or weak section under `## Blocked` in `docs/build-log.md`.
+- **One path: `saasaloy init`, the interview, the build.** The `saasaloy-setup` interview runs with the owner, ends with one read-back, and starts `saasaloy-build` in the same session. Nobody answers a question after the read-back.
+- **The signal is `autonomy: afk`** in the YAML frontmatter of `docs/product-brief.md`. Only a person sets it: the owner's confirmation at the end of the `saasaloy-setup` read-back. With no such field, every skill keeps its attended path and asks. The same frontmatter holds `deploy: preview` or `deploy: none`; the build records the choice and deploys nothing.
+- **No brief and no person: stop.** When neither `docs/product-brief.md` nor `./product-brief.md` exists and nobody in the session can answer the interview, write nothing, say that the build needs the interview or a brief with `autonomy: afk`, and stop. A headless run whose prompt says the owner is here and answers questions has a person: run the interview in text. Never answer the interview yourself.
+- **The agent writes the brief and the spec from the owner's answers**, through the `saasaloy-setup` interview, and never invents a price, a proof, a customer name or a URL. `docs/product-spec.md` holds the module picks, the database driver, and one table for each entity, which the build makes in the owner's order with one commit each. A picked module that needs an account gets its local provider, and its vendor step goes under `## Left for a human`. Env values are optional: a missing `packages/env/.env` reads as an empty file, so the local defaults in `packages/env/.env.example` apply. The agent runs `pnpm env:setup` itself, at the start and after each `saasaloy add`. It writes `packages/env/.env` only through `saasaloy env`: `--from-file` with a file a person supplied, or `--set` for a local value that is not a secret, as the `saasaloy-build` skill says. The brief is complete when all ten answers are filled (Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, Where "sign up" goes) and none is tagged `weak:`. An answer tagged `weak-accepted:` counts as filled. With an incomplete brief, stop before the first module and list each missing or weak section under `## Blocked` in `docs/build-log.md`.
 - **`pnpm check` is the gate.** Run `pnpm lint:fix` and `pnpm format`, then `pnpm check`. A stage is not done until it passes.
-- **Commit once per stage on `build/mvp`.** Create the branch if it does not exist, and continue on it when it does. Commit through the Husky and commitlint hooks, never with `--no-verify`. Never push.
-- **`docs/build-log.md` is the output.** Give each stage a `## <stage>` section with what it did and its commit hash. Put what stopped the run under `## Blocked`, and each step you leave for a person under `## Left for a human`. A new session reads the log first and continues from the last stage with a commit.
+- **Commit once per stage, and once per spec entity, on `build/mvp`.** Create the branch if it does not exist, and continue on it when it does. Commit through the Husky and commitlint hooks, never with `--no-verify`. Never push.
+- **`docs/build-log.md` is the output.** Give each stage a `## <stage>` section, and each spec entity a `## Feature: <table>` section, with what it did and its commit hash. Put what stopped the run under `## Blocked`, and each step you leave for a person under `## Left for a human`. A new session reads the log first and continues from the last stage with a commit.
 - **Allowed without asking:** database schema changes and migrations, new dependencies (exact-pinned), and new workspace packages (with a `clean` script).
 - **One session per worktree.** An unattended run works in its own worktree. Run `pnpm dev:stop` when a stage that started `pnpm dev` ends, so no dev server holds a port after the run.
-- **Still forbidden:** a deploy (`pnpm deploy:production`, `wrangler deploy`), anything that spends money or creates a vendor account, editing a secret (`packages/env/.env`, `.env.prod`, a dashboard), deleting data outside the local dev database, and `git push`. Every other "Ask First" item stays forbidden too. Log the step under `## Left for a human` and carry on.
+- **Still forbidden:** a deploy (`pnpm deploy:production`, `wrangler deploy`), anything that spends money or creates a vendor account, editing a secret (a hand edit of `packages/env/.env`, any edit of `.env.prod`, a dashboard), deleting data outside the local dev database, and `git push`. Every other "Ask First" item stays forbidden too. Log the step under `## Left for a human` and carry on.
 
 ## Boundaries
 

@@ -27,6 +27,15 @@ const NOW = Date.parse("2026-11-04T12:00:00Z");
 const DAY = 86_400_000;
 const TOKEN = "t0k-secret-value";
 
+/** The JSON a recorded fetch sent as its body. */
+function jsonBody(init: RequestInit | undefined): unknown {
+  const body = init?.body;
+  if (typeof body !== "string") {
+    throw new TypeError("The request body is not a string.");
+  }
+  return JSON.parse(body) as unknown;
+}
+
 describe(parseTime, () => {
   it("reads an ISO time", () => {
     expect(parseTime("2026-10-31T10:00Z", NOW)).toBe(
@@ -342,7 +351,7 @@ describe("files on disk", () => {
       expect(call?.init.headers).toMatchObject({
         authorization: `Bearer ${TOKEN}`,
       });
-      expect(JSON.parse(String(call?.init.body))).toMatchObject({
+      expect(jsonBody(call?.init)).toMatchObject({
         dry: true,
         limit: 20,
         timeframe: { from: NOW - 7_200_000, to: NOW },
@@ -374,7 +383,7 @@ describe("files on disk", () => {
         ["--since", "1h", "--worker", "other"],
         EVENTS
       );
-      expect(JSON.parse(String(calls[0]?.init.body))).toMatchObject({
+      expect(jsonBody(calls[0]?.init)).toMatchObject({
         parameters: { filters: [{ value: "other" }] },
       });
     });

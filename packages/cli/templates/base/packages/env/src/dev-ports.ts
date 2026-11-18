@@ -34,6 +34,13 @@ export const BLOCK_COUNT = 1000;
 const BLOCK_BASE = 10_000;
 const BLOCK_SIZE = 10;
 
+/**
+ * The environment variable that sets the block in any checkout, the main one included. A
+ * harness that runs a project beside other dev servers sets it, so the project's servers
+ * stay off the pinned ports.
+ */
+export const BLOCK_ENV = "DEV_PORTS_BLOCK";
+
 /** The browser services: a page served on one of these ports calls the api. */
 const BROWSER_PORTS = new Set([3000, 3001, 3002]);
 
@@ -134,6 +141,24 @@ export async function chooseBlock(options: {
   );
 }
 
+/**
+ * The block `value` names, from the `DEV_PORTS_BLOCK` variable, or undefined when it is
+ * unset or blank. Any value but a whole number from 0 to 999 throws.
+ */
+export function forcedBlock(value?: string): number | undefined {
+  const text = value?.trim() ?? "";
+  if (text === "") {
+    return undefined;
+  }
+  const block = /^\d+$/.test(text) ? Number(text) : Number.NaN;
+  if (!Number.isInteger(block) || block >= BLOCK_COUNT) {
+    throw new Error(
+      `${BLOCK_ENV} is "${text}". It must be a whole number from 0 to ${String(BLOCK_COUNT - 1)}, or unset.`
+    );
+  }
+  return block;
+}
+
 /** Every worktree path in `git worktree list --porcelain` output. */
 export function parseWorktreeList(porcelain: string): string[] {
   return splitLines(porcelain)
@@ -152,33 +177,41 @@ export function parseRecord(text?: string): DevPortsRecord | undefined {
   } catch {
     return undefined;
   }
-  if (typeof parsed !== "object" || parsed === null) {
+  if (!isRecord(parsed)) {
     return undefined;
   }
-  const { block, host, cookiePrefix, services } = parsed as Record<
-    string,
-    unknown
-  >;
+  const { block, host, cookiePrefix, services } = parsed;
   const blockOk =
     block === null ||
-    (Number.isInteger(block) &&
-      (block as number) >= 0 &&
-      (block as number) < BLOCK_COUNT);
+    (typeof block === "number" &&
+      Number.isInteger(block) &&
+      block >= 0 &&
+      block < BLOCK_COUNT);
   if (
     !blockOk ||
     typeof host !== "string" ||
     (cookiePrefix !== null && typeof cookiePrefix !== "string") ||
-    typeof services !== "object" ||
-    services === null
+    !isRecord(services)
   ) {
     return undefined;
   }
+  const ports: Record<string, number> = {};
+  for (const [name, port] of Object.entries(services)) {
+    if (typeof port !== "number") {
+      return undefined;
+    }
+    ports[name] = port;
+  }
   return {
-    block: block as number | null,
+    block: typeof block === "number" ? block : null,
     host,
-    cookiePrefix: cookiePrefix as string | null,
-    services: services as Record<string, number>,
+    cookiePrefix: typeof cookiePrefix === "string" ? cookiePrefix : null,
+    services: ports,
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 /** `host` when it is a bare host name or address, the shape a URL's host part takes. */
@@ -290,32 +323,40 @@ export function rewriteBlock(text: string, block?: string[]): string {
   return lines.length > 0 ? `${lines.join("\n")}\n` : "";
 }
 
-function connects(port: number, host: string): Promise<boolean> {
+async function connects(port: number, host: string): Promise<boolean> {
   // A socket reports through events, not a promise, so this wraps it in one.
   // oxlint-disable-next-line promise/avoid-new
-  return new Promise((resolve) => {
+  return await new Promise((resolve) => {
     const socket = createConnection({ port, host });
     socket.setTimeout(500);
     const done = (open: boolean): void => {
       socket.destroy();
       resolve(open);
     };
-    socket.once("connect", () => done(true));
-    socket.once("timeout", () => done(false));
-    socket.once("error", () => done(false));
+    socket.once("connect", () => {
+      done(true);
+    });
+    socket.once("timeout", () => {
+      done(false);
+    });
+    socket.once("error", () => {
+      done(false);
+    });
   });
 }
 
-function bindFails(port: number): Promise<boolean> {
+async function bindFails(port: number): Promise<boolean> {
   // A server reports through events, not a promise, so this wraps it in one.
   // oxlint-disable-next-line promise/avoid-new
-  return new Promise((resolve) => {
+  return await new Promise((resolve) => {
     const server = createServer();
     server.once("error", (error: NodeJS.ErrnoException) => {
       resolve(error.code === "EADDRINUSE");
     });
     server.listen({ port, exclusive: true }, () => {
-      server.close(() => resolve(false));
+      server.close(() => {
+        resolve(false);
+      });
     });
   });
 }
@@ -333,5 +374,5 @@ export async function isPortListening(port: number): Promise<boolean> {
   if (loopback.includes(true)) {
     return true;
   }
-  return bindFails(port);
+  return await bindFails(port);
 }

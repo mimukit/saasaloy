@@ -30,6 +30,7 @@ import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import { parseDep, readRootPackageJson, writeDeps } from "./pkg-json.js";
 import type { DepChange, PackageJson } from "./pkg-json.js";
+import { DEFAULT_SOURCE } from "./registry.js";
 import type { LoadedModule } from "./registry.js";
 import { keepRecordedPatch, keepWorkerName } from "./kept-names.js";
 import {
@@ -112,6 +113,12 @@ export interface CompareInstalledArgs {
   resolveRef: (name: string, entry: LockModule, ref: string) => Promise<string>;
   /** `--ref <ref>`: the explicit unpin. Only ever set alongside a single named module. */
   overrideRef?: string;
+  /**
+   * The running CLI's release tag (ADR 0062). A default-registry module that is not
+   * pinned to a SHA compares against it rather than against the ref its lock names, so
+   * a lock an older CLI wrote at `main` moves onto the tag. Absent keeps every lock ref.
+   */
+  releaseRef?: string;
   /** True when SAASALOY_REGISTRY_DIR is set — a working copy replaces the registry. */
   registryOverride?: boolean;
 }
@@ -137,7 +144,14 @@ function short(sha: string): string {
 export async function compareInstalled(
   args: CompareInstalledArgs
 ): Promise<ModuleComparison[]> {
-  const { installed, lock, resolveRef, overrideRef, registryOverride } = args;
+  const {
+    installed,
+    lock,
+    resolveRef,
+    overrideRef,
+    registryOverride,
+    releaseRef,
+  } = args;
   const out: ModuleComparison[] = [];
 
   for (const name of installed) {
@@ -200,7 +214,11 @@ export async function compareInstalled(
       continue;
     }
 
-    const ref = overrideRef ?? entry.ref;
+    const ref =
+      overrideRef ??
+      (releaseRef !== undefined && entry.source === DEFAULT_SOURCE
+        ? releaseRef
+        : entry.ref);
     try {
       const latest = await resolveRef(name, entry, ref);
       const status: UpdateStatus =

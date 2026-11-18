@@ -83,7 +83,7 @@ const HELP: CommandHelp = {
     "--force": "scaffold into a directory that is not empty",
     "-y, --yes": "run pnpm install with no prompt",
     "--no-install": "never run pnpm install, and never ask",
-    "--no-git": "do not run git init in the new project",
+    "--no-git": "do not run git init or make the first commit",
     "--testing=<mode>":
       "the testing mode: off (default), tests-after or tdd; asked on a terminal when absent",
   },
@@ -170,6 +170,8 @@ function askTestingMode(): Promise<TestingMode | symbol> {
 interface RunResult {
   ok: boolean;
   message?: string;
+  /** The child's stdout, set when it exited 0. */
+  stdout?: string;
 }
 
 // Run one child process in the scaffolded project. Output is buffered (not streamed)
@@ -199,7 +201,7 @@ function run(command: string, args: string[], cwd: string): Promise<RunResult> {
     });
     child.on("close", (code) => {
       if (code === 0) {
-        resolvePromise({ ok: true });
+        resolvePromise({ ok: true, stdout });
       } else {
         // Prefer pnpm's own diagnostics (stderr, then stdout); fall back to the code.
         const details = [stderr.trim(), stdout.trim()]
@@ -242,6 +244,51 @@ export async function initGitRepo(
     return { created: false, message: result.message ?? "git init failed" };
   }
   return { created: true };
+}
+
+/** The subject of the scaffold's first commit (plan 0109). */
+export const INITIAL_COMMIT = "chore(repo): initial commit";
+
+async function gitConfigValue(cwd: string, key: string): Promise<string> {
+  const result = await run("git", ["config", "--get", key], cwd);
+  return result.ok ? (result.stdout ?? "").trim() : "";
+}
+
+// True when git can name an author and a committer here. Without one, `git commit` either
+// refuses or invents a `user@host` identity, and neither belongs in a project's history.
+async function hasGitIdentity(cwd: string): Promise<boolean> {
+  const fromEnv = (kind: "NAME" | "EMAIL"): boolean =>
+    Boolean(
+      process.env[`GIT_AUTHOR_${kind}`] && process.env[`GIT_COMMITTER_${kind}`]
+    );
+  const name = fromEnv("NAME") || (await gitConfigValue(cwd, "user.name"));
+  const email = fromEnv("EMAIL") || (await gitConfigValue(cwd, "user.email"));
+  return Boolean(name) && Boolean(email);
+}
+
+// Commit the scaffold on `main`, so a build branch has a base and `main..build/mvp` has a
+// meaning (plan 0109). `--no-verify` skips the scaffold's own hooks: once `pnpm install`
+// ran, husky's pre-commit runs lint-staged over every file of the scaffold, and that is
+// slow and checks files no person wrote. `pnpm check` is the gate for those files.
+export async function commitScaffold(
+  cwd: string
+): Promise<{ committed: boolean; reason?: "identity"; message?: string }> {
+  if (!(await hasGitIdentity(cwd))) {
+    return { committed: false, reason: "identity" };
+  }
+  const add = await run("git", ["add", "--all"], cwd);
+  if (!add.ok) {
+    return { committed: false, message: add.message ?? "git add failed" };
+  }
+  const commit = await run(
+    "git",
+    ["commit", "--quiet", "--no-verify", "--message", INITIAL_COMMIT],
+    cwd
+  );
+  if (!commit.ok) {
+    return { committed: false, message: commit.message ?? "git commit failed" };
+  }
+  return { committed: true };
 }
 
 function errorMessage(error: unknown): string {
@@ -471,8 +518,10 @@ async function initProject(opts: InitOptions): Promise<number> {
 
   // Before the install: husky's `prepare` script runs during `pnpm install` and needs a
   // repository to install its hooks into.
+  let gitCreated = false;
   if (!noGit) {
     const git = await initGitRepo(target);
+    gitCreated = git.created;
     if (git.created) {
       logger.step(`Initialized a git repository ${pc.dim("(git init)")}.`);
     } else if (git.message) {
@@ -564,16 +613,58 @@ async function initProject(opts: InitOptions): Promise<number> {
     }
   }
 
+  // Write each service's `.env` from the key list's local defaults, so `pnpm check` and
+  // `pnpm dev` pass with no env step (plan 0109). Only in a repository init made: the
+  // script finds the project root through git. A failure is a warning, because the
+  // scaffold is complete and the command is the one step left to run by hand.
+  let envWritten = false;
+  if (installed && gitCreated) {
+    const envSetup = await run("pnpm", ["env:setup"], target);
+    envWritten = envSetup.ok;
+    if (envSetup.ok) {
+      logger.step(
+        `Wrote each service's .env from the local defaults ${pc.dim("(pnpm env:setup)")}.`
+      );
+    } else {
+      logger.warn(
+        `Couldn't run ${pc.cyan("pnpm env:setup")}: ${stripAnsi(envSetup.message ?? "").trim()} ` +
+          `${pc.dim("(the scaffold is fine — fix the error, then run it yourself)")}.`
+      );
+    }
+  }
+
+  // Last, so the commit holds the lockfile the install wrote. Only in a repository init
+  // made: a repository that already existed is its owner's history, not ours.
+  if (gitCreated) {
+    const commit = await commitScaffold(target);
+    if (commit.committed) {
+      logger.step(
+        `Committed the scaffold on main ${pc.dim(`(${INITIAL_COMMIT})`)}.`
+      );
+    } else if (commit.reason === "identity") {
+      logger.warn(
+        `Made no commit: no git identity is set (user.name and user.email). ` +
+          `Set one with ${pc.cyan("git config --global user.name")} and ${pc.cyan("user.email")}, ` +
+          `then run ${pc.cyan(`git add --all && git commit -m "${INITIAL_COMMIT}"`)}.`
+      );
+    } else {
+      logger.warn(
+        `Couldn't commit the scaffold: ${commit.message ?? "git commit failed"} ` +
+          `${pc.dim(`(the scaffold is fine — commit it yourself as "${INITIAL_COMMIT}")`)}.`
+      );
+    }
+  }
+
+  // One path (plan 0109): `init`, the interview, the build. The interview skill starts
+  // the build itself, so the list names no second skill and no `pnpm dev`: a dev server
+  // started before `pnpm env:setup` fails on the missing env files.
   const steps = [
     nameArg === "." ? null : `cd ${nameArg}`,
     installed ? null : "pnpm install",
-    `pnpm dev                     ${pc.dim("# run dev servers")}`,
-    // The skills the base ships are the fastest way to make the scaffold yours, and an
-    // owner who never opens AGENTS.md would otherwise not know they exist.
-    // Pad to the same column the commands above comment at (`pnpm dev` + 21 spaces).
-    ...skills.linked.map(
-      (name) => `${`/${name}`.padEnd(29)}${pc.dim("# in your AI coding tool")}`
-    ),
+    envWritten
+      ? null
+      : `${"pnpm env:setup".padEnd(22)}${pc.dim("# write each service's .env")}`,
+    `${"/saasaloy-setup".padEnd(22)}${pc.dim("# the interview; it starts the build")}`,
   ]
     .filter((line): line is string => line !== null)
     .map((line) => pc.cyan(line))

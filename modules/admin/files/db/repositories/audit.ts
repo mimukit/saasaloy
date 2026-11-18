@@ -46,9 +46,12 @@ export type AuditEventInput = Omit<NewAuditEvent, "id"> & { id?: string };
  * the whole write: Postgres keeps microseconds, which the page cursor (milliseconds) cannot
  * carry, so rows of one write that straddle a page boundary would lose the later rows on
  * the next page. A row without an `id` gets a random UUID.
+ *
+ * It takes only `insert`, so an open transaction fits too: on Postgres a route test's
+ * `database.db` is one, and its type is not the client's `Db`.
  */
 export async function insertAuditEvents(
-  db: Db,
+  db: Pick<Db, "insert">,
   rows: readonly AuditEventInput[]
 ): Promise<void> {
   const at = new Date();

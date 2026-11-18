@@ -4,7 +4,8 @@
 //
 // A link is either relative to the repo root or a GitHub URL into this repo
 // (`https://github.com/mimukit/saasaloy/blob/main/<path>`), which the agent can fetch
-// without a clone. Both forms must name a file that exists. Run it with
+// without a clone. Both forms must name a file that exists. The reader lives in
+// `scripts/llms-txt.ts`, which the release preflight shares. Run it with
 // `pnpm test:scripts`.
 
 import assert from "node:assert/strict";
@@ -12,30 +13,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { links, repoPath } from "./llms-txt.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const REPO_URL = "https://github.com/mimukit/saasaloy/";
-
-/** The repo path a link names, or `undefined` for a link that points outside the repo. */
-export function repoPath(href: string): string | undefined {
-  const target = href.split("#")[0] ?? "";
-  if (target.startsWith(REPO_URL)) {
-    const match = /^(?:blob|tree)\/[^/]+\/(.+)$/.exec(
-      target.slice(REPO_URL.length)
-    );
-    return match?.[1];
-  }
-  if (/^[a-z]+:/i.test(target) || target === "") {
-    return undefined;
-  }
-  return target.replace(/^\.\//, "");
-}
-
-export function links(markdown: string): string[] {
-  return [...markdown.matchAll(/\]\(([^)\s]+)\)/g)].map(
-    (match) => match[1] ?? ""
-  );
-}
 
 describe("the link reader", () => {
   it("maps a GitHub blob URL to a repo path", () => {

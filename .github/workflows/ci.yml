@@ -2,13 +2,16 @@
 # a contributor runs locally, in the same order, so a green local tree is a green
 # CI run and the two never disagree about what "passing" means.
 #
-# The release preflight runs the same ones, and `scripts/release-preflight.test.ts` reads
-# this file to prove it. Write a gate step as a bare `- run: pnpm <script>` so that test
-# still sees it.
+# The release preflight runs the gate job's scripts, and `scripts/release-preflight.test.ts`
+# reads the gate job in this file to prove it. Write a gate step as a bare
+# `- run: pnpm <script>` so that test still sees it.
 #
 # `deps:verify` is deliberately absent. It scaffolds .dev/playground and installs it
 # from the network, which is minutes of work and a third-party outage away from a red
 # build on a change that touched none of it. It belongs on a schedule, not on a push.
+# The `scaffold` job is the one exception, kept apart from the gate (plan 0109): a
+# fresh project failing `pnpm check` is the break an agent meets first, and only an
+# install finds it. The release preflight runs `release:smoke`, which covers it.
 name: ci
 
 on:
@@ -61,3 +64,35 @@ jobs:
       # The repo lints shipped files with the template's oxlint config, which holds only
       # while both pin the same oxlint and Ultracite (issue #152).
       - run: pnpm verify:pins
+
+  # A fresh project, not the template's files one by one (issue #347). It builds the CLI,
+  # scaffolds the modules an agent's build adds on database-d1 from this checkout's
+  # `modules/`, and runs that project's `pnpm check`. A type-aware lint error in a base
+  # template file passed every step of the gate above and failed every new project.
+  # `pnpm scaffold:check` runs the same steps on a laptop.
+  #
+  # The scaffold installs from the npm registry. The cache key also hashes the template's
+  # and the modules' manifests, so a new key saves a store that holds the scaffold's
+  # packages, and the next run on the same key installs them from the cache.
+  scaffold:
+    name: scaffold
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            packages/cli/templates/base/**/package.json
+            modules/*/registry-item.json
+            modules/*/files/**/package.json
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm scaffold:check

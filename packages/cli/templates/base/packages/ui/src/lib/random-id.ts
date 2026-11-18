@@ -10,8 +10,8 @@ export function randomId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   // Byte 6 carries the version in its high nibble (0100), byte 8 the RFC 9562 variant in
   // its top two bits (10). The low bits stay random.
-  bytes[6] = 0x40 + ((bytes[6] as number) % 0x10);
-  bytes[8] = 0x80 + ((bytes[8] as number) % 0x40);
+  bytes[6] = 0x40 + ((bytes[6] ?? 0) % 0x10);
+  bytes[8] = 0x80 + ((bytes[8] ?? 0) % 0x40);
   const hex = Array.from(bytes, (byte) =>
     byte.toString(16).padStart(2, "0")
   ).join("");
