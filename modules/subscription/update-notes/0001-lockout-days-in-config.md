@@ -8,7 +8,7 @@ The past-due lockout window is now a checked-in value, `config.subscription.lock
 
 Nothing reads the `SUBSCRIPTION_LOCKOUT_DAYS` env var any more. The module no longer declares it, and `apps/api/src/env.ts` no longer validates it. A value you set in a `.env` is ignored, and the sweep uses 14 days until you set the leaf.
 
-`setSubscriptionConfig`, `subscriptionConfig()`, `readLockoutDays` and `DEFAULT_LOCKOUT_DAYS` are gone. The lockout job and the `payment-failed` email import the leaf from `@repo/config`. `update` deletes `packages/subscription/src/config.ts` when you never edited it.
+`setSubscriptionConfig`, `subscriptionConfig()`, `readLockoutDays` and `DEFAULT_LOCKOUT_DAYS` are gone. The lockout job and `apps/api/src/subscription-store.ts`, which computes the date the `payment-failed` email names, import the leaf from `@repo/config`. `update` deletes `packages/subscription/src/config.ts` when you never edited it.
 
 ## What the merge plan gets
 
