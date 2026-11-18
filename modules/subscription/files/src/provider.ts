@@ -13,8 +13,6 @@
 export interface SubscriptionEnv {
   /** Which registered provider carries the work. Always required — there is no default. */
   SUBSCRIPTION_PROVIDER?: string;
-  /** Days a subscription may stay `past_due` before the lockout job sets `lockedAt`. */
-  SUBSCRIPTION_LOCKOUT_DAYS?: string;
   [key: string]: unknown;
 }
 
@@ -153,7 +151,7 @@ export interface Subscription extends SubscriptionInput {
   id: string;
   referenceId: string;
   customerType: string;
-  /** Set by the lockout job once a `past_due` row has run past `SUBSCRIPTION_LOCKOUT_DAYS`. */
+  /** Set by the lockout job once a `past_due` row has run past `config.subscription.lockoutDays`. */
   lockedAt?: Date | null;
   /** Set when the trial-ending reminder went out, so a redelivery sends no second one. */
   reminderSentAt?: Date | null;

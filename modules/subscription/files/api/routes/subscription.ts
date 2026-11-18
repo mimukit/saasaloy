@@ -54,7 +54,6 @@ import {
 export interface SubscriptionBindings extends AuthDbBindings {
   [key: string]: unknown;
   SUBSCRIPTION_PROVIDER?: string;
-  SUBSCRIPTION_LOCKOUT_DAYS?: string;
   SUBSCRIPTION_APP_URL?: string;
   QUEUE_PROVIDER?: string;
 }

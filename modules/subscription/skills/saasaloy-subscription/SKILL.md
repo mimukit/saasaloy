@@ -249,7 +249,7 @@ Three consequences worth holding:
 
 Normalized statuses: `trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`, `paused`. A provider maps its own vocabulary onto these and keeps the raw value in `metadata`.
 
-`trialing`, `active` and `past_due` all still entitle the paid plan. `past_due` is in that set on purpose: a failed payment keeps the plan until the daily lockout job sets `lockedAt`, after `SUBSCRIPTION_LOCKOUT_DAYS` (14 when unset). A locked row keeps its status and stops entitling its plan; `payment.succeeded` clears the lock. `lockedAt` and `reminderSentAt` are core-only columns and no provider ever writes them.
+`trialing`, `active` and `past_due` all still entitle the paid plan. `past_due` is in that set on purpose: a failed payment keeps the plan until the daily lockout job sets `lockedAt`, after `config.subscription.lockoutDays` days (14 by default; override it in `packages/config/src/project.ts`). A locked row keeps its status and stops entitling its plan; `payment.succeeded` clears the lock. `lockedAt` and `reminderSentAt` are core-only columns and no provider ever writes them.
 
 Clearing the lock does not need a projected row on the event. Stripe's `invoice.paid` carries an invoice and no subscription, so `applyEvent` reads the subject's current row back for `payment.succeeded`, `payment.failed` and `trial.ending` when the event brings none. That is the whole reason the one event that ends a lockout can end one.
 
@@ -261,14 +261,14 @@ Every subscription side effect runs as a queue consumer or a scheduled job. None
 |---|---|---|
 | `trial.ending` (Stripe's `customer.subscription.trial_will_end`, three days out) | `subscription.event` consumer | Sends `trial-ending`, stamps `reminderSentAt`. Once per subscription, not once per delivery: a vendor that sends the event twice under two ids still sends one email. |
 | `payment.failed` (`invoice.payment_failed`) | `subscription.event` consumer | Sends `payment-failed`, naming the date the lockout would run. Once per distinct failure, because dunning is a sequence. |
-| `subscription.past-due-lockout`, daily at 03:00 UTC | `queue.schedules` → `queue.jobs` | Sets `lockedAt` on `past_due` rows last touched more than `SUBSCRIPTION_LOCKOUT_DAYS` ago, and sends `account-locked`. Idempotent: a locked row is out of the next sweep's set. |
+| `subscription.past-due-lockout`, daily at 03:00 UTC | `queue.schedules` → `queue.jobs` | Sets `lockedAt` on `past_due` rows last touched more than `config.subscription.lockoutDays` days ago, and sends `account-locked`. Idempotent: a locked row is out of the next sweep's set. |
 | `payment.succeeded` (`invoice.paid`) | `subscription.event` consumer | Clears `lockedAt`. |
 
 The three templates ship into `@email/templates/` and are ordinary email templates — edit them there. `apps/api/src/subscription-store.ts` chooses which one to render and fills in the app name — `config.subscription.appName`, falling back to `config.app.name`, both in `packages/config/src/project.ts` — and `SUBSCRIPTION_APP_URL` (an absolute `https:` URL, or `http://localhost:*`; the renderer refuses anything else).
 
 `packages/subscription` sends nothing itself. It decides *when* an email is owed and *to whom* through two ports — `setSubscriptionNotifier` in `src/notify.ts` and `SubscriptionStore.recipientFor` — and `apps/api/src/subscription-store.ts` supplies both, next to the store resolver and the enqueuer. That is what keeps `@repo/email` out of the core. A subject with no resolvable address is a skip, not a failure: the state write has already happened, and a job that retried forever over a deleted user's trial reminder would be worse.
 
-`SUBSCRIPTION_LOCKOUT_DAYS` reaches the sweep the same way: a job handler gets `(payload, ctx)` and no `env`, so `subscription-store.ts` reads the var once at module load and calls `setSubscriptionConfig`.
+The lockout window is `config.subscription.lockoutDays`, a checked-in value, not an env var: two deployments of one project give a past-due customer the same grace. The sweep and the `payment-failed` email both import it from `@repo/config`, so a job handler with no `env` still reads it. Until #162 it was the `SUBSCRIPTION_LOCKOUT_DAYS` env var, which nothing reads now; `saasaloy doctor` reports a `.env` that still sets it. The cron stays the literal `0 3 * * *` in `src/jobs/past-due-lockout.ts`, because a bad cron string would pass `typecheck` and fail on every tick.
 
 ## Upgrading from `billing`
 
@@ -282,7 +282,7 @@ What changed, old name first:
 | Workspace | `packages/billing` (`@repo/billing`) | `packages/subscription` (`@repo/subscription`) |
 | Tables | `billing_subscriptions`, `billing_events` (or `billing_subscription`, `billing_event` before ADR 0038) | `subscriptions`, `subscription_events` |
 | Column | `users.billing_customer_id` | `users.subscription_customer_id` |
-| Env keys | `BILLING_PROVIDER`, `BILLING_LOCKOUT_DAYS`, `BILLING_APP_URL` | `SUBSCRIPTION_PROVIDER`, `SUBSCRIPTION_LOCKOUT_DAYS`, `SUBSCRIPTION_APP_URL` |
+| Env keys | `BILLING_PROVIDER`, `BILLING_LOCKOUT_DAYS`, `BILLING_APP_URL` | `SUBSCRIPTION_PROVIDER`, `SUBSCRIPTION_APP_URL`. The lockout key is now `config.subscription.lockoutDays` (#162) |
 | Config section | `config.billing` | `config.subscription` |
 | Code | `BillingError`, `defineBilling`, `createBilling` | `SubscriptionError`, `defineSubscription`, `createSubscription` |
 | Routes | `/billing/*` in `apps/api`, `/billing` in `apps/admin` | `/subscription/*`, `/subscription` |

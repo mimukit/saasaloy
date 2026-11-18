@@ -8,7 +8,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { subscriptionConfig, setSubscriptionConfig } from "../config.ts";
+import { config } from "@repo/config";
 import { setSubscriptionNotifier } from "../notify.ts";
 import type {
   SubscriptionNotification,
@@ -205,22 +205,15 @@ describe("pastDueLockoutJob", () => {
     );
   });
 
-  it("reads the window from the registered config", async () => {
+  it("reads the window from config.subscription.lockoutDays", async () => {
     const { rows, store } = fakeStore([row()]);
     setSubscriptionStoreResolver(() => store);
-    setSubscriptionConfig({ lockoutDays: 90 });
 
     const job = pastDueLockoutJob();
     await job.run(await job.parse({}), {});
 
-    // 90 days of grace, and the row is 20 days past due, so nothing is locked.
-    assert.equal(rows[0]?.lockedAt, undefined);
-    assert.equal(subscriptionConfig().lockoutDays, 90);
-
-    setSubscriptionConfig({ lockoutDays: 1 });
-    await job.run(await job.parse({}), {});
-
+    // The shipped 14 days of grace, and the row is 20 days past due, so it is locked.
+    assert.equal(config.subscription.lockoutDays, 14);
     assert.ok(rows[0]?.lockedAt instanceof Date);
-    setSubscriptionConfig({ lockoutDays: 14 });
   });
 });

@@ -10,13 +10,12 @@
   "dependencies": [],
   "envVars": {
     "SUBSCRIPTION_PROVIDER": "Which installed provider takes payments: `stripe` (add subscription-stripe) or `console` (add subscription-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
-    "SUBSCRIPTION_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
     "SUBSCRIPTION_APP_URL": "Absolute https URL the subscription emails link to, normally your admin app's /subscription page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/subscription when unset, which is the dev default and is refused by the email renderer on any host but localhost."
   },
   "envServices": {
     "default": ["api"]
   },
-  "envOptional": ["SUBSCRIPTION_LOCKOUT_DAYS", "SUBSCRIPTION_APP_URL"],
+  "envOptional": ["SUBSCRIPTION_APP_URL"],
   "removeWarnings": [
     "The deployed subscriptions and subscription_events tables survive this removal, and so does the users.subscription_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
     "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first.",
@@ -255,10 +254,6 @@
         {
           "path": "files/src/notify.ts",
           "target": "src/notify.ts"
-        },
-        {
-          "path": "files/src/config.ts",
-          "target": "src/config.ts"
         },
         {
           "path": "files/src/jobs/event.ts",

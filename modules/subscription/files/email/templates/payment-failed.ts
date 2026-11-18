@@ -16,8 +16,8 @@ export interface PaymentFailedProps {
   /** The plan still in force while the grace period runs. */
   planName: string;
   /**
-   * When the grace period ends, already formatted by the caller. `SUBSCRIPTION_LOCKOUT_DAYS`
-   * after the failure; the lockout job uses the same number.
+   * When the grace period ends, already formatted by the caller.
+   * `config.subscription.lockoutDays` after the failure; the lockout job uses the same number.
    */
   lockoutOn: string;
   /** Absolute `https:` URL of the subscription page, where the card is updated. */

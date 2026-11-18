@@ -1349,12 +1349,50 @@ export async function checkKeptDeleted(
 export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
 /** The values file `saasaloy env` writes and `pnpm env:setup` copies from. */
 const ENV_VALUES_FILE = "packages/env/.env";
+/** An env key a `config` section leaf replaced, and where its value lives now. */
+interface RetiredEnvKey {
+  /** The env var nothing reads any more. */
+  key: string;
+  /** The module that read it, which owns the finding. */
+  module: string;
+  /** The leaf that replaced it, as a reader writes it. */
+  leaf: string;
+  /** What the value did, in a few words, so the finding says what the owner loses. */
+  role: string;
+}
+
 /**
- * The env var `config.app.name` superseded. `subscription` (then `billing`) no longer declares it, so a fresh
- * project never lists it; an older project's key list keeps the line, because `add` never
- * removes one, and this is how its owner learns the value does nothing.
+ * Env keys a `config` section replaced (#154, #162). Each module that read one no longer
+ * declares it, so a fresh project never lists it; an older project's key list keeps the
+ * line, because `add` never removes one, and this is how its owner learns the value does
+ * nothing. The code ignores the value: there is no fallback and no runtime warning.
  */
-const DEPRECATED_APP_NAME = "BILLING_APP_NAME";
+export const RETIRED_ENV_KEYS: readonly RetiredEnvKey[] = [
+  {
+    key: "BILLING_APP_NAME",
+    leaf: "config.app.name (or config.subscription.appName)",
+    module: "subscription",
+    role: "the subscription emails take their name from",
+  },
+  {
+    key: "SUBSCRIPTION_LOCKOUT_DAYS",
+    leaf: "config.subscription.lockoutDays",
+    module: "subscription",
+    role: "the past-due lockout sweep reads its grace days from",
+  },
+  {
+    key: "FLAGS_ISOLATE_TTL_SECONDS",
+    leaf: 'config["feature-flags"].isolateTtlSeconds',
+    module: "feature-flags",
+    role: "the flag cache reads its isolate TTL from",
+  },
+  {
+    key: "STORAGE_MAX_UPLOAD_BYTES",
+    leaf: "config.storage.maxUploadBytes",
+    module: "storage",
+    role: "the per-file upload cap comes from",
+  },
+];
 
 export interface ConfigCheckArgs {
   /** Project-relative path → contents, for `packages/env/.env` and every service `.env`. */
@@ -1362,8 +1400,8 @@ export interface ConfigCheckArgs {
 }
 
 /**
- * The one thing nothing else checks (#154): `BILLING_APP_NAME`, the env var `config`
- * replaced, still set in a `.env`, where it looks effective and is not.
+ * The one thing nothing else checks (#154, #162): an env var a `config` leaf replaced,
+ * still set in a `.env`, where it looks effective and is not.
  *
  * It reads the files rather than the composed object, because `doctor` never executes
  * project code.
@@ -1376,25 +1414,27 @@ export interface ConfigCheckArgs {
 export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
   const findings: Finding[] = [];
 
-  // `pnpm env:setup` copies the values file into each service's `.env`, so a key set in
-  // `packages/env/.env` would otherwise be reported once per copy. Report the source when
-  // it sets the key; a service file is reported only when the source does not, which is
-  // a value someone typed there by hand or a source other than the values file.
-  const setting = Object.entries(args.envFiles ?? {})
-    .filter(([, contents]) => assignsVar(contents, DEPRECATED_APP_NAME))
-    .map(([file]) => file)
-    .toSorted();
-  const reported = setting.includes(ENV_VALUES_FILE)
-    ? [ENV_VALUES_FILE]
-    : setting;
-  for (const file of reported) {
-    findings.push(
-      finding(
-        "subscription",
-        `/env/${DEPRECATED_APP_NAME}`,
-        `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the subscription emails take their name from config.app.name (or config.subscription.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
-      )
-    );
+  for (const retired of RETIRED_ENV_KEYS) {
+    // `pnpm env:setup` copies the values file into each service's `.env`, so a key set in
+    // `packages/env/.env` would otherwise be reported once per copy. Report the source when
+    // it sets the key; a service file is reported only when the source does not, which is
+    // a value someone typed there by hand or a source other than the values file.
+    const setting = Object.entries(args.envFiles ?? {})
+      .filter(([, contents]) => assignsVar(contents, retired.key))
+      .map(([file]) => file)
+      .toSorted();
+    const reported = setting.includes(ENV_VALUES_FILE)
+      ? [ENV_VALUES_FILE]
+      : setting;
+    for (const file of reported) {
+      findings.push(
+        finding(
+          retired.module,
+          `/env/${retired.key}`,
+          `${file} sets ${retired.key}, which nothing reads any more — ${retired.role} ${retired.leaf}. Delete the line, and set the value in ${CONFIG_PROJECT_FILE}.`
+        )
+      );
+    }
   }
 
   return findings;

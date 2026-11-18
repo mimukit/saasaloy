@@ -8,6 +8,7 @@ import {
   checkBase,
   checkKeptDeleted,
   checkConfigValues,
+  RETIRED_ENV_KEYS,
   checkDeploy,
   checkModule,
   checkPartialInstalls,
@@ -1220,7 +1221,7 @@ describe(readDeployState, () => {
 });
 
 // ---------------------------------------------------------------------------
-// The `config` rule (#154): the env var `config.app.name` superseded.
+// The `config` rule (#154, #162): env vars a `config` section leaf replaced.
 // ---------------------------------------------------------------------------
 
 describe(checkConfigValues, () => {
@@ -1243,6 +1244,52 @@ describe(checkConfigValues, () => {
     expect(found?.module).toBe("subscription");
     expect(found?.where).toBe("/env/BILLING_APP_NAME");
     expect(found?.message).toContain("apps/api/.env");
+  });
+
+  it.each([
+    ["BILLING_APP_NAME", "subscription", "config.app.name"],
+    [
+      "SUBSCRIPTION_LOCKOUT_DAYS",
+      "subscription",
+      "config.subscription.lockoutDays",
+    ],
+    [
+      "FLAGS_ISOLATE_TTL_SECONDS",
+      "feature-flags",
+      'config["feature-flags"].isolateTtlSeconds',
+    ],
+    ["STORAGE_MAX_UPLOAD_BYTES", "storage", "config.storage.maxUploadBytes"],
+  ])("reports a set %s under %s and names %s", (key, module, leaf) => {
+    const found = checkConfigValues({
+      envFiles: { "packages/env/.env": `${key}=1` },
+    });
+    expect(found).toHaveLength(1);
+    expect(found[0]?.module).toBe(module);
+    expect(found[0]?.where).toBe(`/env/${key}`);
+    expect(found[0]?.message).toContain(leaf);
+    expect(found[0]?.message).toContain("packages/config/src/project.ts");
+  });
+
+  it("covers every retired key in the table", () => {
+    expect(RETIRED_ENV_KEYS.map((retired) => retired.key)).toStrictEqual([
+      "BILLING_APP_NAME",
+      "SUBSCRIPTION_LOCKOUT_DAYS",
+      "FLAGS_ISOLATE_TTL_SECONDS",
+      "STORAGE_MAX_UPLOAD_BYTES",
+    ]);
+  });
+
+  it("reports two retired keys in one file as two findings", () => {
+    const found = checkConfigValues({
+      envFiles: {
+        "packages/env/.env":
+          "STORAGE_MAX_UPLOAD_BYTES=1\nFLAGS_ISOLATE_TTL_SECONDS=0\n",
+      },
+    });
+    expect(found.map((f) => f.where)).toStrictEqual([
+      "/env/FLAGS_ISOLATE_TTL_SECONDS",
+      "/env/STORAGE_MAX_UPLOAD_BYTES",
+    ]);
   });
 
   it("ignores a commented or empty assignment", () => {

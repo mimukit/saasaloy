@@ -94,7 +94,7 @@ export interface SubscriptionStore {
  * The subject's live subscription, or `undefined`. "Live" means the status still entitles
  * the paid plan (`trialing`, `active`, `past_due`) **and** the lockout job has not set
  * `lockedAt`. A locked row is deliberately not live: that is how a `past_due` subject drops
- * to the default plan after `SUBSCRIPTION_LOCKOUT_DAYS` without the vendor changing anything.
+ * to the default plan after `config.subscription.lockoutDays` without the vendor changing anything.
  */
 export async function currentSubscription(
   db: SubscriptionStore,

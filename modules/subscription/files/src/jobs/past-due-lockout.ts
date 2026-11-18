@@ -1,4 +1,4 @@
-import { subscriptionConfig } from "../config";
+import { config } from "@repo/config";
 import { notifySubscription } from "../notify";
 import { inSubscriptionStore, requireSubscriptionStore } from "../store";
 import { invalidateEntitlements } from "../subscription";
@@ -9,7 +9,7 @@ import type { RegisteredJob } from "./event";
 //
 // `past_due` deliberately keeps the plan (see `LIVE_STATUSES` in ../provider.ts), because
 // the first failed charge is usually an expired card and cutting a paying customer off that
-// same hour is the wrong trade. `SUBSCRIPTION_LOCKOUT_DAYS` is how long that grace runs. This job
+// same hour is the wrong trade. `config.subscription.lockoutDays` is how long that grace runs. This job
 // sweeps once a day, sets `lockedAt` on everything past the window, and sends the account
 // -locked email; `currentSubscription` then stops returning the row and entitlements fall
 // back to the default plan. A later `payment.succeeded` clears the lock (../subscription.ts).
@@ -37,6 +37,11 @@ export const SUBSCRIPTION_PAST_DUE_LOCKOUT_SCHEDULE =
  * 03:00 UTC daily. Off the hour a vendor retries a failed charge on, so the sweep sees a
  * row the vendor has already had its own last go at, and outside the hours a project's own
  * traffic peaks in.
+ *
+ * Deliberately not a `config.subscription` leaf (#162), unlike `lockoutDays`. A config
+ * value passes `typecheck` whatever string it holds, and a malformed cron throws on every
+ * tick rather than at import (see below), so an override could break the sweep with nothing
+ * failing until the next deploy runs it. No project needs the sweep at another hour.
  */
 export const SUBSCRIPTION_PAST_DUE_LOCKOUT_CRON = "0 3 * * *";
 
@@ -130,7 +135,7 @@ export const pastDueLockoutJob = (): RegisteredJob => ({
       await runPastDueLockout(
         requireSubscriptionStore(),
         new Date(),
-        subscriptionConfig().lockoutDays
+        config.subscription.lockoutDays
       );
     });
   },
