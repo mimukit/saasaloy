@@ -19,5 +19,9 @@
 // Removing a pair later stops new keys from carrying it. It does not shrink a key that
 // already holds it: a key's scope is a snapshot taken at issue time (ADR 0036). Revoke
 // and reissue those keys.
+//
+// Keep this file free of imports. The Agents page in `apps/app` (from the `agent` module)
+// reads it in the browser through `@repo/auth/api-key-scopes`, and an import here would
+// carry whatever it names into that bundle.
 
 export const API_KEY_SCOPES: Readonly<Record<string, readonly string[]>> = {};

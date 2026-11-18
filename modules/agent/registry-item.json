@@ -76,6 +76,23 @@
         "name": "agentApiEntry",
         "from": "./agent-entries/agent"
       }
+    },
+    {
+      "file": "apps/app/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Workspace",
+      "entry": {
+        "to": "/agents",
+        "label": "Agents",
+        "shortcut": "G A"
+      },
+      "icon": {
+        "name": "BotIcon",
+        "from": "lucide-react"
+      },
+      "when": { "installed": ["api-keys-user"] }
     }
   ],
   "files": [
@@ -125,6 +142,26 @@
     {
       "path": "files/web/agent-entry.ts",
       "target": "@web/lib/agent-entries/agent.ts"
+    },
+    {
+      "path": "files/ui/lib/agent/keys.ts",
+      "target": "@ui/lib/agent/keys.ts",
+      "when": { "installed": ["api-keys-user"] }
+    },
+    {
+      "path": "files/ui/content/agent.ts",
+      "target": "@ui/content/agent.ts",
+      "when": { "installed": ["api-keys-user"] }
+    },
+    {
+      "path": "files/ui/blocks/agent/agent-keys.tsx",
+      "target": "@ui/blocks/agent/agent-keys.tsx",
+      "when": { "installed": ["api-keys-user"] }
+    },
+    {
+      "path": "files/app/routes/agents.tsx",
+      "target": "@app/routes/agents.tsx",
+      "when": { "installed": ["api-keys-user"] }
     }
   ],
   "agent": {

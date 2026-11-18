@@ -51,7 +51,7 @@ Each row says how it was settled on 2026-11-17: by the owner before the grill, a
 | A check with Claude and ChatGPT | Not in this plan. Both need OAuth. The benchmark's second agent covers the key path. Default. |
 | UI house rules | The new page uses the `shell` set from `@repo/ui/{components,blocks,containers}/shell/*`. A block takes its data and callbacks as props, with no IO in `@repo/ui`. Words live in `packages/ui/src/content/`. A field with more than 7 options is a combobox. Module UI ships as a `ui` package block (ADR 0030). `apps/app` has no `DESIGN.md`, so `modules/admin/files/DESIGN.md` is the nearest written rule set. |
 | Visual reference | None yet. The nearest existing screen is the organization key workspace, `modules/api-keys-organization/files/admin/components/api-key-workspace.tsx`. Phase 1 makes the mockup and the owner approves it. |
-| Mockup approved | Open. Phase 1 records the date, the round, the gist URL with the file prefix, and the issue comment URL. |
+| Mockup approved | 2026-11-18, round 1. Gist https://gist.github.com/60e583e0d41a1156c2a59e4b5a6a4b2a, files `0110-r1-*`. Issue comment https://github.com/mimukit/saasaloy/issues/231#issuecomment-6976367450. |
 | Outward actions a builder may take | File GitHub issues, the OAuth issue included. Post each mockup round to the mockup gist and the tracking issue. Default, and the owner approved the OAuth issue in the grill. |
 | Attended parts | The mockup approval of phase 1, and the scored benchmark runs of phase 7. Default. |
 | Tests | No new kind of test. Route tests on the present vitest Workers pool cover the OpenAPI document and the MCP endpoint. The guard test is a unit test. |
