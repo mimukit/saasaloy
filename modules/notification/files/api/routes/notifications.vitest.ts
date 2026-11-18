@@ -117,6 +117,17 @@ describe("own rows only", () => {
 
     expect(res.status).toBe(401);
   });
+
+  it("lets a signed-in caller read, even with a stale bearer header beside the cookie", async () => {
+    // The reads open with `requireUser`, which lets a session decide before any key: the
+    // same callers `requireSession` admitted still read, whatever key module is installed.
+    const cookie = await signIn("member@example.test");
+    const res = await call("/notifications", cookie, {
+      headers: { authorization: "Bearer sk_revoked" },
+    });
+
+    expect(res.status).toBe(200);
+  });
 });
 
 describe("unread count", () => {

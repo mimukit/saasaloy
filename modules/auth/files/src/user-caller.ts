@@ -1,7 +1,7 @@
 import { HTTPException } from "hono/http-exception";
 import { demandDenial } from "./user-caller-rules";
 import type { ScopeDemand, UserCaller } from "./user-caller-rules";
-import { requireSession } from "./server";
+import { getSession, requireSession } from "./server";
 import type { AuthRequestContext } from "./server";
 
 export type {
@@ -41,7 +41,8 @@ export interface UserResolver {
   name: string;
   /**
    * Is this credential mine? The cheap synchronous half. `true` commits the request to
-   * this resolver, so a credential that fails never falls back to a session cookie.
+   * this resolver when no session rides along, so a credential that fails gets the
+   * resolver's own refusal rather than a quiet pass.
    */
   claims(headers: { get(name: string): string | null }): boolean;
   /** The caller, or a thrown `HTTPException` (401 for a credential that fails). */
@@ -74,9 +75,15 @@ async function sessionCaller(c: AuthRequestContext): Promise<UserCaller> {
  * The user this request acts for, or a 401; and a 403 when its credential lacks a pair of
  * `demand`.
  *
- * The first resolver that claims the request decides who is calling. With none, the
- * session decides, exactly as `requireSession` does. Then the demand: a person passes it,
- * a scoped credential must hold every pair, and an empty demand is refused for both.
+ * A signed-in session decides first, exactly as `requireSession` does, whatever else the
+ * request carries: every request `requireSession` let through before still gets through,
+ * as the same person, and a person passes every demand. Only a request with no session
+ * goes to the first resolver that claims it, and its credential must hold every pair of
+ * `demand`. An empty demand is refused for both.
+ *
+ * That order is what keeps the gate additive. A browser that sends a stale `Bearer`
+ * header beside its cookie still reads its own data, and a key only ever reaches a route
+ * that refused it outright before.
  */
 export async function requireUser(
   c: AuthRequestContext,
@@ -85,7 +92,10 @@ export async function requireUser(
   const resolver = userResolvers.resolvers.find((candidate) =>
     candidate.claims(c.req.raw.headers)
   );
-  const caller = resolver ? await resolver.resolve(c) : await sessionCaller(c);
+  const caller =
+    resolver && !(await getSession(c))
+      ? await resolver.resolve(c)
+      : await sessionCaller(c);
   const denial = demandDenial(caller.principal, demand);
   if (denial) {
     throw new HTTPException(denial.status, { message: denial.message });

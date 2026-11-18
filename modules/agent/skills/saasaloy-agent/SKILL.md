@@ -61,10 +61,10 @@ Which gate depends on whose data the route touches.
 | The route acts for | Gate | A key it accepts | The vocabulary |
 | --- | --- | --- | --- |
 | one signed-in user | `requireUser(c, { books: ["read"] })` from `@repo/auth/user-caller` | a user's key, with `api-keys-user` | `API_KEY_SCOPES` in `packages/auth/src/api-key-scopes.ts` |
-| one organization | `requirePermission(c, { books: ["read"] })` from `@repo/auth/permissions` | an organization's key, with `api-keys-organization` | the statements in `packages/auth/src/access.ts` |
+| one organization | `requirePermission(c, { books: ["read"] })` from `@repo/auth/permissions` on a write; on a read a member could already call, `requireTenant(c)` plus `can(tenant.principal, demand)` for a key only, as `GET /projects` does | an organization's key, with `api-keys-organization` | the statements in `packages/auth/src/access.ts` |
 | nobody (a public read) | none; `scope: null` in the statement | any key, and no key | none |
 
-`requireUser` is `requireSession` for a person: with no key module it reads the session and nothing else, and a person passes every demand. `api-keys-user` registers its key as a caller kind in `userResolvers` (`packages/auth/src/user-caller.ts`), so a user's key then acts as that user, limited to its scope. An organization's key acts for no user, so `requireUser` refuses it with the same 401 a signed-out caller gets. A later caller kind, such as an OAuth grant, registers one more resolver and changes no route.
+`requireUser` is `requireSession` for a person: a signed-in session decides first, whatever else the request carries, and a person passes every demand, so moving a route to `requireUser` takes access from nobody. Only a request with no session reaches a key. `api-keys-user` registers its key as a caller kind in `userResolvers` (`packages/auth/src/user-caller.ts`), so a user's key then acts as that user, limited to its scope. An organization's key acts for no user, so `requireUser` refuses it with the same 401 a signed-out caller gets. A later caller kind, such as an OAuth grant, registers one more resolver and changes no route.
 
 Add the scope words to the vocabulary before you issue a key that holds them:
 

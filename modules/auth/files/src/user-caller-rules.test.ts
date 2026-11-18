@@ -70,4 +70,8 @@ describe("the gate in ./user-caller.ts", () => {
     assert.match(source, /demandDenial\(caller\.principal, demand\)/);
     assert.match(source, /: await sessionCaller\(c\)/);
   });
+
+  it("lets a session decide before any resolver, so no session caller loses a route", () => {
+    assert.match(source, /resolver && !\(await getSession\(c\)\)/);
+  });
 });

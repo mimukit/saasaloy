@@ -6,7 +6,7 @@ title: A user route can accept a key caller through requireUser
 
 `packages/auth` gets two files and one export:
 
-- `src/user-caller.ts` exports `requireUser(c, demand)` and the `userResolvers` table. `requireUser` returns `{ userId, principal, activeOrganizationId }` for the user a request acts for, then refuses with 403 `permission required: <resource>:<action>` when the caller's credential lacks a demanded pair. With an empty table it reads the session and nothing else, exactly as `requireSession` does, and a person passes every demand.
+- `src/user-caller.ts` exports `requireUser(c, demand)` and the `userResolvers` table. `requireUser` returns `{ userId, principal, activeOrganizationId }` for the user a request acts for. A signed-in session decides first, exactly as `requireSession` does, and a person passes every demand, so every caller `requireSession` admitted is still admitted. Only a request with no session goes to a resolver, and its credential gets 403 `permission required: <resource>:<action>` when it lacks a demanded pair. With an empty table it is `requireSession`.
 - `src/user-caller-rules.ts` holds the import-free rule `demandDenial`, the same rule and refusal text as `api-keys-user`'s `keyAllows` and `teams`' `can()`.
 - `package.json` exports `./user-caller`.
 

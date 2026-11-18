@@ -1,5 +1,6 @@
 import type { AuthDbBindings } from "@repo/auth/server";
-import { requirePermission } from "@repo/auth/permissions";
+import { can, requirePermission } from "@repo/auth/permissions";
+import { requireTenant } from "@repo/auth/tenant";
 import { withDb } from "@repo/db/client";
 import {
   createProject,
@@ -33,10 +34,13 @@ import { declare } from "../contract";
 // Never call both in one handler: the second call re-resolves the session and re-runs the
 // `organization_roles` query for an answer it already has.
 //
-// The read is gated too, because an agent may call it. `member` holds `project: ["read"]`
-// in `access.ts`, so every role that read the list before still reads it, and an
-// organization's key now needs `project:read` in its scope to list projects, which is
-// the scope word the route's statement names.
+// Read is left on `requireTenant` for a person. `member` holds `project: ["read"]` in
+// `access.ts`, so gating the read would be the same check written twice, and a route that
+// lists nothing a member may see is a worse failure than one that lists what they may.
+//
+// A key is the one caller the read asks more of. An agent may call it, so its statement
+// names `project:read`, and an organization's key must hold that scope. The scope limits
+// the key and never a member: a session caller gets exactly what `requireTenant` gave it.
 //
 // The 403 body is `permission required: project:delete`, from `permission-rules.ts`. The
 // `/roles` screen hides the button for a caller `can()` refuses, and that hide is
@@ -79,7 +83,13 @@ export const projects = new Hono<{ Bindings: AuthDbBindings }>()
       },
     }),
     async (c) => {
-      const tenant = await requirePermission(c, { project: ["read"] });
+      const tenant = await requireTenant(c);
+      if (tenant.principal.kind === "apiKey") {
+        const { denial } = can(tenant.principal, { project: ["read"] });
+        if (denial) {
+          throw new HTTPException(denial.status, { message: denial.message });
+        }
+      }
       const rows = await withDb(c, (db) =>
         listProjects(db, tenant.organizationId)
       );

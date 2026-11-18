@@ -1,24 +1,26 @@
 ---
-title: GET /projects demands project:read
+title: GET /projects asks an organization's key for project:read
 ---
 
-This note needs `api/0006-agent-scope`. Apply it first.
+This note needs `api/0005-route-contract` and `api/0006-agent-scope`. Apply both first.
 
 ## What update does
 
-`GET /projects` in `apps/api/src/routes/projects.ts` opens with `requirePermission(c, { project: ["read"] })` in place of `requireTenant(c)`, and its statement names `scope: "project:read"`. The `owner`, `admin` and `member` roles in `access.ts` all hold `project: ["read"]`, so every member who read the list before still reads it. An organization's key now needs `project:read` in its scope to list projects; before, any key of the organization could.
+`GET /projects` in `apps/api/src/routes/projects.ts` still opens with `requireTenant(c)`, and its statement names `scope: "project:read"`. When the caller is an organization's key, the route then runs `can()` with `{ project: ["read"] }` and refuses a key without that scope with 403 `permission required: project:read`. A signed-in member gets exactly the answer `requireTenant` gave before, whatever their role holds: the scope limits a key and never a person.
+
+With testing on, the project also gets `apps/api/src/routes/projects.test.ts`, which proves a member whose custom role has no `project:read` still lists the projects.
 
 ## What the merge plan gets
 
-- `apps/api/src/routes/projects.ts`, if you edited it. Keep your edits and take the gate line in `GET /` and the comment above the recipe.
+- `apps/api/src/routes/projects.ts`, if you edited it. Keep your edits and take the `can` and `requireTenant` imports, the key check in `GET /`, and the comment above the recipe.
 
 ## What you do
 
-If you gave a custom role no `project: ["read"]`, its members now get 403 on `GET /projects`; add the statement to the role if they should read the list. Reissue any key that should keep listing projects with `project:read` in its scope.
+Reissue any organization key that should keep listing projects with `project:read` in its scope. A key issued before this update without it now gets 403 on `GET /projects`.
 
 ## Verify
 
 ```sh
 pnpm typecheck
-grep -n 'requirePermission(c, { project: \["read"\] })' apps/api/src/routes/projects.ts
+grep -n 'tenant.principal.kind === "apiKey"' apps/api/src/routes/projects.ts
 ```
