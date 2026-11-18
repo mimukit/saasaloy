@@ -95,6 +95,8 @@ Under `api-keys-organization` the words go into `statements` in `packages/auth/s
 
 Give the agent the MCP address and a key. The key is made by a person in the product, and its plaintext shows one time.
 
+With `api-keys-user` installed, `agent` adds the Agents page to `apps/app` at `/agents` (nav entry "Agents", `G A`). It shows the MCP address, the setup text below for each agent, and the user's own keys: create with scopes, revoke, and the plaintext once. The create form turns on the `read` and `write` action of each resource in `API_KEY_SCOPES` and leaves every other action off, `delete` included. The browser reads the vocabulary from `@repo/auth/api-key-scopes`, a file that imports nothing; keep it that way, or the auth server lands in the app bundle. The markup is `packages/ui/src/blocks/agent/agent-keys.tsx`, the words are `packages/ui/src/content/agent.ts`, and the setup text is `setupText()` in `packages/ui/src/lib/agent/keys.ts`. Under `api-keys-organization` there is no app page; keys live in the admin app's API keys screen.
+
 - Claude Code: `claude mcp add --transport http <name> https://api.example.com/mcp --header "Authorization: Bearer sk_..."`
 - Cursor, `.cursor/mcp.json`: `{ "mcpServers": { "<name>": { "url": "https://api.example.com/mcp", "headers": { "Authorization": "Bearer sk_..." } } } }`
 - Codex, `~/.codex/config.toml`: `[mcp_servers.<name>]` with `url = "https://api.example.com/mcp"` and `bearer_token_env_var = "<NAME>_KEY"`.
@@ -152,6 +154,19 @@ With testing `off`, neither file ships, so nothing fails on a route with no stat
 | `403 Invalid Host` from `/mcp` | `BETTER_AUTH_URL` does not name the host the request used. |
 | A tool missing from `tools/list` | Its statement is `callable: false`, or it registers with `.all()`, which the surfaces skip. |
 | A 500 on every `/mcp` call naming a tool that "takes a field twice" | A path, query or body field shares a name with another; rename one. `statements.test.ts` catches it. |
+
+## Wire-up
+
+No manual page edit is needed. With `api-keys-user` installed, the module's own route `apps/app/src/routes/agents.tsx` renders the `AgentKeys` block from `@ui/blocks/agent/agent-keys.tsx`. `saasaloy add` still prints "Manual wire-up needed ... on no page yet" for that block target, because it flags every block target. For this module that line is wrong. Ignore it.
+
+The patches did the wiring:
+
+| Patch | File | Effect |
+|---|---|---|
+| `chained-route` | `apps/api/src/index.ts` | mounts `agent` at `/`, which serves `/mcp`, `/openapi.json`, `/llms.txt` and the Server Card |
+| `nav-entry` | `apps/app/src/components/nav.ts` | adds Agents (`BotIcon`, shortcut `G A`) to the Workspace group of the `/` area in `NAV_AREAS`, only with `api-keys-user` |
+| `plugin-array` | `packages/config/src/sections.ts` | adds `agentConfig()` to `sections` |
+| `plugin-array` | `apps/web/src/lib/agent-entries.ts` | adds the "API for agents" section to the site's `/llms.txt` |
 
 ## What `remove` leaves behind
 
