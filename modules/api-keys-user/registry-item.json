@@ -15,6 +15,17 @@
   ],
   "patches": [
     {
+      "file": "packages/auth/src/user-caller.ts",
+      "kind": "plugin-array",
+      "exportName": "userResolvers",
+      "arrayProp": "resolvers",
+      "call": "apiKeyUser",
+      "import": {
+        "name": "apiKeyUser",
+        "from": "./caller"
+      }
+    },
+    {
       "file": "packages/auth/src/auth.ts",
       "kind": "plugin-array",
       "exportName": "adminAuth",

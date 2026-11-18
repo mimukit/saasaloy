@@ -25,7 +25,7 @@ The core, `api-keys`, holds what both owners share:
 Each owner ships `packages/auth/src/plugins/api-key.ts` at the same path, so the `auth.ts` import line is the same in both modes. The owner's file adds `references` and the `schema.apikey` rename to the shared options, and it holds that owner's `apiKeyScopeGuard()`. Each owner also ships `packages/db/src/schema/api-keys.ts`, with `organization_id` or `user_id` as the owner column.
 
 - `api-keys-organization` adds `packages/auth/src/resolvers/api-key.ts` (the bearer resolver, patched into `multitenant`'s `tenantResolvers`), the `/api-keys` screen in `apps/admin`, and its `NAV_ITEMS` entry.
-- `api-keys-user` adds `packages/auth/src/caller.ts` (`requireCaller`, `requireScope`), `packages/auth/src/api-key-rules.ts` (the import-free rules `scopeDenial`, `keyAllows` and `ownerMayUseKeys`), and `packages/auth/src/api-key-scopes.ts` (the key vocabulary). It has no screen. Its one patch puts `apiKeyAdminGuard()` into `adminAuth.plugins`.
+- `api-keys-user` adds `packages/auth/src/caller.ts` (`requireCaller`, `requireScope`, and `apiKeyUser()`), `packages/auth/src/api-key-rules.ts` (the import-free rules `scopeDenial`, `keyAllows` and `ownerMayUseKeys`), and `packages/auth/src/api-key-scopes.ts` (the key vocabulary). It has no screen. One patch puts `apiKeyAdminGuard()` into `adminAuth.plugins`; the other appends `apiKeyUser()` to `userResolvers` in `packages/auth/src/user-caller.ts`, so a route that opens with `requireUser(c, demand)` accepts a user's key as that user, limited to its scope. The shipped notification and file reads open that way, and the `saasaloy-agent` skill describes the gate.
 
 ## Picking an owner
 
