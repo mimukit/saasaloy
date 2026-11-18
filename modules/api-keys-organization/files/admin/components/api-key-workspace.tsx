@@ -9,6 +9,7 @@ import { useState } from "react";
 import type { SubmitEvent } from "react";
 
 import { statements } from "@repo/auth/access";
+import { config } from "@repo/config";
 import { allows } from "@repo/auth/permission-rules";
 import type { PrincipalLike } from "@repo/auth/permission-rules";
 import { DataTable } from "@repo/ui/blocks/shell/data-table";
@@ -74,8 +75,11 @@ import { auth } from "@admin/lib/auth";
 /** One day in seconds. `expiresIn` is seconds, and the plugin's floor is one day. */
 const DAY_SECONDS = 60 * 60 * 24;
 
-/** The plugin's ceiling on a client-set expiry, in days. */
-const MAX_EXPIRY_DAYS = 365;
+/**
+ * The plugin's ceiling on a client-set expiry, in days. The same leaf sets
+ * `keyExpiration.maxExpiresIn` on the server, so the form never offers a refused date.
+ */
+const MAX_EXPIRY_DAYS = config["api-keys"].maxExpiryDays;
 
 /** A key as the list endpoint returns it, narrowed to what the table renders. */
 interface KeyRow {

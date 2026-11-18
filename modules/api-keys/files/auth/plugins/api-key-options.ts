@@ -1,4 +1,5 @@
 import type { ApiKeyConfigurationOptions } from "@better-auth/api-key";
+import { config } from "@repo/config";
 
 // What every API-key owner shares, whoever a key belongs to.
 //
@@ -13,8 +14,9 @@ import type { ApiKeyConfigurationOptions } from "@better-auth/api-key";
 // travels on a create body, which endpoint writes one, how a bearer key is presented,
 // and the one message every failed key gets. One copy, so the two modes cannot drift.
 //
-// It imports nothing at runtime, so `pnpm test:modules` runs `./api-key-options.test.ts`
-// against it with no scaffolded project behind it.
+// Its one runtime import is `@repo/config`, which `pnpm test:modules` maps onto
+// `scripts/config-shim.ts`, so `./api-key-options.test.ts` runs against it with no
+// scaffolded project behind it.
 
 /**
  * The plugin options both owners share.
@@ -31,6 +33,9 @@ import type { ApiKeyConfigurationOptions } from "@better-auth/api-key";
  * - `keyExpiration.defaultExpiresIn: null`. A key with no expiry stays valid until it is
  *   revoked, which is what an operator issuing one for a deploy pipeline expects. An
  *   expiry is offered on the create form and it is theirs to set.
+ * - `keyExpiration.maxExpiresIn`, in days, is `config["api-keys"].maxExpiryDays`. The
+ *   plugin's own default is the same 365, but the create form reads the leaf too, so a
+ *   project that changes it moves the server ceiling and the form's `max` together.
  * - `requireName: true`. A key list of eight unnamed rows is a key list nobody dares
  *   revoke from.
  * - `defaultPrefix: "sk_"` and `startingCharactersConfig.charactersLength: 8`, so the
@@ -66,7 +71,10 @@ export const API_KEY_OPTIONS = {
   defaultPrefix: "sk_",
   enableMetadata: true,
   enableSessionForAPIKeys: false,
-  keyExpiration: { defaultExpiresIn: null },
+  keyExpiration: {
+    defaultExpiresIn: null,
+    maxExpiresIn: config["api-keys"].maxExpiryDays,
+  },
   permissions: {
     // An empty map when the body asks for nothing. The option's type has no `undefined`
     // arm, and `{}` is the same answer said in the type's own vocabulary: a key that

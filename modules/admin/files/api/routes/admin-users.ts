@@ -6,6 +6,7 @@ import {
   withAuthScope,
 } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
+import { config } from "@repo/config";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -29,12 +30,17 @@ import { z } from "zod";
 // `CORS_ORIGINS` allowlist to `*` before this sub-app is mounted, and a sub-app that
 // sets no `onError` inherits api's — which is what turns the `HTTPException` below into
 // `{ "error": { "code": "forbidden", "message": "role required: admin" } }` with a 403.
-// The query `GET /admin/users` takes. The users screen sends none and gets the first 100
-// in the plugin's order; the overview asks for `?limit=5&sortBy=createdAt&sortDirection=desc`
+// The query `GET /admin/users` takes. The users screen sends none and gets the first
+// `config.admin.userListLimit` (100) in the plugin's order; the overview asks for `?limit=5&sortBy=createdAt&sortDirection=desc`
 // and reads the five newest straight off the answer. `sortBy` is an allowlist on purpose:
 // the plugin sorts by any column it is handed, and these two have an index or a reason.
 const listQuery = z.object({
-  limit: z.coerce.number().int().min(1).max(100).default(100),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(config.admin.userListLimit)
+    .default(config.admin.userListLimit),
   sortBy: z.enum(["createdAt", "name"]).optional(),
   sortDirection: z.enum(["asc", "desc"]).optional(),
 });
