@@ -1,5 +1,6 @@
 import { zValidator as zodValidator } from "@hono/zod-validator";
 import type { MiddlewareHandler, ValidationTargets } from "hono";
+import { describeRoute, resolver, uniqueSymbol } from "hono-openapi";
 import type { ZodType } from "zod";
 
 // The route contract: what each api route says about itself to an agent (plan 0110, ADR
@@ -19,20 +20,29 @@ import type { ZodType } from "zod";
 //     (c) => ...
 //   )
 //
-// **It does nothing in a project without `agent`.** `declare` returns a middleware that
-// only calls `next()`, and the statement rides on the function as a property that nothing
-// reads at request time. The response, the status and `AppType` are the route's own: the
-// link adds no input and no response type to the chain. This file imports no runtime code
-// but `@hono/zod-validator`, which api already ships, and it pulls nothing from `agent`.
-// The `agent` module reads the statements; a route module never depends on `agent`.
+// **The declaration library is `hono-openapi`** (ADR 0063). `declare` is its
+// `describeRoute`, filled in from the statement: the name is the `operationId`, the output
+// schema is the success response through `resolver()`, and the statement travels as the
+// operation extension `x-agent`. A closed route is `hide: true`, so the document lists the
+// callable routes unless a reader asks for the hidden ones. `hono-openapi`'s
+// `generateSpecs(app)` then writes the OpenAPI document straight from the app, and that
+// is what the `agent` module calls.
+//
+// **It does nothing in a project without `agent`.** `describeRoute` returns a middleware
+// that only calls `next()`, and the spec rides on the function under `hono-openapi`'s
+// symbol, which nothing reads at request time. `resolver()` converts nothing when it is
+// called: it keeps the schema and returns the functions `generateSpecs` calls later, so no
+// JSON Schema is built at import. The response, the status and `AppType` are the route's
+// own: the link adds no input and no response type to the chain. A route module never
+// depends on `agent`.
 //
 // **A route writes its input schema one time**, in its validator, as it always did. The
 // `zValidator` exported here is `@hono/zod-validator`'s, with the same signature and the
-// same failure hook, and it records which target it checks and with which schema on the
-// middleware it returns. So a route file swaps one import and keeps every call, and the
-// agent reads the input from the same object that checks it: no second copy to drift. The
-// statement adds what the validators cannot say: the name, the description, the output
-// schema and the agent marks.
+// same failure hook. It also puts on the middleware it returns the same marker
+// `hono-openapi`'s own `validator()` puts there (`target` plus a `resolver()` of the
+// schema), so `generateSpecs` merges the route's query, path and body schemas into the
+// operation, exactly as if the route used `hono-openapi`'s validator. A route file swaps
+// one import and keeps every call and every failure hook; no second copy can drift.
 //
 // **Every route states it, callable or not.** `scripts/route-declarations.test.ts` in the
 // Saasaloy repo fails on a shipped route with no `declare(...)`. Admin routes are never
@@ -84,29 +94,46 @@ export interface RouteInput {
   schema: ZodType;
 }
 
+/** The OpenAPI operation extension that carries the statement. */
+export const AGENT_EXTENSION = "x-agent";
+
 // `Symbol.for` rather than `Symbol()`, so a reader in another bundle chunk or a test that
-// loads this file twice still finds the property.
+// loads this file twice still finds the property. These two hold the statement and the
+// input as written, for `routeContracts`; `hono-openapi`'s own symbol holds the spec.
 const DECLARATION = Symbol.for("saasaloy.api.route-declaration");
 const INPUT = Symbol.for("saasaloy.api.route-input");
 
 /**
  * The statement link. Put it first after the path, in front of the route's validators.
  *
- * The middleware it returns is typed `MiddlewareHandler` with no input and no response
- * type, which is what leaves the chain's type, and so `AppType`, as it was.
+ * It is `hono-openapi`'s `describeRoute`, typed `MiddlewareHandler` with no input and no
+ * response type, which is what leaves the chain's type, and so `AppType`, as it was.
  */
 export function declare(declaration: RouteDeclaration): MiddlewareHandler {
-  const link: MiddlewareHandler = async (_c, next) => {
-    // `next` is Hono's downstream continuation, not a Node error-first callback.
-    // oxlint-disable-next-line node/callback-return
-    await next();
-  };
+  const { agent, description, name, output, status = 200 } = declaration;
+  const link = describeRoute({
+    description,
+    hide: !agent.callable,
+    operationId: name,
+    responses: {
+      [String(status)]: {
+        description: "Success",
+        ...(output
+          ? { content: { "application/json": { schema: resolver(output) } } }
+          : {}),
+      },
+    },
+    [AGENT_EXTENSION]: agent,
+  });
   return Object.assign(link, { [DECLARATION]: declaration });
 }
 
 /**
  * `@hono/zod-validator`'s `zValidator`, which also records its target and schema on the
  * middleware it returns. Same overloads, same hook, same failure response.
+ *
+ * The record is twofold: `hono-openapi`'s marker, the shape its own `validator()` writes,
+ * so `generateSpecs` reads the input, and this file's `INPUT`, for `routeContracts`.
  *
  * The cast is the one place the types are taken on trust: the library exports an
  * overloaded function, and a wrapper that forwards its arguments cannot restate the
@@ -124,7 +151,10 @@ export const zValidator = ((
       schema,
       ...rest
     ),
-    { [INPUT]: { schema, target } satisfies RouteInput }
+    {
+      [INPUT]: { schema, target } satisfies RouteInput,
+      [uniqueSymbol]: { target, ...resolver(schema), options: undefined },
+    }
   )) as typeof zodValidator;
 
 // Hono wraps a mounted sub-app's handler when that sub-app sets its own `onError`, and

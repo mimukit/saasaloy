@@ -216,7 +216,7 @@ The fields:
 
 **Which routes are callable.** A product read or write that the Feature stage builds is callable, each with its own scope in `API_KEY_SCOPES`. A route that a module ships stays closed, except product reads such as `GET /notifications` and the public CMS pages. Admin routes are never callable, and neither are auth or payment callback routes. The Saasaloy repo's `scripts/route-declarations.test.ts` fails on a shipped route with no statement.
 
-**Reading the statements.** `routeContracts(app)` from `src/contract.ts` walks a finished app, mounts included, and returns each route's method, full path, statement and validator schemas. `declarationOf(handler)` and `inputOf(handler)` read one handler. The `agent` module uses these; a route module never imports `agent`.
+**Reading the statements.** `declare` is `hono-openapi`'s `describeRoute`, and the recording `zValidator` writes `hono-openapi`'s validator marker, so `generateSpecs(app)` from `hono-openapi` writes the OpenAPI document from the app as it stands; a closed route is hidden unless the caller passes `includeHiddenRoutes: true`. Neither converts a schema before that call. `routeContracts(app)` from `src/contract.ts` walks a finished app, mounts included, and returns each route's method, full path, statement and validator schemas. `declarationOf(handler)` and `inputOf(handler)` read one handler. The `agent` module uses these; a route module never imports `agent`.
 
 ## The typed client
 
