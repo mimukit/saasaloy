@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { deployConfig } from "./deploy.config.ts";
-import { resolveConfig } from "./deploy-production.ts";
+import { CHANGELOG_FILE, resolveConfig } from "./deploy-production.ts";
 import type { ResolvedConfig } from "./deploy-production.ts";
 
 // `pnpm release`: give the next production deploy a version and a changelog entry.
@@ -130,7 +130,7 @@ export function releaseItOptions(
             : { types: release.changelogSections }),
         },
         ...(ownBump ? { whatBump: preMajorBump } : {}),
-        infile: "CHANGELOG.md",
+        infile: CHANGELOG_FILE,
         header: "# Changelog",
       },
     },

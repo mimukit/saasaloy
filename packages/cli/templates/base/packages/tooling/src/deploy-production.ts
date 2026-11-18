@@ -20,6 +20,7 @@ import type {
 //                                                checks; build, upload, migrate and tag nothing
 //   pnpm deploy:production --migrate             run the production migration first
 //   pnpm deploy:production --skip-ci "<reason>"  pass the CI gate, with the reason in the tag
+//   pnpm deploy:production --wait-ci             check the other gates, then wait for CI
 //   pnpm deploy:production --only <service>      one Worker and its smoke checks, no tag
 //
 // The gates come from `deploy.config.ts`: the branch is on its list, the tree is clean,
@@ -27,6 +28,15 @@ import type {
 // the config names one), and a migration file changed since the last deploy tag needs
 // `--migrate`. A failed gate stops a real deploy before anything builds, and the message
 // names the command that clears it.
+//
+// The CI gate reads each job's steps as well as the run's status, because GitHub can show
+// a run as queued or in progress for many minutes after its jobs end (21 minutes on
+// 2026-11-04). For a run that does not show `completed`, a job whose every step ended
+// `success` or `skipped` has passed, and one failed step fails the run. A release commit
+// that changes only the root `version` line and CHANGELOG.md passes on its parent's green
+// run, because the parent's run already tested the same code. `--wait-ci` checks every
+// other gate first, then reads CI again every 15 s until it passes or fails, for up to 30
+// minutes, so a deploy started right after a push waits on the tests and nothing else.
 //
 // The Workers deploy one at a time in `DEPLOY_TARGETS` order, so a frontend never goes
 // live ahead of the api route it calls. Each runs its own `deploy` script
@@ -45,10 +55,12 @@ export interface Options {
   migrate: boolean;
   skipCi?: string;
   only?: string;
+  /** Poll the CI gate until it passes or fails, after every other gate passed. */
+  waitCi?: boolean;
 }
 
 const USAGE =
-  'Usage: pnpm deploy:production [--dry-run] [--migrate] [--skip-ci "<reason>"] [--only <service>]';
+  'Usage: pnpm deploy:production [--dry-run] [--migrate] [--skip-ci "<reason>"] [--wait-ci] [--only <service>]';
 
 /** A flag's value, or undefined when the next word is missing, blank or another flag. */
 function flagValue(args: string[], index: number): string | undefined {
@@ -75,6 +87,8 @@ export function parseArgs(argv: string[]): Options {
       }
       options.skipCi = reason;
       index += 1;
+    } else if (arg === "--wait-ci") {
+      options.waitCi = true;
     } else if (arg === "--only") {
       const service = flagValue(args, index);
       if (service === undefined) {
@@ -85,6 +99,11 @@ export function parseArgs(argv: string[]): Options {
     } else {
       throw new Error(`Unknown argument ${arg ?? ""}.\n${USAGE}`);
     }
+  }
+  if (options.waitCi === true && options.skipCi !== undefined) {
+    throw new Error(
+      `--wait-ci waits for the CI gate, and --skip-ci passes it. Choose one.\n${USAGE}`
+    );
   }
   return options;
 }
@@ -138,19 +157,98 @@ function branchAllowed(branch: string, patterns: string[]): boolean {
 /** The CI workflow's runs on HEAD, reduced to the one fact the gate needs. */
 export type CiState = "passed" | "running" | "failed" | "missing";
 
-export interface CiRun {
+export interface CiStep {
   status: string;
   conclusion: string;
 }
 
+export interface CiJob {
+  status: string;
+  conclusion: string;
+  steps: CiStep[];
+}
+
+export interface CiRun {
+  status: string;
+  conclusion: string;
+  /** The run's jobs, read only for a run that does not show `completed` yet. */
+  jobs?: CiJob[];
+}
+
+const GREEN = new Set(["success", "skipped"]);
+
+/**
+ * One job's result. GitHub can keep a finished job at `in_progress` for many minutes while
+ * its steps already show their results, so a job whose every step ended green has passed.
+ * A job with no steps yet has not started its work, so it is still running.
+ */
+export function jobState(job: CiJob): "passed" | "running" | "failed" {
+  if (job.status === "completed") {
+    return GREEN.has(job.conclusion) ? "passed" : "failed";
+  }
+  if (
+    job.steps.some(
+      (entry) => entry.conclusion !== "" && !GREEN.has(entry.conclusion)
+    )
+  ) {
+    return "failed";
+  }
+  const done =
+    job.steps.length > 0 &&
+    job.steps.every(
+      (entry) => entry.status === "completed" && GREEN.has(entry.conclusion)
+    );
+  return done ? "passed" : "running";
+}
+
+/** One run's result: its own conclusion once it shows one, else its jobs'. */
+function runState(run: CiRun): "passed" | "running" | "failed" {
+  if (run.status === "completed") {
+    return run.conclusion === "success" ? "passed" : "failed";
+  }
+  const jobs = (run.jobs ?? []).map(jobState);
+  if (jobs.includes("failed")) {
+    return "failed";
+  }
+  return jobs.length > 0 && jobs.every((job) => job === "passed")
+    ? "passed"
+    : "running";
+}
+
 export function ciState(runs: CiRun[]): CiState {
-  if (runs.some((run) => run.conclusion === "success")) {
+  const states = new Set(runs.map(runState));
+  if (states.has("passed")) {
     return "passed";
   }
-  if (runs.some((run) => run.status !== "completed")) {
+  if (states.has("running")) {
     return "running";
   }
   return runs.length === 0 ? "missing" : "failed";
+}
+
+/** The changelog `pnpm release` writes, and the one file a release commit may add to. */
+export const CHANGELOG_FILE = "CHANGELOG.md";
+
+const RELEASE_FILES = new Set([CHANGELOG_FILE, "package.json"]);
+const VERSION_LINE = /^[+-]\s*"version":\s*"[^"]*",?\s*$/;
+
+/**
+ * Whether a commit's change to its parent is a release bump and nothing else: it touches
+ * only CHANGELOG.md and the root `package.json`, and `package.json` changes only its
+ * `version` line. `files` is `git diff --name-only`, and `packageDiff` is
+ * `git diff --unified=0` of `package.json`.
+ */
+export function isReleaseOnly(files: string[], packageDiff: string): boolean {
+  if (files.length === 0 || files.some((file) => !RELEASE_FILES.has(file))) {
+    return false;
+  }
+  const changed = splitLines(packageDiff).filter(
+    (line) =>
+      (line.startsWith("+") || line.startsWith("-")) &&
+      !line.startsWith("+++") &&
+      !line.startsWith("---")
+  );
+  return changed.every((line) => VERSION_LINE.test(line));
 }
 
 /** What the gates read from git, GitHub and the workspace. */
@@ -162,6 +260,8 @@ export interface Facts {
   remoteHead?: string | undefined;
   /** `off` when the config names no CI workflow, or `--skip-ci` passed the gate. */
   ci: CiState | "off";
+  /** The parent whose run passed, when HEAD only bumps the release version. */
+  ciCommit?: string | undefined;
   /** The newest deploy tag HEAD descends from. */
   lastTag?: string | undefined;
   /** Migration files changed since `lastTag`, or every one when there is no tag yet. */
@@ -259,13 +359,17 @@ function ciGate(facts: Facts, options: Options, config: ResolvedConfig): Gate {
   }
   const workflow = config.ciWorkflow;
   if (facts.ci === "passed") {
-    return { name: "CI", state: "ok", detail: `${workflow} passed on HEAD.` };
+    const detail =
+      facts.ciCommit === undefined
+        ? `${workflow} passed on HEAD.`
+        : `${workflow} passed on ${facts.ciCommit.slice(0, 7)}, and HEAD changes only the release version and ${CHANGELOG_FILE}.`;
+    return { name: "CI", state: "ok", detail };
   }
   const why = {
     failed: `${workflow} failed on HEAD. Fix it, push, and wait for a green run: gh run watch.`,
-    missing: `${workflow} has no run on HEAD. Push the commit and wait for the run: gh run watch.`,
+    missing: `${workflow} has no run on HEAD. Push the commit, then run: pnpm deploy:production --wait-ci`,
     off: `The run did not read ${workflow}. Run the deploy again.`,
-    running: `${workflow} is still running on HEAD. Run: gh run watch, then deploy again.`,
+    running: `${workflow} is still running on HEAD. Run: pnpm deploy:production --wait-ci`,
   }[facts.ci];
   return {
     name: "CI",
@@ -562,6 +666,12 @@ export interface Project {
 
 const SMOKE_TRIES = 3;
 const SMOKE_PAUSE_MS = 5000;
+/** `--wait-ci` reads the CI gate this often. */
+const CI_POLL_MS = 15_000;
+/** How long `--wait-ci` treats a missing run as one GitHub has not listed yet. */
+const CI_MISSING_MS = 5 * 60_000;
+/** How long `--wait-ci` waits before it reports the state it last read. */
+const CI_WAIT_MS = 30 * 60_000;
 const ENV_CHECK = ["packages/env/src/deploy.ts", "--check"];
 
 function tryGit(io: Io, args: string[]): string | undefined {
@@ -576,25 +686,147 @@ function splitLines(text: string | undefined): string[] {
   return (text ?? "").split("\n").filter((line) => line.trim() !== "");
 }
 
-function readCi(io: Io, workflow: string, head: string): CiState {
+function stringOf(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function readJobs(io: Io, runId: number): CiJob[] {
+  const parsed: unknown = JSON.parse(
+    io.gh(["api", `repos/{owner}/{repo}/actions/runs/${runId}/jobs`])
+  );
+  const jobs =
+    isRecord(parsed) && Array.isArray(parsed.jobs) ? parsed.jobs : [];
+  return jobs.filter(isRecord).map((job) => ({
+    status: stringOf(job.status),
+    conclusion: stringOf(job.conclusion),
+    steps: (Array.isArray(job.steps) ? job.steps : [])
+      .filter(isRecord)
+      .map((entry) => ({
+        status: stringOf(entry.status),
+        conclusion: stringOf(entry.conclusion),
+      })),
+  }));
+}
+
+function readCi(io: Io, workflow: string, commit: string): CiState {
   const output = io.gh([
     "run",
     "list",
     "--workflow",
     workflow,
     "--commit",
-    head,
+    commit,
     "--json",
-    "status,conclusion",
+    "status,conclusion,databaseId",
   ]);
   const parsed: unknown = JSON.parse(output);
   const runs = Array.isArray(parsed)
-    ? parsed.filter(isRecord).map((run) => ({
-        status: typeof run.status === "string" ? run.status : "",
-        conclusion: typeof run.conclusion === "string" ? run.conclusion : "",
-      }))
+    ? parsed.filter(isRecord).map((run): CiRun => {
+        const status = stringOf(run.status);
+        const id =
+          typeof run.databaseId === "number" ? run.databaseId : undefined;
+        return {
+          status,
+          conclusion: stringOf(run.conclusion),
+          // A run that shows `completed` carries its own result, so only a lagging one
+          // costs the extra call.
+          ...(status !== "completed" && id !== undefined
+            ? { jobs: readJobs(io, id) }
+            : {}),
+        };
+      })
     : [];
   return ciState(runs);
+}
+
+/** HEAD's only parent, when HEAD is a release bump and nothing else. */
+function releaseParent(io: Io): string | undefined {
+  const [, parent, ...more] = (
+    tryGit(io, ["rev-list", "--parents", "-n", "1", "HEAD"]) ?? ""
+  ).split(" ");
+  if (parent === undefined || parent === "" || more.length > 0) {
+    return undefined;
+  }
+  const files = splitLines(tryGit(io, ["diff", "--name-only", parent, "HEAD"]));
+  const packageDiff =
+    tryGit(io, ["diff", "--unified=0", parent, "HEAD", "--", "package.json"]) ??
+    "";
+  return isReleaseOnly(files, packageDiff) ? parent : undefined;
+}
+
+type CiFacts = Pick<Facts, "ci" | "ciCommit">;
+
+/**
+ * The CI state of HEAD, or of its parent when HEAD only bumps the release version.
+ * `parent` finds that parent, and runs only when HEAD has not passed.
+ */
+function readCiFacts(
+  io: Io,
+  workflow: string,
+  head: string,
+  parent: () => string | undefined = () => releaseParent(io)
+): CiFacts {
+  const ci = readCi(io, workflow, head);
+  if (ci === "passed") {
+    return { ci };
+  }
+  const commit = parent();
+  if (commit !== undefined && readCi(io, workflow, commit) === "passed") {
+    return { ci: "passed", ciCommit: commit };
+  }
+  return { ci };
+}
+
+/**
+ * Read the CI gate every `CI_POLL_MS` until it passes or fails. A missing run counts as
+ * running for `CI_MISSING_MS`, because GitHub lists a run some seconds after the push. The
+ * wait ends at `CI_WAIT_MS` with the state it last read, which the CI gate then reports.
+ */
+async function waitForCi(
+  io: Io,
+  workflow: string,
+  head: string,
+  first: CiFacts
+): Promise<CiFacts> {
+  const settled = (state: CiFacts): boolean =>
+    state.ci === "passed" || state.ci === "failed";
+  if (settled(first)) {
+    return first;
+  }
+  // The release-parent rule reads git only, so its answer holds for the whole wait.
+  const parent = releaseParent(io);
+  const started = io.now().getTime();
+  let state = first;
+  let reported = 0;
+  io.say(
+    `\nWaiting for ${workflow} on ${head.slice(0, 7)}: a read every ${CI_POLL_MS / 1000} s, for up to ${CI_WAIT_MS / 60_000} minutes.`
+  );
+  for (;;) {
+    const elapsed = io.now().getTime() - started;
+    if (state.ci === "missing" && elapsed >= CI_MISSING_MS) {
+      io.say(
+        `${workflow} has no run on ${head.slice(0, 7)} after ${CI_MISSING_MS / 60_000} minutes. The wait stops.`
+      );
+      return state;
+    }
+    if (elapsed >= CI_WAIT_MS) {
+      io.say(
+        `${workflow} is still ${state.ci} after ${CI_WAIT_MS / 60_000} minutes. The wait stops.`
+      );
+      return state;
+    }
+    await io.sleep(CI_POLL_MS);
+    state = readCiFacts(io, workflow, head, () => parent);
+    if (settled(state)) {
+      return state;
+    }
+    // One line a minute keeps a background log readable.
+    const minutes = Math.floor((io.now().getTime() - started) / 60_000);
+    if (minutes > reported) {
+      reported = minutes;
+      io.say(`  ${workflow} is ${state.ci} after ${minutes} minute(s).`);
+    }
+  }
 }
 
 function readFacts(io: Io, options: Options, config: ResolvedConfig): Facts {
@@ -634,10 +866,9 @@ function readFacts(io: Io, options: Options, config: ResolvedConfig): Facts {
     ),
     head,
     remoteHead: tryGit(io, ["rev-parse", "--verify", `origin/${branch}`]),
-    ci:
-      needsCi && config.ciWorkflow !== undefined
-        ? readCi(io, config.ciWorkflow, head)
-        : "off",
+    ...(needsCi && config.ciWorkflow !== undefined
+      ? readCiFacts(io, config.ciWorkflow, head)
+      : { ci: "off" as const }),
     lastTag,
     newMigrations: splitLines(io.git(migrationArgs)),
     hasDb: io.hasDb(),
@@ -791,7 +1022,21 @@ export async function deployProduction(
     workspaces.filter((workspace) => workspace.service === service)
   );
 
-  const facts = readFacts(io, options, config);
+  let facts = readFacts(io, options, config);
+  if (options.waitCi === true && config.ciWorkflow !== undefined) {
+    // Wait only when every other gate passed, so a dirty tree or a wrong branch fails now.
+    const others = gateReport(facts, options, config).filter(
+      (gate) => gate.name !== "CI" && gate.state === "fail"
+    );
+    if (others.length > 0) {
+      io.say("Another gate failed, so the deploy does not wait for CI.");
+    } else {
+      facts = {
+        ...facts,
+        ...(await waitForCi(io, config.ciWorkflow, facts.head, facts)),
+      };
+    }
+  }
   const release = releaseLabel(facts.release);
   io.say(`Branch ${facts.branch} at ${facts.head.slice(0, 7)} (${release}).`);
   if (facts.lastTag === undefined) {

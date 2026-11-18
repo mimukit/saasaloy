@@ -41,9 +41,8 @@ With `ENV_SOURCE=infisical`, commit `.infisical.json` (the `env-infisical` runbo
 1. Checkout with the full history and every tag, because the deploy reads the last deploy tag.
 2. `pnpm install --frozen-lockfile`.
 3. The production values: `ENV_PROD` written to `packages/env/.env.prod`, or the Infisical CLI installed.
-4. When `.github/workflows/ci.yml` exists (the `ci` module), wait for that workflow's run on the same commit. The deploy's CI gate fails while that run is still going.
-5. Set the git identity to `github-actions[bot]`, because the deploy tag is an annotated tag.
-6. `pnpm deploy:production`: the gates, every Worker in order, the smoke checks, and the deploy tag pushed back to the repository. The job has `contents: write` for that push.
+4. Set the git identity to `github-actions[bot]`, because the deploy tag is an annotated tag.
+5. `pnpm deploy:production --wait-ci`: the gates, every Worker in order, the smoke checks, and the deploy tag pushed back to the repository. The job has `contents: write` for that push. With the `ci` module installed, `--wait-ci` checks every other gate first, then reads the `ci.yml` run on the same commit every 15 s until its job steps pass or fail. It gives up after 5 minutes with no run, or 30 minutes in all. Without the `ci` module, the CI gate is off and nothing waits.
 
 Only one deploy runs at a time. A second push waits for the first deploy to finish and is never cancelled halfway.
 

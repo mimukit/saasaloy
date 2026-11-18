@@ -1,6 +1,6 @@
 ---
 name: saasaloy-deploy
-description: Runbook for an AI agent that releases and deploys this project to production with pnpm release and pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "cut a release", "bump the version", "update the changelog", "put this live", "hotfix production", "roll back production", "what is live", "what will the next deploy ship", "is this fix live", "make the first superadmin", or "set up the first deploy", when a question about production behavior needs the live code, when a release or a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, answering a production question against the last deploy tag, the first superadmin before the first deploy, the release and its changelog, the dry-run report, the gates and what clears each one, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
+description: Runbook for an AI agent that releases and deploys this project to production with pnpm release and pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "cut a release", "bump the version", "update the changelog", "put this live", "hotfix production", "roll back production", "what is live", "what will the next deploy ship", "is this fix live", "make the first superadmin", or "set up the first deploy", when a question about production behavior needs the live code, when a release or a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, answering a production question against the last deploy tag, the first superadmin before the first deploy, the release and its changelog, the dry-run report, the gates and what clears each one, the CI wait with --wait-ci, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
 ---
 
 # saasaloy-deploy
@@ -27,7 +27,7 @@ This skill covers what the command cannot decide: what the owner approves, what 
 You may run these without asking:
 
 - `pnpm release:dry`, any number of times. It prints the next version and the changelog entry, and commits, tags and pushes nothing.
-- `pnpm deploy:production --dry-run`, any number of times. It runs the env check and builds, uploads, migrates and tags nothing.
+- `pnpm deploy:production --dry-run`, any number of times, with or without `--wait-ci`. It runs the env check and builds, uploads, migrates and tags nothing.
 - Read-only git: `git describe --tags --match 'deploy-*' --abbrev=0`, `git log <tag>..HEAD`, `git show <tag>`.
 - `pnpm --filter <package> exec env-deploy --run <service> -- wrangler deployments list`, for each deploy target.
 - `pnpm logs:prod`, and on Postgres `pnpm db:prod:query`. Both are read-only, and both refuse until the owner has written their credential file. The `saasaloy-prod-debug` skill covers them when `database-postgres` is installed.
@@ -63,19 +63,22 @@ Never do these:
    git status -sb
    ```
    `pnpm release` pushes every local commit with the release commit, so a commit from another session would go to origin unreviewed. When the first line shows `ahead`, or any file is listed, stop and ask the owner what to do with them.
-3. Run both dry runs:
+3. Run both dry runs, and save each one's output to a file:
    ```sh
-   pnpm release:dry
-   pnpm deploy:production --dry-run
+   mkdir -p .artifacts/deploy
+   pnpm release:dry > .artifacts/deploy/release-dry.log 2>&1
+   pnpm deploy:production --dry-run > .artifacts/deploy/deploy-dry.log 2>&1
    ```
+   Read each file as often as you need. Do not run a dry run again only to see another part of its output: each one reads git and GitHub and runs the env check again. `.artifacts/` is gitignored, so the files do not fail the tree gate.
 4. When the deploy dry run lists migration files, print each `.sql` file it names and read it.
 5. Write the report. Use the template below.
 6. Stop. Wait for the owner's go-ahead.
-7. Run the release the owner approved, then wait for CI on the release commit when the config names a workflow:
+7. Run the release the owner approved. Then start a dry run that waits for CI, as a background task, with the flags the owner approved for the deploy:
    ```sh
    pnpm release                      # or pnpm release minor, major, <version>
-   gh run watch
+   pnpm deploy:production --dry-run --wait-ci > .artifacts/deploy/deploy-wait.log 2>&1   # add --migrate, --only <service> when approved
    ```
+   Pass the approved flags, because `--wait-ci` waits only when every other gate passes: without an approved `--migrate`, a new migration file fails its gate and nothing waits. With an approved `--skip-ci`, skip this wait, because the two flags conflict. While it runs, draft the result report from the release notes `pnpm release` printed. When it ends, read the log. When every gate is `ok`, go to step 8. A release commit that changes only the root `version` and `CHANGELOG.md` passes on its parent's green run at once, so it usually does not wait. When a gate fails, report the line it printed and stop.
 8. Run the deploy the owner approved, with exactly the flags in the report:
    ```sh
    pnpm deploy:production            # or with --migrate, --skip-ci "<reason>", --only <service>
@@ -180,7 +183,7 @@ The gate values come from `packages/tooling/src/deploy.config.ts`. A key the fil
 | Branch | The branch matches `branches` (default `["main", "hotfix-*"]`; a trailing `*` matches any rest). | `The branch is <x>, and a deploy starts only from ...` | `git switch main`. For a fix while `main` holds unreleased work, see "Hotfix". |
 | Tree | `git status --porcelain` is empty. | `The tree has uncommitted changes (...)` | `git commit`, or `git stash push -u`. An agent asks the owner what to do with the named files. A file the build itself changed is a bug to fix, not to stash. |
 | Origin | HEAD is the same commit as `origin/<branch>`. | `origin has no <branch>`, or `HEAD (...) is not origin/<branch> (...)` | `git push -u origin <branch>`, or `git pull --ff-only`, or `git push`. |
-| CI | `ciWorkflow` names no workflow (the gate is off), or a run of that workflow on HEAD succeeded. | `<workflow> failed on HEAD`, `is still running`, or `has no run on HEAD` | `gh run watch`, then the dry run again. A failed run: read it with `gh run view <id> --log-failed`, fix, push. When GitHub Actions is down: `--skip-ci "<reason>"`. |
+| CI | `ciWorkflow` names no workflow (the gate is off), or a run of that workflow on HEAD succeeded. A run that GitHub still shows as queued or in progress passes when every step of every job ended `success` or `skipped`, because GitHub can mark a run done many minutes after its jobs end. One failed step fails the run at once. A commit with one parent that changes only the root `package.json` `version` line and `CHANGELOG.md` passes on a green run on its parent, and the gate prints `passed on <parent sha>`. | `<workflow> failed on HEAD`, `is still running`, or `has no run on HEAD` | `pnpm deploy:production --dry-run --wait-ci`, which waits for the run. A failed run: read it with `gh run view <id> --log-failed`, fix, push. When GitHub Actions is down: `--skip-ci "<reason>"`. |
 | Migrations | No file matching `migrations` (default `packages/db/migrations/*.sql`) changed since the last deploy tag, or `--migrate` is set. With no tag yet, every migration file counts as new. | `<n> migration file(s) changed since <tag>` | Read the SQL, then `pnpm deploy:production --migrate`. |
 
 Two more checks stop the run before the gates, because the deploy order would be a guess:
@@ -208,6 +211,7 @@ A failure after the gates:
   - `database-postgres`: `db:prod:migrate` checks that `DATABASE_URL` names `<project>_production` on a server other than the development one in `apps/api/.env`. It then dumps the database with `pg_dump` and applies the migrations with `drizzle-kit migrate`. No migration runs without a good dump. After the migration it re-applies the read-only role's grants, as `pnpm db:prod:readonly-grants` does. A failed grant step prints its error and the migration stands.
   - `database-d1`: `db:prod:migrate` runs `wrangler d1 migrations apply DB --remote`, and creates the database first when the account has none by its `database_name`. Before it migrates an existing database, it dumps it with `wrangler d1 export --remote`. No migration runs without a good dump. A database it has just created gets no dump, because it holds nothing.
 - `--skip-ci "<reason>"` passes the CI gate. The reason goes into the tag message. Every other gate still runs.
+- `--wait-ci` checks every other gate first. When one fails, the run reports the gates and does not wait. Otherwise it reads the CI gate again every 15 seconds until it passes or fails. A missing run counts as one GitHub has not listed yet for 5 minutes, and the whole wait ends after 30 minutes. The run then goes on with the state it last read: a dry run reports it, and a real run deploys only on a pass. It prints one line a minute while it waits, so a background log shows progress. `--wait-ci` with `--skip-ci` is an error. With no `ciWorkflow`, nothing waits.
 - `--only <service>` deploys one Worker after the same gates, and runs only its smoke checks. It writes no tag, because the tag means "this commit is live on every Worker".
 
 `pnpm db:prod:dump` takes a dump on its own: `pg_dump --format=custom` for Postgres, `wrangler d1 export --remote` for D1. Dumps land in `~/<project>-backups/` (mode 0700), or in `DB_DUMP_DIR` when it is set, outside the repository. For Postgres, `pg_dump` runs from the `postgres:<major>` image the root `compose.yaml` names, through Docker. Set `PG_DUMP=local` to use the `pg_dump` on `PATH` instead.
@@ -251,7 +255,7 @@ Use this when live code needs a fix and `main` holds commits that must not go li
    ```sh
    git push -u origin hotfix-<slug>
    ```
-4. Wait for CI on the branch when the config names a workflow. Then follow "Procedure" from step 2 on this branch. `pnpm release` on the branch makes a patch release such as `v0.3.1`. When the fix cannot wait for the release, the owner may deploy first and release after.
+4. Wait for CI on the branch when the config names a workflow: run `pnpm deploy:production --dry-run --wait-ci > .artifacts/deploy/deploy-wait.log 2>&1` as a background task, and read the log when it ends. Add `--migrate` when the fix adds a migration file, so the migration gate passes and the run waits. A gate other than CI that fails stops the run with no wait: report it. Then follow "Procedure" from step 2 on this branch. `pnpm release` on the branch makes a patch release such as `v0.3.1`. When the fix cannot wait for the release, the owner may deploy first and release after.
 5. After the deploy, ask the owner to merge the fix into `main`, so the next deploy keeps it. Merge, never rebase: a rebase rewrites the commit the release tag names.
    ```sh
    git switch main && git merge hotfix-<slug>
