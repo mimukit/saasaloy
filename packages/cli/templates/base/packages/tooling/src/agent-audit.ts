@@ -13,7 +13,8 @@ import { parseValues, splitLines } from "@repo/env/dotenv";
 // The api checks run when `saasaloy.json` lists `agent`: `/openapi.json` (OpenAPI 3.x with
 // paths), the api's `/llms.txt`, the Server Card, `/mcp` without a key (it must answer
 // 401), and an MCP `tools/list` with the key in `AGENT_AUDIT_KEY` (at least one tool, each
-// an `operationId` of the OpenAPI document). With no `agent`, the site's `/llms.txt` need
+// an `operationId` of the OpenAPI document). A key check then calls one scoped read-only
+// tool twice: a wrong key must get `unauthorized`, and the audit key must not. With no `agent`, the site's `/llms.txt` need
 // not name an MCP address, and the command says it skipped the api checks.
 //
 // With no `AGENT_AUDIT_KEY`, the 401 from `/mcp` counts as proof the endpoint is up and
@@ -374,7 +375,11 @@ function operationIds(document: unknown): Set<string> {
   return ids;
 }
 
-function toolsListRequest(key?: string): RequestInit {
+function rpcRequest(
+  method: string,
+  params: Record<string, unknown>,
+  key?: string
+): RequestInit {
   return {
     method: "POST",
     headers: {
@@ -383,13 +388,103 @@ function toolsListRequest(key?: string): RequestInit {
       "mcp-protocol-version": MCP_PROTOCOL_VERSION,
       ...(key === undefined ? {} : { authorization: `Bearer ${key}` }),
     },
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/list",
-      params: {},
-    }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   };
+}
+
+function toolsListRequest(key?: string): RequestInit {
+  return rpcRequest("tools/list", {}, key);
+}
+
+/** The key the key check sends to prove a wrong key is refused. */
+export const WRONG_KEY = "saasaloy-agent-audit-wrong-key";
+
+/**
+ * A tool the key check may call: a read with a scope word and no required argument, so
+ * the call changes nothing and its route's gate must check the key.
+ */
+function probeTool(tools: readonly unknown[]): string | undefined {
+  for (const tool of tools) {
+    if (!isRecord(tool) || typeof tool.name !== "string") {
+      continue;
+    }
+    const meta = isRecord(tool._meta) ? tool._meta : {};
+    const annotations = isRecord(tool.annotations) ? tool.annotations : {};
+    const schema = isRecord(tool.inputSchema) ? tool.inputSchema : {};
+    const required = Array.isArray(schema.required) ? schema.required : [];
+    if (
+      typeof meta["saasaloy/scope"] === "string" &&
+      annotations.readOnlyHint === true &&
+      required.length === 0
+    ) {
+      return tool.name;
+    }
+  }
+  return undefined;
+}
+
+/** The error code a `tools/call` answer carries, `unauthorized` for an HTTP 401. */
+function callErrorCode(got: Got): string | undefined {
+  if (got.status === 401) {
+    return "unauthorized";
+  }
+  const message = parseMcpBody(got.body, got.type);
+  const result = isRecord(message) ? message.result : undefined;
+  if (!isRecord(result) || result.isError !== true) {
+    return undefined;
+  }
+  const content = isRecord(result.structuredContent)
+    ? result.structuredContent
+    : {};
+  const error = isRecord(content.error) ? content.error : {};
+  return typeof error.code === "string" ? error.code : "error";
+}
+
+/**
+ * `/mcp` itself checks only that a bearer key is present (ADR 0063); each route's gate
+ * checks the key when a tool runs. So the proof that the key works is one tool call: the
+ * wrong key must get `unauthorized`, and the audit key must not.
+ */
+async function keyCheck(
+  fetcher: AuditFetch,
+  mcpUrl: string,
+  key: string,
+  tools: readonly unknown[]
+): Promise<Check> {
+  const name = probeTool(tools);
+  if (name === undefined) {
+    return skip(
+      "api/key-check",
+      "no read-only tool with a scope and no required argument to call"
+    );
+  }
+  const call = async (sent: string) =>
+    await get(
+      fetcher,
+      mcpUrl,
+      rpcRequest("tools/call", { name, arguments: {} }, sent)
+    );
+  const wrong = await call(WRONG_KEY);
+  if (wrong instanceof Error) {
+    return fail("api/key-check", `${mcpUrl} did not answer: ${wrong.message}`);
+  }
+  if (callErrorCode(wrong) !== "unauthorized") {
+    return fail(
+      "api/key-check",
+      `${name} with a wrong key did not answer unauthorized: ${wrong.body.slice(0, 200)}`
+    );
+  }
+  const right = await call(key);
+  if (right instanceof Error) {
+    return fail("api/key-check", `${mcpUrl} did not answer: ${right.message}`);
+  }
+  if (callErrorCode(right) === "unauthorized") {
+    return fail("api/key-check", `${name} refused ${KEY_VAR} as unauthorized`);
+  }
+  return pass(
+    "api/key-check",
+    `${name} refuses a wrong key and accepts ${KEY_VAR}`
+  );
 }
 
 /** The api checks, for a product with `agent`. */
@@ -505,22 +600,30 @@ export async function auditApi(
   );
   const unknown = names.filter((name) => !ids.has(name));
   if (names.length === 0) {
-    checks.push(fail("api/tools-list", "tools/list lists no tool"));
-  } else if (unknown.length > 0) {
+    checks.push(
+      fail(
+        "api/tools-list",
+        "tools/list lists no tool: mark at least one route callable"
+      )
+    );
+    return checks;
+  }
+  if (unknown.length > 0) {
     checks.push(
       fail(
         "api/tools-list",
         `tools not in the OpenAPI document: ${unknown.join(", ")}`
       )
     );
-  } else {
-    checks.push(
-      pass(
-        "api/tools-list",
-        `${String(names.length)} tools: ${names.join(", ")}`
-      )
-    );
+    return checks;
   }
+  checks.push(
+    pass(
+      "api/tools-list",
+      `${String(names.length)} tools: ${names.join(", ")}`
+    ),
+    await keyCheck(fetcher, mcpUrl, key, tools)
+  );
   return checks;
 }
 

@@ -52,7 +52,12 @@ const TOOLS = {
   id: 1,
   result: {
     tools: [
-      { name: "notes_list", inputSchema: { type: "object" } },
+      {
+        name: "notes_list",
+        inputSchema: { type: "object" },
+        annotations: { readOnlyHint: true },
+        _meta: { "saasaloy/scope": "notes:read" },
+      },
       { name: "notes_create", inputSchema: { type: "object" } },
     ],
   },
@@ -74,6 +79,49 @@ function json(
 
 function authHeader(init: RequestInit | undefined): string | null {
   return new Headers(init?.headers).get("authorization");
+}
+
+/** The JSON-RPC method a request to `/mcp` names. */
+function rpcMethod(init: RequestInit | undefined): string | undefined {
+  if (typeof init?.body !== "string") {
+    return undefined;
+  }
+  const message: unknown = JSON.parse(init.body);
+  return typeof message === "object" &&
+    message !== null &&
+    "method" in message &&
+    typeof message.method === "string"
+    ? message.method
+    : undefined;
+}
+
+/**
+ * The api's `/mcp`: 401 with no key, a tool list for the audit key, and a tool call that
+ * the route's gate answers, `unauthorized` for a key `accepts` refuses.
+ */
+function mcp(
+  init: RequestInit | undefined,
+  accepts: (key: string) => boolean
+): Response {
+  const key = authHeader(init);
+  if (key === null) {
+    return json({ error: { code: "unauthorized", message: "A key" } }, 401);
+  }
+  if (rpcMethod(init) === "tools/list") {
+    return accepts(key)
+      ? text(
+          `event: message\ndata: ${JSON.stringify(TOOLS)}\n\n`,
+          "text/event-stream"
+        )
+      : json({ error: { code: "unauthorized", message: "A key" } }, 401);
+  }
+  const result = accepts(key)
+    ? { isError: false, structuredContent: { notes: [] } }
+    : {
+        isError: true,
+        structuredContent: { error: { code: "unauthorized", message: "no" } },
+      };
+  return json({ jsonrpc: "2.0", id: 1, result });
 }
 
 /** A full product: the web files, and the api with `agent`. */
@@ -105,16 +153,7 @@ function product(): Map<string, Route> {
           "application/mcp-server-card+json"
         ),
     ],
-    [
-      `${API}/mcp`,
-      (init) =>
-        authHeader(init) === `Bearer ${KEY}`
-          ? text(
-              `event: message\ndata: ${JSON.stringify(TOOLS)}\n\n`,
-              "text/event-stream"
-            )
-          : json({ error: { code: "unauthorized", message: "A key" } }, 401),
-    ],
+    [`${API}/mcp`, (init) => mcp(init, (key) => key === `Bearer ${KEY}`)],
   ]);
 }
 
@@ -329,7 +368,42 @@ describe(auditApi, () => {
       "api/server-card": "pass",
       "api/mcp-auth": "pass",
       "api/tools-list": "pass",
+      "api/key-check": "pass",
     });
+  });
+
+  it("fails the key check when the tool accepts a wrong key", async () => {
+    const routes = product();
+    routes.set(`${API}/mcp`, (init) => mcp(init, () => true));
+    const checks = byId(await auditApi(fetchFrom(routes), API, KEY, false));
+    expect(checks["api/key-check"]).toBe("fail");
+  });
+
+  it("fails the key check when the tool refuses the audit key", async () => {
+    const routes = product();
+    routes.set(`${API}/mcp`, (init) =>
+      rpcMethod(init) === "tools/call"
+        ? mcp(init, () => false)
+        : mcp(init, (key) => key === `Bearer ${KEY}`)
+    );
+    const checks = byId(await auditApi(fetchFrom(routes), API, KEY, false));
+    expect(checks["api/key-check"]).toBe("fail");
+  });
+
+  it("skips the key check when no scoped read takes no argument", async () => {
+    const routes = product();
+    const tools = TOOLS.result.tools.map(({ name, inputSchema }) => ({
+      name,
+      inputSchema,
+    }));
+    routes.set(`${API}/mcp`, (init) =>
+      authHeader(init) === null
+        ? json({ error: { code: "unauthorized" } }, 401)
+        : json({ jsonrpc: "2.0", id: 1, result: { tools } })
+    );
+    const checks = byId(await auditApi(fetchFrom(routes), API, KEY, false));
+    expect(checks["api/tools-list"]).toBe("pass");
+    expect(checks["api/key-check"]).toBe("skip");
   });
 
   it("counts a 401 with no key as proof the endpoint is up, and skips tools/list", async () => {
@@ -423,7 +497,7 @@ describe(runAudit, () => {
       deps(product(), ["agent"], { AGENT_AUDIT_KEY: KEY })
     );
     expect(code).toBe(0);
-    expect(lines.at(-1)).toMatch(/11 passed, 0 failed, 0 skipped/);
+    expect(lines.at(-1)).toMatch(/12 passed, 0 failed, 0 skipped/);
   });
 
   it("exits 1 after llms.txt is removed", async () => {
@@ -459,7 +533,7 @@ describe(runAudit, () => {
     const report: unknown = JSON.parse(lines.join("\n"));
     expect(report).toHaveProperty("ok", true);
     expect(report).toHaveProperty("agent", true);
-    expect(report).toHaveProperty("checks.length", 11);
+    expect(report).toHaveProperty("checks.length", 12);
   });
 
   it("exits 2 on a usage error", async () => {

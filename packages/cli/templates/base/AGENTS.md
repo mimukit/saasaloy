@@ -143,7 +143,7 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 - **`/index.md` reads `landing.ts`.** `src/lib/landing-markdown.ts` builds it, and its `LANDING_SECTIONS` must follow the block order in `src/pages/index.astro`.
 - **The legal pages are Markdown in `src/legal/`.** The page and its Markdown copy read the same file. Write your policy there.
 - **A module adds a section through `src/lib/agent-entries.ts`.** `agent` adds the MCP address, the OpenAPI document and the api's own `llms.txt`; `cms` adds the blog. Add a section of your own the same way.
-- **`pnpm agent:audit` checks the running product.** It reads the files above, and with `agent` installed also `/openapi.json`, the Server Card and an MCP `tools/list` with the key in `AGENT_AUDIT_KEY`. It exits 1 on a gap.
+- **`pnpm agent:audit` checks the running product.** It reads the files above, and with `agent` installed also `/openapi.json`, the Server Card and an MCP `tools/list` and one scoped tool call with the key in `AGENT_AUDIT_KEY`. It exits 1 on a gap.
 
 ### The Base Skills
 
