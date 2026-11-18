@@ -200,7 +200,7 @@ Question 13 offers the optional modules. Take the choices from the `modules[]` y
 
 Build the choices in four steps:
 
-1. **Leave out the MVP set** the build always adds: `database`, `api`, `logger`, `validators`, `shell`, `auth`, `app`, `admin`, `email`, and their drivers and providers.
+1. **Leave out the MVP set** the build always adds: `database`, `api`, `logger`, `validators`, `shell`, `auth`, `app`, `admin`, `email`, `agent`, `api-keys`, `api-keys-user`, and their drivers and providers.
 2. **Leave out the drivers and providers.** A driver or provider is a module that another module's `requiresOneOf` names, or a `<capability>-<vendor>` module that depends on its capability, such as `email-plunk` or `payment-console`. The build picks those.
 3. **Leave out the tooling modules** `ci`, `infra-ci-deploy` and `e2e`. They change how the project is built and checked, not what the product does.
 4. **Offer the rest**, each with its `description`, grouped by `stage`. Recommend the ones the earlier answers call for, and say which answer each comes from: paid tiers in question 9 call for `subscription` or `payment`; an audience that is a team calls for `teams`; an entity of the organization calls for `teams` and `multitenant`; a waitlist destination in question 10 calls for `waitlist`.
@@ -243,7 +243,7 @@ After question 15, show everything in one message, and ask for one confirmation.
 
 1. **The brief.** Each of the ten answers in one line. Mark each `weak:` answer and say what the copy leaves out because of it.
 2. **The module list.** The MVP set the build always adds, then each pick from `## Modules` with the driver and each local provider.
-3. **Each entity with its screens**, in the owner's order. Name each screen: the app list, the app detail, the app create and update form, and the admin read-only list.
+3. **Each entity with its screens**, in the owner's order. Name each screen: the app list, the app detail, the app create and update form, and the admin read-only list. Then say that each action of the entity is callable by agents too: an AI agent with a key the user makes can run it through the product's MCP server, with a `<table>:read`, `<table>:write` or `<table>:delete` scope. Name the scopes, such as "`books:read` for `list`, `books:write` for `create`, `update` and `finish`". A delete scope stays off on a new key until the user ticks it.
 4. **Not in this build.** Each wish from `## Not in this build`, or "nothing".
 5. **Left for the owner.** The vendor steps from `## Left for the owner`, the preview token when `deploy: preview`, and the steps no build takes: review and merge `build/mvp`, push it, and deploy to production.
 6. **What happens next.** "On yes, I start the build now and ask you nothing more. It ends at a local app on the `build/mvp` branch, and `docs/build-log.md` records each stage."

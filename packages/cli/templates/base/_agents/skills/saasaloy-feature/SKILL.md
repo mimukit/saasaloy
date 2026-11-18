@@ -12,7 +12,7 @@ The examples use a `books` entity with the word `book`. Put your entity's plural
 ## Before you start
 
 1. **Read the entity from the spec.** Open `docs/product-spec.md` and find the entity's `### <n>. <Entity name>` section under `## Entities`. Its table has five rows, fixed by `.agents/skills/saasaloy-setup/product-spec-template.md`: `Table`, `Fields`, `Who may see it`, `Actions` and `Screens`. [Read the spec](#read-the-spec) says how each row becomes code. Build what the rows say, and nothing more. The owner approved these screens at the interview's read-back, so do not add, drop or rename one. With no spec, take the entity from `docs/product-brief.md`: the one thing the product's user makes, tracks or reads, and give it a `text` title, the four screens, and the actions `list`, `create` and `update`. The table name is plural snake_case (`books`, `reading_sessions`), and the Drizzle export key is the camelCase plural (`books`, `readingSessions`).
-2. **Check the modules.** Run `saasaloy list --installed --json`. The steps below need `database` with a driver, `validators`, `api`, `auth` and `app`. `admin` is optional: skip step 9 without it. Add a missing module with `saasaloy add <module> --yes`.
+2. **Check the modules.** Run `saasaloy list --installed --json`. The steps below need `database` with a driver, `validators`, `api`, `auth` and `app`. `admin` is optional: skip step 9 without it. `saasaloy-build` also adds `agent` with `api-keys` and `api-keys-user`, and then every action follows [the four parts an agent needs](#the-four-parts-an-agent-needs). Add a missing module with `saasaloy add <module> --yes`.
 3. **Check the testing mode.** Read the `<!-- saasaloy:testing -->` block in `AGENTS.md`. With `off`, write no test file and skip step 10, unless the owner asked for tests. With `tests-after`, write the tests after the code. With `tdd`, write the route test of step 10 before the route of step 6, and watch it fail.
 4. **Decide who owns a row**, from the spec's `Who may see it` row. Every table gets a `user_id` column that references `users.id`, the user who made the row. `the owner` scopes every query by the session's user. `every signed-in user reads, the owner writes` lets `list` and the detail read every row, and scopes `update` and each domain verb by the session's user. `the organization` scopes by the active organization, which needs `multitenant`: `saasaloy-multitenant` says how.
 
@@ -51,6 +51,16 @@ The driver skill (`saasaloy-database-d1` or `saasaloy-database-postgres`) names 
 
 A domain verb changes the row's state, usually a `one of` field, and answers `409` when the row is in a state the verb cannot leave. Build only the actions the row names.
 
+### Every action is callable by agents
+
+With `agent` installed, each action of the entity is callable through the product's MCP server, and each one has its own scope word, written `resource:action` with the table name as the resource:
+
+| Action | Scope | Statement |
+|--------|-------|-----------|
+| `list`, and a read of one row | `books:read` | `readOnly: true`, `confirm: false` |
+| `create`, `update` and each domain verb | `books:write` | `readOnly: false`, `confirm: false`; `confirm: true` for a verb that moves money |
+| `delete` | `books:delete`, its own word | `readOnly: false`, `confirm: true` |
+
 ### `Screens` becomes the `app` screens and the `admin` list
 
 Build each screen from the `shell` parts the spec names, and from nothing new:
@@ -69,6 +79,17 @@ Build each screen from the `shell` parts the spec names, and from nothing new:
 
 `apps/admin/src/routes/users.tsx` and `apps/admin/src/routes/members.tsx` compose these parts already: read one before the first screen. `saasaloy-shell`, "The primitive set and the page blocks" and "Build a page", has each prop. Signed-in app code imports `@repo/ui/components/shell/*`, never a base `@repo/ui/components/*` primitive: `pnpm lint` fails on one.
 
+## The four parts an agent needs
+
+With `agent` installed, write these four parts for each action, in the same change as the action. `saasaloy-agent`, "Make an entity callable: the four parts", has the statement, the gate for each `Who may see it` rule, and an example. Read it before step 6; do not copy it here.
+
+1. **The screen**, from step 8, so a person can do what an agent does.
+2. **The route with its agent statement.** `declare({...})` first after the path, `callable: true`, with `output`, `readOnly`, `confirm` and the `scope` from [the scope table](#every-action-is-callable-by-agents). The gate demands the same pair: `requireUser(c, { books: ["write"] })` for `scope: "books:write"`.
+3. **The scope words in the key vocabulary.** Add the entity's words to `API_KEY_SCOPES` in `packages/auth/src/api-key-scopes.ts`: `books: ["read", "write", "delete"]`, with `delete` only when the spec names it. A form that issues keys selects the read and write scopes and leaves each delete scope off until the user ticks it.
+4. **The entry in the agent documents.** `/openapi.json`, the api's `/llms.txt` and the MCP tool list are built from the statement, so there is nothing to write by hand. After the gate, read the api's `/llms.txt` and check that each action's tool line names its scope.
+
+Without `agent`, a route still carries a statement, closed or callable, as `saasaloy-api` says.
+
 ## The steps
 
 | # | Layer | What you write | The skill with the detail |
@@ -78,7 +99,7 @@ Build each screen from the `shell` parts the spec names, and from nothing new:
 | 3 | Seed slice | `packages/db/src/seed/slices/books.ts` | `saasaloy-database`, "Seed data" |
 | 4 | Repository | `packages/db/src/repositories/books.ts` | `saasaloy-database`, "The repository layer" |
 | 5 | Validator | `packages/validators/src/books.ts` | `saasaloy-validators`, "Where a schema lives" |
-| 6 | Route | `apps/api/src/routes/books.ts`, mounted in the route chain | `saasaloy-api`, "Add a route", "Errors" |
+| 6 | Route | `apps/api/src/routes/books.ts` with a statement on each route, mounted in the route chain, and the scope words in `API_KEY_SCOPES` | `saasaloy-api`, "Add a route", "Errors"; `saasaloy-agent`, "Make an entity callable: the four parts" |
 | 7 | `hc` client | the typed call from `apps/app/src/lib/api.ts` | `saasaloy-api`, "The typed client"; `saasaloy-app`, "Call the api" |
 | 8 | `app` screens | the list, the detail and the form in `apps/app/src/routes/` | `saasaloy-app`, "Add a screen", "Protect a screen"; `saasaloy-shell`, "Build a page" |
 | 9 | `admin` list | a read-only list in `apps/admin/src/routes/` | `saasaloy-admin`, "Add a screen" |
@@ -107,7 +128,7 @@ The request body schema for create and update, in `@repo/validators`, never inli
 
 ### 6. Route
 
-A Hono route for each action the spec names, as [the actions table](#actions-becomes-the-routes) maps them. Each one reads the session, answers `401` with none, validates the body with the schema from step 5, and calls the repository from step 4. Return the one error envelope the api skill describes. Mount it in the route chain so its type reaches the `hc` client.
+A Hono route for each action the spec names, as [the actions table](#actions-becomes-the-routes) maps them. Each one opens with its statement, reads the caller, answers `401` with none, validates the body with the schema from step 5, and calls the repository from step 4. With `agent`, the caller gate is `requireUser` with the action's scope, which lets a person's session and a user's key in, and the statement is callable with that scope: see [the four parts an agent needs](#the-four-parts-an-agent-needs). Add the scope words to `API_KEY_SCOPES` in the same step. Return the one error envelope the api skill describes. Mount it in the route chain so its type reaches the `hc` client.
 
 ### 7. `hc` client
 
@@ -135,7 +156,7 @@ pnpm format
 pnpm check
 ```
 
-`pnpm check` runs `typecheck`, `lint`, `test` and `build`, and stops at the first failure. The feature is done when it passes. Then start `pnpm dev`, sign in at `http://localhost:3002/sign-in` as a seed user, open the new screen, and read the dev server's terminal for errors. Stop the dev server when you are done.
+`pnpm check` runs `typecheck`, `lint`, `test` and `build`, and stops at the first failure. The feature is done when it passes. Then start `pnpm dev`, sign in at `http://localhost:3002/sign-in` as a seed user, open the new screen, and read the dev server's terminal for errors. With `agent`, also read the api's `/llms.txt` and find one tool line for each action. Stop the dev server when you are done.
 
 ## Unattended run
 

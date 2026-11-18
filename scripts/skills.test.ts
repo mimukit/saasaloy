@@ -481,3 +481,51 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     assert.doesNotMatch(llms, /Do not write the brief yourself/);
   });
 });
+
+describe("every built product is usable by agents (plan 0110 phase 7)", () => {
+  const read = (name: string): string =>
+    readFileSync(join(BASE_SKILLS, name, "SKILL.md"), "utf-8");
+  const setup = read("saasaloy-setup");
+  const build = read("saasaloy-build");
+  const feature = read("saasaloy-feature");
+  const agentSkill = readFileSync(
+    join(MODULES, "agent", "skills", "saasaloy-agent", "SKILL.md"),
+    "utf-8"
+  );
+
+  it("adds agent, api-keys and api-keys-user in the MVP stage, and api-keys stays scale", () => {
+    const sentence =
+      /^For the MVP stage this gives .*$/m.exec(build)?.[0] ?? "";
+    for (const name of ["agent", "api-keys", "api-keys-user"]) {
+      assert.match(sentence, new RegExp(`\`${name}\``), `${name} is missing`);
+    }
+    assert.match(build, /`api-keys` and `api-keys-user` stay `scale` modules/);
+  });
+
+  it("gives saasaloy-feature the four parts, and points at saasaloy-agent for them", () => {
+    const parts = section(feature, /^The four parts an agent needs$/) ?? "";
+    assert.match(parts, /\*\*The screen\*\*/);
+    assert.match(parts, /\*\*The route with its agent statement\.\*\*/);
+    assert.match(parts, /`API_KEY_SCOPES`/);
+    assert.match(parts, /leaves each delete scope off until the user ticks it/);
+    assert.match(parts, /\*\*The entry in the agent documents\.\*\*/);
+    assert.match(
+      parts,
+      /`saasaloy-agent`, "Make an entity callable: the four parts"/
+    );
+    assert.match(agentSkill, /^## Make an entity callable: the four parts$/m);
+    assert.match(feature, /`books:delete`, its own word/);
+  });
+
+  it("says at the read-back that each entity action is callable by agents", () => {
+    const readBack = section(setup, /^Step 1/) ?? "";
+    assert.match(readBack, /each action of the entity is callable by agents/);
+  });
+
+  it("leaves the agent set out of the capabilities question", () => {
+    assert.match(
+      setup,
+      /\*\*Leave out the MVP set\*\*[^\n]*`agent`, `api-keys`, `api-keys-user`/
+    );
+  });
+});
