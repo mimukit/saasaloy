@@ -4,6 +4,8 @@ import {
   deployProduction,
   gateProblems,
   gateReport,
+  isReleaseOnly,
+  jobState,
   orderTargets,
   parseArgs,
   releaseLabel,
@@ -89,6 +91,20 @@ describe(parseArgs, () => {
     expect(() => parseArgs(["--skip-ci", " "])).toThrow(/needs a reason/);
   });
 
+  it("reads --wait-ci", () => {
+    expect(parseArgs(["--dry-run", "--wait-ci"])).toStrictEqual({
+      ...plain,
+      dryRun: true,
+      waitCi: true,
+    });
+  });
+
+  it("refuses --wait-ci with --skip-ci, because one waits for the gate the other passes", () => {
+    expect(() =>
+      parseArgs(["--wait-ci", "--skip-ci", "Actions outage"])
+    ).toThrow(/--wait-ci waits for the CI gate, and --skip-ci passes it/);
+  });
+
   it("refuses --only without a service", () => {
     expect(() => parseArgs(["--only"])).toThrow(/--only needs a service/);
     expect(() => parseArgs(["--only", "--dry-run"])).toThrow(
@@ -125,6 +141,141 @@ describe(ciState, () => {
 
   it("reports no run", () => {
     expect(ciState([])).toBe("missing");
+  });
+
+  const green = { status: "completed", conclusion: "success" };
+
+  it("passes a run GitHub still shows as queued once every job's steps ended green", () => {
+    expect(
+      ciState([
+        {
+          status: "queued",
+          conclusion: "",
+          jobs: [
+            { status: "completed", conclusion: "success", steps: [green] },
+            {
+              status: "in_progress",
+              conclusion: "",
+              steps: [green, { status: "completed", conclusion: "skipped" }],
+            },
+          ],
+        },
+      ])
+    ).toBe("passed");
+  });
+
+  it("waits on a lagging run with no job yet", () => {
+    expect(ciState([{ status: "queued", conclusion: "", jobs: [] }])).toBe(
+      "running"
+    );
+    expect(ciState([{ status: "queued", conclusion: "" }])).toBe("running");
+  });
+
+  it("fails a lagging run as soon as one step failed", () => {
+    expect(
+      ciState([
+        {
+          status: "in_progress",
+          conclusion: "",
+          jobs: [
+            {
+              status: "in_progress",
+              conclusion: "",
+              steps: [green, { status: "completed", conclusion: "failure" }],
+            },
+          ],
+        },
+      ])
+    ).toBe("failed");
+  });
+});
+
+describe(jobState, () => {
+  const green = { status: "completed", conclusion: "success" };
+
+  it("trusts a completed job's own conclusion", () => {
+    expect(
+      jobState({ status: "completed", conclusion: "success", steps: [] })
+    ).toBe("passed");
+    expect(
+      jobState({ status: "completed", conclusion: "cancelled", steps: [green] })
+    ).toBe("failed");
+  });
+
+  it("passes a lagging job whose every step ended success or skipped", () => {
+    expect(
+      jobState({
+        status: "in_progress",
+        conclusion: "",
+        steps: [green, { status: "completed", conclusion: "skipped" }],
+      })
+    ).toBe("passed");
+  });
+
+  it("waits on a lagging job while a step still runs", () => {
+    expect(
+      jobState({
+        status: "in_progress",
+        conclusion: "",
+        steps: [green, { status: "in_progress", conclusion: "" }],
+      })
+    ).toBe("running");
+  });
+
+  it("fails a lagging job with a failed step", () => {
+    expect(
+      jobState({
+        status: "in_progress",
+        conclusion: "",
+        steps: [
+          { status: "completed", conclusion: "failure" },
+          { status: "queued", conclusion: "" },
+        ],
+      })
+    ).toBe("failed");
+  });
+
+  it("does not pass a job with no steps", () => {
+    expect(jobState({ status: "in_progress", conclusion: "", steps: [] })).toBe(
+      "running"
+    );
+  });
+});
+
+describe(isReleaseOnly, () => {
+  const bump = [
+    "diff --git a/package.json b/package.json",
+    "--- a/package.json",
+    "+++ b/package.json",
+    "@@ -3 +3 @@",
+    '-  "version": "0.7.1",',
+    '+  "version": "0.8.0",',
+  ].join("\n");
+
+  it("takes a version bump and a changelog entry", () => {
+    expect(isReleaseOnly(["CHANGELOG.md", "package.json"], bump)).toBeTruthy();
+  });
+
+  it("refuses a dependency change in package.json", () => {
+    expect(
+      isReleaseOnly(
+        ["CHANGELOG.md", "package.json"],
+        `${bump}\n@@ -20 +20 @@\n-    "hono": "4.0.0",\n+    "hono": "4.1.0",`
+      )
+    ).toBeFalsy();
+  });
+
+  it("refuses any other file", () => {
+    expect(
+      isReleaseOnly(
+        ["CHANGELOG.md", "package.json", "apps/api/src/index.ts"],
+        bump
+      )
+    ).toBeFalsy();
+  });
+
+  it("refuses an empty change", () => {
+    expect(isReleaseOnly([], "")).toBeFalsy();
   });
 });
 
@@ -548,6 +699,10 @@ interface Fake {
   said: string[];
   runs: string[];
   gits: string[];
+  /** Every `gh` call, its arguments joined. */
+  ghs: string[];
+  /** Every `sleep` in milliseconds. */
+  sleeps: number[];
 }
 
 interface FakeSetup {
@@ -571,6 +726,12 @@ interface FakeSetup {
   afterRelease?: string;
   /** Whether the last deploy tag already contains `latestRelease`. */
   releaseDeployed?: boolean;
+  /** What `gh` answers, by its joined arguments and the time since the run started. */
+  gh?: (line: string, elapsedMs: number) => string;
+  /** HEAD's parent, and the change HEAD makes to it. */
+  parent?: { sha: string; files: string; packageDiff: string };
+  /** `rev-list --parents -n 1 HEAD`, for a merge commit. */
+  parents?: string;
 }
 
 const WEB: Workspace = { service: "web", packageName: "@repo/web" };
@@ -580,6 +741,11 @@ function fake(setup: FakeSetup = {}): Fake {
   const said: string[] = [];
   const runs: string[] = [];
   const gits: string[] = [];
+  const ghs: string[] = [];
+  const sleeps: number[] = [];
+  const start = new Date("2026-10-23T14:30:00Z").getTime();
+  // The clock moves only when the run sleeps.
+  let elapsed = 0;
   const remoteHead = "remoteHead" in setup ? setup.remoteHead : HEAD;
   const lastTag = "lastTag" in setup ? setup.lastTag : "deploy-20261020-0900";
   const io: Io = {
@@ -628,6 +794,22 @@ function fake(setup: FakeSetup = {}): Fake {
         }
         return lastTag;
       }
+      if (line === "rev-list --parents -n 1 HEAD") {
+        if (setup.parents !== undefined) {
+          return setup.parents;
+        }
+        return setup.parent === undefined
+          ? HEAD
+          : `${HEAD} ${setup.parent.sha}`;
+      }
+      if (setup.parent !== undefined) {
+        if (line === `diff --name-only ${setup.parent.sha} HEAD`) {
+          return setup.parent.files;
+        }
+        if (line.startsWith(`diff --unified=0 ${setup.parent.sha} HEAD`)) {
+          return setup.parent.packageDiff;
+        }
+      }
       if (line.startsWith("diff --name-only") || line.startsWith("ls-files")) {
         return setup.migrations ?? "";
       }
@@ -636,7 +818,11 @@ function fake(setup: FakeSetup = {}): Fake {
       }
       return "";
     },
-    gh: () => "[]",
+    gh: (args) => {
+      const line = args.join(" ");
+      ghs.push(line);
+      return setup.gh?.(line, elapsed) ?? "[]";
+    },
     run: async (command, args) => {
       const line = [command, ...args].join(" ");
       runs.push(line);
@@ -649,18 +835,20 @@ function fake(setup: FakeSetup = {}): Fake {
         text: async () => await Promise.resolve(body),
       });
     },
-    sleep: async () => {
+    sleep: async (ms) => {
+      sleeps.push(ms);
+      elapsed += ms;
       await Promise.resolve();
     },
     say: (text) => {
       said.push(text);
     },
-    now: () => new Date("2026-10-23T14:30:00Z"),
+    now: () => new Date(start + elapsed),
     workspaces: () => setup.workspaces ?? [WEB],
     wranglerConfig: (service) => setup.routes?.[service],
     hasDb: () => setup.hasDb ?? false,
   };
-  return { io, said, runs, gits };
+  return { io, said, runs, gits, ghs, sleeps };
 }
 
 const webDomain = {
@@ -678,6 +866,201 @@ const project = {
     { id: "api-health", service: "api", path: "/health", status: 200 },
   ],
 };
+
+describe("the CI gate in a whole run", () => {
+  const PARENT = "34720f5bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+  const ciProject = { ...project, config: { ciWorkflow: "ci.yml" } };
+  const dry: Options = { ...plain, dryRun: true };
+  const wait: Options = { ...dry, waitCi: true };
+  const bump = '@@ -3 +3 @@\n-  "version": "0.7.1",\n+  "version": "0.8.0",';
+  const greenRun =
+    '[{"status":"completed","conclusion":"success","databaseId":2}]';
+  const lagging = '[{"status":"queued","conclusion":"","databaseId":7}]';
+  const jobs = (...steps: { status: string; conclusion: string | null }[]) =>
+    JSON.stringify({
+      jobs: [{ status: "in_progress", conclusion: null, steps }],
+    });
+  const done = { status: "completed", conclusion: "success" };
+  const runningStep = { status: "in_progress", conclusion: null };
+  const failedStep = { status: "completed", conclusion: "failure" };
+  /** `gh` answers `runs` for `commit`, `jobs` for the jobs call, and `[]` otherwise. */
+  const ciOn =
+    (commit: string, runs: string, jobsAnswer = jobs(runningStep)) =>
+    (line: string) => {
+      if (line.startsWith("api ")) {
+        return jobsAnswer;
+      }
+      return line.includes(`--commit ${commit}`) ? runs : "[]";
+    };
+  const release = (
+    files = "CHANGELOG.md\npackage.json",
+    packageDiff = bump
+  ) => ({
+    sha: PARENT,
+    files,
+    packageDiff,
+  });
+
+  async function gate(
+    options: Options,
+    setup: Parameters<typeof fake>[0]
+  ): Promise<Fake & { output: string }> {
+    const run = fake({ workspaces: [WEB, API], routes: webDomain, ...setup });
+    await deployProduction(options, run.io, ciProject);
+    return { ...run, output: run.said.join("\n") };
+  }
+
+  it("passes a run GitHub still shows as queued once its jobs' steps ended green", async () => {
+    const run = await gate(dry, { gh: ciOn(HEAD, lagging, jobs(done)) });
+    expect(run.output).toMatch(/ok\s+ci\.yml passed on HEAD\./);
+    expect(run.ghs).toContain("api repos/{owner}/{repo}/actions/runs/7/jobs");
+  });
+
+  it("fails a lagging run with one failed step, with the failed-on-HEAD message", async () => {
+    const run = await gate(dry, {
+      gh: ciOn(HEAD, lagging, jobs(done, failedStep)),
+    });
+    expect(run.output).toMatch(/fail\s+ci\.yml failed on HEAD\./);
+  });
+
+  it("keeps a lagging run whose step still runs as running", async () => {
+    const run = await gate(dry, {
+      gh: ciOn(HEAD, lagging, jobs(done, runningStep)),
+    });
+    expect(run.output).toMatch(/fail\s+ci\.yml is still running on HEAD/);
+  });
+
+  it("reads no jobs for a run that shows completed", async () => {
+    const run = await gate(dry, { gh: ciOn(HEAD, greenRun) });
+    expect(run.output).toMatch(/ok\s+ci\.yml passed on HEAD\./);
+    expect(run.ghs.some((line) => line.startsWith("api "))).toBeFalsy();
+  });
+
+  it("passes a release commit on its parent's green run while HEAD's own run still runs", async () => {
+    const run = await gate(dry, {
+      gh: (line) =>
+        line.includes(`--commit ${PARENT}`)
+          ? greenRun
+          : ciOn(HEAD, lagging)(line),
+      parent: release(),
+    });
+    expect(run.output).toMatch(
+      /ok\s+ci\.yml passed on 34720f5, and HEAD changes only the release version and CHANGELOG\.md\./
+    );
+  });
+
+  it.each([
+    ["changes code", release("CHANGELOG.md\napps/api/src/index.ts", "")],
+    [
+      "changes a dependency",
+      release(
+        "CHANGELOG.md\npackage.json",
+        `${bump}\n@@ -20 +20 @@\n-    "hono": "4.0.0",\n+    "hono": "4.1.0",`
+      ),
+    ],
+  ])("takes no parent pass when HEAD %s", async (_what, parent) => {
+    const run = await gate(dry, { gh: ciOn(PARENT, greenRun), parent });
+    expect(run.output).toMatch(/fail\s+ci\.yml has no run on HEAD/);
+  });
+
+  it("takes no parent pass for a merge commit", async () => {
+    const run = await gate(dry, {
+      gh: ciOn(PARENT, greenRun),
+      parent: release(),
+      parents: `${HEAD} ${PARENT} 9999999ccccccccccccccccccccccccccccccccc`,
+    });
+    expect(run.output).toMatch(/fail\s+ci\.yml has no run on HEAD/);
+    expect(run.ghs.some((line) => line.includes(PARENT))).toBeFalsy();
+  });
+
+  it("takes no parent pass when the parent's run failed", async () => {
+    const run = await gate(dry, {
+      gh: ciOn(
+        PARENT,
+        '[{"status":"completed","conclusion":"failure","databaseId":3}]'
+      ),
+      parent: release(),
+    });
+    expect(run.output).toMatch(/fail\s+ci\.yml has no run on HEAD/);
+  });
+
+  it("--wait-ci passes on the first read after the steps turn green", async () => {
+    // Green from the third read on: the first read, then two sleeps.
+    const run = await gate(wait, {
+      gh: (line, elapsed) =>
+        ciOn(HEAD, lagging, jobs(elapsed >= 30_000 ? done : runningStep))(line),
+    });
+    expect(run.sleeps).toStrictEqual([15_000, 15_000]);
+    expect(run.output).toMatch(/ok\s+ci\.yml passed on HEAD\./);
+  });
+
+  it("--wait-ci stops at the first failed read", async () => {
+    const run = await gate(wait, {
+      gh: (line, elapsed) =>
+        ciOn(
+          HEAD,
+          lagging,
+          jobs(elapsed >= 15_000 ? failedStep : runningStep)
+        )(line),
+    });
+    expect(run.sleeps).toStrictEqual([15_000]);
+    expect(run.output).toMatch(/fail\s+ci\.yml failed on HEAD\./);
+  });
+
+  it("--wait-ci waits through a run GitHub lists late", async () => {
+    const run = await gate(wait, {
+      gh: (line, elapsed) =>
+        elapsed >= 2 * 60_000 ? ciOn(HEAD, greenRun)(line) : "[]",
+    });
+    expect(run.sleeps).toHaveLength(8);
+    expect(run.output).toMatch(/ok\s+ci\.yml passed on HEAD\./);
+  });
+
+  it("--wait-ci stops when no run shows up within 5 minutes", async () => {
+    const run = await gate(wait, {});
+    expect(run.sleeps).toHaveLength(20);
+    expect(run.output).toMatch(/has no run on 7812604 after 5 minutes/);
+    expect(run.output).toMatch(/fail\s+ci\.yml has no run on HEAD/);
+  });
+
+  it("--wait-ci gives up at 30 minutes and reports the run as still running", async () => {
+    const run = await gate(wait, { gh: ciOn(HEAD, lagging) });
+    expect(run.sleeps).toHaveLength(120);
+    expect(run.output).toMatch(/still running after 30 minutes/);
+    expect(run.output).toMatch(/fail\s+ci\.yml is still running on HEAD/);
+    // One progress line a minute, not one a read.
+    expect(run.said.filter((line) => line.includes("minute(s)"))).toHaveLength(
+      30
+    );
+  });
+
+  it("--wait-ci does not wait when another gate fails", async () => {
+    const run = fake({
+      dirty: " M README.md",
+      workspaces: [WEB, API],
+      routes: webDomain,
+      gh: ciOn(HEAD, lagging),
+    });
+    await expect(
+      deployProduction({ ...plain, waitCi: true }, run.io, ciProject)
+    ).rejects.toThrow(/uncommitted changes[\s\S]*still running on HEAD/);
+    expect(run.sleeps).toStrictEqual([]);
+    expect(run.runs).toStrictEqual([]);
+  });
+
+  it("--wait-ci then deploys once CI passes", async () => {
+    const run = fake({
+      workspaces: [WEB, API],
+      routes: webDomain,
+      releaseOnHead: "v0.3.0",
+      gh: (line, elapsed) =>
+        ciOn(HEAD, lagging, jobs(elapsed > 0 ? done : runningStep))(line),
+    });
+    await deployProduction({ ...plain, waitCi: true }, run.io, ciProject);
+    expect(run.sleeps).toStrictEqual([15_000]);
+    expect(run.runs).toContain("pnpm --filter @repo/web run deploy");
+  });
+});
 
 describe(deployProduction, () => {
   it("runs the env check, each Worker in order, the smoke checks, then tags", async () => {
