@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { declare } from "../contract";
 
 // Route module contract: export a Hono sub-app under a NAMED export matching the
 // file, built as ONE chained expression. The chain is what carries the sub-app's
@@ -14,4 +15,12 @@ import { Hono } from "hono";
 //
 // Pass the status explicitly to `c.json`. `hc` infers the response type per status
 // code, so an omitted `200` leaves the caller with a looser type than the route has.
-export const health = new Hono().get("/", (c) => c.json({ status: "ok" }, 200));
+export const health = new Hono().get(
+  "/",
+  declare({
+    name: "health_read",
+    description: "Answers ok when the api Worker runs.",
+    agent: { callable: false, reason: "A deploy probe, not a product action." },
+  }),
+  (c) => c.json({ status: "ok" }, 200)
+);

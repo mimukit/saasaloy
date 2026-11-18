@@ -9,6 +9,8 @@ import {
 } from "@repo/db/repositories/projects";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { z } from "zod";
+import { declare } from "../contract";
 
 // The worked example: three scoped routes, written the way every scoped route in this
 // project should be written. Read it as the recipe, then delete it once your own tables
@@ -48,33 +50,80 @@ import { HTTPException } from "hono/http-exception";
 // export built as ONE chained expression, or the exported type forgets the route and it
 // empties out of `AppType`. This module's `chained-route` patch mounts it at `/projects`.
 
-export const projects = new Hono<{ Bindings: AuthDbBindings }>()
-  .get("/", async (c) => {
-    const tenant = await requireTenant(c);
-    const rows = await withDb(c, (db) =>
-      listProjects(db, tenant.organizationId)
-    );
-    return c.json({ projects: rows }, 200);
-  })
-  .post("/", async (c) => {
-    const tenant = await requirePermission(c, { project: ["create"] });
-    const body = await c.req.json<{ name?: unknown }>();
-    if (typeof body.name !== "string" || body.name.trim() === "") {
-      // 400 through api's `onError`, so the body is the same envelope every other failure
-      // uses. A real route validates its input with `@repo/validators` instead.
-      throw new HTTPException(400, { message: "name is required" });
-    }
+// The body of `GET /projects`, the one route here an agent may call. It sits beside the
+// route because this worked example has no `@repo/validators` file; a real entity puts its
+// output schema next to its input schemas there.
+const projectList = z.object({
+  projects: z.array(
+    z.object({
+      createdAt: z.string(),
+      id: z.string(),
+      name: z.string(),
+      organizationId: z.string(),
+    })
+  ),
+});
 
-    const row = { id: crypto.randomUUID(), name: body.name.trim() };
-    await withDb(c, (db) => createProject(db, tenant.organizationId, row));
-    return c.json(
-      { project: { ...row, organizationId: tenant.organizationId } },
-      201
-    );
-  })
-  .delete("/:id", async (c) => {
-    const tenant = await requirePermission(c, { project: ["delete"] });
-    const id = c.req.param("id");
-    await withDb(c, (db) => deleteProject(db, tenant.organizationId, id));
-    return c.json({ id }, 200);
-  });
+export const projects = new Hono<{ Bindings: AuthDbBindings }>()
+  .get(
+    "/",
+    declare({
+      name: "projects_list",
+      description: "List the projects of the caller's organization.",
+      output: projectList,
+      agent: { callable: true, readOnly: true, confirm: false },
+    }),
+    async (c) => {
+      const tenant = await requireTenant(c);
+      const rows = await withDb(c, (db) =>
+        listProjects(db, tenant.organizationId)
+      );
+      return c.json({ projects: rows }, 200);
+    }
+  )
+  .post(
+    "/",
+    declare({
+      name: "project_create",
+      description: "Create a project in the caller's organization.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    async (c) => {
+      const tenant = await requirePermission(c, { project: ["create"] });
+      const body = await c.req.json<{ name?: unknown }>();
+      if (typeof body.name !== "string" || body.name.trim() === "") {
+        // 400 through api's `onError`, so the body is the same envelope every other failure
+        // uses. A real route validates its input with `@repo/validators` instead.
+        throw new HTTPException(400, { message: "name is required" });
+      }
+
+      const row = { id: crypto.randomUUID(), name: body.name.trim() };
+      await withDb(c, (db) => createProject(db, tenant.organizationId, row));
+      return c.json(
+        { project: { ...row, organizationId: tenant.organizationId } },
+        201
+      );
+    }
+  )
+  .delete(
+    "/:id",
+    declare({
+      name: "project_delete",
+      description: "Delete a project of the caller's organization.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    async (c) => {
+      const tenant = await requirePermission(c, { project: ["delete"] });
+      const id = c.req.param("id");
+      await withDb(c, (db) => deleteProject(db, tenant.organizationId, id));
+      return c.json({ id }, 200);
+    }
+  );

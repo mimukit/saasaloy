@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import {
   ADMIN_ROLE,
   ADMIN_ROLES,
@@ -171,295 +171,354 @@ async function findByEmail(headers: Headers, email: string) {
 }
 
 export const adminMembers = new Hono<{ Bindings: AuthDbBindings }>()
-  .get("/", adminGate, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireAdmin(c);
-      const users = await groupUsers(c.req.raw.headers);
-      const ids = users.map((user) => user.id);
-      const banned = users
-        .filter((user) => user.banned === true)
-        .map((user) => user.id);
-      // "Added by" and "Removed by" come from the audit log, the only place that knows.
-      // `updatedAt` moves on any later write, so it is only the fallback for a removal
-      // made outside this screen.
-      const [added, removed, signedIn] = await withDb(c, (db) =>
-        Promise.all([
-          latestAuditEvents(db, "member.add", ids),
-          latestAuditEvents(db, "member.remove", banned),
-          lastAdminSignIns(db, ids),
-        ])
-      );
-      const group = splitMembers(
-        users,
-        { added, removed, signedIn },
-        ADMIN_ROLE
-      );
-      return c.json(
-        {
-          me: {
-            id: session.user.id,
-            role: session.user.role ?? ADMIN_ROLE,
-          },
-          members: group.members,
-          removed: group.removed,
-        },
-        200
-      );
-    })
-  )
-  .post("/", adminGate, validCreate, (c) =>
-    adminAuthWrite(c, async ({ actor, audit }) => {
-      const { role = ADMIN_ROLE, ...input } = c.req.valid("json");
-      const { headers } = c.req.raw;
-      if (!inGroup(role)) {
-        return c.json(invalid("role: not an admin-group role"), 400);
-      }
-      if (role === SUPERADMIN_ROLE && actor.role !== SUPERADMIN_ROLE) {
-        return c.json(
-          refused("forbidden", "Only a superadmin can add a superadmin."),
-          403
+  .get(
+    "/",
+    declare({
+      name: "admin_members_list",
+      description: "List the admin group's members, active and removed.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireAdmin(c);
+        const users = await groupUsers(c.req.raw.headers);
+        const ids = users.map((user) => user.id);
+        const banned = users
+          .filter((user) => user.banned === true)
+          .map((user) => user.id);
+        // "Added by" and "Removed by" come from the audit log, the only place that knows.
+        // `updatedAt` moves on any later write, so it is only the fallback for a removal
+        // made outside this screen.
+        const [added, removed, signedIn] = await withDb(c, (db) =>
+          Promise.all([
+            latestAuditEvents(db, "member.add", ids),
+            latestAuditEvents(db, "member.remove", banned),
+            lastAdminSignIns(db, ids),
+          ])
         );
-      }
-      // The email may belong to a member removed earlier. Their account still exists,
-      // banned, so the screen offers to restore it rather than make a second one.
-      const existing = await findByEmail(headers, input.email);
-      if (existing !== null) {
-        if (existing.banned === true && inGroup(existing.role)) {
-          const removal = await withDb(c, (db) =>
-            latestAuditEvents(db, "member.remove", [existing.id])
-          );
-          return c.json(
-            {
-              ...refused(
-                "member_removed",
-                "This email belongs to a removed member."
-              ),
-              member: {
-                email: existing.email,
-                id: existing.id,
-                name: existing.name,
-                removedAt: new Date(
-                  removal.get(existing.id)?.at ?? existing.updatedAt
-                ).toISOString(),
-              },
+        const group = splitMembers(
+          users,
+          { added, removed, signedIn },
+          ADMIN_ROLE
+        );
+        return c.json(
+          {
+            me: {
+              id: session.user.id,
+              role: session.user.role ?? ADMIN_ROLE,
             },
+            members: group.members,
+            removed: group.removed,
+          },
+          200
+        );
+      })
+  )
+  .post(
+    "/",
+    declare({
+      name: "admin_member_create",
+      description: "Add a member to the admin group.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validCreate,
+    (c) =>
+      adminAuthWrite(c, async ({ actor, audit }) => {
+        const { role = ADMIN_ROLE, ...input } = c.req.valid("json");
+        const { headers } = c.req.raw;
+        if (!inGroup(role)) {
+          return c.json(invalid("role: not an admin-group role"), 400);
+        }
+        if (role === SUPERADMIN_ROLE && actor.role !== SUPERADMIN_ROLE) {
+          return c.json(
+            refused("forbidden", "Only a superadmin can add a superadmin."),
+            403
+          );
+        }
+        // The email may belong to a member removed earlier. Their account still exists,
+        // banned, so the screen offers to restore it rather than make a second one.
+        const existing = await findByEmail(headers, input.email);
+        if (existing !== null) {
+          if (existing.banned === true && inGroup(existing.role)) {
+            const removal = await withDb(c, (db) =>
+              latestAuditEvents(db, "member.remove", [existing.id])
+            );
+            return c.json(
+              {
+                ...refused(
+                  "member_removed",
+                  "This email belongs to a removed member."
+                ),
+                member: {
+                  email: existing.email,
+                  id: existing.id,
+                  name: existing.name,
+                  removedAt: new Date(
+                    removal.get(existing.id)?.at ?? existing.updatedAt
+                  ).toISOString(),
+                },
+              },
+              409
+            );
+          }
+          return c.json(
+            refused("conflict", "This email already has an account."),
             409
           );
         }
-        return c.json(
-          refused("conflict", "This email already has an account."),
-          409
-        );
-      }
-      try {
-        const { user } = await adminAuth.api.createUser({
-          body: { ...input, role },
-          headers,
-        });
-        // The password is never logged.
-        audit({
-          action: "member.add",
-          after: { email: user.email, name: user.name, role },
-          target: { id: user.id, label: user.email },
-        });
-        return c.json(
-          {
-            member: { email: user.email, id: user.id, name: user.name, role },
-          },
-          201
-        );
-      } catch (error) {
-        const refusal = authRefusal(error);
-        if (refusal === null) {
-          throw error;
-        }
-        return c.json(
-          refused(
-            refusal.status === 403 ? "forbidden" : "invalid_request",
-            refusal.message
-          ),
-          refusal.status === 403 ? 403 : 400
-        );
-      }
-    })
-  )
-  .patch("/:id", adminGate, validUpdate, (c) =>
-    adminAuthWrite(c, async ({ actor, audit }) => {
-      const id = c.req.param("id");
-      if (id !== actor.id) {
-        return c.json(
-          refused("forbidden", "You can change only your own name."),
-          403
-        );
-      }
-      const { headers } = c.req.raw;
-      const target = await findUser(headers, id);
-      if (target === null) {
-        return c.json(refused("not_found", "No such member."), 404);
-      }
-      const { name: next } = c.req.valid("json");
-      // Better Auth's own `/update-user`, not the admin plugin's: a member changes their
-      // own profile, which the rank guard has no say in.
-      await adminAuth.api.updateUser({ body: { name: next }, headers });
-      audit({
-        action: "member.profile.update",
-        after: { name: next },
-        before: { name: target.name },
-        target: { id, label: target.email },
-      });
-      return c.json({ member: { email: target.email, id, name: next } }, 200);
-    })
-  )
-  .post("/:id/password", adminGate, validPassword, (c) =>
-    adminAuthWrite(c, async ({ actor, audit }) => {
-      const id = c.req.param("id");
-      const input = c.req.valid("json");
-      const { headers } = c.req.raw;
-      const target = await findUser(headers, id);
-      if (target === null || !inGroup(target.role) || target.banned === true) {
-        return c.json(refused("not_found", "No such member."), 404);
-      }
-      const label = { id, label: target.email };
-
-      if (id === actor.id) {
-        if (input.currentPassword === undefined) {
-          return c.json(invalid("currentPassword: required"), 400);
-        }
         try {
-          // `returnHeaders`, because signing out the other sessions deletes this one too
-          // and Better Auth sets a fresh session cookie. Passed on, the caller stays
-          // signed in here.
-          const result = await adminAuth.api.changePassword({
-            body: {
-              currentPassword: input.currentPassword,
-              newPassword: input.newPassword,
-              revokeOtherSessions: input.revokeOtherSessions ?? true,
-            },
+          const { user } = await adminAuth.api.createUser({
+            body: { ...input, role },
             headers,
-            returnHeaders: true,
           });
-          for (const cookie of result.headers.getSetCookie()) {
-            c.header("set-cookie", cookie, { append: true });
-          }
+          // The password is never logged.
+          audit({
+            action: "member.add",
+            after: { email: user.email, name: user.name, role },
+            target: { id: user.id, label: user.email },
+          });
+          return c.json(
+            {
+              member: { email: user.email, id: user.id, name: user.name, role },
+            },
+            201
+          );
         } catch (error) {
           const refusal = authRefusal(error);
           if (refusal === null) {
             throw error;
           }
-          return c.json(invalid(refusal.message), 400);
+          return c.json(
+            refused(
+              refusal.status === 403 ? "forbidden" : "invalid_request",
+              refusal.message
+            ),
+            refusal.status === 403 ? 403 : 400
+          );
         }
-        // Only that it was set. The password itself never reaches a row.
+      })
+  )
+  .patch(
+    "/:id",
+    declare({
+      name: "admin_member_update",
+      description: "Change your own name as an admin member.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validUpdate,
+    (c) =>
+      adminAuthWrite(c, async ({ actor, audit }) => {
+        const id = c.req.param("id");
+        if (id !== actor.id) {
+          return c.json(
+            refused("forbidden", "You can change only your own name."),
+            403
+          );
+        }
+        const { headers } = c.req.raw;
+        const target = await findUser(headers, id);
+        if (target === null) {
+          return c.json(refused("not_found", "No such member."), 404);
+        }
+        const { name: next } = c.req.valid("json");
+        // Better Auth's own `/update-user`, not the admin plugin's: a member changes their
+        // own profile, which the rank guard has no say in.
+        await adminAuth.api.updateUser({ body: { name: next }, headers });
+        audit({
+          action: "member.profile.update",
+          after: { name: next },
+          before: { name: target.name },
+          target: { id, label: target.email },
+        });
+        return c.json({ member: { email: target.email, id, name: next } }, 200);
+      })
+  )
+  .post(
+    "/:id/password",
+    declare({
+      name: "admin_member_password_set",
+      description:
+        "Change your own password, or set another member's as a superadmin.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validPassword,
+    (c) =>
+      adminAuthWrite(c, async ({ actor, audit }) => {
+        const id = c.req.param("id");
+        const input = c.req.valid("json");
+        const { headers } = c.req.raw;
+        const target = await findUser(headers, id);
+        if (
+          target === null ||
+          !inGroup(target.role) ||
+          target.banned === true
+        ) {
+          return c.json(refused("not_found", "No such member."), 404);
+        }
+        const label = { id, label: target.email };
+
+        if (id === actor.id) {
+          if (input.currentPassword === undefined) {
+            return c.json(invalid("currentPassword: required"), 400);
+          }
+          try {
+            // `returnHeaders`, because signing out the other sessions deletes this one too
+            // and Better Auth sets a fresh session cookie. Passed on, the caller stays
+            // signed in here.
+            const result = await adminAuth.api.changePassword({
+              body: {
+                currentPassword: input.currentPassword,
+                newPassword: input.newPassword,
+                revokeOtherSessions: input.revokeOtherSessions ?? true,
+              },
+              headers,
+              returnHeaders: true,
+            });
+            for (const cookie of result.headers.getSetCookie()) {
+              c.header("set-cookie", cookie, { append: true });
+            }
+          } catch (error) {
+            const refusal = authRefusal(error);
+            if (refusal === null) {
+              throw error;
+            }
+            return c.json(invalid(refusal.message), 400);
+          }
+          // Only that it was set. The password itself never reaches a row.
+          audit({ action: "member.password.set", target: label });
+          return c.json({ changed: true }, 200);
+        }
+
+        if (actor.role !== SUPERADMIN_ROLE) {
+          return c.json(
+            refused(
+              "forbidden",
+              "Only a superadmin can set another member's password."
+            ),
+            403
+          );
+        }
+        try {
+          await adminAuth.api.setUserPassword({
+            body: { newPassword: input.newPassword, userId: id },
+            headers,
+          });
+        } catch (error) {
+          // A project that raises the auth rule above the minimum here gets a 400, not a 500.
+          const refusal = authRefusal(error);
+          if (refusal === null) {
+            throw error;
+          }
+          return c.json(
+            refused(
+              refusal.status === 403 ? "forbidden" : "invalid_request",
+              refusal.message
+            ),
+            refusal.status === 403 ? 403 : 400
+          );
+        }
+        // The reset ends the member's open sessions, as the dialog says.
+        await adminAuth.api.revokeUserSessions({
+          body: { userId: id },
+          headers,
+        });
         audit({ action: "member.password.set", target: label });
         return c.json({ changed: true }, 200);
-      }
-
-      if (actor.role !== SUPERADMIN_ROLE) {
-        return c.json(
-          refused(
-            "forbidden",
-            "Only a superadmin can set another member's password."
-          ),
-          403
-        );
-      }
-      try {
-        await adminAuth.api.setUserPassword({
-          body: { newPassword: input.newPassword, userId: id },
-          headers,
-        });
-      } catch (error) {
-        // A project that raises the auth rule above the minimum here gets a 400, not a 500.
-        const refusal = authRefusal(error);
-        if (refusal === null) {
-          throw error;
-        }
-        return c.json(
-          refused(
-            refusal.status === 403 ? "forbidden" : "invalid_request",
-            refusal.message
-          ),
-          refusal.status === 403 ? 403 : 400
-        );
-      }
-      // The reset ends the member's open sessions, as the dialog says.
-      await adminAuth.api.revokeUserSessions({ body: { userId: id }, headers });
-      audit({ action: "member.password.set", target: label });
-      return c.json({ changed: true }, 200);
-    })
+      })
   )
-  .delete("/:id", adminGate, (c) =>
-    adminAuthWrite(c, async ({ actor, audit }) => {
-      const id = c.req.param("id");
-      if (id === actor.id) {
-        return c.json(invalid("You cannot remove yourself."), 400);
-      }
-      if (actor.role !== SUPERADMIN_ROLE) {
-        return c.json(
-          refused("forbidden", "Only a superadmin can remove a member."),
-          403
-        );
-      }
-      const { headers } = c.req.raw;
-      const target = await findUser(headers, id);
-      if (target === null || !inGroup(target.role)) {
-        return c.json(refused("not_found", "No such member."), 404);
-      }
-      if (target.banned === true) {
-        return c.json(invalid("This member is already removed."), 400);
-      }
-      try {
-        // `banUser` also deletes every session the member holds.
-        await adminAuth.api.banUser({
-          body: { banReason: REMOVED_REASON, userId: id },
-          headers,
-        });
-      } catch (error) {
-        const refusal = authRefusal(error);
-        if (refusal?.status !== 403) {
-          throw error;
+  .delete(
+    "/:id",
+    declare({
+      name: "admin_member_delete",
+      description: "Remove a member from the admin group.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      adminAuthWrite(c, async ({ actor, audit }) => {
+        const id = c.req.param("id");
+        if (id === actor.id) {
+          return c.json(invalid("You cannot remove yourself."), 400);
         }
-        return c.json(refused("forbidden", refusal.message), 403);
-      }
-      audit({
-        action: "member.remove",
-        after: { removed: true },
-        before: { removed: false },
-        target: { id, label: target.email },
-      });
-      return c.json(
-        { member: { email: target.email, id, name: target.name } },
-        200
-      );
-    })
-  )
-  .post("/:id/restore", adminGate, (c) =>
-    adminAuthWrite(c, async ({ actor, audit }) => {
-      if (actor.role !== SUPERADMIN_ROLE) {
+        if (actor.role !== SUPERADMIN_ROLE) {
+          return c.json(
+            refused("forbidden", "Only a superadmin can remove a member."),
+            403
+          );
+        }
+        const { headers } = c.req.raw;
+        const target = await findUser(headers, id);
+        if (target === null || !inGroup(target.role)) {
+          return c.json(refused("not_found", "No such member."), 404);
+        }
+        if (target.banned === true) {
+          return c.json(invalid("This member is already removed."), 400);
+        }
+        try {
+          // `banUser` also deletes every session the member holds.
+          await adminAuth.api.banUser({
+            body: { banReason: REMOVED_REASON, userId: id },
+            headers,
+          });
+        } catch (error) {
+          const refusal = authRefusal(error);
+          if (refusal?.status !== 403) {
+            throw error;
+          }
+          return c.json(refused("forbidden", refusal.message), 403);
+        }
+        audit({
+          action: "member.remove",
+          after: { removed: true },
+          before: { removed: false },
+          target: { id, label: target.email },
+        });
         return c.json(
-          refused("forbidden", "Only a superadmin can restore a member."),
-          403
+          { member: { email: target.email, id, name: target.name } },
+          200
         );
-      }
-      const id = c.req.param("id");
-      const { headers } = c.req.raw;
-      const target = await findUser(headers, id);
-      if (target === null || !inGroup(target.role)) {
-        return c.json(refused("not_found", "No such member."), 404);
-      }
-      if (target.banned !== true) {
-        return c.json(invalid("This member is not removed."), 400);
-      }
-      // Unbanning keeps the account as it was: the same id, email, password and history.
-      await adminAuth.api.unbanUser({ body: { userId: id }, headers });
-      audit({
-        action: "member.restore",
-        after: { removed: false },
-        before: { removed: true },
-        target: { id, label: target.email },
-      });
-      return c.json(
-        { member: { email: target.email, id, name: target.name } },
-        200
-      );
-    })
+      })
+  )
+  .post(
+    "/:id/restore",
+    declare({
+      name: "admin_member_restore",
+      description: "Restore a removed admin member.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      adminAuthWrite(c, async ({ actor, audit }) => {
+        if (actor.role !== SUPERADMIN_ROLE) {
+          return c.json(
+            refused("forbidden", "Only a superadmin can restore a member."),
+            403
+          );
+        }
+        const id = c.req.param("id");
+        const { headers } = c.req.raw;
+        const target = await findUser(headers, id);
+        if (target === null || !inGroup(target.role)) {
+          return c.json(refused("not_found", "No such member."), 404);
+        }
+        if (target.banned !== true) {
+          return c.json(invalid("This member is not removed."), 400);
+        }
+        // Unbanning keeps the account as it was: the same id, email, password and history.
+        await adminAuth.api.unbanUser({ body: { userId: id }, headers });
+        audit({
+          action: "member.restore",
+          after: { removed: false },
+          before: { removed: true },
+          target: { id, label: target.email },
+        });
+        return c.json(
+          { member: { email: target.email, id, name: target.name } },
+          200
+        );
+      })
   );

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { MiddlewareHandler } from "hono";
 import { adminAuth, auth, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
+import { declare } from "../contract";
 
 /** Identity, so `authGuards` keeps the call shape the `plugin-array` codemod reads. */
 function defineGuards(config: { guards: MiddlewareHandler[] }) {
@@ -47,6 +48,15 @@ export const authGuards = defineGuards({ guards: [] });
 export const authRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
   ["GET", "POST"],
   "/*",
+  declare({
+    name: "auth_handler",
+    description:
+      "Better Auth's endpoints for the app's users: sign-up, sign-in, sessions.",
+    agent: {
+      callable: false,
+      reason: "Sign-in runs in a browser, not through an agent.",
+    },
+  }),
   // The scope opens first and stays open across the guards, so a guard reads the
   // database through `authDb` on the same client the handler uses.
   (c, next) => withAuthScope(c, () => next()),
@@ -88,6 +98,11 @@ function isAdminPluginPath(pathname: string): boolean {
 export const adminAuthRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
   ["GET", "POST"],
   "/*",
+  declare({
+    name: "admin_auth_handler",
+    description: "Better Auth's endpoints for the admin console's staff.",
+    agent: { callable: false, reason: "Admin routes are never callable." },
+  }),
   (c) =>
     isAdminPluginPath(new URL(c.req.url).pathname)
       ? c.notFound()

@@ -1,6 +1,7 @@
 import type { AuthDbBindings } from "@repo/auth/server";
 import { requireTenant } from "@repo/auth/tenant";
 import { Hono } from "hono";
+import { declare } from "../contract";
 
 // `GET /tenant` — who this request is acting as, and for which organization.
 //
@@ -20,6 +21,16 @@ import { Hono } from "hono";
 
 export const tenantRoute = new Hono<{ Bindings: AuthDbBindings }>().get(
   "/",
+  declare({
+    name: "tenant_read",
+    description:
+      "Who the request acts as, in which organization, and what they may do there.",
+    agent: {
+      callable: false,
+      reason:
+        "An auth read for the app's screens; an agent learns its rights from its key.",
+    },
+  }),
   async (c) => {
     // 401 when signed out, 403 with `no active organization` when the caller belongs to
     // none, 403 `forbidden` when they sent `x-organization-id` without being superadmin.

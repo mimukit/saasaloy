@@ -1,6 +1,7 @@
 import { createStorage, StorageError, verifyToken } from "@repo/storage";
 import type { StorageEnv } from "@repo/storage";
 import { Hono } from "hono";
+import { declare } from "../contract";
 
 // The proxy upload and download path. It exists so `createUploadUrl` can always return
 // a URL: a provider that cannot sign one (`storage-memory`, or R2 with no API token)
@@ -36,89 +37,111 @@ const STATUS_FOR: Record<string, 400 | 403 | 404 | 413 | 429 | 500 | 501> = {
 };
 
 export const storage = new Hono<{ Bindings: StorageEnv }>()
-  .put("/objects", async (c) => {
-    const token = c.req.query("token");
-    if (!token) {
-      return c.json(errorBody("forbidden", "missing upload token"), 403);
+  .put(
+    "/objects",
+    declare({
+      name: "storage_object_put",
+      description: "Store the bytes of an upload a signed token names.",
+      agent: {
+        callable: false,
+        reason: "A signed-token byte transfer for the browser, not JSON.",
+      },
+    }),
+    async (c) => {
+      const token = c.req.query("token");
+      if (!token) {
+        return c.json(errorBody("forbidden", "missing upload token"), 403);
+      }
+
+      try {
+        // Verified first, and nothing below reads `c.req.raw.body` until it passes.
+        const claims = await verifyToken(c.env, token);
+        if (claims.method !== "PUT") {
+          return c.json(
+            errorBody("forbidden", "token is not an upload token"),
+            403
+          );
+        }
+
+        const files = createStorage(c.env);
+        const limit = claims.maxBytes ?? files.maxUploadBytes;
+
+        // `content-length` is the only size a proxy can check before it streams. A body
+        // with no length still cannot exceed the cap unnoticed: the feature's `complete`
+        // step heads the real object and deletes an oversize one.
+        const declared = Number(c.req.header("content-length") ?? "");
+        if (Number.isFinite(declared) && declared > limit) {
+          return c.json(
+            errorBody("too_large", `body exceeds ${limit} bytes`),
+            413
+          );
+        }
+
+        const { body } = c.req.raw;
+        if (!body) {
+          return c.json(errorBody("invalid_input", "empty request body"), 400);
+        }
+
+        const object = await files.put(claims.key, body, {
+          contentType:
+            claims.contentType ?? c.req.header("content-type") ?? undefined,
+        });
+        return c.json({ key: object.key, size: object.size }, 200);
+      } catch (error) {
+        if (error instanceof StorageError) {
+          const status = STATUS_FOR[error.code] ?? 500;
+          return c.json(errorBody(error.code, error.message), status);
+        }
+        throw error;
+      }
     }
-
-    try {
-      // Verified first, and nothing below reads `c.req.raw.body` until it passes.
-      const claims = await verifyToken(c.env, token);
-      if (claims.method !== "PUT") {
-        return c.json(
-          errorBody("forbidden", "token is not an upload token"),
-          403
-        );
+  )
+  .get(
+    "/objects",
+    declare({
+      name: "storage_object_get",
+      description: "Serve the bytes a signed token names.",
+      agent: {
+        callable: false,
+        reason: "A signed-token byte transfer for the browser, not JSON.",
+      },
+    }),
+    async (c) => {
+      const token = c.req.query("token");
+      if (!token) {
+        return c.json(errorBody("forbidden", "missing download token"), 403);
       }
 
-      const files = createStorage(c.env);
-      const limit = claims.maxBytes ?? files.maxUploadBytes;
+      try {
+        const claims = await verifyToken(c.env, token);
+        if (claims.method !== "GET") {
+          return c.json(
+            errorBody("forbidden", "token is not a download token"),
+            403
+          );
+        }
 
-      // `content-length` is the only size a proxy can check before it streams. A body
-      // with no length still cannot exceed the cap unnoticed: the feature's `complete`
-      // step heads the real object and deletes an oversize one.
-      const declared = Number(c.req.header("content-length") ?? "");
-      if (Number.isFinite(declared) && declared > limit) {
-        return c.json(
-          errorBody("too_large", `body exceeds ${limit} bytes`),
-          413
-        );
-      }
+        const object = await createStorage(c.env).get(claims.key);
+        if (!object) {
+          return c.json(errorBody("not_found", "no such object"), 404);
+        }
 
-      const { body } = c.req.raw;
-      if (!body) {
-        return c.json(errorBody("invalid_input", "empty request body"), 400);
+        // A raw `Response` rather than `c.body`, because the body is a stream the provider
+        // owns and Hono's `c.body` overloads do not take `ReadableStream | null`. The
+        // stream is passed straight through, so the Worker never buffers the file.
+        return new Response(object.body, {
+          headers: {
+            "content-length": String(object.size),
+            "content-type": object.contentType ?? "application/octet-stream",
+          },
+          status: 200,
+        });
+      } catch (error) {
+        if (error instanceof StorageError) {
+          const status = STATUS_FOR[error.code] ?? 500;
+          return c.json(errorBody(error.code, error.message), status);
+        }
+        throw error;
       }
-
-      const object = await files.put(claims.key, body, {
-        contentType:
-          claims.contentType ?? c.req.header("content-type") ?? undefined,
-      });
-      return c.json({ key: object.key, size: object.size }, 200);
-    } catch (error) {
-      if (error instanceof StorageError) {
-        const status = STATUS_FOR[error.code] ?? 500;
-        return c.json(errorBody(error.code, error.message), status);
-      }
-      throw error;
     }
-  })
-  .get("/objects", async (c) => {
-    const token = c.req.query("token");
-    if (!token) {
-      return c.json(errorBody("forbidden", "missing download token"), 403);
-    }
-
-    try {
-      const claims = await verifyToken(c.env, token);
-      if (claims.method !== "GET") {
-        return c.json(
-          errorBody("forbidden", "token is not a download token"),
-          403
-        );
-      }
-
-      const object = await createStorage(c.env).get(claims.key);
-      if (!object) {
-        return c.json(errorBody("not_found", "no such object"), 404);
-      }
-
-      // A raw `Response` rather than `c.body`, because the body is a stream the provider
-      // owns and Hono's `c.body` overloads do not take `ReadableStream | null`. The
-      // stream is passed straight through, so the Worker never buffers the file.
-      return new Response(object.body, {
-        headers: {
-          "content-length": String(object.size),
-          "content-type": object.contentType ?? "application/octet-stream",
-        },
-        status: 200,
-      });
-    } catch (error) {
-      if (error instanceof StorageError) {
-        const status = STATUS_FOR[error.code] ?? 500;
-        return c.json(errorBody(error.code, error.message), status);
-      }
-      throw error;
-    }
-  });
+  );

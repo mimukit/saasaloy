@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import { requireSession, withAuthScope } from "@repo/auth/server";
 import { withDb } from "@repo/db/client";
 import {
@@ -18,7 +18,11 @@ import {
   StorageError,
 } from "@repo/storage";
 import { errorBody } from "@repo/validators/common";
-import { listQuery, uploadRequest } from "@repo/validators/file-uploads";
+import {
+  fileList,
+  listQuery,
+  uploadRequest,
+} from "@repo/validators/file-uploads";
 import { Hono } from "hono";
 // Imported for its side effect: the module registers the sweep runner with
 // `@repo/file-uploads` at load, and this route file is what puts it on the Worker's import
@@ -92,114 +96,136 @@ const validateList = zValidator("query", listQuery, (result, c) => {
 export const files = new Hono<{ Bindings: Bindings }>()
   // The tenant's objects, newest first. A public row carries its `url`, so a grid of
   // thumbnails renders in one round trip instead of one signed-link request per tile.
-  .get("/", validateList, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireSession(c);
-      const scope = resolveScope(session);
-      const settings = apiEnv(c.env);
-      const { cursor, limit } = c.req.valid("query");
+  .get(
+    "/",
+    declare({
+      name: "files_list",
+      description:
+        "List the caller's uploaded files, newest first, with each public file's URL. Pass the returned cursor for the next page.",
+      output: fileList,
+      agent: { callable: true, readOnly: true, confirm: false },
+    }),
+    validateList,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireSession(c);
+        const scope = resolveScope(session);
+        const settings = apiEnv(c.env);
+        const { cursor, limit } = c.req.valid("query");
 
-      const page = await withDb(c, (db) =>
-        listObjects(db, scope, { limit, ...(cursor ? { cursor } : {}) })
-      );
+        const page = await withDb(c, (db) =>
+          listObjects(db, scope, { limit, ...(cursor ? { cursor } : {}) })
+        );
 
-      return c.json(
-        {
-          objects: page.rows.map((row) => toPayload(settings, row)),
-          // Two settings the screen cannot read for itself: it runs in a browser and
-          // these live in the Worker environment. Sending them with the list is what lets
-          // the upload form disable the public option, and say why, instead of letting a
-          // submit fail.
-          settings: {
-            imageTransforms: imageTransformsEnabled(settings),
-            publicUploads: hasPublicUrl(settings),
+        return c.json(
+          {
+            objects: page.rows.map((row) => toPayload(settings, row)),
+            // Two settings the screen cannot read for itself: it runs in a browser and
+            // these live in the Worker environment. Sending them with the list is what lets
+            // the upload form disable the public option, and say why, instead of letting a
+            // submit fail.
+            settings: {
+              imageTransforms: imageTransformsEnabled(settings),
+              publicUploads: hasPublicUrl(settings),
+            },
+            ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
           },
-          ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
-        },
-        200
-      );
-    })
+          200
+        );
+      })
   )
   // Step one of an upload: record the intent, then hand back somewhere to PUT the bytes.
   // The row exists before the object does, so an upload that is abandoned halfway leaves
   // a `pending` row the sweep can find rather than an orphan in the bucket.
-  .post("/uploads", validateUpload, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireSession(c);
-      const { tenantId } = resolveScope(session);
-      const input = c.req.valid("json");
+  .post(
+    "/uploads",
+    declare({
+      name: "file_upload_start",
+      description: "Record an upload and return the URL to send the bytes to.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    validateUpload,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireSession(c);
+        const { tenantId } = resolveScope(session);
+        const input = c.req.valid("json");
 
-      // `STORAGE_PUBLIC_URL` gates a public upload, not the provider. Refusing by name is
-      // the point: the operator reads the message and knows exactly which variable to set.
-      if (input.visibility === "public" && !hasPublicUrl(apiEnv(c.env))) {
-        return c.json(
-          errorBody(
-            "invalid_input",
-            "STORAGE_PUBLIC_URL is not set, so this api cannot issue a public object URL. Set it to the origin that serves your bucket (an R2 custom domain in production, this api's own origin in dev), or upload the file as private."
-          ),
-          400
-        );
-      }
-
-      try {
-        const storage = createStorage(c.env);
-        if (input.size > storage.maxUploadBytes) {
+        // `STORAGE_PUBLIC_URL` gates a public upload, not the provider. Refusing by name is
+        // the point: the operator reads the message and knows exactly which variable to set.
+        if (input.visibility === "public" && !hasPublicUrl(apiEnv(c.env))) {
           return c.json(
             errorBody(
-              "too_large",
-              `File is ${input.size} bytes, over the ${storage.maxUploadBytes}-byte limit config.storage.maxUploadBytes sets.`
+              "invalid_input",
+              "STORAGE_PUBLIC_URL is not set, so this api cannot issue a public object URL. Set it to the origin that serves your bucket (an R2 custom domain in production, this api's own origin in dev), or upload the file as private."
             ),
-            413
+            400
           );
         }
 
-        // 122 random bits, and for a public object the only thing standing between the
-        // bytes and the internet. See the schema's comment on this column.
-        const id = crypto.randomUUID();
-        const key = buildKey({
-          filename: input.filename,
-          id,
-          scope: input.visibility === "public" ? PUBLIC_SCOPE : PRIVATE_SCOPE,
-          tenantId,
-        });
+        try {
+          const storage = createStorage(c.env);
+          if (input.size > storage.maxUploadBytes) {
+            return c.json(
+              errorBody(
+                "too_large",
+                `File is ${input.size} bytes, over the ${storage.maxUploadBytes}-byte limit config.storage.maxUploadBytes sets.`
+              ),
+              413
+            );
+          }
 
-        await withDb(c, (db) =>
-          createObject(db, {
-            contentType: input.contentType,
+          // 122 random bits, and for a public object the only thing standing between the
+          // bytes and the internet. See the schema's comment on this column.
+          const id = crypto.randomUUID();
+          const key = buildKey({
+            filename: input.filename,
             id,
-            key,
-            ownerId: session.user.id,
-            provider: storage.provider,
-            size: input.size,
+            scope: input.visibility === "public" ? PUBLIC_SCOPE : PRIVATE_SCOPE,
             tenantId,
-            visibility: input.visibility,
-            ...(input.metadata ? { metadata: input.metadata } : {}),
-          })
-        );
+          });
 
-        const target = await storage.createUploadUrl(key, {
-          contentType: input.contentType,
-          maxBytes: storage.maxUploadBytes,
-        });
+          await withDb(c, (db) =>
+            createObject(db, {
+              contentType: input.contentType,
+              id,
+              key,
+              ownerId: session.user.id,
+              provider: storage.provider,
+              size: input.size,
+              tenantId,
+              visibility: input.visibility,
+              ...(input.metadata ? { metadata: input.metadata } : {}),
+            })
+          );
 
-        return c.json(
-          {
-            id,
-            key,
-            upload: {
-              direct: target.direct,
-              expiresAt: target.expiresAt.toISOString(),
-              headers: target.headers,
-              method: target.method,
-              url: target.url,
+          const target = await storage.createUploadUrl(key, {
+            contentType: input.contentType,
+            maxBytes: storage.maxUploadBytes,
+          });
+
+          return c.json(
+            {
+              id,
+              key,
+              upload: {
+                direct: target.direct,
+                expiresAt: target.expiresAt.toISOString(),
+                headers: target.headers,
+                method: target.method,
+                url: target.url,
+              },
             },
-          },
-          201
-        );
-      } catch (error) {
-        return storageFailure(c, error);
-      }
-    })
+            201
+          );
+        } catch (error) {
+          return storageFailure(c, error);
+        }
+      })
   )
   // Step two: prove the object is what the uploader said it was.
   //
@@ -207,141 +233,173 @@ export const files = new Hono<{ Bindings: Bindings }>()
   // the two-step shape exists at all. A mismatch deletes the object and marks the row
   // `rejected` — the row stays so the uploader learns why, rather than watching the file
   // silently not appear.
-  .post("/uploads/:id/complete", (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireSession(c);
-      const scope = resolveScope(session);
-      const id = c.req.param("id");
+  .post(
+    "/uploads/:id/complete",
+    declare({
+      name: "file_upload_complete",
+      description: "Mark an upload finished once its bytes are stored.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireSession(c);
+        const scope = resolveScope(session);
+        const id = c.req.param("id");
 
-      const row = await withDb(c, (db) => findObject(db, scope, id));
-      if (!row) {
-        return c.json(errorBody("not_found", "no such object"), 404);
-      }
-      if (row.status !== "pending") {
-        return c.json(
-          errorBody("conflict", `object is already ${row.status}`),
-          409
-        );
-      }
-
-      try {
-        const storage = createStorage(c.env);
-        const object = await storage.head(row.key);
-        if (!object) {
-          return c.json(
-            errorBody("not_found", "nothing was uploaded to that key"),
-            404
-          );
+        const row = await withDb(c, (db) => findObject(db, scope, id));
+        if (!row) {
+          return c.json(errorBody("not_found", "no such object"), 404);
         }
-
-        const actualType = object.contentType ?? row.contentType;
-        const mismatch =
-          object.size !== row.size ||
-          object.size > storage.maxUploadBytes ||
-          actualType !== row.contentType;
-
-        if (mismatch) {
-          // Delete first, then record. A Worker that dies between the two leaves a
-          // `pending` row with no object, which the sweep removes; the other order would
-          // leave bytes nothing points at.
-          await storage.delete(row.key);
-          await withDb(c, (db) => markRejected(db, scope, id));
+        if (row.status !== "pending") {
           return c.json(
-            errorBody(
-              "rejected",
-              `Uploaded object is ${object.size} bytes of ${actualType}, not the ${row.size} bytes of ${row.contentType} that were declared. It has been deleted.`
-            ),
+            errorBody("conflict", `object is already ${row.status}`),
             409
           );
         }
 
-        await withDb(c, (db) =>
-          markReady(db, scope, id, {
-            contentType: actualType,
-            size: object.size,
-          })
-        );
-        return c.json(
-          toPayload(apiEnv(c.env), {
-            ...row,
-            completedAt: new Date(),
-            contentType: actualType,
-            size: object.size,
-            status: "ready",
-          }),
-          200
-        );
-      } catch (error) {
-        return storageFailure(c, error);
-      }
-    })
+        try {
+          const storage = createStorage(c.env);
+          const object = await storage.head(row.key);
+          if (!object) {
+            return c.json(
+              errorBody("not_found", "nothing was uploaded to that key"),
+              404
+            );
+          }
+
+          const actualType = object.contentType ?? row.contentType;
+          const mismatch =
+            object.size !== row.size ||
+            object.size > storage.maxUploadBytes ||
+            actualType !== row.contentType;
+
+          if (mismatch) {
+            // Delete first, then record. A Worker that dies between the two leaves a
+            // `pending` row with no object, which the sweep removes; the other order would
+            // leave bytes nothing points at.
+            await storage.delete(row.key);
+            await withDb(c, (db) => markRejected(db, scope, id));
+            return c.json(
+              errorBody(
+                "rejected",
+                `Uploaded object is ${object.size} bytes of ${actualType}, not the ${row.size} bytes of ${row.contentType} that were declared. It has been deleted.`
+              ),
+              409
+            );
+          }
+
+          await withDb(c, (db) =>
+            markReady(db, scope, id, {
+              contentType: actualType,
+              size: object.size,
+            })
+          );
+          return c.json(
+            toPayload(apiEnv(c.env), {
+              ...row,
+              completedAt: new Date(),
+              contentType: actualType,
+              size: object.size,
+              status: "ready",
+            }),
+            200
+          );
+        } catch (error) {
+          return storageFailure(c, error);
+        }
+      })
   )
   // A signed, short-lived link for a private object.
   //
   // It refuses a public id rather than signing one. A public row already carries its `url`
   // in the list response, and issuing a second, expiring URL for a world-readable object
   // would imply a revocability this feature does not have.
-  .get("/:id/download", (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireSession(c);
-      const scope = resolveScope(session);
+  .get(
+    "/:id/download",
+    declare({
+      name: "file_download",
+      description: "Redirect to a short-lived download link for one file.",
+      agent: {
+        callable: false,
+        reason: "It answers a redirect to the bytes, not JSON.",
+      },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireSession(c);
+        const scope = resolveScope(session);
 
-      const row = await withDb(c, (db) =>
-        findObject(db, scope, c.req.param("id"))
-      );
-      if (!row || row.status !== "ready") {
-        return c.json(errorBody("not_found", "no such object"), 404);
-      }
-      if (row.visibility === "public") {
-        return c.json(
-          errorBody(
-            "invalid_input",
-            "that object is public — read its url from GET /files instead."
-          ),
-          400
+        const row = await withDb(c, (db) =>
+          findObject(db, scope, c.req.param("id"))
         );
-      }
+        if (!row || row.status !== "ready") {
+          return c.json(errorBody("not_found", "no such object"), 404);
+        }
+        if (row.visibility === "public") {
+          return c.json(
+            errorBody(
+              "invalid_input",
+              "that object is public — read its url from GET /files instead."
+            ),
+            400
+          );
+        }
 
-      try {
-        const target = await createStorage(c.env).createDownloadUrl(row.key);
-        return c.json(
-          {
-            direct: target.direct,
-            expiresAt: target.expiresAt.toISOString(),
-            method: target.method,
-            url: target.url,
-          },
-          200
-        );
-      } catch (error) {
-        return storageFailure(c, error);
-      }
-    })
+        try {
+          const target = await createStorage(c.env).createDownloadUrl(row.key);
+          return c.json(
+            {
+              direct: target.direct,
+              expiresAt: target.expiresAt.toISOString(),
+              method: target.method,
+              url: target.url,
+            },
+            200
+          );
+        } catch (error) {
+          return storageFailure(c, error);
+        }
+      })
   )
   // Three writes, in the order that survives a Worker dying between any two of them:
   // mark `deleting`, delete the object, mark `deleted`. A row left in `deleting` is
   // finished by the sweep. The reverse order would leave a row claiming bytes that are
   // already gone.
-  .delete("/:id", (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireSession(c);
-      const scope = resolveScope(session);
-      const id = c.req.param("id");
+  .delete(
+    "/:id",
+    declare({
+      name: "file_delete",
+      description: "Delete one file.",
+      agent: {
+        callable: false,
+        reason:
+          "A shipped write stays closed to agents; a project opens its own entity actions.",
+      },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireSession(c);
+        const scope = resolveScope(session);
+        const id = c.req.param("id");
 
-      const row = await withDb(c, (db) => findObject(db, scope, id));
-      if (!row) {
-        return c.json(errorBody("not_found", "no such object"), 404);
-      }
+        const row = await withDb(c, (db) => findObject(db, scope, id));
+        if (!row) {
+          return c.json(errorBody("not_found", "no such object"), 404);
+        }
 
-      try {
-        await withDb(c, (db) => markDeleting(db, scope, id));
-        await createStorage(c.env).delete(row.key);
-        await withDb(c, (db) => markDeleted(db, scope, id));
-        return c.body(null, 204);
-      } catch (error) {
-        return storageFailure(c, error);
-      }
-    })
+        try {
+          await withDb(c, (db) => markDeleting(db, scope, id));
+          await createStorage(c.env).delete(row.key);
+          await withDb(c, (db) => markDeleted(db, scope, id));
+          return c.body(null, 204);
+        } catch (error) {
+          return storageFailure(c, error);
+        }
+      })
   )
   // The public path. No token, no session, and that is the decision rather than an
   // oversight: a public object is world-readable by anyone who learns its key, and the
@@ -358,49 +416,62 @@ export const files = new Hono<{ Bindings: Bindings }>()
   // Two refusals come before the database is touched. The scope segment has to be
   // `public-uploads`, so no private key is ever looked up, and the key has to pass
   // `assertValidKey`, so a traversal attempt never reaches a query.
-  .get("/public/:key{.+}", async (c) => {
-    const key = c.req.param("key");
-    if (!isPublicKey(key)) {
-      return c.json(errorBody("not_found", "no such object"), 404);
-    }
-
-    try {
-      assertValidKey(key);
-    } catch {
-      return c.json(errorBody("not_found", "no such object"), 404);
-    }
-
-    const row = await withDb(c, (db) => findPublicObjectByKey(db, key));
-    if (!row) {
-      return c.json(errorBody("not_found", "no such object"), 404);
-    }
-
-    try {
-      const object = await createStorage(c.env).get(key);
-      if (!object) {
+  .get(
+    "/public/:key{.+}",
+    declare({
+      name: "file_public_read",
+      description: "Serve a public file's bytes.",
+      agent: {
+        callable: false,
+        reason: "It serves file bytes to a browser, not JSON.",
+      },
+    }),
+    async (c) => {
+      const key = c.req.param("key");
+      if (!isPublicKey(key)) {
         return c.json(errorBody("not_found", "no such object"), 404);
       }
-      // A raw `Response`, because the body is a stream the provider owns and Hono's
-      // `c.body` overloads do not take `ReadableStream | null`. The Worker never buffers
-      // the file.
-      //
-      // No `cache-control` beyond this one-hour hint. On the production path the header
-      // comes from a Cloudflare Cache Rule on the custom domain, matching
-      // `/t/*/public-*/*`, because the browser does the PUT and no code path in this
-      // module can attach a header to an object it never touches.
-      return new Response(object.body, {
-        headers: {
-          "cache-control": "public, max-age=3600",
-          "content-length": String(object.size),
-          "content-type":
-            object.contentType ?? row.contentType ?? "application/octet-stream",
-        },
-        status: 200,
-      });
-    } catch (error) {
-      return storageFailure(c, error);
+
+      try {
+        assertValidKey(key);
+      } catch {
+        return c.json(errorBody("not_found", "no such object"), 404);
+      }
+
+      const row = await withDb(c, (db) => findPublicObjectByKey(db, key));
+      if (!row) {
+        return c.json(errorBody("not_found", "no such object"), 404);
+      }
+
+      try {
+        const object = await createStorage(c.env).get(key);
+        if (!object) {
+          return c.json(errorBody("not_found", "no such object"), 404);
+        }
+        // A raw `Response`, because the body is a stream the provider owns and Hono's
+        // `c.body` overloads do not take `ReadableStream | null`. The Worker never buffers
+        // the file.
+        //
+        // No `cache-control` beyond this one-hour hint. On the production path the header
+        // comes from a Cloudflare Cache Rule on the custom domain, matching
+        // `/t/*/public-*/*`, because the browser does the PUT and no code path in this
+        // module can attach a header to an object it never touches.
+        return new Response(object.body, {
+          headers: {
+            "cache-control": "public, max-age=3600",
+            "content-length": String(object.size),
+            "content-type":
+              object.contentType ??
+              row.contentType ??
+              "application/octet-stream",
+          },
+          status: 200,
+        });
+      } catch (error) {
+        return storageFailure(c, error);
+      }
     }
-  });
+  );
 
 /** True when the key's scope segment is the public one. `t / tenant / scope / id / name`. */
 function isPublicKey(key: string): boolean {

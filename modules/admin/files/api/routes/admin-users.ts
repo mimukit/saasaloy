@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import {
   adminAuth,
   adminGate,
@@ -71,6 +71,11 @@ const validListQuery = zValidator("query", listQuery, (result, c) => {
 
 export const adminUsers = new Hono<{ Bindings: AuthDbBindings }>().get(
   "/users",
+  declare({
+    name: "admin_users_list",
+    description: "List every user for the admin console.",
+    agent: { callable: false, reason: "Admin routes are never callable." },
+  }),
   // `adminGate` before the validator, so a signed-out caller with a bad query gets 401 and
   // never a 400 that names the field. The shipped admin-gate test checks the order.
   adminGate,

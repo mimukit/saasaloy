@@ -1,6 +1,6 @@
 ---
 name: saasaloy-api
-description: Runbook for the api capability — Hono on Cloudflare Workers with a statically chained, RPC-typed route table. Use when adding, changing, or debugging routes in apps/api, building a typed client with hc<AppType>, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, testing a route with Vitest in Node (app.request), or deploying it. Covers the chained-route registration convention, the mount-relative path rule, explicit status codes, and how features add their own wrangler bindings.
+description: Runbook for the api capability — Hono on Cloudflare Workers with a statically chained, RPC-typed route table. Use when adding, changing, or debugging routes in apps/api, building a typed client with hc<AppType>, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, testing a route with Vitest in Node (app.request), or deploying it. Covers the chained-route registration convention, the mount-relative path rule, explicit status codes, the declare({...}) agent statement every route carries, and how features add their own wrangler bindings.
 ---
 
 # api — Hono on Cloudflare Workers
@@ -90,12 +90,20 @@ matches the file:
 ```ts
 // src/routes/widgets.ts  →  mounted at /widgets
 import { Hono } from "hono";
+import { declare } from "../contract";
+
+const closed = { callable: false, reason: "Example only." } as const;
 
 export const widgets = new Hono()
-  .get("/", (c) => c.json({ widgets: [] }, 200)) //         GET  /widgets
-  .post("/", (c) => c.json({ created: true }, 201)) //      POST /widgets
-  .get("/:id", (c) => c.json({ id: c.req.param("id") }, 200)); // GET /widgets/:id
+  .get("/", declare({ name: "widgets_list", description: "List widgets.", agent: closed }), (c) =>
+    c.json({ widgets: [] }, 200)) //                                   GET  /widgets
+  .post("/", declare({ name: "widget_create", description: "Create a widget.", agent: closed }), (c) =>
+    c.json({ created: true }, 201)) //                                 POST /widgets
+  .get("/:id", declare({ name: "widget_read", description: "Read one widget.", agent: closed }), (c) =>
+    c.json({ id: c.req.param("id") }, 200)); //                        GET  /widgets/:id
 ```
+
+Each route carries one `declare({...})` link, its agent statement. See "Every route states whether agents may call it" below.
 
 **Named, not default.** The `chained-route` codemod writes a named import for the handler and
 refuses to wire a link whose binding resolves to a default import, so `export default widgets`
@@ -162,6 +170,53 @@ that mount**:
 Name the Hono instance after the file (`const widgets = new Hono()`) so the file reads clearly.
 The folder is **flat**, one level of `routes/*.ts`. To nest, nest *inside* a sub-app
 (`.route("/archived", archivedSub)`), not with subdirectories.
+
+## Every route states whether agents may call it
+
+A route says one time what it does and whether an AI agent may call it, with one `declare({...})` link from `src/contract.ts`, placed first after the path and in front of the route's gate and validators. The `agent` module builds the OpenAPI document and the MCP tools from these statements. Without `agent` the link does nothing: it only calls `next()`, and it adds no input and no response type, so `AppType` and every response stay as they were.
+
+```ts
+import { declare, zValidator } from "../contract";
+import { widgetList, widgetListQuery } from "@repo/validators/widgets";
+
+const validList = zValidator("query", widgetListQuery, invalidInput);
+
+export const widgets = new Hono()
+  .get(
+    "/",
+    declare({
+      name: "widgets_list",
+      description: "List the caller's widgets, newest first.",
+      output: widgetList,
+      agent: { callable: true, readOnly: true, confirm: false },
+    }),
+    validList,
+    (c) => c.json({ widgets: [] }, 200)
+  )
+  .delete(
+    "/:id",
+    declare({
+      name: "widget_delete",
+      description: "Delete one of the caller's widgets.",
+      output: widgetDeleted,
+      agent: { callable: true, readOnly: false, confirm: true },
+    }),
+    (c) => c.json({ id: c.req.param("id") }, 200)
+  );
+```
+
+The fields:
+
+- `name` is the tool name and the OpenAPI `operationId`. Write it in snake_case, lead with the resource, and keep it unique across the api: `widgets_list`, `widget_delete`.
+- `description` is what an agent reads to pick the tool. Say what the route does and what it returns, in one or two sentences.
+- `agent` is the statement. `{ callable: false, reason }` keeps the route out of every agent surface. `{ callable: true, readOnly, confirm }` makes it a tool. `readOnly` says it changes nothing. `confirm` says a person must agree first, which the MCP client asks its user; set it on a delete and on anything that moves money.
+- `output` is the zod schema of the success body, and a callable route must give it. Put it in `@repo/validators/<feature>` next to the input schemas. `status` names the success status when it is not 200.
+
+**The input schema is written once, in the validator.** `zValidator` from `../contract` is `@hono/zod-validator`'s, with the same signature, hook and failure response, and it also records its target and schema on the middleware. The `agent` module reads the route's input from there, so `declare` takes no input schema and two copies cannot drift. Import `zValidator` from `../contract` in a route file, not from `@hono/zod-validator`. A path parameter that no validator checks reaches an agent as a plain string.
+
+**Which routes are callable.** A product read or write that the Feature stage builds is callable, each with its own scope in `API_KEY_SCOPES`. A route that a module ships stays closed, except product reads such as `GET /notifications` and the public CMS pages. Admin routes are never callable, and neither are auth or payment callback routes. The Saasaloy repo's `scripts/route-declarations.test.ts` fails on a shipped route with no statement.
+
+**Reading the statements.** `routeContracts(app)` from `src/contract.ts` walks a finished app, mounts included, and returns each route's method, full path, statement and validator schemas. `declarationOf(handler)` and `inputOf(handler)` read one handler. The `agent` module uses these; a route module never imports `agent`.
 
 ## The typed client
 
@@ -303,7 +358,7 @@ what makes the output queryable in the dashboard — `head_sampling_rate` is its
 
 A route does not define its own input shape inline. The schema belongs in `packages/validators`
 (`@repo/validators/<feature>`), which the `validators` capability scaffolds, and the route wraps it
-with `zValidator` from `@hono/zod-validator`. `c.req.valid("json")` then carries the inferred type
+with `zValidator` from `../contract`, which is `@hono/zod-validator`'s with its schema recorded for the agent surfaces. `c.req.valid("json")` then carries the inferred type
 into the handler, with the target matching the one `zValidator` was given. Error bodies use the
 shared `{ error: { code, message } }` envelope from `@repo/validators/common`. See the
 `saasaloy-validators` skill for the full convention.
@@ -457,6 +512,7 @@ The api deploys first. `saasaloy add api` appends `{ service: "api", order: 10 }
 - **`/admin/auth/*` is reserved for the admin auth instance.** Mount nothing under it, and make any `/admin/*` middleware skip it.
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
 - **Request validation belongs in `@repo/validators`**, not in an inline schema in the route.
+- **Every route carries one `declare({...})` link**, callable or not, and imports `zValidator` from `../contract`. Admin, auth and payment callback routes are never callable.
 - **Test a route in Node with `app.request(path, init, env)`.** A setup step goes in `test/setup/`, not in `vitest.config.ts`.
 
 ## Next

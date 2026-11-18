@@ -65,3 +65,50 @@ export type CmsPublicListQuery = z.infer<typeof cmsPublicListQuery>;
 export const cmsCollectionParam = z.object({
   collection: z.string().regex(/^[a-z][a-z0-9-]*$/),
 });
+
+// The bodies of the two public reads an agent may call. Each route's `declare(...)` names
+// its schema as `output`, and the `agent` module turns it into the tool's output schema.
+// The route still builds its own body; a change to one of those bodies changes the schema
+// here too, in the same commit.
+
+/** A media field with the public URL the api adds. A null `url`: no public bucket. */
+const publicMedia = z
+  .object({
+    alt: z.string().optional(),
+    key: z.string(),
+    objectId: z.string(),
+    url: z.string().nullable(),
+  })
+  .nullable();
+
+/** One published entry as the public list shows it: finished strings, no body. */
+export const cmsPublicSummary = z.object({
+  authorName: z.string().nullable(),
+  cover: publicMedia,
+  excerpt: z.string(),
+  id: z.string(),
+  publishedAt: z.string(),
+  slug: z.string(),
+  title: z.string(),
+  updatedAt: z.string(),
+});
+
+/** Body of `GET /cms/:collection/entries`. */
+export const cmsPublicList = z.object({
+  entries: z.array(cmsPublicSummary),
+  page: z.number().int(),
+  pageCount: z.number().int(),
+  total: z.number().int(),
+});
+
+/** Body of `GET /cms/:collection/entries/:slug` on 200: the entry with its html. */
+export const cmsPublicEntry = z.object({
+  entry: cmsPublicSummary.extend({
+    html: z.string(),
+    seo: z.object({
+      metaDescription: z.string(),
+      metaTitle: z.string(),
+      ogImage: publicMedia,
+    }),
+  }),
+});

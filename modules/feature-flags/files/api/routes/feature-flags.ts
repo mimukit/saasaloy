@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import { adminGate, requireAdmin, withAuthScope } from "@repo/auth/server";
 import { withDb } from "@repo/db/client";
 import type { Db } from "@repo/db/client";
@@ -100,178 +100,220 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
   // The screen's whole payload in one request: the code definitions (which say what a flag
   // is and what it defaults to), the global rows, and every override. Definitions and rows
   // are separate on purpose — a flag with no row is the normal state, not a gap to fill.
-  .get("/", adminGate, (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
+  .get(
+    "/",
+    declare({
+      name: "admin_flags_list",
+      description: "List the feature flags and their values.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      withAuthScope(c, async () => {
+        await requireAdmin(c);
 
-      const { overrides, rows } = await withDb(c, async (db) => ({
-        overrides: await listOverrides(db),
-        rows: await listFlags(db),
-      }));
-      const byKey = new Map(rows.map((row) => [row.key, row]));
+        const { overrides, rows } = await withDb(c, async (db) => ({
+          overrides: await listOverrides(db),
+          rows: await listFlags(db),
+        }));
+        const byKey = new Map(rows.map((row) => [row.key, row]));
 
-      return c.json(
-        {
-          flags: flags.flags.map((definition) => {
-            const row = byKey.get(definition.key);
-            return {
-              codeDefault: definition.default,
-              description: row?.description ?? definition.description ?? null,
-              // No row means nothing has ever been set, so the code default applies. The
-              // screen shows that state rather than pretending the flag is off.
-              enabled: row?.enabled ?? definition.default,
-              hasRow: row !== undefined,
-              key: definition.key,
-              percentage: row?.percentage ?? null,
-              type: definition.type,
-            };
-          }),
-          overrides: overrides.map((override) => ({
-            enabled: override.enabled,
-            flagKey: override.flagKey,
-            percentage: override.percentage,
-            tenantId: override.tenantId,
-          })),
-        },
-        200
-      );
-    })
+        return c.json(
+          {
+            flags: flags.flags.map((definition) => {
+              const row = byKey.get(definition.key);
+              return {
+                codeDefault: definition.default,
+                description: row?.description ?? definition.description ?? null,
+                // No row means nothing has ever been set, so the code default applies. The
+                // screen shows that state rather than pretending the flag is off.
+                enabled: row?.enabled ?? definition.default,
+                hasRow: row !== undefined,
+                key: definition.key,
+                percentage: row?.percentage ?? null,
+                type: definition.type,
+              };
+            }),
+            overrides: overrides.map((override) => ({
+              enabled: override.enabled,
+              flagKey: override.flagKey,
+              percentage: override.percentage,
+              tenantId: override.tenantId,
+            })),
+          },
+          200
+        );
+      })
   )
 
   // One flag, for a screen that deep-links to it. Same database-only rule as the list.
-  .get("/:key", adminGate, (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
+  .get(
+    "/:key",
+    declare({
+      name: "admin_flag_read",
+      description: "Read one flag with its tenant overrides.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      withAuthScope(c, async () => {
+        await requireAdmin(c);
 
-      const key = c.req.param("key");
-      const definition = definitionFor(key);
-      if (!definition) {
+        const key = c.req.param("key");
+        const definition = definitionFor(key);
+        if (!definition) {
+          return c.json(
+            errorBody("not_found", `No flag named "${key}" is registered.`),
+            404
+          );
+        }
+
+        const rows = await withDb(c, (db) => listFlags(db));
+        const row = rows.find((candidate) => candidate.key === key);
+
         return c.json(
-          errorBody("not_found", `No flag named "${key}" is registered.`),
-          404
-        );
-      }
-
-      const rows = await withDb(c, (db) => listFlags(db));
-      const row = rows.find((candidate) => candidate.key === key);
-
-      return c.json(
-        {
-          flag: {
-            codeDefault: definition.default,
-            description: row?.description ?? definition.description ?? null,
-            enabled: row?.enabled ?? definition.default,
-            hasRow: row !== undefined,
-            key,
-            percentage: row?.percentage ?? null,
-            type: definition.type,
+          {
+            flag: {
+              codeDefault: definition.default,
+              description: row?.description ?? definition.description ?? null,
+              enabled: row?.enabled ?? definition.default,
+              hasRow: row !== undefined,
+              key,
+              percentage: row?.percentage ?? null,
+              type: definition.type,
+            },
           },
-        },
-        200
-      );
-    })
+          200
+        );
+      })
   )
 
   // The global value. This is the toggle that takes effect with no deploy: the row lands,
   // the global document is republished after the commit, and every isolate picks it up as
   // its cache expires.
-  .put("/:key", adminGate, validateValue, (c) =>
-    adminWrite(c, async ({ db, audit, afterCommit }) => {
-      const key = c.req.param("key");
-      const definition = definitionFor(key);
-      if (!definition) {
-        return c.json(
-          errorBody("not_found", `No flag named "${key}" is registered.`),
-          404
-        );
-      }
+  .put(
+    "/:key",
+    declare({
+      name: "admin_flag_set",
+      description: "Set a flag's default value.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validateValue,
+    (c) =>
+      adminWrite(c, async ({ db, audit, afterCommit }) => {
+        const key = c.req.param("key");
+        const definition = definitionFor(key);
+        if (!definition) {
+          return c.json(
+            errorBody("not_found", `No flag named "${key}" is registered.`),
+            404
+          );
+        }
 
-      const value = c.req.valid("json");
-      const percentage = shareFor(definition.type, value.percentage);
-      const before = await storedFlag(db, key);
+        const value = c.req.valid("json");
+        const percentage = shareFor(definition.type, value.percentage);
+        const before = await storedFlag(db, key);
 
-      await upsertFlag(db, {
-        description: definition.description ?? null,
-        enabled: value.enabled,
-        key,
-        percentage,
-        type: definition.type,
-      });
-      audit({
-        action: "flag.value.set",
-        after: { enabled: value.enabled, percentage },
-        before: before ? valueOf(before) : null,
-        target: { id: key, label: key },
-      });
+        await upsertFlag(db, {
+          description: definition.description ?? null,
+          enabled: value.enabled,
+          key,
+          percentage,
+          type: definition.type,
+        });
+        audit({
+          action: "flag.value.set",
+          after: { enabled: value.enabled, percentage },
+          before: before ? valueOf(before) : null,
+          target: { id: key, label: key },
+        });
 
-      afterCommit(() => publish(c));
-      return c.json({ ok: true }, 200);
-    })
+        afterCommit(() => publish(c));
+        return c.json({ ok: true }, 200);
+      })
   )
 
   // A tenant override, the level that beats the global value.
-  .put("/:key/tenants/:tenantId", adminGate, validateValue, (c) =>
-    adminWrite(c, async ({ db, audit, afterCommit }) => {
-      const key = c.req.param("key");
-      const tenantId = c.req.param("tenantId");
-      const definition = definitionFor(key);
-      if (!definition) {
-        return c.json(
-          errorBody("not_found", `No flag named "${key}" is registered.`),
-          404
-        );
-      }
+  .put(
+    "/:key/tenants/:tenantId",
+    declare({
+      name: "admin_flag_override_set",
+      description: "Set a flag's value for one tenant.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validateValue,
+    (c) =>
+      adminWrite(c, async ({ db, audit, afterCommit }) => {
+        const key = c.req.param("key");
+        const tenantId = c.req.param("tenantId");
+        const definition = definitionFor(key);
+        if (!definition) {
+          return c.json(
+            errorBody("not_found", `No flag named "${key}" is registered.`),
+            404
+          );
+        }
 
-      const value = c.req.valid("json");
-      const percentage = shareFor(definition.type, value.percentage);
-      const before = await storedOverride(db, key, tenantId);
+        const value = c.req.valid("json");
+        const percentage = shareFor(definition.type, value.percentage);
+        const before = await storedOverride(db, key, tenantId);
 
-      await upsertOverride(db, {
-        enabled: value.enabled,
-        flagKey: key,
-        percentage,
-        tenantId,
-      });
-      audit({
-        action: "flag.tenant.set",
-        after: { enabled: value.enabled, percentage },
-        before: before ? valueOf(before) : null,
-        target: tenantTarget(key, tenantId),
-      });
+        await upsertOverride(db, {
+          enabled: value.enabled,
+          flagKey: key,
+          percentage,
+          tenantId,
+        });
+        audit({
+          action: "flag.tenant.set",
+          after: { enabled: value.enabled, percentage },
+          before: before ? valueOf(before) : null,
+          target: tenantTarget(key, tenantId),
+        });
 
-      afterCommit(() => publish(c, tenantId));
-      return c.json({ ok: true }, 200);
-    })
+        afterCommit(() => publish(c, tenantId));
+        return c.json({ ok: true }, 200);
+      })
   )
 
   // Clearing an override deletes the row. The absence is the inheritance: with no row the
   // tenant resolves whatever global says, now and after global next changes. Clearing an
   // override that does not exist changes nothing, so it writes no audit row.
-  .delete("/:key/tenants/:tenantId", adminGate, (c) =>
-    adminWrite(c, async ({ db, audit, afterCommit }) => {
-      const key = c.req.param("key");
-      const tenantId = c.req.param("tenantId");
-      if (!definitionFor(key)) {
-        return c.json(
-          errorBody("not_found", `No flag named "${key}" is registered.`),
-          404
-        );
-      }
+  .delete(
+    "/:key/tenants/:tenantId",
+    declare({
+      name: "admin_flag_override_delete",
+      description: "Remove a flag's override for one tenant.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      adminWrite(c, async ({ db, audit, afterCommit }) => {
+        const key = c.req.param("key");
+        const tenantId = c.req.param("tenantId");
+        if (!definitionFor(key)) {
+          return c.json(
+            errorBody("not_found", `No flag named "${key}" is registered.`),
+            404
+          );
+        }
 
-      const before = await storedOverride(db, key, tenantId);
+        const before = await storedOverride(db, key, tenantId);
 
-      await deleteOverride(db, key, tenantId);
-      if (before) {
-        audit({
-          action: "flag.tenant.clear",
-          before: valueOf(before),
-          target: tenantTarget(key, tenantId),
-        });
-      }
+        await deleteOverride(db, key, tenantId);
+        if (before) {
+          audit({
+            action: "flag.tenant.clear",
+            before: valueOf(before),
+            target: tenantTarget(key, tenantId),
+          });
+        }
 
-      afterCommit(() => publish(c, tenantId));
-      return c.json({ ok: true }, 200);
-    })
+        afterCommit(() => publish(c, tenantId));
+        return c.json({ ok: true }, 200);
+      })
   );
 
 /** The stored global row of one flag, or `undefined` when none was ever written. */

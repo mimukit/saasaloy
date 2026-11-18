@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import { requireAdmin, withAuthScope } from "@repo/auth/server";
 import {
   excerptOf,
@@ -30,6 +30,8 @@ import {
   cmsListQuery,
   cmsPublicListQuery,
   cmsVersionInput,
+  cmsPublicEntry,
+  cmsPublicList,
 } from "@repo/validators/cms";
 import { errorBody } from "@repo/validators/common";
 import { Hono } from "hono";
@@ -357,303 +359,386 @@ export const cms = new Hono<{ Bindings: Bindings }>()
   // with its own bindings and `STORAGE_PUBLIC_URL`. `pnpm cms:rerender` is the local path.
   // A revision whose collection is no longer registered, or whose body no longer renders,
   // keeps its html and is counted in `skipped`.
-  .post("/admin/rerender", (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-      const imageUrl = imageUrlFor(c);
-      let skipped = 0;
-      const rerendered = await withDb(c, (db) =>
-        rerenderLiveRevisions(db, (snapshot) => {
-          const collection = collectionFor(snapshot.collection);
-          if (!collection) {
-            skipped += 1;
-            return null;
-          }
-          try {
-            return renderCollectionHtml(collection, snapshot.data, {
-              imageUrl,
-            });
-          } catch {
-            skipped += 1;
-            return null;
-          }
-        })
-      );
-      return c.json({ rerendered, skipped }, 200);
-    })
+  .post(
+    "/admin/rerender",
+    declare({
+      name: "cms_admin_rerender",
+      description: "Rebuild the html of every live revision.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        await requireAdmin(c);
+        const imageUrl = imageUrlFor(c);
+        let skipped = 0;
+        const rerendered = await withDb(c, (db) =>
+          rerenderLiveRevisions(db, (snapshot) => {
+            const collection = collectionFor(snapshot.collection);
+            if (!collection) {
+              skipped += 1;
+              return null;
+            }
+            try {
+              return renderCollectionHtml(collection, snapshot.data, {
+                imageUrl,
+              });
+            } catch {
+              skipped += 1;
+              return null;
+            }
+          })
+        );
+        return c.json({ rerendered, skipped }, 200);
+      })
   )
 
   // The list, most recently updated first. `status` is the filter chip: `current` (draft
   // and published, the default), `draft`, `published`, `archived` or `all`.
-  .get("/admin/:collection/entries", validateList, (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-      const name = c.req.param("collection");
-      if (!collectionFor(name)) {
-        return unknownCollection(c, name);
-      }
-      const { page, status } = c.req.valid("query");
-      const result = await withDb(c, (db) =>
-        listEntries(db, name, {
-          filter: status,
-          page,
-          pageSize: config.cms.pageSize,
-        })
-      );
-      return c.json(
-        {
-          counts: result.counts,
-          entries: result.entries.map(toAdminSummary),
-          page: result.page,
-          pageCount: result.pageCount,
-          total: result.total,
-        },
-        200
-      );
-    })
+  .get(
+    "/admin/:collection/entries",
+    declare({
+      name: "cms_admin_entries_list",
+      description: "List a collection's entries with their drafts.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    validateList,
+    (c) =>
+      withAuthScope(c, async () => {
+        await requireAdmin(c);
+        const name = c.req.param("collection");
+        if (!collectionFor(name)) {
+          return unknownCollection(c, name);
+        }
+        const { page, status } = c.req.valid("query");
+        const result = await withDb(c, (db) =>
+          listEntries(db, name, {
+            filter: status,
+            page,
+            pageSize: config.cms.pageSize,
+          })
+        );
+        return c.json(
+          {
+            counts: result.counts,
+            entries: result.entries.map(toAdminSummary),
+            page: result.page,
+            pageCount: result.pageCount,
+            total: result.total,
+          },
+          200
+        );
+      })
   )
 
   // Create a draft. The caller becomes its author and its last editor.
-  .post("/admin/:collection/entries", validateCreate, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireAdmin(c);
-      const name = c.req.param("collection");
-      const collection = collectionFor(name);
-      if (!collection) {
-        return unknownCollection(c, name);
-      }
-      const input = c.req.valid("json");
-      const checked = checkData(c, collection, input.data);
-      if ("response" in checked) {
-        return checked.response;
-      }
-      try {
-        const entry = await withDb(c, async (db) => {
-          const row = await createEntry(db, {
-            authorId: session.user.id,
-            collection: name,
-            data: checked.data,
-            slug: input.slug,
-            title: input.title,
+  .post(
+    "/admin/:collection/entries",
+    declare({
+      name: "cms_admin_entry_create",
+      description: "Create a draft entry.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    validateCreate,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireAdmin(c);
+        const name = c.req.param("collection");
+        const collection = collectionFor(name);
+        if (!collection) {
+          return unknownCollection(c, name);
+        }
+        const input = c.req.valid("json");
+        const checked = checkData(c, collection, input.data);
+        if ("response" in checked) {
+          return checked.response;
+        }
+        try {
+          const entry = await withDb(c, async (db) => {
+            const row = await createEntry(db, {
+              authorId: session.user.id,
+              collection: name,
+              data: checked.data,
+              slug: input.slug,
+              title: input.title,
+            });
+            return readBack(c, db, name, row.id);
           });
-          return readBack(c, db, name, row.id);
-        });
-        return c.json({ entry }, 201);
-      } catch (error) {
-        return repositoryFailure(c, error, name);
-      }
-    })
+          return c.json({ entry }, 201);
+        } catch (error) {
+          return repositoryFailure(c, error, name);
+        }
+      })
   )
 
   // One entry with its working draft's `data`, for the editor.
-  .get("/admin/:collection/entries/:id", (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-      const name = c.req.param("collection");
-      if (!collectionFor(name)) {
-        return unknownCollection(c, name);
-      }
-      const entry = await withDb(c, (db) =>
-        getEntry(db, name, c.req.param("id"))
-      );
-      if (!entry) {
-        return c.json(errorBody("not_found", "No such entry."), 404);
-      }
-      return c.json({ entry: toAdminEntry(c, entry) }, 200);
-    })
+  .get(
+    "/admin/:collection/entries/:id",
+    declare({
+      name: "cms_admin_entry_read",
+      description: "Read one entry's working draft.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        await requireAdmin(c);
+        const name = c.req.param("collection");
+        if (!collectionFor(name)) {
+          return unknownCollection(c, name);
+        }
+        const entry = await withDb(c, (db) =>
+          getEntry(db, name, c.req.param("id"))
+        );
+        if (!entry) {
+          return c.json(errorBody("not_found", "No such entry."), 404);
+        }
+        return c.json({ entry: toAdminEntry(c, entry) }, 200);
+      })
   )
 
   // Save the working draft. The live post does not change. A stale `version` is a 409.
-  .put("/admin/:collection/entries/:id", validateDraft, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireAdmin(c);
-      const name = c.req.param("collection");
-      const id = c.req.param("id");
-      const collection = collectionFor(name);
-      if (!collection) {
-        return unknownCollection(c, name);
-      }
-      const input = c.req.valid("json");
-      const checked = checkData(c, collection, input.data);
-      if ("response" in checked) {
-        return checked.response;
-      }
-      try {
-        const entry = await withDb(c, async (db) => {
-          await saveDraft(db, {
-            collection: name,
-            data: checked.data,
-            editorId: session.user.id,
-            id,
-            slug: input.slug,
-            title: input.title,
-            version: input.version,
+  .put(
+    "/admin/:collection/entries/:id",
+    declare({
+      name: "cms_admin_entry_save",
+      description: "Save an entry's working draft.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    validateDraft,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireAdmin(c);
+        const name = c.req.param("collection");
+        const id = c.req.param("id");
+        const collection = collectionFor(name);
+        if (!collection) {
+          return unknownCollection(c, name);
+        }
+        const input = c.req.valid("json");
+        const checked = checkData(c, collection, input.data);
+        if ("response" in checked) {
+          return checked.response;
+        }
+        try {
+          const entry = await withDb(c, async (db) => {
+            await saveDraft(db, {
+              collection: name,
+              data: checked.data,
+              editorId: session.user.id,
+              id,
+              slug: input.slug,
+              title: input.title,
+              version: input.version,
+            });
+            return readBack(c, db, name, id);
           });
-          return readBack(c, db, name, id);
-        });
-        return c.json({ entry }, 200);
-      } catch (error) {
-        return repositoryFailure(c, error, name, id);
-      }
-    })
+          return c.json({ entry }, 200);
+        } catch (error) {
+          return repositoryFailure(c, error, name, id);
+        }
+      })
   )
 
   // Hard delete. Only a draft or an archived entry; a published one is a 409
   // `invalid_state`, so a live post is unpublished on purpose before it can go.
-  .delete("/admin/:collection/entries/:id", (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-      const name = c.req.param("collection");
-      const id = c.req.param("id");
-      if (!collectionFor(name)) {
-        return unknownCollection(c, name);
-      }
-      try {
-        await withDb(c, (db) => deleteEntry(db, { collection: name, id }));
-        return c.body(null, 204);
-      } catch (error) {
-        return repositoryFailure(c, error, name);
-      }
-    })
+  .delete(
+    "/admin/:collection/entries/:id",
+    declare({
+      name: "cms_admin_entry_delete",
+      description: "Delete an entry.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        await requireAdmin(c);
+        const name = c.req.param("collection");
+        const id = c.req.param("id");
+        if (!collectionFor(name)) {
+          return unknownCollection(c, name);
+        }
+        try {
+          await withDb(c, (db) => deleteEntry(db, { collection: name, id }));
+          return c.body(null, 204);
+        } catch (error) {
+          return repositoryFailure(c, error, name);
+        }
+      })
   )
 
   // Publish the working draft: a new revision with its rendered html becomes live. The
   // draft is checked again first, because a collection's schema can change after a save.
-  .post("/admin/:collection/entries/:id/publish", validateVersion, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireAdmin(c);
-      const name = c.req.param("collection");
-      const id = c.req.param("id");
-      const collection = collectionFor(name);
-      if (!collection) {
-        return unknownCollection(c, name);
-      }
-      const { version } = c.req.valid("json");
-      try {
-        const current = await withDb(c, (db) => getEntry(db, name, id));
-        if (!current) {
-          return c.json(errorBody("not_found", "No such entry."), 404);
+  .post(
+    "/admin/:collection/entries/:id/publish",
+    declare({
+      name: "cms_admin_entry_publish",
+      description: "Publish an entry's draft.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    validateVersion,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireAdmin(c);
+        const name = c.req.param("collection");
+        const id = c.req.param("id");
+        const collection = collectionFor(name);
+        if (!collection) {
+          return unknownCollection(c, name);
         }
-        if (current.version !== version) {
-          throw new CmsRepositoryError(
-            "conflict",
-            "Someone else saved this entry after you opened it. Reload to see their changes."
-          );
-        }
-        const checked = checkData(c, collection, current.data);
-        if ("response" in checked) {
-          return checked.response;
-        }
-        const render = renderFor(c, collection);
-        const result = await withDb(c, async (db) => {
-          const published = await publishEntry(db, {
-            authorId: session.user.id,
-            collection: name,
-            id,
-            render: (snapshot) => render(snapshot.data),
-            version,
+        const { version } = c.req.valid("json");
+        try {
+          const current = await withDb(c, (db) => getEntry(db, name, id));
+          if (!current) {
+            return c.json(errorBody("not_found", "No such entry."), 404);
+          }
+          if (current.version !== version) {
+            throw new CmsRepositoryError(
+              "conflict",
+              "Someone else saved this entry after you opened it. Reload to see their changes."
+            );
+          }
+          const checked = checkData(c, collection, current.data);
+          if ("response" in checked) {
+            return checked.response;
+          }
+          const render = renderFor(c, collection);
+          const result = await withDb(c, async (db) => {
+            const published = await publishEntry(db, {
+              authorId: session.user.id,
+              collection: name,
+              id,
+              render: (snapshot) => render(snapshot.data),
+              version,
+            });
+            return {
+              entry: await readBack(c, db, name, id),
+              revision: {
+                createdAt: published.revision.createdAt.toISOString(),
+                html: published.revision.html,
+                id: published.revision.id,
+                slug: published.revision.slug,
+                title: published.revision.title,
+              },
+            };
           });
-          return {
-            entry: await readBack(c, db, name, id),
-            revision: {
-              createdAt: published.revision.createdAt.toISOString(),
-              html: published.revision.html,
-              id: published.revision.id,
-              slug: published.revision.slug,
-              title: published.revision.title,
-            },
-          };
-        });
-        return c.json(result, 200);
-      } catch (error) {
-        return repositoryFailure(c, error, name, id);
-      }
-    })
+          return c.json(result, 200);
+        } catch (error) {
+          return repositoryFailure(c, error, name, id);
+        }
+      })
   )
 
   // Take a published entry offline. It becomes a draft and keeps its revisions.
-  .post("/admin/:collection/entries/:id/unpublish", validateVersion, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireAdmin(c);
-      const name = c.req.param("collection");
-      const id = c.req.param("id");
-      if (!collectionFor(name)) {
-        return unknownCollection(c, name);
-      }
-      const { version } = c.req.valid("json");
-      try {
-        const entry = await withDb(c, async (db) => {
-          await unpublishEntry(db, {
-            collection: name,
-            editorId: session.user.id,
-            id,
-            version,
+  .post(
+    "/admin/:collection/entries/:id/unpublish",
+    declare({
+      name: "cms_admin_entry_unpublish",
+      description: "Take an entry off the public site.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    validateVersion,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireAdmin(c);
+        const name = c.req.param("collection");
+        const id = c.req.param("id");
+        if (!collectionFor(name)) {
+          return unknownCollection(c, name);
+        }
+        const { version } = c.req.valid("json");
+        try {
+          const entry = await withDb(c, async (db) => {
+            await unpublishEntry(db, {
+              collection: name,
+              editorId: session.user.id,
+              id,
+              version,
+            });
+            return readBack(c, db, name, id);
           });
-          return readBack(c, db, name, id);
-        });
-        return c.json({ entry }, 200);
-      } catch (error) {
-        return repositoryFailure(c, error, name, id);
-      }
-    })
+          return c.json({ entry }, 200);
+        } catch (error) {
+          return repositoryFailure(c, error, name, id);
+        }
+      })
   )
 
   // Archive: offline, and out of the default list. Publishing it again puts it back live.
-  .post("/admin/:collection/entries/:id/archive", validateVersion, (c) =>
-    withAuthScope(c, async () => {
-      const session = await requireAdmin(c);
-      const name = c.req.param("collection");
-      const id = c.req.param("id");
-      if (!collectionFor(name)) {
-        return unknownCollection(c, name);
-      }
-      const { version } = c.req.valid("json");
-      try {
-        const entry = await withDb(c, async (db) => {
-          await archiveEntry(db, {
-            collection: name,
-            editorId: session.user.id,
-            id,
-            version,
+  .post(
+    "/admin/:collection/entries/:id/archive",
+    declare({
+      name: "cms_admin_entry_archive",
+      description: "Archive an entry.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    validateVersion,
+    (c) =>
+      withAuthScope(c, async () => {
+        const session = await requireAdmin(c);
+        const name = c.req.param("collection");
+        const id = c.req.param("id");
+        if (!collectionFor(name)) {
+          return unknownCollection(c, name);
+        }
+        const { version } = c.req.valid("json");
+        try {
+          const entry = await withDb(c, async (db) => {
+            await archiveEntry(db, {
+              collection: name,
+              editorId: session.user.id,
+              id,
+              version,
+            });
+            return readBack(c, db, name, id);
           });
-          return readBack(c, db, name, id);
-        });
-        return c.json({ entry }, 200);
-      } catch (error) {
-        return repositoryFailure(c, error, name, id);
-      }
-    })
+          return c.json({ entry }, 200);
+        } catch (error) {
+          return repositoryFailure(c, error, name, id);
+        }
+      })
   )
 
   // The revisions drawer: newest first, the live one marked.
-  .get("/admin/:collection/entries/:id/revisions", (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-      const name = c.req.param("collection");
-      const id = c.req.param("id");
-      if (!collectionFor(name)) {
-        return unknownCollection(c, name);
-      }
-      try {
-        const revisions = await withDb(c, (db) => listRevisions(db, name, id));
-        return c.json(
-          {
-            revisions: revisions.map((revision) => ({
-              ...revision,
-              createdAt: revision.createdAt.toISOString(),
-            })),
-          },
-          200
-        );
-      } catch (error) {
-        return repositoryFailure(c, error, name);
-      }
-    })
+  .get(
+    "/admin/:collection/entries/:id/revisions",
+    declare({
+      name: "cms_admin_revisions_list",
+      description: "List an entry's revisions.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    (c) =>
+      withAuthScope(c, async () => {
+        await requireAdmin(c);
+        const name = c.req.param("collection");
+        const id = c.req.param("id");
+        if (!collectionFor(name)) {
+          return unknownCollection(c, name);
+        }
+        try {
+          const revisions = await withDb(c, (db) =>
+            listRevisions(db, name, id)
+          );
+          return c.json(
+            {
+              revisions: revisions.map((revision) => ({
+                ...revision,
+                createdAt: revision.createdAt.toISOString(),
+              })),
+            },
+            200
+          );
+        } catch (error) {
+          return repositoryFailure(c, error, name);
+        }
+      })
   )
 
   // Copy a revision into the working draft. The live post changes on the next publish.
   .post(
     "/admin/:collection/entries/:id/revisions/:revisionId/restore",
+    declare({
+      name: "cms_admin_revision_restore",
+      description: "Copy a revision into the working draft.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
     validateVersion,
     (c) =>
       withAuthScope(c, async () => {
@@ -687,57 +772,78 @@ export const cms = new Hono<{ Bindings: Bindings }>()
   // No session. Published entries only, newest `published_at` first, `config.cms.pageSize`
   // to a page. Each entry carries its finished excerpt, cover URL and author name, and no
   // `data` and no html: the list does not need the body.
-  .get("/:collection/entries", validatePublicList, async (c) => {
-    const name = c.req.param("collection");
-    const collection = collectionFor(name);
-    if (!collection) {
-      return unknownCollection(c, name);
+  .get(
+    "/:collection/entries",
+    declare({
+      name: "cms_entries_list",
+      description:
+        "List the published entries of a collection, such as the blog, newest first, with each entry's excerpt and cover. Pages hold the configured page size.",
+      output: cmsPublicList,
+      agent: { callable: true, readOnly: true, confirm: false },
+    }),
+    validatePublicList,
+    async (c) => {
+      const name = c.req.param("collection");
+      const collection = collectionFor(name);
+      if (!collection) {
+        return unknownCollection(c, name);
+      }
+      const { page } = c.req.valid("query");
+      const result = await withDb(c, (db) =>
+        listPublished(db, name, { page, pageSize: config.cms.pageSize })
+      );
+      return c.json(
+        {
+          entries: result.entries.map((entry) => {
+            const { seo: _seo, ...listed } = publicFields(c, collection, entry);
+            return listed;
+          }),
+          page: result.page,
+          pageCount: result.pageCount,
+          total: result.total,
+        },
+        200
+      );
     }
-    const { page } = c.req.valid("query");
-    const result = await withDb(c, (db) =>
-      listPublished(db, name, { page, pageSize: config.cms.pageSize })
-    );
-    return c.json(
-      {
-        entries: result.entries.map((entry) => {
-          const { seo: _seo, ...listed } = publicFields(c, collection, entry);
-          return listed;
-        }),
-        page: result.page,
-        pageCount: result.pageCount,
-        total: result.total,
-      },
-      200
-    );
-  })
+  )
 
   // One published entry by its live slug, with the live revision's html. An old slug
   // answers 301 with the current one in `location` and in the body, so `apps/web` can
   // redirect `/blog/<old>` to `/blog/<new>` without following the api's own URL.
-  .get("/:collection/entries/:slug", async (c) => {
-    const name = c.req.param("collection");
-    const collection = collectionFor(name);
-    if (!collection) {
-      return unknownCollection(c, name);
-    }
-    const found = await withDb(c, (db) =>
-      readPublished(db, name, c.req.param("slug"))
-    );
-    if (found.kind === "redirect") {
-      const { path } = c.req;
-      const location = `${path.slice(0, path.lastIndexOf("/") + 1)}${encodeURIComponent(found.slug)}`;
-      return c.json({ slug: found.slug }, 301, { location });
-    }
-    if (found.kind === "missing") {
-      return c.json(errorBody("not_found", "No such post."), 404);
-    }
-    return c.json(
-      {
-        entry: {
-          ...publicFields(c, collection, found.entry),
-          html: found.entry.html,
+  .get(
+    "/:collection/entries/:slug",
+    declare({
+      name: "cms_entry_read",
+      description:
+        "Read one published entry of a collection by its slug, with its rendered html and SEO values. An old slug answers 301 with the current one.",
+      output: cmsPublicEntry,
+      agent: { callable: true, readOnly: true, confirm: false },
+    }),
+    async (c) => {
+      const name = c.req.param("collection");
+      const collection = collectionFor(name);
+      if (!collection) {
+        return unknownCollection(c, name);
+      }
+      const found = await withDb(c, (db) =>
+        readPublished(db, name, c.req.param("slug"))
+      );
+      if (found.kind === "redirect") {
+        const { path } = c.req;
+        const location = `${path.slice(0, path.lastIndexOf("/") + 1)}${encodeURIComponent(found.slug)}`;
+        return c.json({ slug: found.slug }, 301, { location });
+      }
+      if (found.kind === "missing") {
+        return c.json(errorBody("not_found", "No such post."), 404);
+      }
+      return c.json(
+        {
+          entry: {
+            ...publicFields(c, collection, found.entry),
+            html: found.entry.html,
+          },
         },
-      },
-      200
-    );
-  });
+        200
+      );
+    }
+  );

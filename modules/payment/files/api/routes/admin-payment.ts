@@ -1,4 +1,4 @@
-import { zValidator } from "@hono/zod-validator";
+import { declare, zValidator } from "../contract";
 import { createPayment, PaymentError, REJECT_REASONS } from "@repo/payment";
 import type { PaymentEnv, PaymentStatus, RejectReason } from "@repo/payment";
 import { adminGate, requireAdmin, withAuthScope } from "@repo/auth/server";
@@ -125,98 +125,141 @@ const validRefundBody = zValidator("json", refundBody, (result, c) => {
 
 export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
   // The queue. The admin page opens on `?status=submitted`; no status lists every payment.
-  .get("/payments", adminGate, validListQuery, (c) =>
-    staff(c, async ({ db }) => {
-      const { status } = c.req.valid("query");
-      const [payments, counts] = await Promise.all([
-        listPayments(db, status),
-        countPayments(db),
-      ]);
-      return c.json({ counts, payments }, 200);
-    })
+  .get(
+    "/payments",
+    declare({
+      name: "admin_payments_list",
+      description: "List payments for the admin console.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validListQuery,
+    (c) =>
+      staff(c, async ({ db }) => {
+        const { status } = c.req.valid("query");
+        const [payments, counts] = await Promise.all([
+          listPayments(db, status),
+          countPayments(db),
+        ]);
+        return c.json({ counts, payments }, 200);
+      })
   )
 
   // The sidebar's live count on the Payments row: how many payments wait for a review.
   // The admin shell polls it through NAV_COUNTS, so it answers only `{ count }`.
-  .get("/review-count", adminGate, (c) =>
-    staff(c, async ({ db }) => {
-      const { submitted } = await countPayments(db);
-      return c.json({ count: submitted }, 200);
-    })
+  .get(
+    "/review-count",
+    declare({
+      name: "admin_payments_review_count",
+      description: "Count the payments that wait on a review.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      staff(c, async ({ db }) => {
+        const { submitted } = await countPayments(db);
+        return c.json({ count: submitted }, 200);
+      })
   )
 
   // One payment, with its event history and its refunds.
-  .get("/payments/:id", adminGate, (c) =>
-    staff(c, async ({ db }) => {
-      const detail = await paymentDetail(db, c.req.param("id"));
-      if (!detail) {
-        throw new PaymentError(
-          "not_found",
-          `No payment with id "${c.req.param("id")}".`
-        );
-      }
-      return c.json(detail, 200);
-    })
+  .get(
+    "/payments/:id",
+    declare({
+      name: "admin_payment_read",
+      description: "Read one payment with its events.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    (c) =>
+      staff(c, async ({ db }) => {
+        const detail = await paymentDetail(db, c.req.param("id"));
+        if (!detail) {
+          throw new PaymentError(
+            "not_found",
+            `No payment with id "${c.req.param("id")}".`
+          );
+        }
+        return c.json(detail, 200);
+      })
   )
 
   // One decision. Both are conditional updates on `status = 'submitted'`, or on
   // `status = 'pending'` for a method that takes no submission (cash on delivery), so two
   // staff racing get one 200 and one 409. The decision, its event row and its audit row commit
   // together: `staffWrite` runs it inside `adminWrite`.
-  .post("/payments/:id/review", adminGate, validReviewBody, (c) =>
-    staffWrite(c, async ({ db, actorUserId, audit }) => {
-      const id = c.req.param("id");
-      const body = c.req.valid("json");
-      const before = await detailOrThrow(db, id);
-      const client = createPayment(c.env as PaymentEnv);
-      await (body.action === "confirm"
-        ? client.confirm(id, { actorUserId, note: body.note ?? null })
-        : client.reject(id, {
-            actorUserId,
+  .post(
+    "/payments/:id/review",
+    declare({
+      name: "admin_payment_review",
+      description: "Accept or reject a manual payment.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validReviewBody,
+    (c) =>
+      staffWrite(c, async ({ db, actorUserId, audit }) => {
+        const id = c.req.param("id");
+        const body = c.req.valid("json");
+        const before = await detailOrThrow(db, id);
+        const client = createPayment(c.env as PaymentEnv);
+        await (body.action === "confirm"
+          ? client.confirm(id, { actorUserId, note: body.note ?? null })
+          : client.reject(id, {
+              actorUserId,
+              note: body.note ?? null,
+              reason: body.reason,
+            }));
+        const after = await detailOrThrow(db, id);
+        audit({
+          action:
+            body.action === "confirm"
+              ? "payment.review.confirm"
+              : "payment.review.reject",
+          after: {
             note: body.note ?? null,
-            reason: body.reason,
-          }));
-      const after = await detailOrThrow(db, id);
-      audit({
-        action:
-          body.action === "confirm"
-            ? "payment.review.confirm"
-            : "payment.review.reject",
-        after: {
-          note: body.note ?? null,
-          status: after.payment.status,
-          ...(body.action === "reject" ? { reason: body.reason } : {}),
-        },
-        before: { status: before.payment.status },
-        target: paymentTarget(after.payment),
-      });
-      return c.json(after, 200);
-    })
+            status: after.payment.status,
+            ...(body.action === "reject" ? { reason: body.reason } : {}),
+          },
+          before: { status: before.payment.status },
+          target: paymentTarget(after.payment),
+        });
+        return c.json(after, 200);
+      })
   )
 
   // Record a refund. Only from `successful`, and the refunds never add up past `amount`.
-  .post("/payments/:id/refunds", adminGate, validRefundBody, (c) =>
-    staffWrite(c, async ({ db, actorUserId, audit }) => {
-      const id = c.req.param("id");
-      const body = c.req.valid("json");
-      const before = await detailOrThrow(db, id);
-      const { refund } = await createPayment(c.env as PaymentEnv).refund(id, {
-        actorUserId,
-        amount: body.amount,
-        note: body.note ?? null,
-      });
-      const after = await detailOrThrow(db, id);
-      audit({
-        action: "payment.refund.create",
-        after: {
-          refund: { amount: refund.amount, id: refund.id, note: refund.note },
-          refundedAmount: after.payment.refundedAmount,
-        },
-        before: { refundedAmount: before.payment.refundedAmount },
-        target: paymentTarget(after.payment),
-      });
-      return c.json(after, 200);
-    })
+  .post(
+    "/payments/:id/refunds",
+    declare({
+      name: "admin_payment_refund",
+      description: "Record a refund on a successful payment.",
+      agent: { callable: false, reason: "Admin routes are never callable." },
+    }),
+    adminGate,
+    validRefundBody,
+    (c) =>
+      staffWrite(c, async ({ db, actorUserId, audit }) => {
+        const id = c.req.param("id");
+        const body = c.req.valid("json");
+        const before = await detailOrThrow(db, id);
+        const { refund } = await createPayment(c.env as PaymentEnv).refund(id, {
+          actorUserId,
+          amount: body.amount,
+          note: body.note ?? null,
+        });
+        const after = await detailOrThrow(db, id);
+        audit({
+          action: "payment.refund.create",
+          after: {
+            refund: { amount: refund.amount, id: refund.id, note: refund.note },
+            refundedAmount: after.payment.refundedAmount,
+          },
+          before: { refundedAmount: before.payment.refundedAmount },
+          target: paymentTarget(after.payment),
+        });
+        return c.json(after, 200);
+      })
   );
 
 async function detailOrThrow(db: Db, id: string) {

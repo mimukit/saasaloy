@@ -7,6 +7,7 @@ import {
 } from "@repo/db/repositories/sms-messages";
 import { maskCodes } from "@repo/sms/mask-codes";
 import { Hono } from "hono";
+import { declare } from "../contract";
 
 // The admin api behind the SMS screen: the message log, newest first, 50 rows a page.
 // Read only. This module's `chained-route` patch mounts it at `/admin/sms`, so
@@ -26,6 +27,11 @@ function invalid(message: string) {
 
 export const adminSms = new Hono<{ Bindings: AuthDbBindings }>().get(
   "/",
+  declare({
+    name: "admin_sms_list",
+    description: "List the text message log, newest first.",
+    agent: { callable: false, reason: "Admin routes are never callable." },
+  }),
   async (c) => {
     // First, before anything reads the log: 401 with no admin session, 403 for a
     // session without an admin role.
