@@ -1638,13 +1638,15 @@ export async function runUpdate(argv: string[]): Promise<number> {
       }
     }
 
+    // Compare the runbook before anything applies (#359). The agent read the project's
+    // copy before it ran `update`, and the base may replace that copy in this run, so a
+    // compare after the apply would hide the very difference the line reports.
+    const runbook = await runbookFor(root, project.name, cliVersion);
+
     // --dry-run and --diff both preview only: nothing is written anywhere, including
     // `--out`. The merge plan still renders to stdout so the preview is complete.
     if (preview) {
-      const document = renderMergePlan(
-        plan,
-        await runbookFor(root, project.name, cliVersion)
-      );
+      const document = renderMergePlan(plan, runbook);
       if (document) {
         process.stdout.write(document);
       }
@@ -1720,11 +1722,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     // Phase 4: the merge plan is emitted only after the clean path has run, so it
     // describes what is actually left to do rather than what might have been.
-    // Read after the apply: the base may have just rewritten the project's runbook.
-    const document = renderMergePlan(
-      plan,
-      await runbookFor(root, project.name, cliVersion)
-    );
+    const document = renderMergePlan(plan, runbook);
     if (document) {
       await emitMergePlan(document, opts.out);
       note(

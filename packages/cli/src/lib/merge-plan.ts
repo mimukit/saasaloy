@@ -27,8 +27,10 @@ export interface RunbookLine {
   /** The running CLI's version. */
   cliVersion: string;
   /**
-   * True when the project's `.agents/skills/saasaloy-update/SKILL.md` has other bytes than
-   * the bundled skill. "Differs", not "is older": an owner edit also makes them differ.
+   * True when the project's `.agents/skills/saasaloy-update/SKILL.md` had other bytes than
+   * the bundled skill when the run started. "Differs", not "is older": an owner edit also
+   * makes them differ. `update` reads the copy before it applies, because the agent read
+   * that copy and the run may replace it.
    */
   differs: boolean;
 }
@@ -42,7 +44,7 @@ export function runbookLine(runbook: RunbookLine): string {
     `Written by saasaloy ${runbook.cliVersion}. Before you work this plan, read the ` +
     "runbook this CLI ships: `saasaloy skill saasaloy-update`.";
   return runbook.differs
-    ? `${line} That runbook differs from this project's copy in \`${PROJECT_RUNBOOK}\`; follow the one the command prints.`
+    ? `${line} That runbook differs from this project's copy in \`${PROJECT_RUNBOOK}\` as it was when this run started; follow the one the command prints.`
     : line;
 }
 

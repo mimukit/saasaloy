@@ -1435,6 +1435,31 @@ describe("runUpdate — the base template (#120)", { timeout: 30_000 }, () => {
     expect(second).toContain("differs from this project's copy");
   });
 
+  // #359: the main case. The project holds an older runbook as a clean managed file, so
+  // this run replaces it. The agent read the old copy, so the line still flags it.
+  it("says the runbook differs when this run replaces an older copy", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "old agent rules, plus mine\n",
+      "utf-8"
+    );
+    const rel = ".agents/skills/saasaloy-update/SKILL.md";
+    const skill = join(project, rel);
+    const bundled = await readFile(skill, "utf-8");
+    const older = `${bundled}\nAn older step.\n`;
+    await writeFile(skill, older, "utf-8");
+    state.manifest.managed[rel]!.hash = hashContent(older);
+    await saveManifest(project, state.manifest);
+
+    const { code, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(EXIT_WORK_PENDING);
+    await expect(readFile(skill, "utf-8")).resolves.toBe(bundled);
+    expect(out.split("\n")[1]).toContain("differs from this project's copy");
+  });
+
   it("compares the project's runbook with the bundled one rendered for the project", async () => {
     const name = basename(project);
     const skill = join(
