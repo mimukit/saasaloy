@@ -199,6 +199,9 @@ importers:
       ultracite:
         specifier: 7.12.2
         version: 7.12.2(oxlint@1.86.0(oxlint-tsgolint@7.0.2003))(prettier@3.9.9)(stylelint@17.15.0(supports-color@10.2.2)(typescript@7.0.2))
+      yaml:
+        specifier: 2.9.1
+        version: 2.9.1
       zod:
         specifier: 4.6.5
         version: 4.6.5

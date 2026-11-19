@@ -1,24 +1,33 @@
 ---
 name: saasaloy-ci
-description: Runbook for the ci module — the static GitHub Actions workflow at .github/workflows/ci.yml, the root ci:prepare script and its ci:prepare:<module> steps, the optional ci:e2e step, and the deploy CI gate in packages/tooling/src/deploy.config.ts. Use when CI fails, when a change needs a service or a tool ready before lint, typecheck and test run in CI, when adding a CI step for a module, or when turning the deploy CI gate off.
+description: Runbook for the ci module — the static GitHub Actions workflow at .github/workflows/ci.yml, the root ci:prepare script with ci:prepare:env and its ci:prepare:<module> steps, the build step, the optional ci:e2e step, and the deploy CI gate in packages/tooling/src/deploy.config.ts. Use when CI fails, when a CI build fails naming an unset key, when a change needs a service or a tool ready before lint, typecheck, test and build run in CI, when adding a CI step for a module, or when turning the deploy CI gate off.
 ---
 
 # ci — the GitHub Actions gate
 
-`ci` gives the project one workflow, `.github/workflows/ci.yml`, that runs on every push and pull request. It installs three things:
+`ci` gives the project one workflow, `.github/workflows/ci.yml`, that runs on every push to `main` and on every pull request. It installs four things:
 
 | What | Where it lands |
 | --- | --- |
 | the workflow | `.github/workflows/ci.yml` |
 | `ci:prepare` | root `package.json` script (patch) |
+| `ci:prepare:env` | root `package.json` script (patch) |
 | `ciWorkflow: "ci.yml"` | `packages/tooling/src/deploy.config.ts` (patch) |
 
 The workflow runs these steps, in this order:
 
-1. `pnpm install --frozen-lockfile`. A `package.json` edited without its lockfile fails here.
-2. `pnpm ci:prepare`. It runs every root script whose name starts with `ci:prepare:`, one at a time. With none, it does nothing and passes.
-3. `pnpm lint`, `pnpm typecheck` and `pnpm test`. `test` passes with no test files, so a project with testing off stays green.
-4. `pnpm run --if-present ci:e2e`. It runs only when the root `package.json` has a `ci:e2e` script. No module adds one yet, so the step does nothing until you write it.
+1. Check out the commit, set up pnpm and Node 24, and restore the Turborepo cache in `.turbo/cache`. The cache key holds the branch and the commit SHA, and a run falls back to its branch's newest cache, then to `main`'s.
+2. `pnpm install --frozen-lockfile`. A `package.json` edited without its lockfile fails here.
+3. `pnpm ci:prepare`. It runs `ci:prepare:env` first, then every other root script whose name starts with `ci:prepare:`, one at a time. `ci:prepare:env` runs `node packages/env/scripts/env-setup.ts --example`, which writes each service's `.env` from the defaults in `packages/env/.env.example`. It refuses nothing, and a key with no default is written blank.
+4. `pnpm lint`, `pnpm typecheck` and `pnpm test`. `test` passes with no test files, so a project with testing off stays green.
+5. `pnpm build`. A broken build fails here, not at deploy time.
+6. `pnpm run --if-present ci:e2e`. It runs only when the root `package.json` has a `ci:e2e` script. No module adds one yet, so the step does nothing until you write it.
+
+## When the workflow runs
+
+- **A push runs it on `main` only.** Every other branch, `hotfix-*` included, gets its run from its pull request, and that run carries the branch's head SHA. So the deploy gate finds a run on a hotfix branch too.
+- **A run on `main` is never cancelled.** `cancel-in-progress` is `${{ github.ref != 'refs/heads/main' }}`. `pnpm deploy:production` reads the run on the deploy commit. If a second merge cancelled the run on the first merge commit, the deploy gate would find a cancelled run and stop. A second push to any other branch cancels that branch's older run, whose answer is worthless.
+- **Every `uses:` is pinned to a 40-character commit SHA**, with the release tag in a `# vX.Y.Z` comment. A tag can be moved to other code, and a SHA cannot. A newer saasaloy release brings newer pins.
 
 ## The workflow file does not change
 
@@ -34,7 +43,7 @@ To add a CI step of your own, add a `ci:prepare:<name>` script to the root `pack
 
 ## The e2e suite is not in CI yet
 
-The `e2e` module adds no `ci:*` script. `pnpm e2e` needs every `apps/<app>/.env`, and those files are gitignored, so a fresh runner has none. With the Postgres driver, `packages/env/.env.example` also leaves `DATABASE_URL` blank, and `db:seed` reads the job's `DATABASE_URL` ahead of `apps/api/.env`. To run the suite in CI, add a `ci:prepare:e2e` script that writes `packages/env/.env`, runs `pnpm env:setup` and runs `pnpm e2e:install --with-deps`. Then add a `ci:e2e` script that runs `pnpm e2e`, and give the seed a project database rather than the server URL.
+The `e2e` module adds no `ci:*` script. `ci:prepare:env` writes every `apps/<app>/.env` from the example's defaults, but a key with no default stays blank there. With the Postgres driver, `packages/env/.env.example` also leaves `DATABASE_URL` blank, and `db:seed` reads the job's `DATABASE_URL` ahead of `apps/api/.env`. To run the suite in CI, add a `ci:prepare:e2e` script that writes `packages/env/.env`, runs `pnpm env:setup` (which replaces the files `ci:prepare:env` wrote) and runs `pnpm e2e:install --with-deps`. Then add a `ci:e2e` script that runs `pnpm e2e`, and give the seed a project database rather than the server URL.
 
 ## The deploy gate
 
@@ -42,7 +51,8 @@ The `e2e` module adds no `ci:*` script. `pnpm e2e` needs every `apps/<app>/.env`
 
 ## When CI is red
 
-- Run the failing step locally first: `pnpm ci:prepare && pnpm lint && pnpm typecheck && pnpm test`. The workflow runs nothing that a local shell cannot.
+- Run the failing step locally first: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`. The workflow runs nothing that a local shell cannot. Do not run `pnpm ci:prepare` on your own checkout: `ci:prepare:env` overwrites each service's `.env` with the example's defaults. Run `pnpm env:setup` afterwards if you did.
+- `build` fails naming an unset key: CI writes that key blank, because `packages/env/.env.example` gives it no default. Give it a local default there, under its `# @services` line. A secret never gets a default; a build that needs a secret needs a CI secret and a `ci:prepare:<name>` script that writes it.
 - `install` fails with a lockfile error: run `pnpm install` and commit `pnpm-lock.yaml`.
 - `ci:prepare:database` times out: the container's health check failed. Read the step log for the `postgres` service output.
 

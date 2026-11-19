@@ -110,6 +110,10 @@ A new service with a dev server adds `devPort` to its `SERVICES` row: 3000 to 30
 
 A source that does not answer at all — no CLI, no network — is treated as offline: `env:setup` keeps every service file that is already complete and warns, and fails writing nothing when one is incomplete. A refusal the source *answered* with, such as no access, always fails.
 
+## `--example`, for CI only
+
+`node packages/env/scripts/env-setup.ts --example` writes each dev service's `.env` from the defaults in `packages/env/.env.example` and nothing else. It reads no value source, keeps no value already on disk, refuses nothing, and writes no `.env.local`. A key with no default is written blank. The `ci` module runs it as `pnpm ci:prepare:env`, so a CI runner can build with no `packages/env/.env`. Never run it on a developer checkout: it overwrites every service's `.env`. When a CI build fails naming a key, give that key a local default in `packages/env/.env.example`. It does not take `--env prod`.
+
 ## Production and `--env prod`
 
 Each service row declares `dev` or `prod`. `pnpm env:setup --env prod` refuses to act without `--only <service>`, and refuses outright to write production values into a workspace under `apps/`. Two independent guards on the one command that can put a live credential on disk.

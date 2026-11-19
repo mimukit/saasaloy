@@ -17,18 +17,34 @@
 // Run it with `pnpm test:scripts`.
 
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+  applyActionPins,
   applyBumps,
   buildCandidates,
   depPath,
   depValue,
   discoverManifests,
+  discoverWorkflows,
+  evaluateActionPin,
+  fetchActionTags,
   MAJOR_GROUP_TITLE,
+  parseActionPins,
   readManifestDeps,
+  resolveActionPins,
   semverDelta,
 } from "./update-deps.ts";
-import type { Dep, Manifest, ManifestKind, Row } from "./update-deps.ts";
+import type {
+  ActionTag,
+  Dep,
+  GithubGet,
+  Manifest,
+  ManifestKind,
+  Row,
+} from "./update-deps.ts";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -307,5 +323,195 @@ describe("buildCandidates", () => {
     const [candidate] = buildCandidates([row]);
     assert.equal(candidate?.kind, "major");
     assert.equal(candidate?.group, MAJOR_GROUP_TITLE);
+  });
+});
+
+// --- The github-actions group --------------------------------------------------
+// No test here reaches the network: every GitHub API call goes through a fake `GithubGet`.
+
+const SHA_OLD = "1".repeat(40);
+const SHA_701 = "a".repeat(40);
+const SHA_710 = "b".repeat(40);
+const SHA_800 = "c".repeat(40);
+
+const TAGS: ActionTag[] = [
+  { name: "v8.0.0", sha: SHA_800 },
+  { name: "v8", sha: SHA_800 },
+  { name: "v7.1.0", sha: SHA_710 },
+  { name: "v7.0.1", sha: SHA_701 },
+  { name: "v7", sha: SHA_710 },
+];
+
+const WORKFLOW = [
+  "jobs:",
+  "  gate:",
+  "    steps:",
+  `      - uses: actions/checkout@${SHA_701} # v7.0.1`,
+  "      - uses: pnpm/action-setup@v6",
+  "      - uses: ./local-action",
+  "      - uses: docker://alpine:3",
+  "      - run: pnpm test",
+  "",
+].join("\n");
+
+function fakeGithub(tagsByRepo: Record<string, ActionTag[]>): {
+  get: GithubGet;
+  calls: string[];
+} {
+  const calls: string[] = [];
+  const get: GithubGet = (path) => {
+    calls.push(path);
+    const repo = /^\/repos\/([^/]+\/[^/]+)\/tags/.exec(path)?.[1] ?? "";
+    const tags = tagsByRepo[repo];
+    if (!tags) {
+      return Promise.reject(new Error(`GitHub API 404 for ${path}`));
+    }
+    return Promise.resolve(
+      tags.map((tag) => ({ name: tag.name, commit: { sha: tag.sha } }))
+    );
+  };
+  return { get, calls };
+}
+
+describe("github-actions: parseActionPins", () => {
+  it("reads each repository action and skips local and docker actions", () => {
+    const pins = parseActionPins("ci.yml", WORKFLOW);
+    assert.deepEqual(
+      pins.map((pin) => [pin.line, pin.action, pin.ref, pin.tag]),
+      [
+        [3, "actions/checkout", SHA_701, "v7.0.1"],
+        [4, "pnpm/action-setup", "v6", undefined],
+      ]
+    );
+  });
+
+  it("keeps a subdirectory action's path and takes the tags of its repository", () => {
+    const [pin] = parseActionPins(
+      "x.yml",
+      `      - uses: github/codeql-action/init@${SHA_OLD} # v3.1.0`
+    );
+    assert.equal(pin?.repo, "github/codeql-action");
+    assert.equal(pin?.action, "github/codeql-action/init");
+  });
+});
+
+describe("github-actions: evaluateActionPin", () => {
+  it("moves a SHA pin to the newest tag within its major and names the newer major", () => {
+    const [pin] = parseActionPins("ci.yml", WORKFLOW);
+    assert.ok(pin);
+    const row = evaluateActionPin(pin, TAGS, false);
+    assert.equal(row.status, "update");
+    assert.deepEqual(row.target, { name: "v7.1.0", sha: SHA_710 });
+    assert.equal(row.newerMajor, "v8.0.0");
+  });
+
+  it("crosses the major with --allow-major", () => {
+    const [pin] = parseActionPins("ci.yml", WORKFLOW);
+    assert.ok(pin);
+    assert.deepEqual(evaluateActionPin(pin, TAGS, true).target, {
+      name: "v8.0.0",
+      sha: SHA_800,
+    });
+  });
+
+  it("reads a pin whose SHA and comment match the newest tag as up to date", () => {
+    const [pin] = parseActionPins(
+      "ci.yml",
+      `      - uses: actions/checkout@${SHA_800} # v8.0.0`
+    );
+    assert.ok(pin);
+    assert.equal(evaluateActionPin(pin, TAGS, false).status, "up-to-date");
+  });
+
+  it("flags a matching SHA whose comment names another tag", () => {
+    const [pin] = parseActionPins(
+      "ci.yml",
+      `      - uses: actions/checkout@${SHA_800} # v8`
+    );
+    assert.ok(pin);
+    assert.equal(evaluateActionPin(pin, TAGS, false).status, "update");
+  });
+
+  it("pins a tag ref to the newest full tag of that major", () => {
+    const [pin] = parseActionPins(
+      "ci.yml",
+      "      - uses: actions/checkout@v7"
+    );
+    assert.ok(pin);
+    const row = evaluateActionPin(pin, TAGS, false);
+    assert.equal(row.status, "update");
+    assert.deepEqual(row.target, { name: "v7.1.0", sha: SHA_710 });
+  });
+
+  it("is unresolved when the repository has no vX.Y.Z tag", () => {
+    const [pin] = parseActionPins("ci.yml", "      - uses: a/b@v1");
+    assert.ok(pin);
+    const row = evaluateActionPin(pin, [{ name: "v1", sha: SHA_OLD }], false);
+    assert.equal(row.status, "unresolved");
+  });
+});
+
+describe("github-actions: applyActionPins", () => {
+  it("rewrites the SHA and the comment and leaves every other line alone", () => {
+    const pins = parseActionPins("ci.yml", WORKFLOW);
+    const rows = pins.map((pin) => evaluateActionPin(pin, TAGS, false));
+    const after = applyActionPins(WORKFLOW, rows.slice(0, 1));
+    assert.deepEqual(changedLines(WORKFLOW, after), [
+      `      - uses: actions/checkout@${SHA_710} # v7.1.0`,
+    ]);
+  });
+});
+
+describe("github-actions: fetchActionTags and resolveActionPins", () => {
+  it("asks the tags API once per repository", async () => {
+    const { get, calls } = fakeGithub({ "actions/checkout": TAGS });
+    const tags = await fetchActionTags("actions/checkout", get);
+    assert.equal(tags.length, TAGS.length);
+    assert.deepEqual(calls, [
+      "/repos/actions/checkout/tags?per_page=100&page=1",
+    ]);
+  });
+
+  it("resolves a repository's tags once for every line that names it", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "update-deps-actions-"));
+    try {
+      const file = join(dir, "two.yml");
+      writeFileSync(
+        file,
+        `${WORKFLOW}      - uses: actions/checkout@v7\n      - uses: actions/checkout@v8\n`
+      );
+      const { get, calls } = fakeGithub({
+        "actions/checkout": TAGS,
+        "pnpm/action-setup": [{ name: "v6.1.1", sha: SHA_OLD }],
+      });
+      const rows = await resolveActionPins(false, get, [file]);
+      assert.equal(rows.length, 4);
+      assert.equal(calls.length, 2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("evaluates every line of the shipped ci workflow and reports a failed lookup as unresolved", async () => {
+    const ci = (await discoverWorkflows()).find((file) =>
+      file.endsWith("modules/ci/files/workflows/ci.yml")
+    );
+    assert.ok(ci, "discoverWorkflows did not find the ci module workflow");
+    const { get, calls } = fakeGithub({ "actions/checkout": TAGS });
+    const rows = await resolveActionPins(false, get, [ci]);
+    const repos = new Set(rows.map((row) => row.pin.repo));
+    assert.equal(calls.length, repos.size, "one tags call per repository");
+    assert.ok(repos.has("actions/checkout"));
+    assert.ok(
+      rows
+        .filter((row) => row.pin.repo !== "actions/checkout")
+        .every((row) => row.status === "unresolved")
+    );
+  });
+
+  it("scans shipped workflows only, never the repo's own .github/", async () => {
+    const files = await discoverWorkflows();
+    assert.ok(files.length > 0);
+    assert.ok(files.every((file) => !file.includes("/.github/")));
   });
 });

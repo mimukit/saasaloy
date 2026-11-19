@@ -13,7 +13,7 @@ import { after, describe, it } from "node:test";
 import { readEnvFile } from "./env-file.ts";
 import { SERVICES } from "./services.ts";
 import type { Service } from "./services.ts";
-import { setupServices } from "./setup.ts";
+import { setupServices, writeExampleDefaults } from "./setup.ts";
 import { EnvError, local } from "./sources.ts";
 import type { EnvSource } from "./sources.ts";
 
@@ -284,5 +284,43 @@ describe("setupServices", () => {
       }),
       /nothing safe to keep/
     );
+  });
+});
+
+describe("writeExampleDefaults", () => {
+  it("writes the example's defaults and leaves a key with no default blank", () => {
+    const root = makeRoot();
+    const report = writeExampleDefaults({ root, services: [api] });
+    assert.deepEqual(
+      report.map((service) => [service.file, service.created]),
+      [["apps/api/.env", true]]
+    );
+    const { values } = readEnvFile(path.join(root, "apps/api/.env"));
+    assert.equal(values.get("A"), "local");
+    assert.equal(values.get("B"), "");
+    assert.equal(values.get("DATABASE_URL"), "");
+  });
+
+  it("ignores packages/env/.env and the values already on disk", () => {
+    const root = makeRoot();
+    writeFileSync(path.join(root, "packages/env/.env"), "A=from-the-source\n");
+    mkdirSync(path.join(root, "apps/api"), { recursive: true });
+    writeFileSync(
+      path.join(root, "apps/api/.env"),
+      "A=old\nDATABASE_URL=postgres://branch\n"
+    );
+    const [service] = writeExampleDefaults({ root, services: [api] });
+    assert.equal(service?.created, false);
+    const { values } = readEnvFile(path.join(root, "apps/api/.env"));
+    assert.equal(values.get("A"), "local");
+    assert.equal(values.get("DATABASE_URL"), "");
+  });
+
+  it("omits a key the service must never carry", () => {
+    const root = makeRoot("# @services ops\nA=local\nDATABASE_URL=secret\n");
+    writeExampleDefaults({ root, services: [ops] });
+    const { values } = readEnvFile(path.join(root, "ops/.env"));
+    assert.equal(values.get("A"), "local");
+    assert.equal(values.get("DATABASE_URL"), "");
   });
 });
