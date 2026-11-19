@@ -20,6 +20,17 @@ A packages/kv workspace with the provider interface, namespaced keys and the con
 | Depended on by | [`feature-flags`](feature-flags.md), [`kv-cloudflare`](kv-cloudflare.md), [`kv-memory`](kv-memory.md), [`kv-upstash`](kv-upstash.md), [`payment-bkash`](payment-bkash.md), [`ratelimit`](ratelimit.md) |
 | Providers | [`kv-cloudflare`](kv-cloudflare.md), [`kv-memory`](kv-memory.md), [`kv-upstash`](kv-upstash.md), [`payment-bkash`](payment-bkash.md) |
 
+## Providers
+
+`kv` picks its provider at runtime with `KV_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=kv
+KV_PROVIDER=cloudflare  uses kv-cloudflare
+KV_PROVIDER=memory  uses kv-memory
+KV_PROVIDER=upstash  uses kv-upstash
+KV_PROVIDER=ment-bkash  uses payment-bkash
+```
+
 ## Environment variables
 
 | Variable | Services | Optional | What it does |

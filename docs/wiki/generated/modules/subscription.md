@@ -20,6 +20,15 @@ Subscriptions in a packages/subscription workspace: the provider contract, plans
 | Depended on by | [`subscription-console`](subscription-console.md), [`subscription-stripe`](subscription-stripe.md) |
 | Providers | [`subscription-console`](subscription-console.md), [`subscription-stripe`](subscription-stripe.md) |
 
+## Providers
+
+`subscription` picks its provider at runtime with `SUBSCRIPTION_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=subscription
+SUBSCRIPTION_PROVIDER=console  uses subscription-console
+SUBSCRIPTION_PROVIDER=stripe  uses subscription-stripe
+```
+
 ## Environment variables
 
 | Variable | Services | Optional | What it does |

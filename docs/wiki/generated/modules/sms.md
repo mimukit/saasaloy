@@ -20,6 +20,15 @@ A packages/sms workspace with the provider interface and segment counting; add o
 | Depended on by | [`auth-phone`](auth-phone.md), [`sms-console`](sms-console.md), [`sms-khudebarta`](sms-khudebarta.md) |
 | Providers | [`sms-console`](sms-console.md), [`sms-khudebarta`](sms-khudebarta.md) |
 
+## Providers
+
+`sms` picks its provider at runtime with `SMS_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=sms
+SMS_PROVIDER=console  uses sms-console
+SMS_PROVIDER=khudebarta  uses sms-khudebarta
+```
+
 ## Environment variables
 
 | Variable | Services | Optional | What it does |

@@ -8,6 +8,7 @@ import { unified } from "@astrojs/markdown-remark";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
+import { remarkDocsBlocks } from "./src/lib/docs-blocks.ts";
 import { rehypeCodeFrame } from "./src/lib/docs-code.ts";
 import { remarkDocsLinks } from "./src/lib/docs-links.ts";
 import { remarkDropTitle } from "./src/lib/docs-title.ts";
@@ -88,8 +89,8 @@ function devPort() {
 // relative link to its /docs URL, or to the file on GitHub at the release tag, and fails the
 // build on a link to a wiki page that does not exist. The title plugin drops each page's own
 // H1, which the layout prints. The rehype plugin frames each code block with a Copy button
-// and each table with a scroll region. A later plugin, such as the saasaloy-* blocks, goes in these two
-// lists. Syntax highlighting is off: shiki's inline colours would sit outside the brand
+// and each table with a scroll region. The blocks plugin turns each `saasaloy-*` fence into a list the islands replace
+// and fails the build on an unknown one (src/lib/docs-blocks.ts). Syntax highlighting is off: shiki's inline colours would sit outside the brand
 // tokens, so docs.css styles a code block with the same tokens as the command field.
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const cliVersion = JSON.parse(
@@ -124,6 +125,7 @@ export default defineConfig({
       syntaxHighlight: false,
       remarkPlugins: [
         remarkDropTitle,
+        [remarkDocsBlocks, { repoRoot }],
         [remarkDocsLinks, { repoRoot, version: cliVersion }],
       ],
       rehypePlugins: [rehypeCodeFrame],

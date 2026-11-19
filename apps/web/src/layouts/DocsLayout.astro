@@ -308,4 +308,10 @@ const headerLinks = landing.navbar.links.filter(
       }
     }
   </script>
+  <script>
+    // The `saasaloy-*` blocks keep their plain list until this swaps in the island.
+    import { mountDocsBlocks } from "@web/lib/docs-blocks-client";
+
+    void mountDocsBlocks();
+  </script>
 </Layout>

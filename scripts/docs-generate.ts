@@ -323,6 +323,66 @@ function servicesOf(item: Descriptor, key: string): string {
     : "api (inferred)";
 }
 
+// --- saasaloy-* blocks -------------------------------------------------------
+//
+// The docs site turns a `saasaloy-graph` or `saasaloy-providers` fence into an interactive
+// block (apps/web/src/lib/docs-blocks.ts), and it reads the module facts from the
+// descriptors itself. The body this script writes is for every other reader: GitHub shows
+// it as a code block, and an agent reads the raw page, where the body is the block's data.
+
+/** A tile of the graph: a module that is a capability or a feature, not a provider or driver. */
+function graphLines(all: readonly Descriptor[]): string[] {
+  const tiles = all.filter((item) => {
+    const tier = tierOf(item, all);
+    return tier === "capability" || tier === "feature";
+  });
+  const names = new Set(tiles.map((item) => item.name));
+  return tiles.map((item) => {
+    const tier = tierOf(item, all);
+    const { providers, drivers } = implementationsOf(item, all);
+    const parts: [string, string[]][] = [
+      ["depends on", item.dependsOn.filter((name) => names.has(name))],
+      [
+        "used by",
+        tiles
+          .filter((other) => other.dependsOn.includes(item.name))
+          .map((other) => other.name),
+      ],
+      ["providers", providers],
+      ["drivers", drivers],
+    ];
+    const shown = parts
+      .filter(([, list]) => list.length > 0)
+      .map(([label, list]) => `${label} ${list.join(", ")}`);
+    return `${item.name} (${tier})${shown.length === 0 ? "" : `: ${shown.join("; ")}`}`;
+  });
+}
+
+/**
+ * The env var that picks a provider at runtime, such as `EMAIL_PROVIDER`. A capability
+ * whose providers a project does not pick between at runtime (`validators`) has none, and
+ * its page shows no providers block.
+ */
+function selectorOf(item: Descriptor): string | undefined {
+  return Object.keys(item.envVars).find((name) => name.endsWith("_PROVIDER"));
+}
+
+function providersBlock(
+  item: Descriptor,
+  providers: string[],
+  selector: string
+): string {
+  const lines = providers.map(
+    (name) => `${selector}=${name.slice(item.name.length + 1)}  uses ${name}`
+  );
+  return [
+    `${code(item.name)} picks its provider at runtime with ${code(selector)}. Select a provider to see the value to set.`,
+    [`\`\`\`saasaloy-providers capability=${item.name}`, ...lines, "```"].join(
+      "\n"
+    ),
+  ].join("\n\n");
+}
+
 // --- modules.md --------------------------------------------------------------
 
 function catalog(all: readonly Descriptor[]): string {
@@ -338,6 +398,10 @@ function catalog(all: readonly Descriptor[]): string {
     "# Module catalog",
     notice("every module descriptor in `modules/`"),
     `${all.length} modules in the default registry. Each name links to its page, which holds the descriptor facts and the skill text an agent reads. Run ${code("saasaloy add <name> --dry-run")} to print what a module writes before it writes anything. The tiers are defined in [the glossary](glossary.md).`,
+    "## Module dependencies",
+    "Select a module to see what it depends on, what depends on it, and its providers or drivers. A provider or a driver shows under its capability or feature.",
+    ["```saasaloy-graph", ...graphLines(all), "```"].join("\n"),
+    "## Catalog",
     table(["Module", "Tier", "Stage", "What it gives you"], rows),
   ].join("\n\n")}\n`;
 }
@@ -441,6 +505,14 @@ function modulePage(
     "## Facts",
     table(["Field", "Value"], facts),
   ];
+  const selector = selectorOf(item);
+  if (
+    tierOf(item, all) === "capability" &&
+    providers.length > 0 &&
+    selector !== undefined
+  ) {
+    sections.push("## Providers", providersBlock(item, providers, selector));
+  }
 
   const keys = Object.keys(item.envVars).toSorted();
   const envSection =

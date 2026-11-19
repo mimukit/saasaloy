@@ -20,6 +20,17 @@ One-off payments in a packages/payment workspace: the provider contract, the sta
 | Depended on by | [`ecommerce`](ecommerce.md), [`payment-bkash`](payment-bkash.md), [`payment-console`](payment-console.md), [`payment-manual`](payment-manual.md), [`payment-sslcommerz`](payment-sslcommerz.md) |
 | Providers | [`payment-bkash`](payment-bkash.md), [`payment-console`](payment-console.md), [`payment-manual`](payment-manual.md), [`payment-sslcommerz`](payment-sslcommerz.md) |
 
+## Providers
+
+`payment` picks its provider at runtime with `PAYMENT_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=payment
+PAYMENT_PROVIDER=bkash  uses payment-bkash
+PAYMENT_PROVIDER=console  uses payment-console
+PAYMENT_PROVIDER=manual  uses payment-manual
+PAYMENT_PROVIDER=sslcommerz  uses payment-sslcommerz
+```
+
 ## Environment variables
 
 | Variable | Services | Optional | What it does |

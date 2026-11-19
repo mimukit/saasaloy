@@ -79,6 +79,43 @@ describe("the module catalog", () => {
     assert.ok(catalog.includes(`${folders.length} modules`));
   });
 
+  it("carries the dependency graph block, one line for each tile", () => {
+    const catalog = generated.get("docs/wiki/generated/modules.md") ?? "";
+    const body = /```saasaloy-graph\n([\s\S]*?)\n```/.exec(catalog)?.[1] ?? "";
+    const lines = body.split("\n");
+    assert.ok(
+      lines.some((line) =>
+        line.startsWith("email (capability): depends on api; used by")
+      ),
+      "the graph body has no email line"
+    );
+    assert.ok(
+      lines.some((line) =>
+        line.includes("providers email-cloudflare, email-console, email-plunk")
+      ),
+      "the email line names its three providers"
+    );
+    assert.ok(
+      lines.every((line) => !line.startsWith("email-plunk")),
+      "a provider has no line of its own"
+    );
+    assert.ok(
+      catalog.indexOf("## Module dependencies") < catalog.indexOf("## Catalog")
+    );
+  });
+
+  it("puts the providers block on a capability that picks a provider at runtime", () => {
+    const email = generated.get("docs/wiki/generated/modules/email.md") ?? "";
+    assert.ok(email.includes("```saasaloy-providers capability=email\n"));
+    assert.ok(email.includes("EMAIL_PROVIDER=plunk  uses email-plunk"));
+    const validators =
+      generated.get("docs/wiki/generated/modules/validators.md") ?? "";
+    assert.ok(!validators.includes("saasaloy-providers"));
+    const provider =
+      generated.get("docs/wiki/generated/modules/email-plunk.md") ?? "";
+    assert.ok(!provider.includes("saasaloy-providers"));
+  });
+
   it("starts every generated file with a banner that names the script", () => {
     for (const [path, content] of generated) {
       assert.match(

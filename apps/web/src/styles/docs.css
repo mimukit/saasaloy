@@ -441,6 +441,20 @@
   display: none;
 }
 
+/* A `saasaloy-*` block (src/lib/docs-blocks.ts). Its plain list reads as a list of the
+   page's prose; the island's lists are controls, so they drop the prose bullet. */
+.docs-prose .saasaloy-list {
+  padding-left: 0;
+}
+
+.docs-prose .saasaloy-list > li::before {
+  content: none;
+}
+
+.docs-prose .saasaloy-list > li + li {
+  margin-top: 0;
+}
+
 /* A table scrolls inside its own box instead of widening the page. */
 .docs-scroll {
   overflow-x: auto;

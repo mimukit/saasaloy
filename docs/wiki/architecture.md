@@ -117,6 +117,14 @@ recorded flat in the manifest
 
 The asymmetry to know about: the engine applies eight kinds forward, and six of them have an inverse `remove` can run (`chained-route`, `const-array`, `drizzle-column`, `nav-entry`, `plugin-array`, `wrangler-binding`). The two `package.json` kinds have none, and are dropped from the manifest with a warning. See [Known limitations](reference.md#known-limitations).
 
+### The dependency graph
+
+Select a module to see what it depends on, what depends on it, and its providers or drivers. The graph reads the descriptors, so it shows the registry as it is. The [module catalog](generated/modules.md) shows the same graph with every module.
+
+```saasaloy-graph focus=email
+email (capability): depends on api; used by email-react, subscription; providers email-cloudflare, email-console, email-plunk
+```
+
 ## The base is nearly empty
 
 `saasaloy init` writes an Astro landing page, a shared UI package and a shared TypeScript

@@ -6,6 +6,48 @@
 
 56 modules in the default registry. Each name links to its page, which holds the descriptor facts and the skill text an agent reads. Run `saasaloy add <name> --dry-run` to print what a module writes before it writes anything. The tiers are defined in [the glossary](glossary.md).
 
+## Module dependencies
+
+Select a module to see what it depends on, what depends on it, and its providers or drivers. A provider or a driver shows under its capability or feature.
+
+```saasaloy-graph
+admin (capability): depends on api, database, auth, shell; used by cms, ecommerce, feature-flags, file-uploads, multitenant, payment, subscription, teams
+agent (capability): depends on api, validators, auth, app, api-keys
+api (capability): depends on logger; used by admin, agent, app, auth, cms, database, e2e, ecommerce, email, feature-flags, file-uploads, kv, multitenant, notification, payment, queue, ratelimit, sms, storage, subscription, teams, validators, waitlist
+api-keys (feature): depends on auth; used by agent; drivers api-keys-organization, api-keys-user
+app (capability): depends on api, auth, shell; used by agent, notification
+auth (capability): depends on api, database; used by admin, agent, api-keys, app, auth-phone, cms, ecommerce, feature-flags, file-uploads, multitenant, notification, payment, subscription, teams
+auth-phone (feature): depends on auth, sms, ratelimit; used by ecommerce
+ci (capability)
+cms (feature): depends on api, database, validators, auth, admin, file-uploads; used by ecommerce
+command (feature): depends on shell
+database (capability): depends on api; used by admin, auth, cms, feature-flags, file-uploads, multitenant, notification, payment, subscription, teams, waitlist; drivers database-d1, database-postgres
+e2e (capability): depends on api
+ecommerce (feature): depends on api, validators, auth, auth-phone, admin, file-uploads, payment, cms
+email (capability): depends on api; used by email-react, subscription; providers email-cloudflare, email-console, email-plunk
+email-react (feature): depends on email
+env-infisical (feature)
+feature-flags (feature): depends on api, database, validators, auth, admin, kv
+file-uploads (feature): depends on api, auth, admin, database, storage, validators; used by cms, ecommerce
+infra-ci-deploy (feature)
+kv (capability): depends on api; used by feature-flags, ratelimit; providers kv-cloudflare, kv-memory, kv-upstash, payment-bkash
+logger (capability): used by api; providers logger-console
+multitenant (feature): depends on api, database, auth, teams, admin
+notification (feature): depends on api, database, auth, app, validators, shell
+payment (capability): depends on api, database, auth, admin; used by ecommerce; providers payment-bkash, payment-console, payment-manual, payment-sslcommerz
+queue (capability): depends on api; used by subscription; providers payment-bkash, queue-cloudflare, queue-memory
+ratelimit (feature): depends on api, kv; used by auth-phone
+shell (capability): used by admin, app, command, notification
+sms (capability): depends on api; used by auth-phone; providers sms-console, sms-khudebarta
+storage (capability): depends on api; used by file-uploads; providers storage-cloudflare, storage-memory
+subscription (capability): depends on api, database, auth, admin, queue, email; providers subscription-console, subscription-stripe
+teams (feature): depends on api, database, auth, admin; used by multitenant
+validators (capability): depends on api; used by agent, cms, ecommerce, feature-flags, file-uploads, notification, waitlist; providers payment-manual
+waitlist (feature): depends on api, database, validators
+```
+
+## Catalog
+
 | Module | Tier | Stage | What it gives you |
 |---|---|---|---|
 | [`admin`](modules/admin.md) | capability | mvp | An apps/admin TanStack Router SPA behind the auth session, for the site's staff. |

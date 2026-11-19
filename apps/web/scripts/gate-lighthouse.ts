@@ -16,12 +16,13 @@ import { chromiumPath, serveDist } from "./serve-dist.ts";
 const site = await serveDist();
 const chromePath = await chromiumPath();
 
-// `/`, then `/docs`, one hand-written docs page and one generated module page. The 95 floor
+// `/`, then `/docs`, one hand-written docs page, the catalog and one generated module page. The 95 floor
 // in lighthouserc.json holds for each URL.
 const ROUTES = [
   "/",
   "/docs",
   "/docs/how-to/add-a-module",
+  "/docs/modules",
   "/docs/modules/email",
 ] as const;
 

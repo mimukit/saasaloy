@@ -20,6 +20,14 @@ A packages/logger workspace with the provider interface, a level threshold and f
 | Depended on by | [`api`](api.md), [`logger-console`](logger-console.md) |
 | Providers | [`logger-console`](logger-console.md) |
 
+## Providers
+
+`logger` picks its provider at runtime with `LOGGER_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=logger
+LOGGER_PROVIDER=console  uses logger-console
+```
+
 ## Environment variables
 
 | Variable | Services | Optional | What it does |

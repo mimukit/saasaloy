@@ -18,6 +18,13 @@
 // checks that <html> carries the matching class, so a silent fallback to the default light
 // theme cannot pass for a dark run.
 //
+// The docs routes load a second time with JavaScript off, in the light theme (the theme
+// script is JavaScript too), at the same three widths. The `saasaloy-*` blocks then show
+// their plain list, and the pass holds that list to the same axe rules and overflow check.
+// Chromium's `javaScriptEnabled: false` also stops axe, which runs in the page, so the
+// pass strips every <script> from each document instead: what the browser then runs is
+// what a browser with JavaScript off runs.
+//
 // Every load asks for reduced motion. The page's motion is additive, so the still state
 // is the real one, and a blur-in caught half way would make contrast a coin toss.
 //
@@ -26,14 +33,15 @@
 import { THEME_STORAGE_KEY } from "../src/lib/theme.ts";
 import { chromiumPath, serveDist } from "./serve-dist.ts";
 
-// `/docs`, one hand-written page and one generated module page stand for the docs shell.
-const ROUTES = [
-  "/",
-  "/404",
+// `/docs`, one hand-written page, the catalog (the graph block) and one generated module
+// page (the providers block) stand for the docs shell.
+const DOCS_ROUTES = [
   "/docs",
   "/docs/how-to/add-a-module",
+  "/docs/modules",
   "/docs/modules/email",
 ] as const;
+const ROUTES = ["/", "/404", ...DOCS_ROUTES] as const;
 const WIDTHS = [375, 768, 1440] as const;
 const THEMES = ["light", "dark"] as const;
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
@@ -123,6 +131,64 @@ try {
       }
       await context.close();
     }
+  }
+
+  // JavaScript off: the docs shell and the plain lists of the `saasaloy-*` blocks.
+  for (const width of WIDTHS) {
+    const context = await browser.newContext({
+      reducedMotion: "reduce",
+      viewport: { width, height: 900 },
+    });
+    await context.route("**/*", async (route) => {
+      if (route.request().resourceType() !== "document") {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const source = await response.text();
+      const html = source.replaceAll(/<script\b[\s\S]*?<\/script>/g, "");
+      await route.fulfill({ response, body: html });
+    });
+    const page = await context.newPage();
+    for (const route of DOCS_ROUTES) {
+      const where = `${route} ${width}px no-js`;
+      await page.goto(site.origin + route, { waitUntil: "networkidle" });
+      const ran = await page.evaluate(
+        () => document.querySelectorAll("script, [data-mounted]").length
+      );
+      if (ran > 0) {
+        failures += 1;
+        console.error(`FAIL ${where}: the page still ran JavaScript`);
+        continue;
+      }
+      const overflow = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        view: window.innerWidth,
+      }));
+      if (overflow.scroll > overflow.view) {
+        failures += 1;
+        console.error(
+          `FAIL ${where}: document is ${overflow.scroll}px wide in a ${overflow.view}px viewport`
+        );
+      }
+      const { violations } = await new AxeBuilder({ page })
+        .withTags(AXE_TAGS)
+        .analyze();
+      if (violations.length === 0) {
+        console.log(`ok   ${where}: 0 violations`);
+        continue;
+      }
+      failures += violations.length;
+      console.error(`FAIL ${where}: ${violations.length} violation(s)`);
+      for (const violation of violations) {
+        const targets = violation.nodes
+          .slice(0, 3)
+          .map((node) => node.target.join(" "))
+          .join(", ");
+        console.error(`  ${violation.id}: ${violation.help} at ${targets}`);
+      }
+    }
+    await context.close();
   }
 
   // WCAG 2.2.2: with motion allowed, every animation on the document clock ends within

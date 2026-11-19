@@ -20,6 +20,16 @@ A packages/email workspace with the provider interface, the escaping html tag an
 | Depended on by | [`email-cloudflare`](email-cloudflare.md), [`email-console`](email-console.md), [`email-plunk`](email-plunk.md), [`email-react`](email-react.md), [`subscription`](subscription.md) |
 | Providers | [`email-cloudflare`](email-cloudflare.md), [`email-console`](email-console.md), [`email-plunk`](email-plunk.md) |
 
+## Providers
+
+`email` picks its provider at runtime with `EMAIL_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=email
+EMAIL_PROVIDER=cloudflare  uses email-cloudflare
+EMAIL_PROVIDER=console  uses email-console
+EMAIL_PROVIDER=plunk  uses email-plunk
+```
+
 ## Environment variables
 
 | Variable | Services | Optional | What it does |

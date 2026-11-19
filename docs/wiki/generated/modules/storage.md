@@ -20,6 +20,15 @@ File storage in a packages/storage workspace: the provider interface, signed lin
 | Depended on by | [`file-uploads`](file-uploads.md), [`storage-cloudflare`](storage-cloudflare.md), [`storage-memory`](storage-memory.md) |
 | Providers | [`storage-cloudflare`](storage-cloudflare.md), [`storage-memory`](storage-memory.md) |
 
+## Providers
+
+`storage` picks its provider at runtime with `STORAGE_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=storage
+STORAGE_PROVIDER=cloudflare  uses storage-cloudflare
+STORAGE_PROVIDER=memory  uses storage-memory
+```
+
 ## Environment variables
 
 | Variable | Services | Optional | What it does |
