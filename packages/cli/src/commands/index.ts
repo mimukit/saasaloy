@@ -7,6 +7,7 @@ import { runList } from "./list.js";
 import { runNew } from "./new.js";
 import { runOutdated } from "./outdated.js";
 import { runRemove } from "./remove.js";
+import { runSkill } from "./skill.js";
 import { runTesting } from "./testing.js";
 import { runUpdate } from "./update.js";
 
@@ -28,7 +29,8 @@ export type CommandRegistry = Record<string, Command>;
 // it is the step `add`'s own next-steps note sends you to, `testing` sits directly after
 // `env` because it is the other per-project setting a user configures after composing
 // (#242), and `outdated` sits directly before `update` because it is the question `update`
-// is the answer to. Append with that in mind. No explicit `order`/`group` field until the list outgrows a single screen.
+// is the answer to. `skill` sits after `doctor`: it prints the running CLI's own base
+// skills, the agent's runbook for every command above it (#359). Append with that in mind. No explicit `order`/`group` field until the list outgrows a single screen.
 export const COMMANDS: CommandRegistry = {
   init: { describe: DESCRIPTIONS.init, run: runInit },
   add: { describe: DESCRIPTIONS.add, run: runAdd },
@@ -40,4 +42,5 @@ export const COMMANDS: CommandRegistry = {
   list: { describe: DESCRIPTIONS.list, run: runList },
   new: { describe: DESCRIPTIONS.new, run: runNew },
   doctor: { describe: DESCRIPTIONS.doctor, run: runDoctor },
+  skill: { describe: DESCRIPTIONS.skill, run: runSkill },
 };

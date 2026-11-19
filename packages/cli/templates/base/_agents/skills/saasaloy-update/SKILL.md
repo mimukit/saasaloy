@@ -16,13 +16,13 @@ The update is done when `saasaloy update` exits `0`. Until then, the CLI records
 | Code | Meaning | What you do |
 |---|---|---|
 | `0` | Nothing is left to do. A preview (`--dry-run`, `--diff`) also exits `0`. | Stop. The update is done. |
-| `1` | The run failed. | Read the error. `saasaloy update --abort` restores the newest backup. |
+| `1` | The run failed. | Read the error. `saasaloy update --abort` restores the newest backup. When the run prints `Report this to Saasaloy: saasaloy skill saasaloy-report`, or the error gives no fix you can make inside this project, follow the `saasaloy-report` skill. Run `saasaloy skill saasaloy-report` to read it. |
 | `2` | The run refused. Nothing was written. | Read the message. It names the cause: a dirty tree, no terminal and no `--yes`, an unknown `--resolved` path or `--done` id, a bad `--from`. |
 | `3` | The run applied what it could. Files wait on a merge, or update notes wait to be done. | Work the merge plan, then record the work. |
 
 ## Procedure
 
-1. **Upgrade the CLI.** Run `pnpm add -g saasaloy@latest`, then run `saasaloy --version`. A project needs no CLI upgrade to take a newer module, but the base template ships inside the CLI, so a base update needs it.
+1. **Upgrade the CLI.** Run `pnpm add -g saasaloy@latest`, then run `saasaloy --version`. A project needs no CLI upgrade to take a newer module, but the base template ships inside the CLI, so a base update needs it. Then run `saasaloy skill saasaloy-update`. It prints this runbook as the running CLI ships it. When that text differs from this file, follow the printed text from here on. The merge plan's second line names the same command, and says when the runbook differs from this project's copy.
 2. **Preview.** Run `saasaloy update --dry-run`. It writes nothing and exits `0`. Its Plan box gives the count of files to apply, files that need a merge, and update notes. Report that count to the owner.
 3. **Apply.** Run `saasaloy update --yes --out .saasaloy/merge-plan.md`. `--yes` skips the `Proceed?` prompt, and a run with no terminal refuses without it. A dirty working tree refuses with exit `2`: commit first, or add `--force`. With `--out`, the merge plan goes to that file and not to stdout.
 4. **Work the merge plan.** Read `.saasaloy/merge-plan.md` from the top. Do the update notes and the file merges as [Work the merge plan](#work-the-merge-plan) says.
@@ -131,7 +131,8 @@ The base notes newer than `0.7.0` then print as normal notes. `--from` works onl
 
 When no person is at the keyboard, ask nothing. Pass `--yes` to every run that writes. Do every step of the procedure, and stop with a report when one of these happens:
 
-- A run exits `1` or `2` and the message gives no fix you can make inside this project.
+- A run exits `1` and the message gives no fix you can make inside this project. Follow the `saasaloy-report` skill (run `saasaloy skill saasaloy-report` to read it) for an unattended run.
+- A run exits `2` and the message gives no fix you can make inside this project.
 - A merge where you cannot keep both changes. Keep the local version, record nothing for that file, and name it.
 - `pnpm check` stays red after three tries at a fix.
 

@@ -13,7 +13,8 @@
 //     heading that starts `## Wire-up`;
 //   - the eight capability skills the gap audit named have a removal section and a
 //     failure-mode section;
-//   - the base template ships `saasaloy-build`, `saasaloy-feature` and `saasaloy-update`;
+//   - the base template ships `saasaloy-build`, `saasaloy-feature`, `saasaloy-report` and
+//     `saasaloy-update`;
 //   - `saasaloy-build` names the steps a fresh scaffold needs (plan 0109): the install
 //     that tolerates a changed lockfile, `db:generate` before `db:setup`, the env step
 //     after each `add`, the first commit, and the resume rules, and the base `AGENTS.md`
@@ -245,6 +246,7 @@ describe("the base skills", () => {
   for (const name of [
     "saasaloy-build",
     "saasaloy-feature",
+    "saasaloy-report",
     "saasaloy-update",
   ]) {
     it(`ship ${name} with its name in the frontmatter`, () => {

@@ -24,7 +24,7 @@ Target: no number. The build checks the runbook pointer with tests. The maintain
 | The command's name | `saasaloy skill [<name>] [--json]`. With no name it lists the bundled base skills. `runbook` fits only the update skill, and `help <skill>` mixes CLI help with agent instructions. This is public CLI surface, so ADR 0064 records it. |
 | Scope of `saasaloy skill` | Base skills only, read from `templates/base/_agents/skills/`. Module skills already arrive with their module through `add` and `update`, and a registry fetch would add a network path. |
 | How an old project learns of the command | The CLI output names it, because an old skill cannot. The merge plan header names `saasaloy skill saasaloy-update`, and the failure hint names `saasaloy skill saasaloy-report`. |
-| When the merge plan header line prints | On every run. When the project's copy of `saasaloy-update/SKILL.md` has different bytes from the bundled one, the line adds "differs from this project's copy". It says "differs", not "is older", because an owner edit also makes the copies differ. |
+| When the merge plan header line prints | On every run. When the project's copy of `saasaloy-update/SKILL.md` had different bytes from the bundled one when the run started, the line adds "differs from this project's copy". It says "differs", not "is older", because an owner edit also makes the copies differ. `update` reads the copy before the apply, because the agent read that copy and the run may replace it (owner decision on PR #361). |
 | Where the failure hint prints | Two places only: the catch for unhandled errors in `packages/cli/src/index.ts`, and the apply failure path in `packages/cli/src/commands/update.ts`. It is one stderr line, `Report this to Saasaloy: saasaloy skill saasaloy-report`, and it never prints under `--json`. A hint on every exit `1` would also fire after a cancel, because exit `1` means "something failed, or you cancelled" (`src/cli.ts`). A typed failure through all 23 `EXIT_FAILURE` paths costs too much for this plan. |
 | Exit `2` and exit `3` | They print no hint and do not trigger the report skill. A refusal and pending work are expected outcomes. The owner can still call `saasaloy-report` by hand. |
 | No launcher | No `saasaloy triage` that starts Claude Code or Codex. A Saasaloy user already works inside an agent, and a launcher ties the CLI to two vendors, against the vendor-blind rule in `AGENTS.md`. |
@@ -54,7 +54,7 @@ The plan adds one small CLI command, one base skill, an issue form and a label w
 
 Rejected: fetch the runbook from `main` as T3 does. A project runs a released CLI, and `main` can describe flags that the release does not have.
 
-### Phase 1: create the `via-agent` label (#359)
+### Phase 1: create the `via-agent` label (#359) (built 2026-11-19)
 
 The owner approved this outward action in the grill on 2026-11-19, and the re-grill on 2026-11-19 lets an unattended run do it. The PR body shows the `gh label list` output.
 
@@ -62,7 +62,7 @@ The owner approved this outward action in the grill on 2026-11-19, and the re-gr
 
 Done when: `gh label list --repo mimukit/saasaloy --search via-agent` prints the label.
 
-### Phase 2: `saasaloy skill` (#359)
+### Phase 2: `saasaloy skill` (#359) (built 2026-11-19)
 
 - Add `packages/cli/src/commands/skill.ts` and register it in `commands/index.ts` after `doctor`, with a line in `descriptions.ts`.
 - `saasaloy skill <name>` renders `templates/base/_agents/skills/<name>/SKILL.md` with `renderTemplate` and prints it on stdout. Run inside a project, it uses that project's name for the template vars. Outside a project it uses the default vars.
@@ -73,7 +73,7 @@ Done when: `gh label list --repo mimukit/saasaloy --search via-agent` prints the
 
 Done when: `node packages/cli/dist/index.js skill saasaloy-update` run in `.dev` prints the template skill, `skill nope` exits `2`, `pnpm --filter saasaloy test` passes, and `docs/adr/0064-*.md` exists.
 
-### Phase 3: the CLI points to its own runbook (#359)
+### Phase 3: the CLI points to its own runbook (#359) (built 2026-11-19)
 
 - `renderMergePlan` adds one line under `# Saasaloy merge plan`. It names the CLI version and says: read `saasaloy skill saasaloy-update` before you work this plan. When the project's copy has different bytes, the line adds "differs from this project's copy".
 - `src/index.ts` and the apply failure path in `update.ts` print one stderr line after the error: `Report this to Saasaloy: saasaloy skill saasaloy-report`. The line never prints under `--json`.
@@ -82,7 +82,7 @@ Done when: `node packages/cli/dist/index.js skill saasaloy-update` run in `.dev`
 
 Done when: a test project whose `saasaloy-update` skill differs from the bundled one gets a merge plan whose second line names `saasaloy skill saasaloy-update` and says the copy differs, the hint tests pass, and `pnpm --filter saasaloy test` passes.
 
-### Phase 4: the `saasaloy-report` skill, the issue form and the label workflow (#359)
+### Phase 4: the `saasaloy-report` skill, the issue form and the label workflow (#359) (built 2026-11-19)
 
 - Add `.github/ISSUE_TEMPLATE/agent-report.yml` with these field ids: `what-happened`, `command`, `diagnosis`, `steps`, `versions`, `environment`, `evidence`, `related`, `workaround`, `agent`. The form applies the label `via-agent`.
 - Add `.github/workflows/label-agent-reports.yml`. On `issues: opened`, it adds `via-agent` when the body starts with `<!-- via-agent -->`. It needs `issues: write` and nothing else.

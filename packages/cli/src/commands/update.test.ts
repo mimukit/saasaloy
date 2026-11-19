@@ -29,7 +29,12 @@ import {
   recordBaseFiles,
   templateHash,
 } from "../lib/base.js";
-import { EXIT_WORK_PENDING } from "../lib/exit.js";
+import {
+  EXIT_FAILURE,
+  EXIT_REFUSED,
+  EXIT_WORK_PENDING,
+  REPORT_HINT,
+} from "../lib/exit.js";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { emptyLock, loadLock, saveLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
@@ -45,7 +50,8 @@ import { TESTING_BLOCKS } from "../lib/testing.js";
 import { stripAnsi } from "../lib/tui.js";
 import { readVersion } from "../version.js";
 import { runOutdated } from "./outdated.js";
-import { finishUpToDate, runUpdate } from "./update.js";
+import { renderBundledSkill } from "./skill.js";
+import { finishUpToDate, runbookFor, runUpdate } from "./update.js";
 import type { UpToDateSteps } from "./update.js";
 
 // Both guards here reject bad input *before* the command reaches the registry, which is
@@ -982,6 +988,76 @@ describe("runUpdate — backfill (#242)", () => {
     expect(code).toBe(EXIT_WORK_PENDING);
     await expect(pathExists(join(project, "plan.md"))).resolves.toBeTruthy();
     expect(output).toContain("saasaloy update");
+    // Exit 3 is an expected outcome, not a bug to report (#359).
+    expect(output).not.toContain(REPORT_HINT);
+  });
+
+  // #359: a failure while the plan applies is one the owner cannot fix by changing the
+  // input, so the report hint follows it. Here `lib` is a file, so writing
+  // `lib/widget.ts` fails with a plain filesystem error.
+  it("prints the report hint after the plan fails to apply", async () => {
+    await state(["widget", "gadget"], {
+      widget: localEntry,
+      gadget: localEntry,
+    });
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as Record<string, unknown>;
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({
+        ...config,
+        aliases: { "@web": "apps/web", "@lib": "lib" },
+      }),
+      "utf-8"
+    );
+    await module(
+      "widget",
+      { files: [{ path: "files/widget.ts", target: "@lib/widget.ts" }] },
+      { "files/widget.ts": "theirs\n" }
+    );
+    await writeFile(join(project, "lib"), "not a folder\n", "utf-8");
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+
+    expect(code).toBe(EXIT_FAILURE);
+    const lines = output.trimEnd().split("\n");
+    expect(lines.at(-1)).toBe(REPORT_HINT);
+    expect(lines.filter((line) => line === REPORT_HINT)).toHaveLength(1);
+  });
+
+  // #359: only a failure after Proceed gets the hint. Here the module names a file its
+  // registry copy does not hold, so the plan fails to build with exit 1 before anything
+  // applies, and the owner gets no hint to report it.
+  it("prints no report hint when the run fails with exit 1 before the apply", async () => {
+    await state(["widget", "gadget"], {
+      widget: localEntry,
+      gadget: localEntry,
+    });
+    await module("widget", {
+      files: [{ path: "files/missing.ts", target: "@web/missing.ts" }],
+    });
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+
+    expect(code).toBe(EXIT_FAILURE);
+    expect(output).not.toContain(REPORT_HINT);
+  });
+
+  // #359: a refusal is an expected outcome, even when it reaches the command's catch.
+  // An unparseable lock refuses with exit 2.
+  it("prints no report hint when the run refuses with exit 2", async () => {
+    await state(["widget", "gadget"], {
+      widget: localEntry,
+      gadget: localEntry,
+    });
+    await writeFile(join(project, "saasaloy-lock.json"), "{ not json", "utf-8");
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(output).toContain("saasaloy-lock.json is invalid");
+    expect(output).not.toContain(REPORT_HINT);
   });
 
   // Nothing is outdated (gadget has no lock entry to compare, and naming it leaves the
@@ -1309,6 +1385,13 @@ describe("runUpdate — the base template (#120)", { timeout: 30_000 }, () => {
     // 3, not 0: the run applied what it could and left a file waiting on a merge.
     expect(code).toBe(EXIT_WORK_PENDING);
     expect(out).toContain("# Saasaloy merge plan");
+    // #359: the line under the title points at the running CLI's runbook. The project's
+    // copy is the one this CLI renders, so it is not flagged.
+    const second = out.split("\n")[1]!;
+    expect(second).toContain(`saasaloy ${cliVersion}`);
+    expect(second).toContain("`saasaloy skill saasaloy-update`");
+    expect(second).not.toContain("differs");
+    expect(err).not.toContain(REPORT_HINT);
     expect(out).toContain("## base");
     expect(out).toContain(BASE_INTENT);
     expect(out).toContain("AGENTS.md");
@@ -1318,6 +1401,93 @@ describe("runUpdate — the base template (#120)", { timeout: 30_000 }, () => {
     );
     expect((await lockOnDisk()).base).toStrictEqual(
       baseRecord(cliVersion, "f".repeat(64))
+    );
+  });
+
+  // #359: an agent reads the project's runbook before it runs `update`. When that copy is
+  // not what this CLI ships, the merge plan says so on its second line.
+  it("says the runbook differs when the project's saasaloy-update skill has other bytes", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "old agent rules, plus mine\n",
+      "utf-8"
+    );
+    const skill = join(
+      project,
+      ".agents",
+      "skills",
+      "saasaloy-update",
+      "SKILL.md"
+    );
+    await writeFile(
+      skill,
+      `${await readFile(skill, "utf-8")}\nAn older step.\n`,
+      "utf-8"
+    );
+
+    const { code, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(EXIT_WORK_PENDING);
+    const second = out.split("\n")[1]!;
+    expect(second).toContain("`saasaloy skill saasaloy-update`");
+    expect(second).toContain("differs from this project's copy");
+  });
+
+  // #359: the main case. The project holds an older runbook as a clean managed file, so
+  // this run replaces it. The agent read the old copy, so the line still flags it.
+  it("says the runbook differs when this run replaces an older copy", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "old agent rules, plus mine\n",
+      "utf-8"
+    );
+    const rel = ".agents/skills/saasaloy-update/SKILL.md";
+    const skill = join(project, rel);
+    const bundled = await readFile(skill, "utf-8");
+    const older = `${bundled}\nAn older step.\n`;
+    await writeFile(skill, older, "utf-8");
+    state.manifest.managed[rel]!.hash = hashContent(older);
+    await saveManifest(project, state.manifest);
+
+    const { code, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(EXIT_WORK_PENDING);
+    await expect(readFile(skill, "utf-8")).resolves.toBe(bundled);
+    expect(out.split("\n")[1]).toContain("differs from this project's copy");
+  });
+
+  it("compares the project's runbook with the bundled one rendered for the project", async () => {
+    const name = basename(project);
+    const skill = join(
+      project,
+      ".agents",
+      "skills",
+      "saasaloy-update",
+      "SKILL.md"
+    );
+
+    await expect(runbookFor(project, name, "9.9.9")).resolves.toStrictEqual({
+      cliVersion: "9.9.9",
+      differs: false,
+    });
+
+    await mkdir(join(project, ".agents", "skills", "saasaloy-update"), {
+      recursive: true,
+    });
+    await writeFile(skill, await renderBundledSkill("saasaloy-update", name));
+    await expect(runbookFor(project, name, "9.9.9")).resolves.toHaveProperty(
+      "differs",
+      false
+    );
+
+    await writeFile(skill, "an owner's own runbook\n", "utf-8");
+    await expect(runbookFor(project, name, "9.9.9")).resolves.toHaveProperty(
+      "differs",
+      true
     );
   });
 

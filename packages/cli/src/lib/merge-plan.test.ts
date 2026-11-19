@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BASE_INTENT, BASE_MODULE, noSnapshotReason } from "./base.js";
-import { renderMergePlan } from "./merge-plan.js";
+import { PROJECT_RUNBOOK, renderMergePlan } from "./merge-plan.js";
 import type { UpdateNote } from "./update-notes.js";
 import type {
   ModuleComparison,
@@ -553,5 +553,53 @@ describe("renderMergePlan — update notes", () => {
 
   it("still returns an empty document with no merge and no note", () => {
     expect(renderMergePlan(plan([], {}))).toBe("");
+  });
+});
+
+// #359: an old project's `saasaloy-update` skill cannot name `saasaloy skill`, so the merge
+// plan does, on the line under its title, on every run.
+describe("renderMergePlan — the runbook line (#359)", () => {
+  const drifted = (): UpdatePlan => plan([modulePlan({ files: [file()] })]);
+
+  it("names the CLI version and `saasaloy skill saasaloy-update` under the title", () => {
+    const lines = renderMergePlan(drifted(), {
+      cliVersion: "1.4.0",
+      differs: false,
+    }).split("\n");
+
+    expect(lines[0]).toBe("# Saasaloy merge plan");
+    expect(lines[1]).toContain("saasaloy 1.4.0");
+    expect(lines[1]).toContain("`saasaloy skill saasaloy-update`");
+    expect(lines[1]).not.toContain("differs");
+    expect(lines[2]).toBe("");
+  });
+
+  it("says the bundled runbook differs from this project's copy when the bytes differ", () => {
+    const lines = renderMergePlan(drifted(), {
+      cliVersion: "1.4.0",
+      differs: true,
+    }).split("\n");
+
+    expect(lines[1]).toContain("`saasaloy skill saasaloy-update`");
+    expect(lines[1]).toContain("differs from this project's copy");
+    expect(lines[1]).toContain(PROJECT_RUNBOOK);
+  });
+
+  it("prints the line on a notes-only plan too", () => {
+    const doc = renderMergePlan(
+      plan([], {
+        notes: [
+          { id: "base/0001-x", title: "X", body: "## What you do\n\nX.\n" },
+        ],
+      }),
+      { cliVersion: "1.4.0", differs: false }
+    );
+    expect(doc.split("\n")[1]).toContain("`saasaloy skill saasaloy-update`");
+  });
+
+  it("still renders nothing when nothing needs a merge", () => {
+    expect(
+      renderMergePlan(plan([]), { cliVersion: "1.4.0", differs: true })
+    ).toBe("");
   });
 });
