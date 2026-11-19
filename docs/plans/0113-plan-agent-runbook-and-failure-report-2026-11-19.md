@@ -54,7 +54,7 @@ The plan adds one small CLI command, one base skill, an issue form and a label w
 
 Rejected: fetch the runbook from `main` as T3 does. A project runs a released CLI, and `main` can describe flags that the release does not have.
 
-### Phase 1: create the `via-agent` label (#359)
+### Phase 1: create the `via-agent` label (#359) (built 2026-11-19)
 
 The owner approved this outward action in the grill on 2026-11-19, and the re-grill on 2026-11-19 lets an unattended run do it. The PR body shows the `gh label list` output.
 
@@ -62,7 +62,7 @@ The owner approved this outward action in the grill on 2026-11-19, and the re-gr
 
 Done when: `gh label list --repo mimukit/saasaloy --search via-agent` prints the label.
 
-### Phase 2: `saasaloy skill` (#359)
+### Phase 2: `saasaloy skill` (#359) (built 2026-11-19)
 
 - Add `packages/cli/src/commands/skill.ts` and register it in `commands/index.ts` after `doctor`, with a line in `descriptions.ts`.
 - `saasaloy skill <name>` renders `templates/base/_agents/skills/<name>/SKILL.md` with `renderTemplate` and prints it on stdout. Run inside a project, it uses that project's name for the template vars. Outside a project it uses the default vars.
@@ -73,7 +73,7 @@ Done when: `gh label list --repo mimukit/saasaloy --search via-agent` prints the
 
 Done when: `node packages/cli/dist/index.js skill saasaloy-update` run in `.dev` prints the template skill, `skill nope` exits `2`, `pnpm --filter saasaloy test` passes, and `docs/adr/0064-*.md` exists.
 
-### Phase 3: the CLI points to its own runbook (#359)
+### Phase 3: the CLI points to its own runbook (#359) (built 2026-11-19)
 
 - `renderMergePlan` adds one line under `# Saasaloy merge plan`. It names the CLI version and says: read `saasaloy skill saasaloy-update` before you work this plan. When the project's copy has different bytes, the line adds "differs from this project's copy".
 - `src/index.ts` and the apply failure path in `update.ts` print one stderr line after the error: `Report this to Saasaloy: saasaloy skill saasaloy-report`. The line never prints under `--json`.
@@ -82,7 +82,7 @@ Done when: `node packages/cli/dist/index.js skill saasaloy-update` run in `.dev`
 
 Done when: a test project whose `saasaloy-update` skill differs from the bundled one gets a merge plan whose second line names `saasaloy skill saasaloy-update` and says the copy differs, the hint tests pass, and `pnpm --filter saasaloy test` passes.
 
-### Phase 4: the `saasaloy-report` skill, the issue form and the label workflow (#359)
+### Phase 4: the `saasaloy-report` skill, the issue form and the label workflow (#359) (built 2026-11-19)
 
 - Add `.github/ISSUE_TEMPLATE/agent-report.yml` with these field ids: `what-happened`, `command`, `diagnosis`, `steps`, `versions`, `environment`, `evidence`, `related`, `workaround`, `agent`. The form applies the label `via-agent`.
 - Add `.github/workflows/label-agent-reports.yml`. On `issues: opened`, it adds `via-agent` when the body starts with `<!-- via-agent -->`. It needs `issues: write` and nothing else.
