@@ -4,16 +4,12 @@
 // reader of /docs/x.md has no file tree to resolve `../y.md` against.
 import type { APIRoute, GetStaticPaths } from "astro";
 
-import { assertKnownBlocks } from "@web/lib/docs-blocks";
 import { loadDocs } from "@web/lib/docs";
 import type { DocsPage } from "@web/lib/docs-nav";
 import { rawPage } from "@web/lib/docs-raw";
 
 export const getStaticPaths = (async () => {
   const { items, pages } = await loadDocs();
-  for (const { page, entry } of items) {
-    assertKnownBlocks(entry.body ?? "", page.path);
-  }
   return items.map(({ page, entry }) => ({
     params: { slug: page.slug === "" ? "index" : page.slug },
     props: { page, pages, body: entry.body ?? "" },

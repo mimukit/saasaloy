@@ -4,7 +4,7 @@
 // from `main`, N commits after v<latest>".
 //
 // The facts come from `git`, which a page cannot call: `astro dev` renders inside workerd, which
-// has no `child_process` (the spike in .afkkit/groups/g2-spike.md). `astro.config.mjs` calls
+// has no `child_process` (the "Loader spike result" in PR #364). `astro.config.mjs` calls
 // `readBuildInfo` in Node and hands the result to the pages through `vite.define`.
 //
 // `describeBuild` holds the decisions and takes the git answers as arguments, so a
