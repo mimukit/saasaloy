@@ -6,7 +6,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { deploy, deployCommand, rerunCommand } from "./release-deploy.ts";
-import { deployCommands, runAll } from "../apps/web/scripts/deploy-release.ts";
+import {
+  deployCommands,
+  headProblem,
+  runAll,
+} from "../apps/web/scripts/deploy-release.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
@@ -109,6 +113,15 @@ describe("the web deploy:release script", () => {
 
   it("rejects a tag that is not v<semver>", () => {
     assert.throws(() => deployCommands("0.9.0", false), /not a release tag/);
+  });
+
+  it("refuses a real deploy when HEAD is not at the tag", () => {
+    assert.equal(headProblem("v0.9.0", ["v0.9.0"]), undefined);
+    assert.match(
+      headProblem("v0.9.0", []) ?? "",
+      /HEAD is not at v0\.9\.0.*git checkout v0\.9\.0/
+    );
+    assert.match(headProblem("v0.9.0", ["v0.8.0"]) ?? "", /not at v0\.9\.0/);
   });
 
   it("stops at the first failing command", () => {

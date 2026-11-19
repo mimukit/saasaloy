@@ -10,21 +10,24 @@
 // `--dry-run` goes on to wrangler, which compiles and checks without uploading.
 //
 // The build must run with the tag checked out: the docs header shows a "Built from main"
-// banner unless HEAD is a `v*` tag (src/lib/docs-build-info.ts).
+// banner unless HEAD is a `v*` tag (src/lib/docs-build-info.ts). A real deploy refuses to
+// start when HEAD is not at the tag, so a rerun from `main` cannot ship `main` under a
+// release's name. `--dry-run` skips that check.
 //
 // Imports node: builtins only. Node 24 strips the types.
 
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const TAG = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+/** A release tag: `v<semver>`, as packages/cli/.release-it.js writes it. */
+export const RELEASE_TAG = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
 /** One command to run, as an executable and its arguments. */
 export type Command = readonly [string, ...string[]];
 
 /** The two commands a release deploy runs, in order. Throws on a tag that is not `v<semver>`. */
 export function deployCommands(tag: string, dryRun: boolean): Command[] {
-  if (!TAG.test(tag)) {
+  if (!RELEASE_TAG.test(tag)) {
     throw new Error(
       `deploy:release: "${tag}" is not a release tag. Pass one such as v0.9.0.`
     );
@@ -41,6 +44,20 @@ export function deployCommands(tag: string, dryRun: boolean): Command[] {
       ...(dryRun ? ["--dry-run"] : []),
     ],
   ];
+}
+
+/**
+ * Why a real deploy of `tag` must not start, or undefined when it may. `tagsAtHead` is the
+ * output of `git tag --points-at HEAD`, one tag per entry.
+ */
+export function headProblem(
+  tag: string,
+  tagsAtHead: readonly string[]
+): string | undefined {
+  if (tagsAtHead.includes(tag)) {
+    return undefined;
+  }
+  return `deploy:release: HEAD is not at ${tag}. Run \`git checkout ${tag}\` first, or the site ships another commit under the release's name.`;
 }
 
 /**
@@ -80,6 +97,20 @@ function main(argv: string[]): number {
     return 2;
   }
   const cwd = fileURLToPath(new URL("..", import.meta.url));
+  if (!dryRun) {
+    const tags = spawnSync("git", ["tag", "--points-at", "HEAD"], {
+      cwd,
+      encoding: "utf-8",
+    });
+    const problem = headProblem(
+      tag,
+      tags.status === 0 ? tags.stdout.split("\n").filter(Boolean) : []
+    );
+    if (problem !== undefined) {
+      console.error(problem);
+      return 1;
+    }
+  }
   return runAll(commands, ([file, ...fileArgs]) => {
     // `wrangler` is a devDependency of this workspace, so it runs through `pnpm exec`.
     const [bin, binArgs] =

@@ -13,12 +13,12 @@
 // `scripts/release-deploy.test.ts` runs `deploy` with a fake failing command. Nothing in a
 // test deploys.
 //
-// Imports node: builtins only. Node 24 strips the types.
+// Imports node: builtins and the web deploy script's tag rule. Node 24 strips the types.
 
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 
-const TAG = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+import { RELEASE_TAG } from "../apps/web/scripts/deploy-release.ts";
 
 /** The command that deploys one release's site. */
 export function deployCommand(tag: string): string[] {
@@ -47,7 +47,7 @@ export function deploy(
   run: (command: string[]) => number,
   log: (line: string) => void
 ): number {
-  if (!TAG.test(tag)) {
+  if (!RELEASE_TAG.test(tag)) {
     log(
       `release:deploy: "${tag}" is not a release tag. Pass one such as v0.9.0.`
     );
