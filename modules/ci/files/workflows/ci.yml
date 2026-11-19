@@ -18,11 +18,14 @@ on:
   pull_request:
 
 concurrency:
-  # A pull request run has the ref `refs/pull/<n>/merge`, so group it by its branch.
-  group: ci-${{ github.head_ref || github.ref }}
-  # A second push to a branch makes the first run's answer worthless, so cancel it. Never
-  # on main: `pnpm deploy:production` reads the run on the deploy commit, and a cancelled
-  # run there fails the deploy gate. Every commit on main keeps its own result.
+  # On main, one group per commit. GitHub keeps one pending run per group and cancels the
+  # older pending run, whatever `cancel-in-progress` says, so a shared main group would
+  # lose a run when three merges land close together. A pull request run groups by its
+  # number, so two forks with the same branch name do not share a group.
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.event.pull_request.number || github.ref }}
+  # A second push to a pull request makes the first run's answer worthless, so cancel it.
+  # Never on main: `pnpm deploy:production` reads the run on the deploy commit, and a
+  # cancelled run there fails the deploy gate. Every commit on main keeps its own result.
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:

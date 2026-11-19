@@ -43,6 +43,16 @@ describe("modules/ci/files/workflows/ci.yml", () => {
     assert.equal(concurrency["cancel-in-progress"], expression);
   });
 
+  it("gives each commit on main its own concurrency group", () => {
+    // A shared group would let GitHub cancel a pending main run, whatever
+    // `cancel-in-progress` says.
+    const concurrency = record(workflow.concurrency, "concurrency");
+    const group =
+      // oxlint-disable-next-line no-template-curly-in-string -- a GitHub expression, not a template
+      "ci-${{ github.ref == 'refs/heads/main' && github.sha || github.event.pull_request.number || github.ref }}";
+    assert.equal(concurrency.group, group);
+  });
+
   it("runs on a push to main only, and on every pull request", () => {
     const on = record(workflow.on, "on");
     assert.deepEqual(Object.keys(on).toSorted(), ["pull_request", "push"]);

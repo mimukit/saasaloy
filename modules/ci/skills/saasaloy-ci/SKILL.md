@@ -26,7 +26,7 @@ The workflow runs these steps, in this order:
 ## When the workflow runs
 
 - **A push runs it on `main` only.** Every other branch, `hotfix-*` included, gets its run from its pull request, and that run carries the branch's head SHA. So the deploy gate finds a run on a hotfix branch too.
-- **A run on `main` is never cancelled.** `cancel-in-progress` is `${{ github.ref != 'refs/heads/main' }}`. `pnpm deploy:production` reads the run on the deploy commit. If a second merge cancelled the run on the first merge commit, the deploy gate would find a cancelled run and stop. A second push to any other branch cancels that branch's older run, whose answer is worthless.
+- **A run on `main` is never cancelled.** `pnpm deploy:production` reads the run on the deploy commit. If a second merge cancelled the run on the first merge commit, the deploy gate would find a cancelled run and stop. So each commit on `main` gets its own concurrency group, and `cancel-in-progress` is `${{ github.ref != 'refs/heads/main' }}`. The own group matters: GitHub keeps one pending run per group and cancels the older pending run even when `cancel-in-progress` is false. A pull request groups by its number, and a second push to it cancels its older run, whose answer is worthless.
 - **Every `uses:` is pinned to a 40-character commit SHA**, with the release tag in a `# vX.Y.Z` comment. A tag can be moved to other code, and a SHA cannot. A newer saasaloy release brings newer pins.
 
 ## The workflow file does not change
@@ -54,6 +54,7 @@ The `e2e` module adds no `ci:*` script. `ci:prepare:env` writes every `apps/<app
 - Run the failing step locally first: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`. The workflow runs nothing that a local shell cannot. Do not run `pnpm ci:prepare` on your own checkout: `ci:prepare:env` overwrites each service's `.env` with the example's defaults. Run `pnpm env:setup` afterwards if you did.
 - `test` or `build` fails naming an unset key (an `EnvValidationError` in a test): CI writes that key blank, because `packages/env/.env.example` gives it no default. Give it a local default there, under its `# @services` line. A secret never gets a default; a step that needs a secret needs a CI secret and a `ci:prepare:<name>` script that writes it.
 - A new project with `email` meets this on its first CI run: `EMAIL_PROVIDER` and `EMAIL_FROM` have no default, and the api route tests read them. Set the local values in `packages/env/.env.example`, for example `EMAIL_PROVIDER=console` with `email-console` installed and `EMAIL_FROM=hello@example.test`. The module ships no default on purpose, because the provider key must name a provider the project chose.
+- `ci:prepare:env` fails with `Unknown option --example`: the project's `packages/env/scripts/env-setup.ts` is older than saasaloy 0.9.0. Run `saasaloy update` to take the current file.
 - `install` fails with a lockfile error: run `pnpm install` and commit `pnpm-lock.yaml`.
 - `ci:prepare:database` times out: the container's health check failed. Read the step log for the `postgres` service output.
 
