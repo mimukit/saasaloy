@@ -78,14 +78,16 @@
     position: sticky;
     top: 3.5rem;
     align-self: start;
-    padding-block: 2rem;
+    padding-top: 2rem;
   }
 
   /* The list scrolls inside the sticky column. The <nav> is the scroll box, and it takes a
-     tab stop so a keyboard can scroll it (WCAG 2.1.1). */
+     tab stop so a keyboard can scroll it (WCAG 2.1.1). The box runs from under the header's
+     3.5rem and the column's 2rem top padding to the bottom of the window, and the column has
+     no bottom padding, so at the end of the page the box stops on the footer's rule. */
   .docs-menu nav,
   .docs-toc nav {
-    max-height: calc(100dvh - 3.5rem - 4rem);
+    max-height: calc(100dvh - 3.5rem - 2rem);
     overflow-y: auto;
   }
 
