@@ -213,3 +213,41 @@ export function remarkDocsBlocks(options: { repoRoot: string }) {
     }
   };
 }
+
+/**
+ * Scans a page body for fenced blocks whose language starts with `saasaloy-` and throws on one
+ * that is not in BLOCK_LANGUAGES. The remark plugin throws too, but Astro's content loader logs
+ * a render error and goes on, so the build exits 0. The raw Markdown route calls this from
+ * `getStaticPaths`, which Astro does not catch, so an unknown block fails the build there.
+ */
+export function assertKnownBlocks(body: string, path: string): void {
+  let open: { char: string; size: number } | undefined;
+  for (const line of body.split("\n")) {
+    const match = /^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)/.exec(line);
+    if (match === null) {
+      continue;
+    }
+    const [, fence = "", lang = ""] = match;
+    const char = fence.charAt(0);
+    if (open !== undefined) {
+      if (
+        char === open.char &&
+        fence.length >= open.size &&
+        lang === "" &&
+        line.trim() === fence
+      ) {
+        open = undefined;
+      }
+      continue;
+    }
+    open = { char, size: fence.length };
+    if (
+      lang.startsWith("saasaloy-") &&
+      !(BLOCK_LANGUAGES as readonly string[]).includes(lang)
+    ) {
+      throw new Error(
+        `Unknown block "${lang}". The known blocks are ${BLOCK_LANGUAGES.join(", ")}. (in ${path})`
+      );
+    }
+  }
+}

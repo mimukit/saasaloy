@@ -186,6 +186,18 @@ const { search } = docsUi;
         }
       });
 
+      // Enter in the field opens the first result. Without this the form closes the dialog.
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+        const first = list.querySelector("a");
+        if (first) {
+          event.preventDefault();
+          first.click();
+        }
+      });
+
       // The arrow keys walk the field and the results. Enter on a result is its link.
       dialog.addEventListener("keydown", (event) => {
         if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {

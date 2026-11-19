@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { blockFor, remarkDocsBlocks } from "./docs-blocks.ts";
+import {
+  assertKnownBlocks,
+  blockFor,
+  remarkDocsBlocks,
+} from "./docs-blocks.ts";
 import {
   graphData,
   parseBlockArgs,
@@ -197,5 +201,16 @@ describe("remarkDocsBlocks", () => {
         }),
       /Unknown block "saasaloy-chart".*docs\/wiki\/x\.md/
     );
+  });
+
+  it("scans a body for an unknown saasaloy-* fence", () => {
+    assert.throws(
+      () => assertKnownBlocks("text\n\n```saasaloy-bogus x=1\n```\n", "x.md"),
+      /Unknown block "saasaloy-bogus".*x\.md/
+    );
+    assertKnownBlocks("```saasaloy-graph focus=email\n```\n", "x.md");
+    assertKnownBlocks("```ts\nconst a = 1;\n```\n", "x.md");
+    // A fence shown inside a longer fence is text, not a block.
+    assertKnownBlocks("````md\n```saasaloy-bogus\n```\n````\n", "x.md");
   });
 });
