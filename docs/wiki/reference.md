@@ -1,6 +1,6 @@
 # Reference
 
-Everything the CLI declares: nine commands, their flags, the coordinate grammar, the
+Everything the CLI declares: its commands, their flags, the coordinate grammar, the
 environment variables it reads, and the files it writes. Nothing here is aspirational — if
 a flag isn't listed, it doesn't exist.
 
@@ -10,19 +10,7 @@ a flag isn't listed, it doesn't exist.
 saasaloy <command> [options]
 ```
 
-| Command | What it does |
-|---|---|
-| `init` | scaffold a new Saasaloy project (base: Astro landing + ui + config) |
-| `add` | apply a module into the current project (resolves `dependsOn`) |
-| `env` | fill in the environment variables the installed modules declare (`--check` gates a deploy) |
-| `testing` | print the project's testing mode, or set it to `off`, `tests-after` or `tdd` |
-| `outdated` | report the base template and each installed module, current vs latest (`--check` gates CI) |
-| `update` | re-apply the base template and modules at a newer version, with a merge plan for anything you edited |
-| `remove` | undo a module's applied files via the manifest (offline) |
-| `list` | list the modules a registry offers, marking the ones installed here |
-| `new` | scaffold a new module in a registry repo (descriptor + `files/` + skill stub) |
-| `doctor` | validate local module descriptors, or a project's `saasaloy.json` against its manifest |
-| `skill` | print a base skill bundled with this CLI, or list them (the runbook that matches this version) |
+The command list, with each command's usage line and flags, is generated from the CLI source on [the CLI commands page](generated/cli.md). The sections below hold what a command does and what it prints.
 
 `saasaloy help`, `saasaloy --help` and `saasaloy -h` all print the command list and exit
 0. Bare `saasaloy` opens a picker over the same list on a terminal, and prints the list
@@ -38,12 +26,7 @@ current project has installed when it is run inside one, and works anywhere.
 
 ### Exit codes
 
-| Code | Meaning |
-|---|---|
-| `0` | the command did what it was asked, or you answered no to a confirmation |
-| `1` | something failed, or you cancelled: a fetch died, a write threw, Ctrl-C |
-| `2` | saasaloy refused by design: an unknown flag or command, a module conflict, an unmet `requiresOneOf`, an invalid state file, a `doctor` or `env --check` finding, or a prompt with no terminal to answer it in |
-| `3` | `saasaloy update` only: the run applied what it could and left work pending: files waiting on a merge, update notes not yet marked done, or both. The code is named `EXIT_WORK_PENDING` in `packages/cli/src/lib/exit.ts`. |
+The codes are generated from `packages/cli/src/lib/exit.ts` and listed with their meaning on [the CLI commands page](generated/cli.md#exit-codes). `0` is success, `1` is a failure, `2` is a refusal by design, and `3` is `update` leaving work pending.
 
 A wrapper script reads `2` as "the input is wrong, retrying will not help" and `1` as
 "transient, a retry may work".
@@ -483,19 +466,7 @@ Every GitHub API call carries a 15-second timeout and no retry, so a connection 
 and then stalls fails with a message rather than hanging. Every network failure names
 `SAASALOY_REGISTRY_DIR` as the offline path.
 
-The table above is the CLI's own environment. A module declares its own variables in its `registry-item.json` `envVars` map, and `saasaloy env` is what collects them. Seven capabilities select their implementation with a `<CAP>_PROVIDER` variable:
-
-| Variable | Values | Required |
-|---|---|---|
-| `SUBSCRIPTION_PROVIDER` | `stripe`, `console` | yes, no default |
-| `EMAIL_PROVIDER` | `cloudflare`, `plunk`, `console` | yes, no default |
-| `KV_PROVIDER` | `cloudflare`, `memory` | yes, no default |
-| `QUEUE_PROVIDER` | `cloudflare`, `memory` | yes, no default |
-| `SMS_PROVIDER` | `console` | yes, no default |
-| `STORAGE_PROVIDER` | `cloudflare`, `memory` | yes, no default |
-| `LOGGER_PROVIDER` | `console` | no. Unset selects the first registered provider, and with none registered every log call is a silent no-op |
-
-Each value names the provider module you install for it. `LOGGER_PROVIDER` is the deliberate exception to "no default in either direction": a naming typo still throws, but a missing value never does, because an outage caused by the observability layer is worse than one absent knob.
+The table above is the CLI's own environment. A module declares its own variables in its `registry-item.json` `envVars` map, and `saasaloy env` is what collects them. [The environment reference](generated/env.md) lists every one of them, with its module and the services that read it. Seven capabilities select their implementation with a `<CAP>_PROVIDER` variable, and that page lists each selector and its values. Each value names the provider module you install for it. `LOGGER_PROVIDER` is the only one that may stay unset: unset selects the first registered provider, and with none registered every log call is a silent no-op. It is the deliberate exception to "no default in either direction": a naming typo still throws, but a missing value never does, because an outage caused by the observability layer is worse than one absent knob.
 
 ## Email providers
 

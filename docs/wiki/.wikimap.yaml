@@ -2,25 +2,66 @@ home: docs/wiki
 engine: none
 pages:
   - path: index.md
+    title: Overview
+    section: Start
     documents: [README.md, packages/cli/src/index.ts]
   - path: getting-started.md
+    title: Getting started
+    section: Start
     mode: tutorial
     documents:
       - package.json
       - packages/cli/package.json
       - packages/cli/src/commands/init.ts
       - packages/cli/templates/base/**
-  - path: modules.md
-    mode: reference
+  - path: architecture.md
+    title: Architecture
+    section: Start
+    mode: explanation
     documents:
+      - packages/cli/src/**
+      - packages/cli/templates/base/**
       - modules/*/registry-item.json
-      - modules/README.md
-  - path: how-to/make-it-yours.md
+  - path: how-to/build-with-an-agent.md
+    title: Build with an agent
+    section: Build with an agent
     mode: how-to
     documents:
       - packages/cli/templates/base/_agents/skills/**
       - packages/cli/templates/base/AGENTS.md
+      - README.md
+  - path: how-to/make-it-yours.md
+    title: Make it yours
+    section: Build with an agent
+    mode: how-to
+    documents:
+      - packages/cli/templates/base/_agents/skills/**
+      - packages/cli/templates/base/AGENTS.md
+  - path: modules.md
+    title: Modules
+    section: Modules
+    mode: reference
+    documents:
+      - modules/*/registry-item.json
+      - modules/README.md
+  - path: generated/modules.md
+    title: Module catalog
+    section: Modules
+    mode: reference
+    generated: true
+    documents:
+      - modules/*/registry-item.json
+  - path: generated/modules/*.md
+    title: Module pages
+    section: Modules
+    mode: reference
+    generated: true
+    documents:
+      - modules/*/registry-item.json
+      - modules/*/skills/**/SKILL.md
   - path: how-to/add-a-module.md
+    title: Add a module
+    section: Guides
     mode: how-to
     documents:
       - packages/cli/src/commands/add.ts
@@ -28,11 +69,15 @@ pages:
       - packages/cli/src/lib/resolve.ts
       - modules/*/registry-item.json
   - path: how-to/remove-a-module.md
+    title: Remove a module
+    section: Guides
     mode: how-to
     documents:
       - packages/cli/src/commands/remove.ts
       - packages/cli/src/lib/remover.ts
   - path: how-to/deploy-to-cloudflare.md
+    title: Deploy to Cloudflare
+    section: Guides
     mode: how-to
     documents:
       - packages/cli/templates/base/apps/web/wrangler.jsonc
@@ -43,25 +88,17 @@ pages:
       - modules/database/registry-item.json
       - modules/*/registry-item.json
   - path: how-to/contribute-a-module.md
+    title: Contribute a module
+    section: Guides
     mode: how-to
     documents:
       - modules/README.md
       - packages/cli/schemas/registry-item.schema.json
       - .agents/skills/**
       - CONTRIBUTING.md
-  - path: architecture.md
-    mode: explanation
-    documents:
-      - packages/cli/src/**
-      - packages/cli/templates/base/**
-      - modules/*/registry-item.json
-  - path: reference.md
-    mode: reference
-    documents:
-      - packages/cli/src/commands/**
-      - packages/cli/src/lib/registry.ts
-      - packages/cli/schemas/*.schema.json
   - path: runbooks/bad-descriptor-on-main.md
+    title: A bad descriptor on main
+    section: Runbooks
     mode: how-to
     documents:
       - packages/cli/src/lib/registry.ts
@@ -69,7 +106,59 @@ pages:
       - packages/cli/src/lib/lock.ts
       - modules/*/registry-item.json
   - path: runbooks/update-overwrote-my-work.md
+    title: Update overwrote my work
+    section: Runbooks
     mode: how-to
     documents:
       - packages/cli/src/commands/update.ts
       - packages/cli/CHANGELOG.md
+  - path: runbooks/finish-the-theme-split.md
+    title: Finish the theme split
+    section: Runbooks
+    mode: how-to
+    documents:
+      - packages/cli/templates/base/packages/ui/src/styles/**
+  - path: runbooks/move-off-the-infra-module.md
+    title: Move off the infra module
+    section: Runbooks
+    mode: how-to
+    documents:
+      - modules/infra-ci-deploy/registry-item.json
+      - packages/cli/templates/base/package.json
+  - path: reference.md
+    title: Reference
+    section: Reference
+    mode: reference
+    documents:
+      - packages/cli/src/commands/**
+      - packages/cli/src/lib/registry.ts
+      - packages/cli/schemas/*.schema.json
+  - path: generated/cli.md
+    title: CLI commands
+    section: Reference
+    mode: reference
+    generated: true
+    documents:
+      - packages/cli/src/commands/*.ts
+      - packages/cli/src/lib/exit.ts
+  - path: generated/env.md
+    title: Environment variables
+    section: Reference
+    mode: reference
+    generated: true
+    documents:
+      - modules/*/registry-item.json
+  - path: generated/glossary.md
+    title: Glossary
+    section: Reference
+    mode: reference
+    generated: true
+    documents:
+      - CONTEXT.md
+  - path: generated/adr.md
+    title: Architecture decision records
+    section: Decisions
+    mode: reference
+    generated: true
+    documents:
+      - docs/adr/*.md
