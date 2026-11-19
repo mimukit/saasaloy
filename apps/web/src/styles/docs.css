@@ -16,22 +16,6 @@
   background-color: color-mix(in oklch, var(--background) 92%, transparent);
 }
 
-/* The strip a non-release build shows above the header. Tonal surface and a hairline, no
-   colour of its own, so it passes contrast in both themes. */
-.docs-banner {
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid var(--border);
-  background-color: var(--muted);
-  color: var(--foreground);
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  text-align: center;
-}
-
-.docs-banner code {
-  font-family: var(--font-mono);
-}
-
 .docs-shell {
   display: grid;
   gap: 1rem;

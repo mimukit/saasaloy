@@ -9,10 +9,10 @@
 // from `packages/cli/package.json`, so a rerun at an older tag deploys that tag's name.
 // `--dry-run` goes on to wrangler, which compiles and checks without uploading.
 //
-// The build must run with the tag checked out: the docs header shows a "Built from main"
-// banner unless HEAD is a `v*` tag (src/lib/docs-build-info.ts). A real deploy refuses to
-// start when HEAD is not at the tag, so a rerun from `main` cannot ship `main` under a
-// release's name. `--dry-run` skips that check.
+// The build must run with the tag checked out: the footer of every page shows the version
+// and the commit it was built from (src/lib/build-info.ts). A real deploy refuses to start
+// when HEAD is not at the tag, so a rerun from `main` cannot ship `main` under a release's
+// name. `--dry-run` skips that check.
 //
 // Imports node: builtins only. Node 24 strips the types.
 

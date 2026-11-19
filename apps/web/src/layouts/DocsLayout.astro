@@ -7,14 +7,15 @@
 // names and mono only for group labels and module names.
 //
 // The version label ("saasaloy v0.9.0") and the page's stamp ("Verified against 42cbf03",
-// linked to the commit) sit beside the "Edit on GitHub" link under the title. A build whose
-// HEAD is not a `v*` tag also gets a strip above the header, "Built from main, N commits
-// after v0.8.0". Both read `__DOCS_BUILD_INFO__`, which astro.config.mjs computes in Node
-// because a page cannot call `git` (src/lib/docs-build-info.ts).
+// linked to the commit) sit beside the "Edit on GitHub" link under the title. The version
+// reads `__BUILD_INFO__`, which astro.config.mjs computes in Node (src/lib/build-info.ts).
+// Under the page sits the landing page's footer, which shows the version and the commit.
+// Layout.astro draws the announcement bar above the header.
 import type { MarkdownHeading } from "astro";
 
 import Layout from "@web/layouts/Layout.astro";
 import DocsSearch from "@web/components/DocsSearch.astro";
+import { Footer } from "@web/blocks/footer";
 import { ThemeToggle } from "@web/blocks/theme-toggle";
 import { docsUi } from "@web/content/docs";
 import { landing, ui } from "@web/content/landing";
@@ -61,33 +62,14 @@ const toc = headings.filter(
 
 const sourceUrl = `${repoUrl}/blob/main/docs/wiki/${current.path}`;
 const rawUrl = `/docs/${current.slug === "" ? "index" : current.slug}.md`;
-const build = __DOCS_BUILD_INFO__;
+const build = __BUILD_INFO__;
 const stamp = stampOf(Astro.props.stampSource ?? "");
-const { banner } = build;
-const bannerCount =
-  banner?.count === undefined
-    ? undefined
-    : banner.count === 1
-      ? docsUi.banner.one
-      : interpolate(docsUi.banner.many, { count: banner.count });
 const headerLinks = landing.navbar.links.filter(
   (link) => link.label !== "" && link.href !== ""
 );
 ---
 
 <Layout title={title} description={description}>
-  {banner && (
-    <p class="docs-banner" data-pagefind-ignore>
-      {docsUi.banner.before}
-      <code>{docsUi.banner.branch}</code>
-      {interpolate(
-        bannerCount === undefined
-          ? docsUi.banner.afterNoCount
-          : docsUi.banner.after,
-        { count: bannerCount ?? "", tag: banner.tag }
-      )}
-    </p>
-  )}
   <header class="docs-header">
     <div class="section-container-hero flex h-14 items-center gap-4 md:gap-6">
       <a
@@ -272,6 +254,8 @@ const headerLinks = landing.navbar.links.filter(
       </nav>
     </main>
   </div>
+
+  <Footer siteName={siteName} />
 
   <p class="sr-only" role="status" data-docs-status></p>
 

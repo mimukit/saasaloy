@@ -16,10 +16,11 @@ interface ImportMeta {
 }
 
 /**
- * The docs header's version and banner, computed in Node by `astro.config.mjs` and inlined
- * by Vite (`vite.define`). The shape is `BuildInfo` in src/lib/docs-build-info.ts.
+ * The site's version and commit, computed in Node by `astro.config.mjs` and inlined by Vite
+ * (`vite.define`). The shape is `BuildInfo` in src/lib/build-info.ts. Read it through
+ * src/lib/build.ts.
  */
-declare const __DOCS_BUILD_INFO__: {
+declare const __BUILD_INFO__: {
   version: string;
-  banner: { tag: string; count: number | undefined } | undefined;
+  commit: string | undefined;
 };

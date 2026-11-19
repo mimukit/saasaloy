@@ -488,6 +488,14 @@ export const landing = {
     },
     credit: "Developed with {heart} from Bangladesh · Sponsored by {sponsor}",
     sponsor: { label: "Brainaloy Labs", href: "https://brainaloy.com" },
+    /**
+     * The build line in the colophon: the CLI version, linked to its GitHub release, and the
+     * short commit, linked to the commit. `{version}` is the number without the `v`, and
+     * `{sha}` is the full commit. An empty `version` hides the line.
+     */
+    version: "v{version}",
+    releaseHref: `${REPO}/releases/tag/v{version}`,
+    commitHref: `${REPO}/commit/{sha}`,
   },
 };
 
@@ -529,5 +537,7 @@ export const ui = {
     navLabel: "Footer",
     /** Screen-reader text for the heart in the credit line. */
     heart: "love",
+    /** Screen-reader text before the short commit in the build line. */
+    commit: "Commit",
   },
 };
