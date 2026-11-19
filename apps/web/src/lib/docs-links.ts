@@ -15,6 +15,7 @@
 import { existsSync } from "node:fs";
 import { posix, relative, resolve, sep } from "node:path";
 
+import { fenceReader } from "./docs-fence.ts";
 import { pageUrl } from "./docs-slug.ts";
 
 export interface LinkContext {
@@ -93,15 +94,11 @@ export function absolutizeMarkdown(
   context: Omit<LinkContext, "target">,
   origin: string
 ): string {
-  let fenced = false;
+  const inFence = fenceReader();
   return markdown
     .split("\n")
     .map((line) => {
-      if (/^\s*(```|~~~)/.test(line)) {
-        fenced = !fenced;
-        return line;
-      }
-      if (fenced) {
+      if (inFence(line)) {
         return line;
       }
       return line.replaceAll(

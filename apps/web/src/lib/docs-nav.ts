@@ -13,6 +13,7 @@
 
 import { parse } from "yaml";
 
+import { fenceReader } from "./docs-fence.ts";
 import {
   GENERATED_DIR,
   assertUniqueSlugs,
@@ -63,23 +64,34 @@ interface WikimapEntry {
 
 /** The text of the first `# ` heading outside a code fence, or undefined. */
 export function firstHeading(markdown: string): string | undefined {
-  let fenced = false;
+  const inFence = fenceReader();
   for (const line of markdown.split("\n")) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-    } else if (!fenced && line.startsWith("# ")) {
+    if (!inFence(line) && line.startsWith("# ")) {
       return line.slice(2).trim();
     }
   }
   return undefined;
 }
 
-function globToRegExp(glob: string): RegExp {
-  const escaped = glob
-    .replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`)
-    .replaceAll("**/", "(?:.*/)?")
-    .replaceAll("*", "[^/]*");
-  return new RegExp(`^${escaped}$`);
+// A glob: "**/" is any run of folders, "*" is any name part, "?" is one character, and the
+// rest is literal.
+export function globToRegExp(glob: string): RegExp {
+  const source = glob
+    .split(/(\*\*\/|\*|\?)/)
+    .map((part) => {
+      if (part === "**/") {
+        return "(?:.*/)?";
+      }
+      if (part === "*") {
+        return "[^/]*";
+      }
+      if (part === "?") {
+        return "[^/]";
+      }
+      return part.replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`);
+    })
+    .join("");
+  return new RegExp(`^${source}$`);
 }
 
 function readEntries(wikimap: string): WikimapEntry[] {
@@ -122,7 +134,7 @@ export function buildDocsPages(
         `docs: .wikimap.yaml puts ${entry.path} in the unknown section "${entry.section}". Known: ${SECTIONS.join(", ")}.`
       );
     }
-    const isGlob = entry.path.includes("*");
+    const isGlob = /[*?]/.test(entry.path);
     const matched = isGlob
       ? sources
           .map((source) => source.path)

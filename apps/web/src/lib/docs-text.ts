@@ -1,6 +1,8 @@
 // Small readers over a wiki page's raw Markdown: the meta description, and the tier tag of a
 // module page. Pure, so a node:test file holds them.
 
+import { fenceReader } from "./docs-fence.ts";
+
 const MAX_DESCRIPTION = 160;
 
 /** Plain text from one line of Markdown: links, code marks and emphasis stripped. */
@@ -18,15 +20,11 @@ function plain(line: string): string {
  * and an HTML comment do not count as a paragraph.
  */
 export function pageDescription(markdown: string): string {
-  let fenced = false;
+  const inFence = fenceReader();
   const paragraph: string[] = [];
   for (const line of markdown.split("\n")) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-      continue;
-    }
     const text = line.trim();
-    const skipped = fenced || /^(#|>|\||<!--|[-*+] |\d+\. )/.test(text);
+    const skipped = inFence(line) || /^(#|>|\||<!--|[-*+] |\d+\. )/.test(text);
     if (skipped || text === "") {
       if (paragraph.length > 0) {
         break;

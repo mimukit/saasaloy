@@ -142,8 +142,6 @@ function Widgets() {
 }
 ```
 
-```
-
 That is the whole registration. The file is a child of `src/routes/__root.tsx`, so it inherits the
 shell and the access gate with no work of its own. `src/routes/users.tsx` is the worked example in
 the scaffold; copy from it.
@@ -172,7 +170,7 @@ A route sets its own `errorComponent` only when its words should differ, as `/us
 
 Putting the screen in the sidebar is a separate, optional step. See [The shell](#the-shell) below.
 
-## The shell
+#### The shell
 
 Every route except `/login` renders inside `src/components/app-shell.tsx`, and so does every screen except the refusal page (`AccessDenied`, see [The gate](#the-gate-a-session-is-never-enough)). That file reads the router and the session and hands them to `ShellLayout` in `@repo/ui/containers/shell/shell-layout`, which imports no router and no session:
 
@@ -185,7 +183,7 @@ The sidebar is the coss sidebar from the shell set, `variant="inset"` and `colla
 
 Active state is `aria-current`. `AppShell`'s link component wraps TanStack Router's `Link`, which sets `aria-current="page"` on the active row, and the sidebar row styles that attribute. There is no second "which page am I on" comparison to keep in step. The page path in the header is the area's label and the label of the nav item whose `to` is the longest prefix of the current path.
 
-### Add a nav group or an area
+##### Add a nav group or an area
 
 `NAV_AREAS` in `src/components/nav.ts` is the one list to edit:
 
@@ -218,7 +216,7 @@ Every row becomes a "Go to <label>" command in `src/components/commands.ts`, nex
 
 `nav.ts` holds the data and the rules that read it, and nothing else, so its rules stay unit-testable without React. Read an optional count through the `navCount(entry)` helper rather than `entry.count`.
 
-### Add a live count to a nav row
+##### Add a live count to a nav row
 
 A static `count` in `NAV_AREAS` is a number fixed at build time. A number that changes, such as how many payments wait for a review, is a live count. `NAV_COUNTS` in `src/components/nav-counts.ts` lists them, one `{ to, path }` per row. `to` is the row's `to` in `NAV_AREAS`. `path` is an api path that answers `{ count: number }` behind the admin session.
 
@@ -251,14 +249,14 @@ await queryClient.invalidateQueries({ queryKey: ["nav-count", "/payments"] });
 
 Keep the route that answers the count cheap: the shell calls it on every focus and every minute while the tab is open.
 
-## The shell primitive set and the page blocks
+#### The shell primitive set and the page blocks
 
 The `shell` module writes the UI kit this app uses into `packages/ui/src/{components,blocks,containers,lib}/shell/`, and admin code uses nothing else. The `saasaloy-shell` skill lists every primitive and block, their props, the `DataTable` column shape and the lint rule. Two admin-only facts sit here:
 
 - `ShellLayout` keeps its `subtitle` prop at the default, `"Admin"`, the line under the product name.
 - The router's defaults render the shell `ErrorState` and `PageSkeleton`, and `__root.tsx` mounts the toast provider for `toastManager` from `components/shell/toast`.
 
-## The users screen, end to end
+#### The users screen, end to end
 
 `src/routes/users.tsx` is the worked example, and every row in it is real data from `GET /admin/users`.
 
@@ -274,7 +272,7 @@ The `shell` module writes the UI kit this app uses into `packages/ui/src/{compon
 
 Copy that split when you add a screen: **the route owns the state and the data, the blocks own the pixels.**
 
-## The gate: a session is never enough
+#### The gate: a session is never enough
 
 This app signs in on the **admin session**: `adminAuth` at `/admin/auth`, cookie `admin.session_token`. A client signed in on another app in the same browser holds `client.session_token`, which this app never reads, so the two stay signed in side by side. See "Two instances" in the `saasaloy-auth` skill.
 
@@ -300,7 +298,7 @@ component instead and the loaders of the route the visitor asked for fire first,
 before the panel paints. Keep the check in `beforeLoad` and no child loader runs for anyone the
 guard turns away.
 
-### This guard is the second half of the gate
+##### This guard is the second half of the gate
 
 The first half is `requireAdmin` (or `requireAdminApp`) in `@repo/auth/server`, and the api route is where it runs. Both read the admin session whatever the request's `x-auth-audience` header says. Use `requireAdmin` for admin-only work and `requireAdminApp` for a route every admin-app role may call, `support` included when a project adds it. `beforeLoad` stops this app from asking on a denied visitor's behalf; it cannot stop `curl`, a stale bundle, or a second client someone writes against the same api. Ship a new admin route and you wire both halves or you have shipped neither:
 
@@ -387,20 +385,20 @@ destination.
 
 There is deliberately **no sign-up route** here, and `adminAuth` sets `disableSignUp: true`. An admin account is made by promoting an existing user, never by self-service at the backoffice door. Only a superadmin may grant `admin` or `superadmin` (the rank guard in the `saasaloy-auth` skill).
 
-## Add an admin write route, in four steps
+#### Add an admin write route, in four steps
 
 1. **Name the action.** Add an entry to your module's action file, `apps/api/src/audit/<module>.ts`: the route as `METHOD /admin/...` exactly as Hono lists it, the target type, the area, and a `label` such as "Confirmed a payment". Give one entry of a new area an `areaLabel`. A module ships that file with a `plugin-array` patch into `AUDIT_ACTIONS` in `apps/api/src/lib/audit-actions.ts`, the way `payment` and `feature-flags` do, so `saasaloy remove` takes the actions with the module.
 2. **Gate the route.** List `adminGate` first, then the validator, then a handler that opens with `adminWrite(c, async ({ db, actor, audit, afterCommit }) => ...)`. Use `db` for every query of the change. When Better Auth makes the change, use `adminAuthWrite(c, async ({ actor, audit }) => ...)` and call `adminAuth.api.*` with `headers: c.req.raw.headers`, so the plugin's permissions and `rank-guard` run as the caller.
 3. **Write the row.** Call `audit({ action, target: { id, label }, before, after })` once per change, with the fields the change touched. A create passes `after` only, a delete `before` only. Never pass a password: `adminWrite` throws on a key that matches `/password/i`, and `adminAuthWrite` drops it and logs at `error`. Put an email or any other side effect in `afterCommit`.
 4. **Prove it.** `audit-coverage.test.ts` fails until step 1 names the route, and `admin-gate.test.ts` fails if the validator runs before the gate. Neither proves the row is written, so add a route test beside the route that signs in a seeded admin, calls it, and reads `audit_events` for the row. `admin-members.test.ts` is the model.
 
-## What the D1 driver guarantees
+#### What the D1 driver guarantees
 
 Under `database-postgres`, `adminWrite` is one transaction. The change and its audit rows commit together, and a body that throws or answers 4xx keeps nothing.
 
 Under `database-d1` there is no interactive transaction. Each statement of the body commits as it runs, and the audit rows go in one batch after it. A body that writes and then fails keeps its write and gets no row. A failed audit insert is logged at `error` and the change stands. Validate before you write, and a D1 route keeps nothing on a 4xx either. `adminAuthWrite` gives this weaker guarantee on both drivers, because Better Auth makes the change outside our transaction.
 
-## The members screen
+#### The members screen
 
 `src/routes/members.tsx` manages the admin group, the accounts in `ADMIN_ROLES`. Users lists every account; Members manages only the admin group. The api is `apps/api/src/routes/admin-members.ts` at `/admin/members`, and `membersQuery` in `src/lib/members-query.ts` reads `GET /admin/members`, which answers `{ me, members, removed }`. The route pages `listUsers` with a role filter until it has the whole group, so nothing is cut off at 100.
 
@@ -412,7 +410,7 @@ Under `database-d1` there is no interactive transaction. Each statement of the b
 - Adding the email of a removed member answers 409 `member_removed` with the member, and the dialog offers a superadmin "Restore <name>".
 - The member panel lists the member's three newest changes as actor (`GET /admin/audit-events?actor=<id>&limit=3`) and links to `/activity?actor=<id>`. The remove asks first in an alert dialog, and every save reports in a toast.
 
-## The Activity page
+#### The Activity page
 
 `src/routes/activity.tsx` lists `audit_events` newest first, 50 rows a page, through `useInfiniteQuery` and a "Load older" button. The api is `apps/api/src/routes/admin-audit.ts` at `/admin/audit-events`, with `adminGate` before the validator on both routes.
 
@@ -422,7 +420,7 @@ Under `database-d1` there is no interactive transaction. Each statement of the b
 - The person, area and range live in the address through `validateSearch` (`activitySearch` in `src/lib/activity.ts`). The search box narrows by target label 300 ms after the typing stops.
 - A row opens the detail panel with the exact time, the actor and role, the target, the action key, and a "What changed" table of each stored field before and after.
 
-## Extension seams
+#### Extension seams
 
 Some module files take a project's own code through a seed file under `src/extend/`. A seed file is written once and is then the project's: `saasaloy update` never changes it, and writes it again only when it is missing, because a managed file imports it. Put your change in the seed file and leave the managed file alone, and it keeps taking updates with no merge (ADR 0060).
 
@@ -435,7 +433,7 @@ A search key such as `payment: z.string().optional().catch(undefined)` keeps a m
 
 `__root.tsx` takes no edit for a wrapper; `app-shell.tsx` applies them. The overview, `index.tsx`, has no seam yet.
 
-## The typed client
+#### The typed client
 
 `src/lib/api.ts` is the only place `hc` is called:
 
@@ -461,7 +459,7 @@ Four properties are load-bearing:
 `@repo/api/client` is a **types-only** export (its `package.json` maps `./client` under a `types`
 condition alone), which is why `@repo/api` is a `devDependency`. No Worker code enters this bundle.
 
-### Why `@cloudflare/workers-types` is in this app's `types`
+##### Why `@cloudflare/workers-types` is in this app's `types`
 
 `tsconfig.json` lists `"types": ["@cloudflare/workers-types", "vite/client"]`, and the first entry
 looks wrong in a browser-only SPA. It is not.
@@ -478,11 +476,11 @@ The fix is nearly always in `apps/api` (or in another ambient type this app must
 change to `src/lib/api.ts`. The entry is types only; there is no runtime dependency on the Workers
 runtime in this app.
 
-### Why the two TanStack Router pins carry different numbers
+##### Why the two TanStack Router pins carry different numbers
 
 `@tanstack/react-router` is pinned at `1.170.32` and `@tanstack/router-plugin` at `1.168.35`, which reads like drift and is not. TanStack releases the two on independent version lines, and `router-plugin@1.168.35` names `"@tanstack/react-router": "^1.170.32"` in its own `peerDependencies` — the pins are the matching pair, they just do not share a number. Do not "fix" the mismatch by inventing a `router-plugin@1.170.32`; no such release exists. Check the plugin's `peerDependencies` against the router pin instead, and move both together when `pnpm deps:update` offers a bump.
 
-## Loader + Query, and why both
+#### Loader + Query, and why both
 
 `src/main.tsx` creates one `QueryClient` at module scope and puts it on the **router context**, so a
 route's `loader` prefetches through the same cache the component then reads:
@@ -507,7 +505,7 @@ A data route needs no `errorComponent` of its own: the router's default renders 
 
 The overview at `/` is the exception to awaiting in the loader. Its loader calls `prefetchQuery` for `/health` and for `newestUsersQuery` and awaits neither, so the page paints at once, and each card renders its own skeleton, its data, or its own failure. A down api shows "Unreachable" in the health card and never swaps the page for an error screen. Copy that shape for a dashboard whose cards read separate requests; await in the loader for a screen that is one list.
 
-## Theme and font
+#### Theme and font
 
 **The admin app carries its own theme file.** This module writes `packages/ui/src/styles/admin.css`, beside the web app's `brand.css`. It imports the shared `globals.css`, which owns Tailwind's entrypoint, the `@source` globs and the base layer and holds no token values. `admin.css` then imports the `shell` module's `shell.css` and declares the `dark` custom variant, this app's `:root` and `.dark` values, and its own `@theme inline` colour mapping and radius scale. The variant and the mapping repeat `brand.css`'s on purpose: each theme file holds its own, so a shadcn preset aimed at `brand.css` never reaches this app.
 
@@ -533,13 +531,13 @@ The `theme` key alone cannot carry this. `setTheme("system")` DELETES it — tha
 
 `ThemeMenuItem` is a "Theme" submenu (`MenuSub`, `MenuSubTrigger`, `MenuSubPopup`) with one `MenuRadioItem` per entry in its `THEME_OPTIONS` list. A pick calls `setTheme(value)` inside `revealTheme`, then writes `THEME_CHOICE_KEY`, so the starting-theme rule in `main.tsx` keeps the choice on the next load, `system` included. It does not use the delegated `[data-theme-toggle]` handler, because that handler only flips light and dark. The current choice is the `data-theme` attribute on `<html>`, which `setTheme` writes, read through a `MutationObserver`. To add a theme, teach `@repo/ui/lib/theme` to apply it, then add one entry to `THEME_OPTIONS`. `main.tsx` still calls `installThemeToggle()` for its OS listener, which repaints a visitor on `system` when the OS changes.
 
-### The font this app adds
+##### The font this app adds
 
 - **`@fontsource-variable/inter`** is a runtime `dependency` of this app, imported from `src/main.tsx` beside `admin.css`, and set as `--font-sans` in a `@theme` block in `admin.css`. The import stays in the app because Tailwind resolves a CSS `@import` from the stylesheet's own folder, and `packages/ui` does not depend on the font. It is the app's only face; no mono font is loaded. The body enables Inter's `cv11` and `ss01` sets; `shell.css` adds `tabular-nums`.
 
 It is exact-pinned. Template and module-descriptor dependencies are invisible to pnpm, so move it with `pnpm deps:update` and never by hand-typing a version. `@tanstack/react-table` belongs to the `shell` module now; see `saasaloy-shell`.
 
-## Ports and CORS
+#### Ports and CORS
 
 | Service | Port | Pinned in |
 |---|---|---|
@@ -563,7 +561,7 @@ back to `http://localhost:4000`.
 Cookie behaviour is the `auth` module's (ADR 0004). Cross-origin dev works because api's `cors()` sets `credentials: true` for the allowlisted origins and the cookie is host-only on `localhost`. Cookies ignore the port, so `:3000` and `:3001` see the same jar; the names `client.session_token` and `admin.session_token` are what keep a client sign-in on the web app from replacing this app's session. In
 production, put the api and the admin app on sibling subdomains and set `COOKIE_DOMAIN`.
 
-## Run it
+#### Run it
 
 ```sh
 pnpm --filter @repo/api dev    # :4000 in the main checkout, the real workerd runtime
@@ -572,7 +570,7 @@ pnpm --filter @repo/admin dev  # :3001 in the main checkout
 
 Both, in two terminals. Admin on its own serves a login screen that cannot sign anyone in.
 
-## Deploy
+#### Deploy
 
 Static assets on a Worker, exactly like `apps/web`:
 
@@ -597,7 +595,7 @@ is. The app is assets-only, so it gets no secrets.
 
 `saasaloy add admin` appends `{ service: "admin", order: 20 }` to `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`, so the admin deploys after the api it calls and before the web. It also appends the `admin-home` smoke check, `GET /` with a 200, which runs once `apps/admin/wrangler.jsonc` has a `routes[]` entry with `custom_domain: true`. `pnpm deploy:production --only admin` deploys this app alone after the gates. See the `saasaloy-deploy` skill.
 
-## Removing the module
+#### Removing the module
 
 `saasaloy remove admin` deletes the files **this module** installed and prunes the directories that
 leaves empty. A route file another module dropped into `src/routes/` is that module's, so it
@@ -609,7 +607,7 @@ because its prefix directory did not vanish.
 leftovers by hand before re-adding, or the next `add admin` restores a workspace around orphaned
 files.
 
-## Conventions to honor
+#### Conventions to honor
 
 - **A screen is a file drop** under `src/routes/`, never a patch. Let the plugin rewrite
   `src/routeTree.gen.ts`; never hand-edit it.
@@ -646,6 +644,6 @@ files.
 - **Browser env vars are `PUBLIC_*`.** A `VITE_*` name is not exposed here.
 - **No bindings and no Worker entry.** Anything needing D1, R2 or a secret belongs in `apps/api`.
 
-## Next
+#### Next
 
 Run `saasaloy-feature` to build the first product entity end to end, with its list on an admin screen.

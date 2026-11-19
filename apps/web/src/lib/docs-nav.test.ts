@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import {
   buildDocsPages,
   firstHeading,
+  globToRegExp,
   groupPages,
   neighbours,
 } from "./docs-nav.ts";
@@ -103,5 +104,19 @@ describe("groupPages and neighbours", () => {
 describe("firstHeading", () => {
   it("skips a heading inside a code fence", () => {
     assert.equal(firstHeading("```\n# not me\n```\n# me\n"), "me");
+  });
+});
+
+describe("globToRegExp", () => {
+  it("reads **/ as any folders, * as one name part and ? as one character", () => {
+    const deep = globToRegExp("**/x.md");
+    assert.ok(deep.test("x.md"));
+    assert.ok(deep.test("a/b/x.md"));
+    const one = globToRegExp("generated/modules/*.md");
+    assert.ok(one.test("generated/modules/email.md"));
+    assert.ok(!one.test("generated/modules/a/email.md"));
+    assert.ok(!one.test("generated/modulesXemail.md"));
+    assert.ok(globToRegExp("how-to/?.md").test("how-to/a.md"));
+    assert.ok(!globToRegExp("how-to/?.md").test("how-to/ab.md"));
   });
 });
