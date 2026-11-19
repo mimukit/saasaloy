@@ -18,14 +18,13 @@ Background jobs and schedules in a packages/queue workspace, with a cron matcher
 | Requires one of | none |
 | Conflicts with | none |
 | Depended on by | [`payment-bkash`](payment-bkash.md), [`queue-cloudflare`](queue-cloudflare.md), [`queue-memory`](queue-memory.md), [`subscription`](subscription.md) |
-| Providers | [`payment-bkash`](payment-bkash.md), [`queue-cloudflare`](queue-cloudflare.md), [`queue-memory`](queue-memory.md) |
+| Providers | [`queue-cloudflare`](queue-cloudflare.md), [`queue-memory`](queue-memory.md) |
 
 ## Providers
 
 `queue` picks its provider at runtime with `QUEUE_PROVIDER`. Select a provider to see the value to set.
 
 ```saasaloy-providers capability=queue
-QUEUE_PROVIDER=t-bkash  uses payment-bkash
 QUEUE_PROVIDER=cloudflare  uses queue-cloudflare
 QUEUE_PROVIDER=memory  uses queue-memory
 ```

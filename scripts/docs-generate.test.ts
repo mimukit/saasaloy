@@ -16,6 +16,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { catalogRows } from "../apps/web/src/lib/module-catalog.ts";
+import type { RegistryDescriptor } from "../apps/web/src/lib/module-catalog.ts";
 import {
   generate,
   rewriteLinks,
@@ -114,6 +116,40 @@ describe("the module catalog", () => {
     const provider =
       generated.get("docs/wiki/generated/modules/email-plunk.md") ?? "";
     assert.ok(!provider.includes("saasaloy-providers"));
+  });
+
+  it("lists the same providers for each capability as the site catalog", () => {
+    const descriptors = readdirSync(join(ROOT, "modules"), {
+      withFileTypes: true,
+    })
+      .filter((entry) => entry.isDirectory())
+      .map(
+        (entry) =>
+          JSON.parse(
+            readFileSync(
+              join(ROOT, "modules", entry.name, "registry-item.json"),
+              "utf-8"
+            )
+          ) as RegistryDescriptor
+      );
+    for (const row of catalogRows(descriptors)) {
+      const page =
+        generated.get(`docs/wiki/generated/modules/${row.name}.md`) ?? "";
+      const listed = /^\| Providers \| (.*) \|$/m.exec(page)?.[1] ?? "";
+      const expected = row.variants
+        .filter((variant) => variant.tier === "provider")
+        .map((variant) => variant.name);
+      for (const name of expected) {
+        assert.ok(listed.includes(`\`${name}\``), `${row.name} misses ${name}`);
+      }
+      assert.equal(
+        listed.match(/`[^`]+`/g)?.length ?? 0,
+        expected.length,
+        `${row.name} lists a provider that is not its own: ${listed}`
+      );
+    }
+    const kv = generated.get("docs/wiki/generated/modules/kv.md") ?? "";
+    assert.ok(!kv.includes("uses payment-bkash"));
   });
 
   it("starts every generated file with a banner that names the script", () => {

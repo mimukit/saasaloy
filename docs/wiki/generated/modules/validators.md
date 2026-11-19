@@ -18,7 +18,6 @@ A packages/validators workspace with the zod request schemas and the shared erro
 | Requires one of | none |
 | Conflicts with | none |
 | Depended on by | [`agent`](agent.md), [`cms`](cms.md), [`ecommerce`](ecommerce.md), [`feature-flags`](feature-flags.md), [`file-uploads`](file-uploads.md), [`notification`](notification.md), [`payment-manual`](payment-manual.md), [`waitlist`](waitlist.md) |
-| Providers | [`payment-manual`](payment-manual.md) |
 
 ## Environment variables
 

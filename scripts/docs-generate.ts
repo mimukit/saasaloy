@@ -23,7 +23,8 @@
 // before the CLI is built. `scripts/llms-txt.ts` reads the built CLI's `--help` instead, which
 // the release preflight has to do anyway.
 //
-// Imports node: builtins only. Node 24 strips the types, so there is no build step.
+// Imports node: builtins and a few import-free modules from the CLI and the site. Node 24
+// strips the types, so there is no build step.
 
 import {
   existsSync,
@@ -34,6 +35,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join, posix, resolve } from "node:path";
+import { fenceReader } from "../apps/web/src/lib/docs-fence.ts";
 import { DESCRIPTIONS } from "../packages/cli/src/commands/descriptions.ts";
 import type { CliSurface } from "./llms-txt.ts";
 
@@ -223,15 +225,11 @@ export function rewriteLinks(
   fromFile: string,
   toFile: string
 ): string {
-  let fenced = false;
+  const inFence = fenceReader();
   return markdown
     .split("\n")
     .map((line) => {
-      if (/^\s*(```|~~~)/.test(line)) {
-        fenced = !fenced;
-        return line;
-      }
-      if (fenced) {
+      if (inFence(line)) {
         return line;
       }
       return line.replaceAll(/\]\(([^)\s]+)\)/g, (whole, href: string) => {
@@ -255,15 +253,11 @@ export function rewriteLinks(
 
 /** Demotes every heading outside a code fence by `by` levels, to a ceiling of six. */
 function demoteHeadings(markdown: string, by: number): string {
-  let fenced = false;
+  const inFence = fenceReader();
   return markdown
     .split("\n")
     .map((line) => {
-      if (/^\s*(```|~~~)/.test(line)) {
-        fenced = !fenced;
-        return line;
-      }
-      const heading = fenced ? undefined : /^(#{1,6})(\s.*)$/.exec(line);
+      const heading = inFence(line) ? undefined : /^(#{1,6})(\s.*)$/.exec(line);
       return heading
         ? `${"#".repeat(Math.min(6, (heading[1] ?? "").length + by))}${heading[2] ?? ""}`
         : line;
@@ -290,19 +284,27 @@ export function tierOf(item: Descriptor, all: readonly Descriptor[]): Tier {
   return registersProvider ? "provider" : "feature";
 }
 
-function implementationsOf(
+/**
+ * The module a provider belongs to: the longest `dependsOn` entry its name starts with, so
+ * `email-cloudflare` belongs to `email`. `payment-bkash` depends on `kv` too, but it is not a
+ * `kv` provider. The site applies the same rule in apps/web/src/lib/module-catalog.ts.
+ */
+export function parentOf(item: Descriptor): string | undefined {
+  return item.dependsOn
+    .filter((name) => item.name.startsWith(`${name}-`))
+    .toSorted((a, b) => b.length - a.length)[0];
+}
+
+export function implementationsOf(
   item: Descriptor,
   all: readonly Descriptor[]
 ): { providers: string[]; drivers: string[] } {
-  const providers: string[] = [];
-  for (const other of all) {
-    if (
-      other.dependsOn.includes(item.name) &&
-      tierOf(other, all) === "provider"
-    ) {
-      providers.push(other.name);
-    }
-  }
+  const providers = all
+    .filter(
+      (other) =>
+        parentOf(other) === item.name && tierOf(other, all) === "provider"
+    )
+    .map((other) => other.name);
   return { providers, drivers: [...item.requiresOneOf] };
 }
 
@@ -376,8 +378,11 @@ function providersBlock(
   const lines = providers.map(
     (name) => `${selector}=${name.slice(item.name.length + 1)}  uses ${name}`
   );
+  const lead = /comma list/i.test(item.envVars[selector] ?? "")
+    ? `${code(item.name)} picks its providers at runtime with ${code(selector)}, a comma list in priority order. Select providers to see the value to set.`
+    : `${code(item.name)} picks its provider at runtime with ${code(selector)}. Select a provider to see the value to set.`;
   return [
-    `${code(item.name)} picks its provider at runtime with ${code(selector)}. Select a provider to see the value to set.`,
+    lead,
     [`\`\`\`saasaloy-providers capability=${item.name}`, ...lines, "```"].join(
       "\n"
     ),

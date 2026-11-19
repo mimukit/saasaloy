@@ -30,19 +30,19 @@ env-infisical (feature)
 feature-flags (feature): depends on api, database, validators, auth, admin, kv
 file-uploads (feature): depends on api, auth, admin, database, storage, validators; used by cms, ecommerce
 infra-ci-deploy (feature)
-kv (capability): depends on api; used by feature-flags, ratelimit; providers kv-cloudflare, kv-memory, kv-upstash, payment-bkash
+kv (capability): depends on api; used by feature-flags, ratelimit; providers kv-cloudflare, kv-memory, kv-upstash
 logger (capability): used by api; providers logger-console
 multitenant (feature): depends on api, database, auth, teams, admin
 notification (feature): depends on api, database, auth, app, validators, shell
 payment (capability): depends on api, database, auth, admin; used by ecommerce; providers payment-bkash, payment-console, payment-manual, payment-sslcommerz
-queue (capability): depends on api; used by subscription; providers payment-bkash, queue-cloudflare, queue-memory
+queue (capability): depends on api; used by subscription; providers queue-cloudflare, queue-memory
 ratelimit (feature): depends on api, kv; used by auth-phone
 shell (capability): used by admin, app, command, notification
 sms (capability): depends on api; used by auth-phone; providers sms-console, sms-khudebarta
 storage (capability): depends on api; used by file-uploads; providers storage-cloudflare, storage-memory
 subscription (capability): depends on api, database, auth, admin, queue, email; providers subscription-console, subscription-stripe
 teams (feature): depends on api, database, auth, admin; used by multitenant
-validators (capability): depends on api; used by agent, cms, ecommerce, feature-flags, file-uploads, notification, waitlist; providers payment-manual
+validators (capability): depends on api; used by agent, cms, ecommerce, feature-flags, file-uploads, notification, waitlist
 waitlist (feature): depends on api, database, validators
 ```
 

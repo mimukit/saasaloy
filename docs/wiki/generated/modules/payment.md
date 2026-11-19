@@ -22,7 +22,7 @@ One-off payments in a packages/payment workspace: the provider contract, the sta
 
 ## Providers
 
-`payment` picks its provider at runtime with `PAYMENT_PROVIDER`. Select a provider to see the value to set.
+`payment` picks its providers at runtime with `PAYMENT_PROVIDER`, a comma list in priority order. Select providers to see the value to set.
 
 ```saasaloy-providers capability=payment
 PAYMENT_PROVIDER=bkash  uses payment-bkash
