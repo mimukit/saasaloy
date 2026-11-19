@@ -1026,6 +1026,24 @@ describe("runUpdate — backfill (#242)", () => {
     expect(lines.filter((line) => line === REPORT_HINT)).toHaveLength(1);
   });
 
+  // #359: only a failure after Proceed gets the hint. Here the module names a file its
+  // registry copy does not hold, so the plan fails to build with exit 1 before anything
+  // applies, and the owner gets no hint to report it.
+  it("prints no report hint when the run fails with exit 1 before the apply", async () => {
+    await state(["widget", "gadget"], {
+      widget: localEntry,
+      gadget: localEntry,
+    });
+    await module("widget", {
+      files: [{ path: "files/missing.ts", target: "@web/missing.ts" }],
+    });
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+
+    expect(code).toBe(EXIT_FAILURE);
+    expect(output).not.toContain(REPORT_HINT);
+  });
+
   // #359: a refusal is an expected outcome, even when it reaches the command's catch.
   // An unparseable lock refuses with exit 2.
   it("prints no report hint when the run refuses with exit 2", async () => {

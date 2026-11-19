@@ -212,6 +212,38 @@ describe("skill <name>", () => {
   });
 });
 
+describe("skill in a project whose saasaloy.json is broken", () => {
+  // A broken config is the state an agent may be reporting, so the skill still prints:
+  // a warning on stderr, the default name in the vars, and exit 0 (#359).
+  it("warns on stderr and still prints the skill", async () => {
+    const project = await tempDir("saasaloy-skill-broken-");
+    await writeFile(join(project, "saasaloy.json"), "{ nope", "utf-8");
+    process.chdir(outside);
+    const clean = await run(["saasaloy-update"]);
+    process.chdir(project);
+
+    const result = await run(["saasaloy-update"]);
+
+    expect(result.code).toBe(0);
+    expect(result.out).toBe(clean.out);
+    expect(result.err).toContain("saasaloy.json");
+  });
+
+  it("keeps stdout one JSON document under --json", async () => {
+    const project = await tempDir("saasaloy-skill-broken-json-");
+    await writeFile(join(project, "saasaloy.json"), "{ nope", "utf-8");
+    process.chdir(project);
+
+    const json = await runJson(runSkill, ["saasaloy-update", "--json"]);
+
+    expect(json.code).toBe(0);
+    expect(json.doc).toMatchObject({
+      name: "saasaloy-update",
+      schemaVersion: 1,
+    });
+  });
+});
+
 describe("skill (no name)", () => {
   it("lists every skill folder in the template with its description", async () => {
     process.chdir(outside);

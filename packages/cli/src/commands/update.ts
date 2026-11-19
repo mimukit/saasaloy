@@ -1845,11 +1845,17 @@ export async function runbookFor(
   if (!(await pathExists(copy))) {
     return { cliVersion, differs: false };
   }
-  const [mine, bundled] = await Promise.all([
-    readFile(copy),
-    renderBundledSkill("saasaloy-update", projectName),
-  ]);
-  return { cliVersion, differs: !mine.equals(Buffer.from(bundled, "utf-8")) };
+  // The line is advice. A copy that cannot be read must not fail an update
+  // that has already applied, so it reads as "not flagged".
+  try {
+    const [mine, bundled] = await Promise.all([
+      readFile(copy),
+      renderBundledSkill("saasaloy-update", projectName),
+    ]);
+    return { cliVersion, differs: !mine.equals(Buffer.from(bundled, "utf-8")) };
+  } catch {
+    return { cliVersion, differs: false };
+  }
 }
 
 /**
