@@ -9,7 +9,11 @@
 // The version label ("saasaloy v0.9.0") and the page's stamp ("Verified against 42cbf03",
 // linked to the commit) sit beside the "Edit on GitHub" link under the title. The version
 // reads `__BUILD_INFO__`, which astro.config.mjs computes in Node (src/lib/build-info.ts).
-// Under the page sits the landing page's footer, which shows the version and the commit.
+// The header sits on the page's three columns from `lg` (plan 0114, round 3, layout A): the
+// wordmark and the Docs tag over the sidebar, the search field over the page, and the links
+// and the theme toggle over the table of contents. docs.css draws the two column rules
+// through it. Under the page sits the landing page's footer, which shows the version and the
+// commit.
 // Layout.astro draws the announcement bar above the header.
 import type { MarkdownHeading } from "astro";
 
@@ -64,48 +68,66 @@ const sourceUrl = `${repoUrl}/blob/main/docs/wiki/${current.path}`;
 const rawUrl = `/docs/${current.slug === "" ? "index" : current.slug}.md`;
 const build = __BUILD_INFO__;
 const stamp = stampOf(Astro.props.stampSource ?? "");
-const headerLinks = landing.navbar.links.filter(
-  (link) => link.label !== "" && link.href !== ""
+// The header's links, in the approved order. The Docs tag after the wordmark stands in for
+// the landing page's Docs link.
+const headerLinks = (["guide", "github"] as const).flatMap((id) =>
+  landing.navbar.links.filter(
+    (link) => link.id === id && link.label !== "" && link.href !== ""
+  )
 );
 ---
 
 <Layout title={title} description={description}>
   <header class="docs-header">
-    <div class="section-container-hero flex h-14 items-center gap-4 md:gap-6">
-      <a
-        href="/"
-        aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
-        class="text-primary text-2xl leading-8 font-semibold tracking-[-0.02em] lowercase"
-      >
-        <span aria-hidden="true">{siteName}</span>
-      </a>
-      <DocsSearch />
-      <nav
-        aria-label={ui.navbar.mainNavLabel}
-        class="hidden items-center gap-8 md:flex"
-      >
-        {headerLinks.map((link) => (
-          <a
-            href={link.href}
-            aria-current={
-              link.href === "/docs"
-                ? current.slug === ""
-                  ? "page"
-                  : "true"
-                : undefined
-            }
-            target={isExternalHref(link.href) ? "_blank" : undefined}
-            rel={isExternalHref(link.href) ? "noopener noreferrer" : undefined}
-            class="text-highlight text-sm font-medium underline-offset-4 hover:underline aria-[current=page]:underline aria-[current=true]:underline"
-          >
-            {link.label}
-            {isExternalHref(link.href) && (
-              <span class="sr-only"> {ui.link.newTab}</span>
-            )}
-          </a>
-        ))}
-      </nav>
-      <ThemeToggle className="ml-auto md:ml-0" />
+    <div class="section-container-hero docs-header-bar">
+      <div class="docs-header-brand">
+        <a
+          href="/"
+          aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
+          class="text-primary text-2xl leading-8 font-semibold tracking-[-0.02em] lowercase"
+        >
+          <span aria-hidden="true">{siteName}</span>
+        </a>
+        <span
+          class="text-muted-foreground font-mono text-sm"
+          aria-hidden="true"
+        >
+          /
+        </span>
+        <a
+          href="/docs"
+          aria-current={current.slug === "" ? "page" : "true"}
+          class="text-foreground hover:text-primary font-mono text-sm font-medium tracking-[0.06em] uppercase underline-offset-4 hover:underline"
+        >
+          {docsUi.headerTag}
+        </a>
+      </div>
+      <div class="docs-header-search">
+        <DocsSearch />
+      </div>
+      <div class="docs-header-tools">
+        <nav
+          aria-label={ui.navbar.mainNavLabel}
+          class="hidden items-center gap-8 md:flex"
+        >
+          {headerLinks.map((link) => (
+            <a
+              href={link.href}
+              target={isExternalHref(link.href) ? "_blank" : undefined}
+              rel={
+                isExternalHref(link.href) ? "noopener noreferrer" : undefined
+              }
+              class="text-highlight text-sm font-medium underline-offset-4 hover:underline"
+            >
+              {link.label}
+              {isExternalHref(link.href) && (
+                <span class="sr-only"> {ui.link.newTab}</span>
+              )}
+            </a>
+          ))}
+        </nav>
+        <ThemeToggle />
+      </div>
     </div>
   </header>
 

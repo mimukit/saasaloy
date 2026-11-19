@@ -16,6 +16,47 @@
   background-color: color-mix(in oklch, var(--background) 92%, transparent);
 }
 
+/* The header bar. Below 64rem it is one row: the wordmark and the Docs tag on the left, the
+   search and the tools on the right. The search field takes the free width from 48rem, and
+   below that the search is an icon beside the theme toggle. */
+.docs-header-bar {
+  display: flex;
+  height: 3.5rem;
+  align-items: center;
+  gap: 1rem;
+}
+
+.docs-header-brand,
+.docs-header-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.docs-header-brand {
+  gap: 0.625rem;
+}
+
+.docs-header-search {
+  display: flex;
+  margin-left: auto;
+}
+
+.docs-header-tools {
+  gap: 1.5rem;
+}
+
+@media (width >= 48rem) {
+  .docs-header-bar {
+    gap: 2rem;
+  }
+
+  .docs-header-search {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
 .docs-shell {
   display: grid;
   gap: 1rem;
@@ -42,6 +83,30 @@
 }
 
 @media (width >= 64rem) {
+  /* From 64rem the header takes the shell's three columns, and its cells draw the two
+     column rules, so each rule runs from the top of the page to the footer. */
+  .docs-header-bar {
+    display: grid;
+    align-items: stretch;
+    gap: 0 2.5rem;
+    grid-template-columns: 16rem minmax(0, 1fr) 14rem;
+  }
+
+  .docs-header-brand {
+    border-right: 1px solid var(--border);
+  }
+
+  .docs-header-search {
+    align-items: center;
+    margin-left: 0;
+  }
+
+  .docs-header-tools {
+    justify-content: flex-end;
+    padding-left: 1rem;
+    border-left: 1px solid var(--border);
+  }
+
   .docs-shell {
     gap: 0 2.5rem;
     grid-template-areas: "menu main toc";

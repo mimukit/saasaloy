@@ -6,6 +6,8 @@
 export const docsUi = {
   /** The Docs title in the page's tab: `{page} | Docs | {siteName}`. */
   titleSuffix: "Docs",
+  /** The tag after the wordmark in the header, a link to the docs home. */
+  headerTag: "Docs",
   breadcrumbLabel: "Breadcrumb",
   breadcrumbRoot: "docs",
   sidebarLabel: "Docs pages",
