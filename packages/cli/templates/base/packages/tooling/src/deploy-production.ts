@@ -115,6 +115,7 @@ export interface ResolvedRelease {
   githubRelease: boolean;
   preMajor: boolean;
   changelogSections: ChangelogSection[] | undefined;
+  include: string[];
 }
 
 export interface ResolvedConfig {
@@ -140,6 +141,7 @@ export function resolveConfig(config: DeployConfig): ResolvedConfig {
       githubRelease: config.release?.githubRelease ?? true,
       preMajor: config.release?.preMajor ?? true,
       changelogSections: config.release?.changelogSections,
+      include: config.release?.include ?? [],
     },
   };
 }

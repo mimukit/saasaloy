@@ -37,7 +37,7 @@ declare module "vitest" {
   interface ProvidedContext {
     /** The template database's state folder, provided by `scripts/test-setup.ts`. */
     testD1State: string;
-    /** `apps/api/wrangler.jsonc`, so the copy opens with the api's own bindings. */
+    /** `apps/api/.wrangler/test-state/wrangler.json`: the api's D1 bindings and nothing else. */
     testWranglerConfig: string;
   }
 }
@@ -57,6 +57,15 @@ export interface TestDatabase {
   /** An `env` for `app.request(path, init, env)` carrying this file's D1 as `DB`. */
   readonly env: TestEnv;
 }
+
+/**
+ * How long the hook that opens a file's database may take. Vitest's default is 10 seconds.
+ * The hook copies the template, imports wrangler and starts one workerd with the D1 binding
+ * alone, about a second on an idle machine. Wrangler's `getPlatformProxy` is the stable way
+ * to open a local D1, and its import is most of that second. On a loaded CI runner, with
+ * four projects testing at once, the same hook once took more than 10 seconds (issue #358).
+ */
+const OPEN_TIMEOUT_MS = 60_000;
 
 /** An `env` whose `DB` is `d1`. */
 export function testEnv<TExtra extends object = object>(
@@ -110,7 +119,7 @@ export function testDatabase(): TestDatabase {
     });
     d1 = proxy.env.DB;
     dispose = () => proxy.dispose();
-  });
+  }, OPEN_TIMEOUT_MS);
 
   afterAll(async () => {
     await dispose?.();

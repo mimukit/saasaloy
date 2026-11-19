@@ -46,6 +46,13 @@ export interface ReleaseConfig {
    * A breaking commit shows whatever its type.
    */
   changelogSections?: ChangelogSection[];
+  /**
+   * Untracked paths the release commit also carries, each staged with `git add` just
+   * before release-it commits. Each is relative to the repository root and uses only
+   * `A-Z a-z 0-9 . _ / -`, with no `..` segment. `["docs/release/"]` ships the release
+   * walkthrough the `saasaloy-deploy` skill writes. Default: `[]`.
+   */
+  include?: string[];
 }
 
 /** One commit type and the changelog heading it goes under. */

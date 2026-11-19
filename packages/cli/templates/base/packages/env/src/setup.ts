@@ -1,6 +1,6 @@
 import path from "node:path";
 import { blankOnPurposeKeys, incompleteKeys } from "./check.ts";
-import { planEnv } from "./dotenv.ts";
+import { parseValues, planEnv } from "./dotenv.ts";
 import {
   readEnvFile,
   readLegacyDevVars,
@@ -174,4 +174,38 @@ function keepComplete(
     files: services.map((service) => service.file),
     reason,
   };
+}
+
+/**
+ * `pnpm env:setup --example`, for CI only: write each service's `.env` from the defaults in
+ * `packages/env/.env.example` and nothing else. It reads no value source, keeps nothing
+ * already on disk and refuses nothing. A key with no default is written blank, so a build
+ * that needs it fails later and names the key. Give such a key a default in the example.
+ */
+export function writeExampleDefaults(options: {
+  root: string;
+  services: Service[];
+}): ServiceReport[] {
+  const { root } = options;
+  return options.services.filter(hasFile).map((service) => {
+    const example = readExample(root, service.name);
+    const target = path.join(root, service.file);
+    const { exists } = readEnvFile(target);
+    // The plan's `missingKeys` goes unread: this mode refuses nothing.
+    const plan = planEnv({
+      example,
+      values: parseValues(example),
+      blankOnPurpose: new Set(),
+      keep: new Map(),
+      omit: service.omit,
+    });
+    writeEnvFile(target, plan.lines);
+    return {
+      service: service.name,
+      file: service.file,
+      created: !exists,
+      extraKeys: [],
+      migrated: false,
+    };
+  });
 }

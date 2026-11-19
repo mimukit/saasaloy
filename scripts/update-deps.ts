@@ -30,6 +30,12 @@
 // packument, a clock value, and the flags. This file owns everything around it: the
 // npm fetch, the report, the picker, and the writes. Each manifest resolves independently from npm.
 //
+// The `github-actions` group covers the third thing pnpm cannot see: the `uses:` lines of
+// the workflows this repo ships (`modules/*/files/**` and the base template). Each one
+// pins a commit SHA with a `# vX.Y.Z` comment, and the group resolves each tag to its SHA
+// through the GitHub API (set GITHUB_TOKEN or GH_TOKEN to lift the anonymous rate limit).
+// The repo's own `.github/` workflows stay on tags and are not scanned.
+//
 // TypeScript, run directly by Node 24's type stripping — there is no build step. The
 // types are checked by `pnpm typecheck` through tsconfig.scripts.json (#54).
 
@@ -915,15 +921,35 @@ async function main(): Promise<void> {
 
   printReport(rows, notes);
 
+  const actionRows = await resolveActionPins(flags.allowMajor);
+  printActionReport(actionRows);
+  const actionUpdates = actionRows.filter((r) => r.status === "update");
+
   if (flags.check) {
     // Read-only CI gate: exit non-zero only on what a default deps:update would change.
-    const pending = rows.filter((r) => ACTIONABLE.has(r.status)).length;
+    const pending =
+      rows.filter((r) => ACTIONABLE.has(r.status)).length +
+      actionUpdates.length;
     outro(
       pending > 0
         ? pc.yellow(`${pending} pending — run ${pc.bold("pnpm deps:update")}`)
         : pc.green("up to date")
     );
     process.exit(pending > 0 ? 1 : 0);
+  }
+
+  // The action pins are their own group: written with no prompt under --yes, a non-TTY
+  // or --dry-run (which writes nothing), and after one confirm in a TTY.
+  if (actionUpdates.length > 0) {
+    const write =
+      flags.dryRun || flags.yes || !process.stdout.isTTY
+        ? true
+        : await confirm({
+            message: `Update ${actionUpdates.length} GitHub Actions pin${actionUpdates.length === 1 ? "" : "s"}?`,
+          });
+    if (write === true) {
+      await writeActionPins(actionUpdates);
+    }
   }
 
   const candidates = buildCandidates(rows);
@@ -1200,6 +1226,287 @@ async function writeUpdates(
           changed === 1 ? "dependency" : "dependencies"
         }.`
   );
+}
+
+// --- GitHub Actions pins (the `github-actions` group) -----------------------
+// The workflows this repo ships to projects (`modules/*/files/**` and the base template)
+// pin every `uses:` to a 40-character commit SHA, with the release tag in a `# vX.Y.Z`
+// comment. A tag can be moved to other code; a SHA cannot. This group resolves each
+// action's tags from the GitHub API, picks the newest `vX.Y.Z` within the pinned major
+// (any major with --allow-major), and rewrites the SHA and the comment together. The
+// repo's own `.github/` workflows stay on tags and are never scanned.
+
+/** One `uses:` line of a shipped workflow. */
+export interface ActionPin {
+  file: string;
+  /** Zero-based line index in the file. */
+  line: number;
+  /** `owner/repo`, the repository the tags come from. */
+  repo: string;
+  /** `owner/repo` plus any subdirectory, exactly as written before the `@`. */
+  action: string;
+  /** What follows the `@`: a SHA or a tag. */
+  ref: string;
+  /** The `# vX.Y.Z` comment, when the line carries one. */
+  tag?: string;
+}
+
+/** One tag of an action's repository and the commit it names. */
+export interface ActionTag {
+  name: string;
+  sha: string;
+}
+
+export interface ActionRow {
+  pin: ActionPin;
+  status: "up-to-date" | "update" | "unresolved";
+  /** The tag and SHA the line should carry. */
+  target?: ActionTag;
+  /** A newer tag in a higher major, when the default stays within the pinned major. */
+  newerMajor?: string;
+  error?: string;
+}
+
+// The value may be quoted. The rewrite in `applyActionPins` writes it unquoted.
+const USES_LINE =
+  /^(\s*(?:-\s+)?uses:\s*)["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(\/[^@\s"']*)?@([^\s#"']+)["']?(?:\s*#\s*(\S+))?\s*$/;
+
+const FULL_SHA = /^[0-9a-f]{40}$/;
+
+/** Every `uses:` line of one workflow that names a repository action. */
+export function parseActionPins(file: string, text: string): ActionPin[] {
+  const pins: ActionPin[] = [];
+  for (const [line, content] of text.split("\n").entries()) {
+    const match = USES_LINE.exec(content);
+    if (!match) {
+      continue; // a local `./` action, a `docker://` image, or no `uses:` at all
+    }
+    const repo = match[2] ?? "";
+    pins.push({
+      file,
+      line,
+      repo,
+      action: `${repo}${match[3] ?? ""}`,
+      ref: match[4] ?? "",
+      tag: match[5],
+    });
+  }
+  return pins;
+}
+
+/** `v7.0.1` → `7.0.1`; anything that is not a full `vX.Y.Z` → null. */
+function tagVersion(tag: string): string | null {
+  const version = tag.replace(/^v/, "");
+  return tag.startsWith("v") && parseSemver(version) !== null ? version : null;
+}
+
+/** The major the line pins today: from its `# vX.Y.Z` comment, or from a tag ref. */
+function pinnedMajor(pin: ActionPin): number | null {
+  const label = FULL_SHA.test(pin.ref) ? pin.tag : pin.ref;
+  const match = label === undefined ? null : /^v(\d+)(?:\.|$)/.exec(label);
+  return match ? Number(match[1]) : null;
+}
+
+/** Decide what one `uses:` line should carry, given its repository's tags. */
+export function evaluateActionPin(
+  pin: ActionPin,
+  tags: readonly ActionTag[],
+  allowMajor: boolean
+): ActionRow {
+  const releases = tags
+    .filter((tag) => tagVersion(tag.name) !== null)
+    .toSorted((a, b) =>
+      cmp(tagVersion(a.name) ?? "", tagVersion(b.name) ?? "")
+    );
+  const newest = releases.at(-1);
+  if (newest === undefined) {
+    return {
+      pin,
+      status: "unresolved",
+      error: `${pin.repo} has no vX.Y.Z tag`,
+    };
+  }
+  const major = pinnedMajor(pin);
+  const within =
+    major === null || allowMajor
+      ? newest
+      : releases.findLast(
+          (tag) => parseSemver(tagVersion(tag.name) ?? "")?.[0] === major
+        );
+  if (within === undefined) {
+    return {
+      pin,
+      status: "unresolved",
+      error: `${pin.repo} has no vX.Y.Z tag in major ${major}`,
+    };
+  }
+  const current = pin.ref === within.sha && pin.tag === within.name;
+  return {
+    pin,
+    status: current ? "up-to-date" : "update",
+    target: within,
+    newerMajor: within === newest ? undefined : newest.name,
+  };
+}
+
+/** Rewrite each row's line to `<action>@<sha> # <tag>`, keeping the indent and the key. */
+export function applyActionPins(
+  text: string,
+  rows: readonly ActionRow[]
+): string {
+  const lines = text.split("\n");
+  for (const row of rows) {
+    const content = lines[row.pin.line];
+    const match = content === undefined ? null : USES_LINE.exec(content);
+    if (row.target === undefined || !match) {
+      continue;
+    }
+    lines[row.pin.line] =
+      `${match[1]}${row.pin.action}@${row.target.sha} # ${row.target.name}`;
+  }
+  return lines.join("\n");
+}
+
+/** The workflows this repo ships: YAML under `modules/*\/files/` and the base template. */
+export async function discoverWorkflows(): Promise<string[]> {
+  const isYaml = (f: string) => f.endsWith(".yml") || f.endsWith(".yaml");
+  const fromModules = await walk(
+    join(root, "modules"),
+    (f) => isYaml(f) && f.includes(join("", "files", "")),
+    []
+  );
+  const fromBase = await walk(
+    join(root, "packages/cli/templates/base"),
+    isYaml,
+    []
+  );
+  return [...fromModules, ...fromBase].toSorted();
+}
+
+/** Something that answers a GitHub API path with parsed JSON. Tests pass a fake. */
+export type GithubGet = (path: string) => Promise<unknown>;
+
+const githubGet: GithubGet = async (path) => {
+  const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
+  const res = await fetch(`https://api.github.com${path}`, {
+    headers: {
+      accept: "application/vnd.github+json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`GitHub API ${res.status} for ${path}`);
+  }
+  const body: unknown = await res.json();
+  return body;
+};
+
+/** Every tag of `repo` and the commit it names, from the tags API. */
+export async function fetchActionTags(
+  repo: string,
+  get: GithubGet = githubGet
+): Promise<ActionTag[]> {
+  const tags: ActionTag[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const body = await get(`/repos/${repo}/tags?per_page=100&page=${page}`);
+    if (!Array.isArray(body)) {
+      throw new TypeError(`GitHub API returned no tag list for ${repo}`);
+    }
+    for (const item of body as unknown[]) {
+      const commit = isRecord(item) ? item.commit : undefined;
+      if (
+        isRecord(item) &&
+        typeof item.name === "string" &&
+        isRecord(commit) &&
+        typeof commit.sha === "string"
+      ) {
+        tags.push({ name: item.name, sha: commit.sha });
+      }
+    }
+    if (body.length < 100) {
+      break;
+    }
+  }
+  return tags;
+}
+
+/** Read every shipped workflow, resolve each action's tags once, and evaluate each line. */
+export async function resolveActionPins(
+  allowMajor: boolean,
+  get: GithubGet = githubGet,
+  files?: string[]
+): Promise<ActionRow[]> {
+  const pins: ActionPin[] = [];
+  for (const file of files ?? (await discoverWorkflows())) {
+    pins.push(...parseActionPins(file, await readFile(file, "utf-8")));
+  }
+  const byRepo = new Map<string, Promise<ActionTag[]>>();
+  return Promise.all(
+    pins.map(async (pin) => {
+      let tags = byRepo.get(pin.repo);
+      if (!tags) {
+        tags = fetchActionTags(pin.repo, get);
+        byRepo.set(pin.repo, tags);
+      }
+      try {
+        return evaluateActionPin(pin, await tags, allowMajor);
+      } catch (error) {
+        return {
+          pin,
+          status: "unresolved" as const,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    })
+  );
+}
+
+function renderActionRow(row: ActionRow): string {
+  const where = pc.dim(`${relative(root, row.pin.file)}:${row.pin.line + 1}`);
+  const from = FULL_SHA.test(row.pin.ref)
+    ? `${row.pin.ref.slice(0, 7)} ${row.pin.tag ?? pc.dim("(no tag comment)")}`
+    : `${row.pin.ref} ${pc.dim("(tag, not a SHA)")}`;
+  if (row.status === "unresolved") {
+    return `${pc.cyan(row.pin.action)} ${from} ${pc.red(row.error ?? "unresolved")}  ${where}`;
+  }
+  const to = row.target
+    ? `${row.target.sha.slice(0, 7)} ${row.target.name}`
+    : "";
+  const major = row.newerMajor
+    ? pc.red(` (major ${row.newerMajor} available)`)
+    : "";
+  const arrow =
+    row.status === "update" ? ` ${pc.dim("→")} ${pc.green(to)}` : "";
+  return `${pc.cyan(row.pin.action)} ${from}${arrow}${major}  ${where}`;
+}
+
+/** The `github-actions` box: every shipped `uses:` line and what it resolves to. */
+function printActionReport(rows: readonly ActionRow[]): void {
+  if (rows.length === 0) {
+    log.warn("No shipped workflow names an action.");
+    return;
+  }
+  note(
+    wrapForNote(rows.map(renderActionRow).join("\n")),
+    pc.magenta(`github-actions ${pc.dim(`(${rows.length})`)}`)
+  );
+}
+
+/** Rewrite every `update` row's line, one file at a time. */
+async function writeActionPins(rows: readonly ActionRow[]): Promise<void> {
+  const byFile = new Map<string, ActionRow[]>();
+  for (const row of rows.filter((r) => r.status === "update")) {
+    byFile.set(row.pin.file, [...(byFile.get(row.pin.file) ?? []), row]);
+  }
+  for (const [file, fileRows] of byFile) {
+    const before = await readFile(file, "utf-8");
+    for (const row of fileRows) {
+      log.step(`${pc.dim(relative(root, file))}  ${renderActionRow(row)}`);
+    }
+    if (!flags.dryRun) {
+      await writeFile(file, applyActionPins(before, fileRows), "utf-8");
+    }
+  }
 }
 
 // Run the CLI only when node was pointed at this file. `scripts/update-deps.test.ts`

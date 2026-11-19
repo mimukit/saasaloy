@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { resolveConfig } from "./deploy-production.ts";
 import {
   belowOne,
+  checkIncludePaths,
   findToken,
+  includeHooks,
+  missingIncludeProblem,
   parseReleaseArgs,
   preMajorBump,
   releaseItOptions,
@@ -131,6 +134,76 @@ describe(releaseItOptions, () => {
         preset: { name: "conventionalcommits", types: sections },
       },
     });
+  });
+});
+
+describe(includeHooks, () => {
+  it("stages each release.include path, quoted, before the release commit", () => {
+    const options = releaseItOptions(
+      resolveConfig({
+        release: { include: ["docs/release/", "notes/v1_2-x.md"] },
+      }),
+      { dryRun: false }
+    );
+    expect(options.hooks).toStrictEqual({
+      "before:git:release": [
+        "git add -- 'docs/release/'",
+        "git add -- 'notes/v1_2-x.md'",
+      ],
+    });
+  });
+
+  it("adds no hook for an empty or unset list", () => {
+    expect(includeHooks([])).toStrictEqual({});
+    expect(releaseItOptions(config, { dryRun: false })).not.toHaveProperty(
+      "hooks"
+    );
+  });
+
+  it("refuses an absolute path, a .. segment and a space before release-it runs", () => {
+    expect(() => checkIncludePaths(["/etc/passwd"])).toThrow(/is absolute/);
+    expect(() => checkIncludePaths(["docs/../secrets"])).toThrow(
+      /has a \.\. segment/
+    );
+    expect(() => checkIncludePaths(["docs/my notes.md"])).toThrow(
+      /character outside/
+    );
+    for (const root of [".", "./", "./."]) {
+      expect(() => checkIncludePaths([root])).toThrow(
+        /names the repository root/
+      );
+    }
+    expect(() =>
+      releaseItOptions(
+        resolveConfig({ release: { include: ["docs/'; rm -rf ~; '"] } }),
+        { dryRun: false }
+      )
+    ).toThrow(/release did not start/);
+  });
+});
+
+describe(missingIncludeProblem, () => {
+  it("refuses a real release whose include path is missing, and lets a dry run through", () => {
+    const none = (): boolean => false;
+    expect(
+      missingIncludeProblem(["docs/release/"], { dryRun: false }, none)
+    ).toMatch(/names docs\/release\/, and nothing is there/);
+    expect(
+      missingIncludeProblem(["docs/release/"], { dryRun: true }, none)
+    ).toBeUndefined();
+    expect(
+      missingIncludeProblem(["docs/release/"], { dryRun: false }, () => true)
+    ).toBeUndefined();
+  });
+
+  it("refuses a real release whose include path git ignores", () => {
+    const all = (): boolean => true;
+    expect(
+      missingIncludeProblem(["docs/release/"], { dryRun: false }, all, all)
+    ).toMatch(/git ignores release\.include path docs\/release\//);
+    expect(
+      missingIncludeProblem(["docs/release/"], { dryRun: true }, all, all)
+    ).toBeUndefined();
   });
 });
 

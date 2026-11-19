@@ -521,7 +521,7 @@ It is **deliberately not part of `deps:verify`**: it downloads a browser and tak
 
 ## Releasing
 
-Only the maintainer releases. There is no automated publish: CI is a gate and never touches npm, and every release is cut by hand from a `main` checkout.
+Only the maintainer releases. The maintainer cuts each release by hand from a `main` checkout with `pnpm release`, which tags and pushes but never publishes. The tag push starts `.github/workflows/publish.yml`, and that workflow publishes to npm after the maintainer approves it on GitHub ([ADR 0064](docs/adr/0064-adr-the-cli-publishes-from-a-tag-started-approved-oidc-workflow-2026-11-19.md)). The `ci` workflow is a gate and never touches npm.
 
 One package is published — `packages/cli`, as [`saasaloy`](https://www.npmjs.com/package/saasaloy). The root package is private and stays at `0.0.0` forever. Modules are not published; the repo is the registry (ADR 0012).
 
@@ -553,9 +553,11 @@ A breaking commit is one with `!` before the colon (`feat!:`, `feat(cli)!:`) or 
 - It adds a note under `packages/cli/update-notes/` or `modules/<name>/update-notes/`. The note tells the agent in a scaffolded project what to change by hand.
 - It carries the footer `Update-Note: none (<reason>)`, for a break that needs nothing from a project. The reason must not be empty.
 
-The preflight fails on a breaking commit since the last tag that does neither, and it prints each opt-out reason with the commit's short SHA and subject. The commit-msg hook rejects an `Update-Note:` footer that is not `none (<reason>)` with a non-empty reason.
+If a breaking commit lands without its note, a later commit adds the note and carries the footer `Update-Note-For: <full sha>`. Name the breaking commit by its full 40-character SHA (`git rev-parse <short sha>`), because a short SHA can become ambiguous. One commit may carry several of these footers, one for each breaking commit it covers. The preflight counts the notes that commit adds for each commit it names.
 
-The changelog stays short. For each breaking item, `packages/cli/.release-it.js` appends a link to the note file that commit added, at the release tag. The full steps live only in the note. `scripts/changelog-update-notes.ts` holds that logic, and `scripts/update-note-footer.ts` holds the footer rule both checks share.
+The preflight fails on a breaking commit since the last tag that has no note of its own, no later note and no opt-out. It prints each opt-out reason and each late note with the commit's short SHA and subject. It warns about an `Update-Note-For:` footer that names a short SHA, names a commit that is not a breaking commit since the last tag, or sits on a commit that adds no note, and it quotes the footer. Such a footer covers nothing, so the breaking commit it meant to cover still fails as a missing note. The check warns instead of failing because a commit on `main` cannot change, and a failure would stop every later release. The commit-msg hook rejects an `Update-Note:` footer that is not `none (<reason>)` with a non-empty reason, and an `Update-Note-For:` footer that is not a full SHA.
+
+The changelog stays short. For each breaking item, `packages/cli/.release-it.js` appends a link to the note file that commit added, or that a later commit added with `Update-Note-For:`, at the release tag. The full steps live only in the note. `scripts/changelog-update-notes.ts` holds that logic, and `scripts/update-note-footer.ts` holds the footer rule both checks share.
 
 ### Before you run it
 
@@ -580,9 +582,28 @@ pnpm release
 
 Both release scripts read `GITHUB_TOKEN` from your shell and fall back to `gh auth token`, so you do not pass it by hand. Without a token release-it does not stop; it falls back to a web release and puts the whole changelog in a `releases/new` query string, and GitHub answers 414. The preflight fails on an empty token for that reason.
 
-That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHANGELOG.md` written from the commits, commits it as `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, creates the GitHub Release, and publishes to npm. It prompts before each step.
+That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHANGELOG.md` written from the commits, commits it as `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, and creates the GitHub Release. It prompts before each step. It does not publish to npm: `packages/cli/.release-it.js` sets `npm: { publish: false }`, so release-it's npm plugin only bumps the version.
 
-npm publishes last, after the push. A published CLI reads the modules at its own tag, so the tag must be on GitHub before npm offers the version to anyone. release-it's built-in order is npm first; `packages/cli/release-npm-last.js` moves its npm plugin behind git and github, and `scripts/release-order.test.ts` fails the gate when the push no longer comes first. See [ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md).
+The tag push starts the `publish` workflow. A published CLI reads the modules at its own tag, so the tag must be on GitHub before npm offers the version to anyone, and a publish that starts from the tag push has that order by construction. `scripts/release-order.test.ts` fails the gate when a release-it dry run shows an `npm publish` step, or when `publish.yml` starts on anything but a `v*` tag push, gives an OIDC token to a job outside the `npm` environment, or names an action by tag instead of a commit SHA. See [ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md) and [ADR 0064](docs/adr/0064-adr-the-cli-publishes-from-a-tag-started-approved-oidc-workflow-2026-11-19.md).
+
+### Approving the publish
+
+The workflow has two jobs. `build` runs at once, with no approval and no OIDC token. `publish` needs `build`, and it runs in the GitHub environment `npm`, which has the maintainer as required reviewer, so it waits until you approve it:
+
+1. Open the `publish` run for the tag: `gh run list --workflow publish.yml --limit 1`, or the repository's Actions tab.
+2. Select **Review deployments**, tick `npm`, and select **Approve and deploy**.
+3. Wait for the job to finish: `gh run watch <run id>`.
+4. Check the result: `npm view saasaloy@X.Y.Z dist.attestations` prints the provenance attestation.
+
+The `build` job checks that the tagged commit is on `main` and that the tag equals `v` plus the `packages/cli` version. Then it builds the CLI with no dependency cache, packs the tarball with `pnpm pack`, installs the tarball, checks that `saasaloy --version` prints the version, and uploads the tarball as an artifact. The `publish` job downloads that tarball and runs `npm publish <tarball> --access public --provenance`, and nothing else. So no install script and no build step runs in the job that can get a publish token. Neither job runs the gate again, because the preflight ran it on the same commit. `publish` fails by name when `npm --version` is below 11.5.1, the first npm with trusted publishing. Every `uses:` in `publish.yml` is pinned to a commit SHA.
+
+npm authenticates the `publish` job with trusted publishing (OIDC). Only that job has `id-token: write`, and the repository holds no `NPM_TOKEN` secret. The trusted publisher in the `saasaloy` package settings on npmjs.com names `mimukit/saasaloy`, `publish.yml` and the environment `npm`. If you rename the workflow file or the environment, change the trusted publisher too, or the publish fails with a 404.
+
+To lint the workflow after you change it, run actionlint from its Docker image, pinned by digest. Nothing is installed on the box:
+
+```sh
+docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667 .github/workflows/publish.yml
+```
 
 To see the whole plan without doing any of it:
 
@@ -590,7 +611,7 @@ To see the whole plan without doing any of it:
 pnpm release:dry
 ```
 
-The dry run skips the preflight hook. Run `pnpm release:preflight` to check the release requirements and the packed artifact.
+The dry run skips the preflight hook, and it shows no `npm publish` step, because release-it does not publish. Run `pnpm release:preflight` to check the release requirements and the packed artifact.
 
 ### The npm README
 
@@ -600,12 +621,12 @@ Edit the root `README.md`. Never edit the copy. `release:smoke` asserts `README.
 
 ### Machine setup
 
-Two pieces of state, and nothing else. A second machine needs both:
+One piece of state, and one tool. A second machine needs both:
 
 - `gh auth login` — the release scripts read `GITHUB_TOKEN` from the shell, or call `gh auth token` when it is unset, and release-it uses it to create the GitHub Release.
-- `npm login`, on an account with 2FA. Confirm with `npm whoami`. Login does not replace publish authentication. Run the release in an interactive terminal so npm can request an authenticator code or browser approval. Do not use `--ci` for a local release because it disables the authentication prompt. Use `--only-version` to automate the other release steps while keeping npm authentication interactive.
+- Docker, for the actionlint command above. It is needed only when you change a workflow.
 
-There is no token in the repo and no OIDC provenance, because provenance needs a CI publish and CI does not publish.
+The normal release needs no npm login on the machine, because the `publish` workflow publishes. An npm login on an account with 2FA (`npm login`, then `npm whoami`) is needed only for the emergency token publish in [If the publish fails](#if-the-publish-fails).
 
 ### The preflight
 
@@ -613,18 +634,19 @@ Before release-it writes anything it runs `pnpm release:preflight`, which:
 
 1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
 2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
-3. Fails if a breaking commit since the last tag adds no update note and carries no `Update-Note: none (<reason>)` footer, and prints each opt-out reason. See [Breaking changes need an update note](#breaking-changes-need-an-update-note).
-4. Builds the CLI and fails if the root `llms.txt` names a skill, a command or a flag the release does not hold. The release is the npm package (the base skills under `packages/cli/templates/base/_agents/skills/`, and the commands and flags `saasaloy --help` and `saasaloy <command> --help` print) plus the registry at the release tag, which is this commit's `modules/`. `scripts/llms-txt.ts` reads the file.
-5. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as the `gate` job in `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree. The `scaffold` job there (`pnpm scaffold:check`) is left to step 6, whose projects hold its modules and more.
-6. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It runs `pnpm env:setup` and checks the web app's development server. Then it runs `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in each compatible combination of module choices, with testing on so the module tests run. Each database driver runs with each API key owner, and each project adds its driver first. A module that depends on a module the project's choice excludes stays out: `ecommerce` runs in the Postgres projects only. Before the checks each project runs `db:generate`, `db:setup` and `env:setup`, and fills each key with no default with a local value. The Postgres projects need Docker with the compose plugin, because `db:setup` starts their server with `docker compose`; the script stops it at the end. The projects and the development server check run at the same time.
+3. Fails if a breaking commit since the last tag adds no update note, gets none from a later `Update-Note-For: <full sha>` commit and carries no `Update-Note: none (<reason>)` footer, and prints each opt-out reason. See [Breaking changes need an update note](#breaking-changes-need-an-update-note).
+4. Fails if the version of the last tag is not on npm (`npm view saasaloy@<version> version`). A tag with no publish behind it means a `publish` run that waits for approval or failed. Approve or rerun it first, because a new release on top would skip that version on npm for good. When npm cannot answer, a network error for example, the preflight stops and prints npm's error. It never reads that as a published or a missing version.
+5. Builds the CLI and fails if the root `llms.txt` names a skill, a command or a flag the release does not hold. The release is the npm package (the base skills under `packages/cli/templates/base/_agents/skills/`, and the commands and flags `saasaloy --help` and `saasaloy <command> --help` print) plus the registry at the release tag, which is this commit's `modules/`. `scripts/llms-txt.ts` reads the file.
+6. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as the `gate` job in `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree. The `scaffold` job there (`pnpm scaffold:check`) is left to step 7, whose projects hold its modules and more.
+7. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It runs `pnpm env:setup` and checks the web app's development server. Then it runs `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in each compatible combination of module choices, with testing on so the module tests run. Each database driver runs with each API key owner, and each project adds its driver first. A module that depends on a module the project's choice excludes stays out: `ecommerce` runs in the Postgres projects only. Before the checks each project runs `db:generate`, `db:setup` and `env:setup`, and fills each key with no default with a local value. The Postgres projects need Docker with the compose plugin, because `db:setup` starts their server with `docker compose`; the script stops it at the end. The projects and the development server check run at the same time.
 
-On a rerun after a transient failure you can skip step 5:
+On a rerun after a transient failure you can skip step 6:
 
 ```sh
 SAASALOY_RELEASE_SKIP_GATE=1 pnpm release
 ```
 
-Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2, 3, 4 and 6 always run.
+Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2, 3, 4, 5 and 7 always run.
 
 ### Modules that need a new CLI
 
@@ -636,20 +658,38 @@ A module change and a CLI change both reach a plain `saasaloy add` at the next r
 
 `registry-floors.test.ts` fails the gate when step 1 or 2 is missing. Nothing enforces step 3, so release soon after the merge.
 
-The version is then already bumped when you release. Release it as it stands, so release-it publishes that version rather than asking for a new one:
+The version is then already bumped when you release. Release it as it stands, so release-it tags that version rather than asking for a new one:
 
 ```sh
 pnpm release 0.6.0 --only-version
 ```
 
-Replace `0.6.0` with the version in `packages/cli/package.json`. The explicit version preserves the planned version and selects the changelog range from the latest tag to the new tag. The npm configuration enables `allowSameVersion`, so `npm version` accepts the unchanged version. Do not use `--no-increment` here because the changelog plugin selects the previous release range. Do not use `--ci` because npm needs an interactive authentication prompt.
+Replace `0.6.0` with the version in `packages/cli/package.json`. The explicit version preserves the planned version and selects the changelog range from the latest tag to the new tag. The npm configuration enables `allowSameVersion`, so `npm version` accepts the unchanged version. Do not use `--no-increment` here because the changelog plugin selects the previous release range. Do not use `--ci`, because it skips the prompt before each step.
 
 ### If it fails after the push
 
-release-it has no rollback. Once the commit, tag, and push exist, the version is spent. npm publishes last, so a failed publish leaves a tag with no npm version. That is safe: no installed CLI names the tag until npm offers it.
+release-it has no rollback. Once the commit, tag, and push exist, the version is spent.
 
 1. **Never rerun `pnpm release` for the same version**, and never rewrite pushed `main` history.
 2. Fix whatever failed.
-3. Publish by hand from `packages/cli`: `npm publish`. `prepack` rebuilds `dist/` first.
-4. If the GitHub Release is missing, create it by hand with `gh release create vX.Y.Z --notes-from-tag`.
-5. If the failure is in the published package itself, fix it and release the next patch. Do not unpublish.
+3. If the GitHub Release is missing, create it by hand with `gh release create vX.Y.Z --notes-from-tag`.
+4. If the failure is in the published package itself, fix it and release the next patch. Do not unpublish.
+
+### If the publish fails
+
+A failed `publish` run leaves a tag with no npm version. That is safe: no installed CLI names the tag until npm offers it, so it delays users and breaks nothing. The preflight refuses the next release until the version is on npm.
+
+1. Read the failed step: `gh run view <run id> --log-failed`.
+2. If the cause is outside the tagged code (an npm outage, the trusted publisher settings, the environment), fix it.
+3. Rerun the job: `gh run rerun <run id> --failed`, or **Re-run failed jobs** on the run page. The rerun waits for your approval again.
+4. If the cause is in the tagged code, never move the tag. The preflight ran the same build, pack and install on that commit, so this is rare. The preflight refuses the next release while the version is missing on npm, and it has no override, so decide by hand whether to publish the tag as it is or to remove the check for one release.
+
+The emergency path is a token publish, for when GitHub Actions is down. It has no provenance, so use it only when the `publish` workflow cannot run:
+
+1. Check out the tag in a clean clone: `git checkout vX.Y.Z`.
+2. Run `pnpm install --frozen-lockfile`.
+3. Log in to npm with 2FA: `npm login`, then `npm whoami`.
+4. From `packages/cli`, run `npm publish --access public`. npm asks for the one-time code. `prepack` builds `dist/` first.
+5. Check the result: `npm view saasaloy@X.Y.Z version`.
+
+The trusted publisher stays the normal path. npm keeps token publishes allowed on the package for this path only.

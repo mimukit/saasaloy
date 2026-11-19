@@ -3,16 +3,30 @@
 # runs every one of them in order. `pnpm deploy:production` waits for this workflow to
 # pass on HEAD, because the module set `ciWorkflow: "ci.yml"` in
 # packages/tooling/src/deploy.config.ts. See .agents/skills/saasaloy-ci/SKILL.md.
+#
+# Every `uses:` names a full commit SHA, with the release tag in the comment. A tag can be
+# moved to other code; a SHA cannot. A newer saasaloy release brings newer pins.
 name: ci
 
 on:
+  # `main` only. A merge commit on main gets its run from this push, and the deploy gate
+  # reads that run. Every other branch, `hotfix-*` included, gets its run from its pull
+  # request, which carries the branch's head SHA.
   push:
+    branches:
+      - main
   pull_request:
 
-# A second push to a branch makes the first run's answer worthless. Cancel it.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # On main, one group per commit. GitHub keeps one pending run per group and cancels the
+  # older pending run, whatever `cancel-in-progress` says, so a shared main group would
+  # lose a run when three merges land close together. A pull request run groups by its
+  # number, so two forks with the same branch name do not share a group.
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.event.pull_request.number || github.ref }}
+  # A second push to a pull request makes the first run's answer worthless, so cancel it.
+  # Never on main: `pnpm deploy:production` reads the run on the deploy commit, and a
+  # cancelled run there fails the deploy gate. Every commit on main keeps its own result.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
   contents: read
@@ -25,20 +39,35 @@ jobs:
       # The database `ci:prepare:database` starts from compose.yaml, with its literal
       # development credentials. Only the database-postgres driver reads it.
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # Keeps husky's `prepare` from installing git hooks on the runner.
+      HUSKY: "0"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       # No `version` key: the action reads `packageManager` from package.json.
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: pnpm
 
+      # Turborepo's local cache, keyed by branch and commit. A run starts from the newest
+      # cache of its own branch, then from main's.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.head_ref || github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ github.head_ref || github.ref_name }}-
+            turbo-${{ runner.os }}-main-
+
       - run: pnpm install --frozen-lockfile
 
-      # Does nothing until a module adds a `ci:prepare:<module>` script.
+      # `ci:prepare:env` runs first and writes each service's `.env` from the defaults in
+      # packages/env/.env.example. Then every other `ci:prepare:<module>` script runs.
       - run: pnpm ci:prepare
 
       - run: pnpm lint
@@ -47,6 +76,9 @@ jobs:
 
       # Passes with no test files, so a project with testing off stays green.
       - run: pnpm test
+
+      # A broken build fails here, not at deploy time.
+      - run: pnpm build
 
       # Runs only when the root package.json defines a `ci:e2e` script.
       - run: pnpm run --if-present ci:e2e

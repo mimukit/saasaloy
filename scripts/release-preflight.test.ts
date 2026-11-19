@@ -20,6 +20,8 @@ import { describe, it } from "node:test";
 import {
   BASE_SKILLS,
   benchBriefs,
+  checkTagPublished,
+  badFootersMessage,
   benchmarkMessage,
   checkBenchmark,
   checkUpdateNotes,
@@ -28,6 +30,7 @@ import {
   gatedPaths,
   hasGitHubToken,
   isBreakingCommit,
+  lateNoteMessage,
   llmsSurfaceProblems,
   missingTokenMessage,
   missingUpdateNotesMessage,
@@ -38,10 +41,11 @@ import {
   shouldSkipGate,
   staleMainMessage,
   UNATTENDED_CLI_CONTRACT,
+  unpublishedTagMessage,
   updateNoteOptOut,
 } from "./release-preflight.ts";
 import { MVP_MODULES } from "./scaffold-check.ts";
-import type { Git } from "./release-preflight.ts";
+import type { Git, NpmView, NpmViewResult } from "./release-preflight.ts";
 
 describe("shouldSkipGate", () => {
   it("is off when the variable is unset", () => {
@@ -116,6 +120,90 @@ describe("hasGitHubToken", () => {
 describe("missingTokenMessage", () => {
   it("tells the maintainer how to recover", () => {
     assert.match(missingTokenMessage(), /gh auth login/);
+  });
+});
+
+describe("checkTagPublished", () => {
+  /** A fake `npm view` that answers every spec with `result` and records what it was asked. */
+  function npmView(result: NpmViewResult): { view: NpmView; asked: string[] } {
+    const asked: string[] = [];
+    return {
+      asked,
+      view: (spec) => {
+        asked.push(spec);
+        return result;
+      },
+    };
+  }
+
+  it("asks npm for the version of the tag, without the v", () => {
+    const fake = npmView({ status: 0, stdout: "0.8.0\n", stderr: "" });
+    checkTagPublished(fake.view, "saasaloy", "v0.8.0");
+    assert.deepEqual(fake.asked, ["saasaloy@0.8.0"]);
+  });
+
+  it("reads a printed version as published", () => {
+    const fake = npmView({ status: 0, stdout: "0.8.0\n", stderr: "" });
+    assert.deepEqual(checkTagPublished(fake.view, "saasaloy", "v0.8.0"), {
+      state: "published",
+      version: "0.8.0",
+    });
+  });
+
+  it("reads an E404 as missing", () => {
+    const fake = npmView({
+      status: 1,
+      stdout: "",
+      stderr:
+        "npm error code E404\nnpm error 404 No match found for version 0.9.0\n",
+    });
+    assert.deepEqual(checkTagPublished(fake.view, "saasaloy", "v0.9.0"), {
+      state: "missing",
+      version: "0.9.0",
+    });
+  });
+
+  it("reads a network error as unknown, never as missing", () => {
+    const fake = npmView({
+      status: 1,
+      stdout: "",
+      stderr:
+        "npm error code ENOTFOUND\nnpm error request to https://registry.npmjs.org/saasaloy failed\n",
+    });
+    const result = checkTagPublished(fake.view, "saasaloy", "v0.9.0");
+    assert.equal(result.state, "unknown");
+    assert.match(result.state === "unknown" ? result.detail : "", /ENOTFOUND/);
+  });
+
+  it("reads an npm that cannot start as unknown", () => {
+    const fake = npmView({
+      status: null,
+      stdout: "",
+      stderr: "",
+      error: new Error("spawn npm ENOENT"),
+    });
+    assert.equal(
+      checkTagPublished(fake.view, "saasaloy", "v0.9.0").state,
+      "unknown"
+    );
+  });
+
+  it("reads an empty answer with exit 0 as unknown, not as published", () => {
+    const fake = npmView({ status: 0, stdout: "", stderr: "" });
+    assert.equal(
+      checkTagPublished(fake.view, "saasaloy", "v0.9.0").state,
+      "unknown"
+    );
+  });
+});
+
+describe("unpublishedTagMessage", () => {
+  const message = unpublishedTagMessage("saasaloy", "v0.9.0");
+
+  it("names the version, the tag and the workflow to rerun", () => {
+    assert.match(message, /saasaloy@0\.9\.0/);
+    assert.match(message, /v0\.9\.0/);
+    assert.match(message, /publish\.yml/);
   });
 });
 
@@ -290,7 +378,12 @@ describe("checkUpdateNotes", () => {
       fakeGit([{ hash: HASH_A, message: "feat: add a flag\n" }]),
       "v0.8.0"
     );
-    assert.deepEqual(result, { missing: [], optOuts: [] });
+    assert.deepEqual(result, {
+      missing: [],
+      optOuts: [],
+      late: [],
+      badFooters: [],
+    });
   });
 
   it("reads the commits after the tag, skipping merges", () => {
@@ -302,6 +395,111 @@ describe("checkUpdateNotes", () => {
     checkUpdateNotes(git, "v0.8.0");
     assert.ok(calls[0]!.includes("v0.8.0..HEAD"));
     assert.ok(calls[0]!.includes("--no-merges"));
+  });
+});
+
+// Issue #358: a breaking commit that shipped without its note gets one from a later
+// commit carrying `Update-Note-For: <full sha>`. These replay the real case, 974d223.
+describe("checkUpdateNotes with a late note", () => {
+  const BREAKING = "974d223f83c798fc66f674a5bd48a52cee1d7321";
+  const LATE = "c".repeat(40);
+  const breakingCommit = {
+    hash: BREAKING,
+    message:
+      "feat(auth)!: gate admin routes and close plugin admin endpoints\n\nBREAKING CHANGE: /admin/auth/admin/* no longer answers over http.\n",
+    added: [],
+  };
+
+  it("counts a later commit's note for the commit its footer names", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: LATE,
+          message: `docs(auth): add the update note for the admin endpoints\n\nUpdate-Note-For: ${BREAKING}\n`,
+          added: ["modules/auth/update-notes/0006-admin-plugin-endpoints.md"],
+        },
+        breakingCommit,
+      ]),
+      "v0.8.0"
+    );
+    assert.deepEqual(result.missing, []);
+    assert.deepEqual(result.badFooters, []);
+    assert.equal(result.late.length, 1);
+    assert.equal(result.late[0]!.shortHash, "974d223");
+    assert.deepEqual(result.late[0]!.by, ["ccccccc"]);
+  });
+
+  it("fails a footer that names a commit that is not breaking", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: LATE,
+          message: `docs: add a note\n\nUpdate-Note-For: ${HASH_A}\n`,
+          added: ["modules/auth/update-notes/0006-x.md"],
+        },
+        { hash: HASH_A, message: "feat(auth): add a flag\n" },
+      ]),
+      "v0.8.0"
+    );
+    assert.equal(result.badFooters.length, 1);
+    assert.match(result.badFooters[0]!, /Update-Note-For: a{40}/);
+    assert.match(result.badFooters[0]!, /not a breaking commit since v0\.8\.0/);
+  });
+
+  it("fails a footer whose commit adds no note, and leaves the commit missing", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: LATE,
+          message: `docs: promise a note\n\nUpdate-Note-For: ${BREAKING}\n`,
+          added: ["docs/x.md"],
+        },
+        breakingCommit,
+      ]),
+      "v0.8.0"
+    );
+    assert.equal(result.badFooters.length, 1);
+    assert.match(result.badFooters[0]!, /Update-Note-For: 974d223f/);
+    assert.match(result.badFooters[0]!, /adds no update note/);
+    assert.equal(result.missing.length, 1);
+  });
+
+  it("fails a short SHA, and leaves the commit missing", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: LATE,
+          message: "docs: add a note\n\nUpdate-Note-For: 974d223\n",
+          added: ["modules/auth/update-notes/0006-x.md"],
+        },
+        breakingCommit,
+      ]),
+      "v0.8.0"
+    );
+    assert.equal(result.badFooters.length, 1);
+    assert.match(result.badFooters[0]!, /"Update-Note-For: 974d223"/);
+    assert.match(result.badFooters[0]!, /full 40-character/);
+    assert.equal(result.missing.length, 1);
+  });
+});
+
+describe("badFootersMessage and lateNoteMessage", () => {
+  it("names the footer and its form", () => {
+    const message = badFootersMessage(["ccccccc docs: x: bad"]);
+    assert.match(message, /Update-Note-For/);
+    assert.match(message, /ccccccc docs: x: bad/);
+  });
+
+  it("names the commit that added the late note", () => {
+    assert.equal(
+      lateNoteMessage({
+        hash: HASH_A,
+        shortHash: "aaaaaaa",
+        subject: "feat!: x",
+        by: ["ccccccc"],
+      }),
+      "aaaaaaa feat!: x: update note added later by ccccccc (Update-Note-For)"
+    );
   });
 });
 
@@ -321,6 +519,7 @@ describe("missingUpdateNotesMessage", () => {
   it("says what to add", () => {
     assert.match(message, /update-notes\//);
     assert.match(message, /Update-Note: none \(<reason>\)/);
+    assert.match(message, /Update-Note-For: <full sha>/);
   });
 });
 
