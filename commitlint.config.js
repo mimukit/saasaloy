@@ -9,9 +9,16 @@
 // rule lives in `scripts/update-note-footer.ts`, which the preflight shares, and has its
 // tests there.
 //
+// `update-note-for-sha` rejects an `Update-Note-For:` footer unless it names a full
+// 40-character SHA. A later commit uses that footer to add the note a breaking commit
+// missed (issue #358); the rule lives in the same file.
+//
 // Bypass for a genuine emergency: `git commit --no-verify`, or `HUSKY=0 git commit`
 // to skip every hook at once (which is also how CI avoids installing them).
-import { updateNoteReasonRule } from "./scripts/update-note-footer.ts";
+import {
+  updateNoteForRule,
+  updateNoteReasonRule,
+} from "./scripts/update-note-footer.ts";
 
 export default {
   extends: ["@commitlint/config-conventional"],
@@ -19,10 +26,12 @@ export default {
     {
       rules: {
         "update-note-reason": updateNoteReasonRule,
+        "update-note-for-sha": updateNoteForRule,
       },
     },
   ],
   rules: {
     "update-note-reason": [2, "always"],
+    "update-note-for-sha": [2, "always"],
   },
 };

@@ -8,6 +8,13 @@
 // conventional-commits parser only splits notes on `BREAKING CHANGE`, so an `Update-Note:`
 // line lands in `footer` or `body` depending on what precedes it.
 //
+// A breaking commit that shipped without its note can get one later (issue #358). The
+// later commit adds the note and carries `Update-Note-For: <full sha>`, one footer for
+// each commit it covers. The preflight counts that commit's added notes for the named
+// commit, and the changelog links them. Only a full 40-character SHA is accepted: a short
+// one can become ambiguous as the history grows. `updateNoteForRule` refuses any other
+// value at commit time.
+//
 // Imports nothing. Node 24 strips the types, so commitlint loads it straight from the
 // `.js` config; `pnpm typecheck` checks it via tsconfig.scripts.json.
 
@@ -63,4 +70,49 @@ export function updateNoteReasonRule(parsed: {
     false,
     `Update-Note footer must read "Update-Note: none (<reason>)" with a non-empty reason, got "${bad[0] ?? ""}"`,
   ];
+}
+
+const FOR_FOOTER = /^Update-Note-For:(.*)$/i;
+const FULL_SHA = /^[0-9a-f]{40}$/i;
+
+/** One `Update-Note-For:` footer: the value as written, and the SHA it names. */
+export interface UpdateNoteFor {
+  /** The value after the colon, trimmed. */
+  value: string;
+  /** The full SHA in lower case, or null when the value is not exactly 40 hex characters. */
+  sha: string | null;
+}
+
+/** Each `Update-Note-For:` footer in a message, skipping git's `#` comment lines. */
+export function updateNoteForFooters(message: string): UpdateNoteFor[] {
+  return message
+    .split("\n")
+    .filter((line) => !line.startsWith("#"))
+    .flatMap((line) => {
+      const value = FOR_FOOTER.exec(line.trimEnd())?.[1]?.trim();
+      if (value === undefined) {
+        return [];
+      }
+      return [
+        { value, sha: FULL_SHA.test(value) ? value.toLowerCase() : null },
+      ];
+    });
+}
+
+/** What to say about an `Update-Note-For:` value that is not a full SHA. */
+export function shortShaProblem(value: string): string {
+  return `"Update-Note-For: ${value}" must name a full 40-character commit SHA`;
+}
+
+/**
+ * commitlint rule `update-note-for-sha`: every `Update-Note-For:` footer names a full
+ * 40-character SHA. A message without the footer passes.
+ */
+export function updateNoteForRule(parsed: {
+  raw?: string | null;
+}): [boolean, string?] {
+  const bad = updateNoteForFooters(parsed.raw ?? "").find(
+    (footer) => footer.sha === null
+  );
+  return bad === undefined ? [true] : [false, shortShaProblem(bad.value)];
 }

@@ -18,9 +18,20 @@ import {
 const HASH_A = "a".repeat(40);
 const HASH_B = "b".repeat(40);
 
-/** A fake git that answers `diff-tree` from a table of added files per commit. */
-function fakeGit(added: Record<string, readonly string[]>): Git {
+/**
+ * A fake git that answers `diff-tree` from a table of added files per commit, and `log`
+ * from a list of commits (none by default).
+ */
+function fakeGit(
+  added: Record<string, readonly string[]>,
+  log: readonly { hash: string; message: string }[] = []
+): Git {
   return (args) => {
+    if (args[0] === "log") {
+      return log
+        .map((commit) => `${commit.hash}\u001F${commit.message}\u001E`)
+        .join("\n");
+    }
     if (args[0] !== "diff-tree") {
       throw new Error(`unexpected git call: git ${args.join(" ")}`);
     }
@@ -118,6 +129,47 @@ describe("finalizeUpdateNotes", () => {
       fakeGit({})
     );
     assert.equal(result.noteGroups[0]!.notes[0]!.text, "drop the old flag");
+  });
+
+  it("links the note a later commit added with Update-Note-For", () => {
+    let range = "";
+    const base = fakeGit(
+      { [HASH_B]: ["modules/auth/update-notes/0006-x.md"] },
+      [
+        {
+          hash: HASH_B,
+          message: `docs(auth): add the late note\n\nUpdate-Note-For: ${HASH_A}`,
+        },
+        { hash: HASH_A, message: "feat(auth)!: close the endpoints" },
+      ]
+    );
+    const result = finalizeUpdateNotes(
+      context([{ text: "close the endpoints", hash: HASH_A }]),
+      (args) => {
+        if (args[0] === "log") {
+          range = args.at(-1) ?? "";
+        }
+        return base(args);
+      }
+    );
+    assert.equal(range, "v0.8.0..HEAD");
+    assert.equal(
+      result.noteGroups[0]!.notes[0]!.text,
+      "close the endpoints (update note: [modules/auth/update-notes/0006-x.md](https://github.com/mimukit/saasaloy/blob/v0.9.0/modules/auth/update-notes/0006-x.md))"
+    );
+  });
+
+  it("does not link a late footer whose SHA is short", () => {
+    const result = finalizeUpdateNotes(
+      context([{ text: "close the endpoints", hash: HASH_A }]),
+      fakeGit({ [HASH_B]: ["modules/auth/update-notes/0006-x.md"] }, [
+        {
+          hash: HASH_B,
+          message: "docs(auth): add the late note\n\nUpdate-Note-For: aaaaaaa",
+        },
+      ])
+    );
+    assert.equal(result.noteGroups[0]!.notes[0]!.text, "close the endpoints");
   });
 
   it("turns on the compare link the way the default finalizer does", () => {

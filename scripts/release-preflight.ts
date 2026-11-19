@@ -16,7 +16,8 @@
 // always run.
 //
 // The update-note check reads the commits since the last tag. A breaking commit must add a
-// file under an `update-notes/` folder, or opt out with `Update-Note: none (<reason>)`. It
+// file under an `update-notes/` folder, or opt out with `Update-Note: none (<reason>)`, or
+// get its note from a later commit that carries `Update-Note-For: <full sha>`. It
 // runs before the gate because it costs one `git log` and one `git diff-tree` per breaking
 // commit, so a missing note fails in a second rather than after five minutes of gate.
 //
@@ -37,7 +38,7 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Git } from "./changelog-update-notes.ts";
+import type { Git, LoggedCommit } from "./changelog-update-notes.ts";
 import {
   benchBriefs,
   benchmarkMessage,
@@ -47,9 +48,14 @@ import {
   REPORT_DIR,
   REPORT_NAME,
 } from "./bench-gate.ts";
-import { addedUpdateNotes } from "./changelog-update-notes.ts";
+import {
+  addedUpdateNotes,
+  commitsInRange,
+  lateNoteFooters,
+  lateUpdateNotes,
+} from "./changelog-update-notes.ts";
 import { cliSurface, llmsSurfaceProblems, releaseSkills } from "./llms-txt.ts";
-import { updateNoteOptOut } from "./update-note-footer.ts";
+import { shortShaProblem, updateNoteOptOut } from "./update-note-footer.ts";
 
 export type { BenchmarkCheck, BenchReport } from "./bench-gate.ts";
 export {
@@ -146,47 +152,92 @@ export interface OptOut extends BreakingCommit {
   reason: string;
 }
 
+/** A breaking commit that a later commit covered with `Update-Note-For:`. */
+export interface LateNote extends BreakingCommit {
+  /** The short SHAs of the commits that added its notes. */
+  by: string[];
+}
+
 export interface UpdateNoteCheck {
   /** Breaking commits with no note and no opt-out. Each one fails the release. */
   missing: BreakingCommit[];
   /** Breaking commits that opted out. The preflight prints each reason. */
   optOuts: OptOut[];
+  /** Breaking commits whose note came in a later commit. The preflight prints each one. */
+  late: LateNote[];
+  /** One line per `Update-Note-For:` footer that is wrong. Each one fails the release. */
+  badFooters: string[];
 }
 
-const FIELD = "\u001F";
-const RECORD = "\u001E";
+function breakingCommit(commit: LoggedCommit): BreakingCommit {
+  return {
+    hash: commit.hash,
+    shortHash: commit.hash.slice(0, 7),
+    subject: commit.message.split("\n")[0] ?? "",
+  };
+}
 
 /**
  * Check every non-merge commit in `<tag>..HEAD`. Merges are skipped: a PR merge commit
  * adds nothing of its own, and the commits it brings in are read one by one.
+ *
+ * A breaking commit is covered by a note it adds itself, then by a note a later commit
+ * adds under `Update-Note-For: <its full sha>`, then by an `Update-Note: none (<reason>)`
+ * opt-out. A footer that names no full SHA, names a commit that is not a breaking commit
+ * in the range, or sits on a commit that adds no note is itself a failure: it would
+ * otherwise read as a note that is not there.
  */
 export function checkUpdateNotes(git: Git, tag: string): UpdateNoteCheck {
-  const log = git([
-    "log",
-    "--no-merges",
-    `--format=%H${FIELD}%B${RECORD}`,
-    `${tag}..HEAD`,
-  ]);
-  const result: UpdateNoteCheck = { missing: [], optOuts: [] };
-  for (const record of log.split(RECORD)) {
-    const separator = record.indexOf(FIELD);
-    if (separator === -1) {
+  const commits = commitsInRange(git, `${tag}..HEAD`);
+  const result: UpdateNoteCheck = {
+    missing: [],
+    optOuts: [],
+    late: [],
+    badFooters: [],
+  };
+  const breaking = new Set(
+    commits
+      .filter((commit) => isBreakingCommit(commit.message))
+      .map((commit) => commit.hash.toLowerCase())
+  );
+  const footers = lateNoteFooters(git, commits);
+  for (const footer of footers) {
+    const carrier = breakingCommit(footer.commit);
+    const where = `${carrier.shortHash} ${carrier.subject}`;
+    const named = `"Update-Note-For: ${footer.value}"`;
+    if (footer.target === null) {
+      result.badFooters.push(`${where}: ${shortShaProblem(footer.value)}`);
+    } else if (!breaking.has(footer.target)) {
+      result.badFooters.push(
+        `${where}: ${named} names a commit that is not a breaking commit since ${tag}`
+      );
+    } else if (footer.notes.length === 0) {
+      result.badFooters.push(
+        `${where}: ${named} is on a commit that adds no update note`
+      );
+    }
+  }
+  const lateNotes = lateUpdateNotes(footers);
+  for (const logged of commits) {
+    if (!isBreakingCommit(logged.message)) {
       continue;
     }
-    const hash = record.slice(0, separator).trim();
-    const message = record.slice(separator + 1).trim();
-    if (!isBreakingCommit(message)) {
+    const commit = breakingCommit(logged);
+    if (addedUpdateNotes(git, logged.hash).length > 0) {
       continue;
     }
-    const commit: BreakingCommit = {
-      hash,
-      shortHash: hash.slice(0, 7),
-      subject: message.split("\n")[0] ?? "",
-    };
-    if (addedUpdateNotes(git, hash).length > 0) {
+    if (lateNotes.has(logged.hash.toLowerCase())) {
+      const by = footers
+        .filter(
+          (footer) =>
+            footer.target === logged.hash.toLowerCase() &&
+            footer.notes.length > 0
+        )
+        .map((footer) => footer.commit.hash.slice(0, 7));
+      result.late.push({ ...commit, by });
       continue;
     }
-    const reason = updateNoteOptOut(message);
+    const reason = updateNoteOptOut(logged.message);
     if (reason === null) {
       result.missing.push(commit);
     } else {
@@ -205,8 +256,24 @@ export function missingUpdateNotesMessage(
     ...missing.map((commit) => `  ${commit.shortHash} ${commit.subject}`),
     "  Each breaking commit adds a note under packages/cli/update-notes/ or",
     "  modules/<name>/update-notes/ in the same commit, or carries the footer",
-    "  `Update-Note: none (<reason>)` with a non-empty reason.",
+    "  `Update-Note: none (<reason>)` with a non-empty reason. A note that comes",
+    "  later goes in its own commit with the footer `Update-Note-For: <full sha>`.",
   ].join("\n");
+}
+
+/** What to print for `Update-Note-For:` footers that are wrong. */
+export function badFootersMessage(badFooters: readonly string[]): string {
+  return [
+    "these Update-Note-For footers are wrong:",
+    ...badFooters.map((line) => `  ${line}`),
+    "  `Update-Note-For: <full sha>` names a breaking commit since the last tag by its",
+    "  full 40-character SHA, and its own commit adds the note under an update-notes/ folder.",
+  ].join("\n");
+}
+
+/** One line for a breaking commit whose note a later commit added. */
+export function lateNoteMessage(late: LateNote): string {
+  return `${late.shortHash} ${late.subject}: update note added later by ${late.by.join(", ")} (Update-Note-For)`;
 }
 
 /** One line for a breaking commit that opted out of a note. */
@@ -273,6 +340,44 @@ function coversRelease(revision: string): boolean {
   );
 }
 
+/**
+ * The update-note check on its own: read the last `v*` tag, check the commits since it,
+ * print each opt-out and late note, and exit 1 on a failure. Returns the tag. `main` runs
+ * it, and a maintainer runs it alone without the rest of the preflight:
+ *
+ *   node --input-type=module -e 'import("./scripts/release-preflight.ts").then((m) => m.runUpdateNoteCheck())'
+ */
+export function runUpdateNoteCheck(): string {
+  const tag = capture(
+    ["describe", "--tags", "--match=v*", "--abbrev=0"],
+    "git describe --tags"
+  );
+  const notes = checkUpdateNotes(
+    (args) => capture(args, `git ${args[0] ?? ""}`),
+    tag
+  );
+  for (const optOut of notes.optOuts) {
+    step(optOutMessage(optOut));
+  }
+  for (const late of notes.late) {
+    step(lateNoteMessage(late));
+  }
+  if (notes.badFooters.length > 0) {
+    fail(
+      "an Update-Note-For footer is wrong",
+      badFootersMessage(notes.badFooters)
+    );
+  }
+  if (notes.missing.length > 0) {
+    fail(
+      "breaking change without an update note",
+      missingUpdateNotesMessage(notes.missing)
+    );
+  }
+  step(`every breaking commit since ${tag} has an update note`);
+  return tag;
+}
+
 async function main(): Promise<void> {
   // --- Can release-it reach the GitHub API? -------------------------------------------
 
@@ -298,24 +403,7 @@ async function main(): Promise<void> {
 
   // --- Does every breaking commit carry an update note? -----------------------------
 
-  const tag = capture(
-    ["describe", "--tags", "--match=v*", "--abbrev=0"],
-    "git describe --tags"
-  );
-  const notes = checkUpdateNotes(
-    (args) => capture(args, `git ${args[0] ?? ""}`),
-    tag
-  );
-  for (const optOut of notes.optOuts) {
-    step(optOutMessage(optOut));
-  }
-  if (notes.missing.length > 0) {
-    fail(
-      "breaking change without an update note",
-      missingUpdateNotesMessage(notes.missing)
-    );
-  }
-  step(`every breaking commit since ${tag} has an update note`);
+  const tag = runUpdateNoteCheck();
 
   // --- Does a benchmark score report clear this release? ----------------------------
 

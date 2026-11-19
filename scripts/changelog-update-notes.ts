@@ -9,12 +9,21 @@
 // hands the writer `previousTag` and `currentTag`, so the one thing that guessing still did
 // was turn on the compare link, and `finalizeUpdateNotes` does that too.
 //
-// `release-preflight.ts` uses `addedUpdateNotes` to require a note on each breaking commit.
+// A note can also come late (issue #358): a later commit adds it and carries
+// `Update-Note-For: <full sha>`. `lateUpdateNotes` maps each footer in a range to the notes
+// its commit added, and `finalizeUpdateNotes` links those to the named commit's breaking
+// item exactly as it links a same-commit note. It reads `<previousTag>..HEAD`, because
+// release-it writes the changelog before it creates the new tag.
 //
-// Imports nothing but node: builtins. Node 24 strips the types, so there is no build step;
-// `pnpm typecheck` checks it via tsconfig.scripts.json.
+// `release-preflight.ts` uses `addedUpdateNotes`, `commitsInRange` and `lateUpdateNotes`
+// to require a note on each breaking commit.
+//
+// Imports node: builtins and `./update-note-footer.ts`, which imports nothing. Node 24
+// strips the types, so there is no build step; `pnpm typecheck` checks it via
+// tsconfig.scripts.json.
 
 import { spawnSync } from "node:child_process";
+import { updateNoteForFooters } from "./update-note-footer.ts";
 
 /** Runs git with these arguments and returns its stdout. Injected so tests need no repo. */
 export type Git = (args: readonly string[]) => string;
@@ -47,6 +56,89 @@ export function addedUpdateNotes(git: Git, hash: string): string[] {
     .filter((line) => line !== "" && isUpdateNotePath(line));
 }
 
+/** One non-merge commit from `git log`: its full SHA and its whole message. */
+export interface LoggedCommit {
+  hash: string;
+  message: string;
+}
+
+const FIELD = "\u001F";
+const RECORD = "\u001E";
+
+/**
+ * The non-merge commits in a range such as `v0.8.0..HEAD`, newest first. Merges are
+ * skipped: a PR merge commit adds nothing of its own, and the commits it brings in are
+ * read one by one.
+ */
+export function commitsInRange(git: Git, range: string): LoggedCommit[] {
+  const log = git([
+    "log",
+    "--no-merges",
+    `--format=%H${FIELD}%B${RECORD}`,
+    range,
+  ]);
+  const commits: LoggedCommit[] = [];
+  for (const record of log.split(RECORD)) {
+    const separator = record.indexOf(FIELD);
+    if (separator === -1) {
+      continue;
+    }
+    commits.push({
+      hash: record.slice(0, separator).trim(),
+      message: record.slice(separator + 1).trim(),
+    });
+  }
+  return commits;
+}
+
+/** One `Update-Note-For:` footer, with the commit that carries it and the notes it added. */
+export interface LateNoteFooter {
+  /** The commit that carries the footer. */
+  commit: LoggedCommit;
+  /** The footer value as written. */
+  value: string;
+  /** The full SHA it names in lower case, or null when the value is not a full SHA. */
+  target: string | null;
+  /** The update notes the footer's commit added. */
+  notes: string[];
+}
+
+/** Every `Update-Note-For:` footer in these commits, with the notes each commit added. */
+export function lateNoteFooters(
+  git: Git,
+  commits: readonly LoggedCommit[]
+): LateNoteFooter[] {
+  return commits.flatMap((commit) => {
+    const footers = updateNoteForFooters(commit.message);
+    if (footers.length === 0) {
+      return [];
+    }
+    const notes = addedUpdateNotes(git, commit.hash);
+    return footers.map((footer) => ({
+      commit,
+      value: footer.value,
+      target: footer.sha,
+      notes,
+    }));
+  });
+}
+
+/** The late notes per named commit: full SHA to the note paths later commits added for it. */
+export function lateUpdateNotes(
+  footers: readonly LateNoteFooter[]
+): Map<string, string[]> {
+  const byTarget = new Map<string, string[]>();
+  for (const footer of footers) {
+    if (footer.target === null || footer.notes.length === 0) {
+      continue;
+    }
+    const notes = byTarget.get(footer.target) ?? [];
+    notes.push(...footer.notes.filter((path) => !notes.includes(path)));
+    byTarget.set(footer.target, notes);
+  }
+  return byTarget;
+}
+
 /** The note file on GitHub at the release tag, which is where it stays fixed. */
 export function updateNoteUrl(version: string, path: string): string {
   return `${REPO_URL}/blob/v${version}/${path}`;
@@ -66,8 +158,9 @@ interface WriterContext {
 }
 
 /**
- * Append a link to each breaking note whose commit added an update note. Mutates and
- * returns the context, which is the contract `finalizeContext` has.
+ * Append a link to each breaking note whose commit added an update note, or that a later
+ * commit since `previousTag` covered with `Update-Note-For:`. Mutates and returns the
+ * context, which is the contract `finalizeContext` has.
  */
 export function finalizeUpdateNotes<T extends WriterContext>(
   context: T,
@@ -84,13 +177,29 @@ export function finalizeUpdateNotes<T extends WriterContext>(
   if (version === undefined) {
     return context;
   }
+  let late: Map<string, string[]> | undefined;
+  const lateFor = (hash: string): string[] => {
+    if (!context.previousTag) {
+      return [];
+    }
+    late ??= lateUpdateNotes(
+      lateNoteFooters(git, commitsInRange(git, `${context.previousTag}..HEAD`))
+    );
+    return late.get(hash.toLowerCase()) ?? [];
+  };
   for (const group of context.noteGroups ?? []) {
     for (const note of group.notes) {
       const hash = note.commit?.hash;
       if (!hash) {
         continue;
       }
-      const links = addedUpdateNotes(git, hash).map(
+      const paths = addedUpdateNotes(git, hash);
+      for (const path of lateFor(hash)) {
+        if (!paths.includes(path)) {
+          paths.push(path);
+        }
+      }
+      const links = paths.map(
         (path) => `[${path}](${updateNoteUrl(version, path)})`
       );
       if (links.length > 0) {
