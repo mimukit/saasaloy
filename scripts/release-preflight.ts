@@ -171,7 +171,7 @@ export interface UpdateNoteCheck {
   optOuts: OptOut[];
   /** Breaking commits whose note came in a later commit. The preflight prints each one. */
   late: LateNote[];
-  /** One line per `Update-Note-For:` footer that is wrong. Each one fails the release. */
+  /** One line per `Update-Note-For:` footer that covers nothing. The preflight warns about each. */
   badFooters: string[];
 }
 
@@ -190,8 +190,9 @@ function breakingCommit(commit: LoggedCommit): BreakingCommit {
  * A breaking commit is covered by a note it adds itself, then by a note a later commit
  * adds under `Update-Note-For: <its full sha>`, then by an `Update-Note: none (<reason>)`
  * opt-out. A footer that names no full SHA, names a commit that is not a breaking commit
- * in the range, or sits on a commit that adds no note is itself a failure: it would
- * otherwise read as a note that is not there.
+ * in the range, or sits on a commit that adds no note covers nothing. It goes to
+ * `badFooters`, which the preflight prints as a warning; the commit it meant to cover
+ * still counts as missing.
  */
 export function checkUpdateNotes(git: Git, tag: string): UpdateNoteCheck {
   const commits = commitsInRange(git, `${tag}..HEAD`);
@@ -270,7 +271,7 @@ export function missingUpdateNotesMessage(
 /** What to print for `Update-Note-For:` footers that are wrong. */
 export function badFootersMessage(badFooters: readonly string[]): string {
   return [
-    "these Update-Note-For footers are wrong:",
+    "these Update-Note-For footers cover nothing:",
     ...badFooters.map((line) => `  ${line}`),
     "  `Update-Note-For: <full sha>` names a breaking commit since the last tag by its",
     "  full 40-character SHA, and its own commit adds the note under an update-notes/ folder.",
@@ -354,6 +355,13 @@ function fail(message: string, ...detail: string[]): never {
   process.exit(1);
 }
 
+function warn(message: string, ...detail: string[]): void {
+  console.warn(`release-preflight: warning: ${message}`);
+  for (const line of detail) {
+    console.warn(`  ${line}`);
+  }
+}
+
 function step(message: string): void {
   console.log(`release-preflight: ${message}`);
 }
@@ -427,9 +435,12 @@ export function runUpdateNoteCheck(): string {
   for (const late of notes.late) {
     step(lateNoteMessage(late));
   }
+  // A warning, not a failure: history on main cannot change, so a failure here would
+  // stop every later release. A wrong footer covers nothing, so the breaking commit it
+  // meant to cover still fails below as a missing note.
   if (notes.badFooters.length > 0) {
-    fail(
-      "an Update-Note-For footer is wrong",
+    warn(
+      "an Update-Note-For footer covers nothing",
       badFootersMessage(notes.badFooters)
     );
   }
