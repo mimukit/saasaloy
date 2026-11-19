@@ -1,0 +1,84 @@
+# The report an agent files through the `saasaloy-report` base skill
+# (packages/cli/templates/base/_agents/skills/saasaloy-report/SKILL.md). The skill
+# names every field id below, and `scripts/agent-report-form.test.ts` fails when the
+# two sets differ. An agent that posts with `gh issue create` writes one `### <label>`
+# heading per field, which is the body this form renders, and starts the body with
+# `<!-- via-agent -->` so `.github/workflows/label-agent-reports.yml` labels it.
+name: Agent report
+description: A Saasaloy failure found by an agent in a real project, filed with the owner's yes.
+labels: [via-agent]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        An agent fills this form through the `saasaloy-report` skill. Run `saasaloy skill saasaloy-report` in your project to read it. Remove tokens, keys and your home directory path before you submit.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What the agent or the owner tried, and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Failed command and exit code
+      description: The exact command, its exit code, and the error it printed.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnosis
+    attributes:
+      label: Diagnosis
+      description: The cause in the Saasaloy source at the CLI's release tag, with file paths and line numbers.
+    validations:
+      required: false
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps from a fresh `saasaloy init`, or from the project state the report describes.
+    validations:
+      required: true
+  - type: textarea
+    id: versions
+    attributes:
+      label: Versions
+      description: The output of `saasaloy --version`, and the module refs in `saasaloy-lock.json`.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: The Node version, the pnpm version, and the OS.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: The `saasaloy doctor --json` output, CLI output, and managed files as upstream ships them. Owner code only after the owner said yes to each excerpt.
+    validations:
+      required: false
+  - type: textarea
+    id: related
+    attributes:
+      label: Related issues and releases
+      description: Existing issues and releases the agent searched, and why they do not cover this report.
+    validations:
+      required: false
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Workaround
+      description: A fix inside the project that got past the failure, if one exists.
+    validations:
+      required: false
+  - type: input
+    id: agent
+    attributes:
+      label: Agent
+      description: The agent and the model that filed this report.
+    validations:
+      required: true

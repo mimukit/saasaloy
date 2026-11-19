@@ -147,7 +147,7 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 
 ### The Base Skills
 
-Ten skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
+Eleven skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
 
 1. **`saasaloy-setup`** interviews the owner once, writes `docs/product-brief.md` and `docs/product-spec.md`, and ends with one read-back. On the owner's confirmation it starts `saasaloy-build` in the same session. Other skills read the brief and the spec rather than ask again.
 2. **`saasaloy-landing-copy`** writes `packages/ui/src/content/landing.ts` from the brief.
@@ -165,6 +165,10 @@ The other six run when the thing they own moves:
 - **`saasaloy-testing`** says which test a change needs under this project's testing mode.
 - **`saasaloy-deploy`** covers `pnpm deploy:production`, its gates, the rollback, the first superadmin, and answering a production question against the last deploy tag.
 - **`saasaloy-update`** takes the project to a newer CLI and newer modules: `saasaloy update`, the merge plan, the update notes, `--resolved` and `--done`.
+
+One runs when Saasaloy itself fails:
+
+- **`saasaloy-report`** reports a Saasaloy failure to `mimukit/saasaloy`: the facts to collect, the source at the CLI's release tag, the search for a known issue, and an issue posted only after the owner's yes. Run `saasaloy skill saasaloy-report` to read the copy the running CLI ships.
 
 ### Naming Conventions
 

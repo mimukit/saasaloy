@@ -1,0 +1,28 @@
+# Labels an issue that the `saasaloy-report` skill posted with `gh issue create`.
+# The issue form applies `via-agent` itself, and the skill adds `--label via-agent`
+# only when its user has triage permission on this repo. Every other agent report
+# arrives without the label, so this job adds it when the body starts with the
+# `<!-- via-agent -->` marker.
+#
+# The body never reaches a shell: the `if` reads it as an expression, and the step
+# gets only the issue number. GitHub runs this workflow from the default branch.
+name: label-agent-reports
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    if: startsWith(github.event.issue.body, '<!-- via-agent -->')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: gh issue edit "$NUMBER" --repo "$REPO" --add-label via-agent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
