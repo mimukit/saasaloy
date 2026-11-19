@@ -25,8 +25,11 @@ interface Props {
 const { title, description, noindex = false, jsonLd } = Astro.props;
 
 // `Astro.site` is the `site` origin in astro.config.mjs. It is always set there, so the
-// canonical URL never falls back to the dev server's host.
-const canonical = new URL(Astro.url.pathname, Astro.site).href;
+// canonical URL never falls back to the dev server's host. The path has no trailing slash,
+// as the docs links and /sitemap.xml do: the Worker serves `/docs/x` from `docs/x/index.html`
+// and redirects `/docs/x/` to it (`html_handling` in wrangler.jsonc).
+const path = Astro.url.pathname.replace(/(.)\/$/, "$1");
+const canonical = new URL(path, Astro.site).href;
 
 // The link preview image, 1200×630. public/og.png is the README module-map banner, padded
 // to that ratio. The URL is absolute, because a preview crawler resolves nothing.
