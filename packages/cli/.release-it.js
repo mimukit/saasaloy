@@ -3,10 +3,14 @@
 // the update note its commit added (issue #298). The logic and its tests live in
 // `scripts/changelog-update-notes.ts`.
 //
-// npm publishes last (ADR 0062). The CLI reads the default registry at the tag of its own
-// version, so the tag must be on GitHub before npm offers that version to anyone.
-// `./release-npm-last.js` is release-it's npm plugin moved behind git and github; its
-// options go under the `npm` namespace exactly as the built-in plugin's did.
+// release-it never publishes to npm (ADR 0064). It bumps the version, writes the changelog,
+// commits, tags, pushes and creates the GitHub Release. The tag push starts
+// `.github/workflows/publish.yml`, which waits for the owner's approval in the GitHub
+// environment `npm` and then publishes with npm trusted publishing (OIDC) and provenance.
+// So the tag reaches GitHub before npm offers the version, by construction (ADR 0062).
+// `npm.publish: false` keeps the built-in npm plugin for the version bump only, and
+// `allowSameVersion` lets `pnpm release <version> --only-version` keep a version that a
+// PR already set. `scripts/release-order.test.ts` checks that a dry run runs no publish.
 
 import { finalizeUpdateNotes } from "../../scripts/changelog-update-notes.ts";
 
@@ -41,12 +45,9 @@ export default {
         finalizeContext: (context) => finalizeUpdateNotes(context),
       },
     },
-    "./release-npm-last.js": [
-      "npm",
-      {
-        publish: true,
-        allowSameVersion: true,
-      },
-    ],
+  },
+  npm: {
+    publish: false,
+    allowSameVersion: true,
   },
 };

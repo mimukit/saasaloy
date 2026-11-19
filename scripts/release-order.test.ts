@@ -1,20 +1,26 @@
-// Checks that a CLI release pushes its tag before npm publishes it (ADR 0062). The CLI reads
-// the default registry at the tag of its own version, so a version on npm whose tag is not
-// yet on GitHub refuses every `add`. release-it 21 runs its built-in npm plugin before git,
-// and `packages/cli/release-npm-last.js` moves it last.
+// Checks that a CLI release never publishes from this box, and that the publish waits for a
+// tag on GitHub and an approval (ADR 0064, which amends ADR 0062). The CLI reads the default
+// registry at the tag of its own version, so a version on npm whose tag is not yet on
+// GitHub refuses every `add`.
 //
-// The test runs release-it itself, in dry-run mode, in a throwaway git repository with a
-// local remote. It reads the commands release-it would run and checks their order. The
-// fixture config takes the npm plugin's entry from the real `packages/cli/.release-it.js`,
-// so a config that drops the plugin fails here too. Run it with `pnpm test:scripts`.
+// The first half runs release-it itself, in dry-run mode, in a throwaway git repository with
+// a local remote, and reads the commands it would run. The fixture config is the real
+// `packages/cli/.release-it.js` with only the parts that need a real repository swapped
+// out (the GitHub Release, the preflight hook, the npm registry checks), so a config that
+// turns the npm publish back on, or adds a plugin that publishes, fails here.
+//
+// The second half parses `.github/workflows/publish.yml` and checks that it starts only on
+// a `v*` tag push and that its publish job runs only in the `npm` environment, the one with
+// the owner as required reviewer. Run it with `pnpm test:scripts`.
 
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI = join(ROOT, "packages", "cli");
@@ -25,20 +31,20 @@ const RELEASE_IT = join(
   "bin",
   "release-it.js"
 );
-const PLUGIN = "./release-npm-last.js";
+const PUBLISH_WORKFLOW = join(ROOT, ".github", "workflows", "publish.yml");
 
-/** The lines of a dry run that commit, tag, push or publish, in the order they ran. */
+/** The lines of a dry run that bump, commit, tag, push or publish, in the order they ran. */
 function releaseSteps(output: string): string[] {
   return output
     .split("\n")
     .map((line) => line.trim())
     .filter((line) =>
-      /^[!$] (?:git (?:commit|tag|push)|npm publish)\b/.test(line)
+      /^[!$] (?:git (?:commit|tag|push)|npm (?:version|publish))\b/.test(line)
     )
     .map((line) => line.slice(2).split(" ").slice(0, 2).join(" "));
 }
 
-describe("the release order", () => {
+describe("the release-it dry run", () => {
   let dir: string;
   let output: string;
 
@@ -65,24 +71,22 @@ describe("the release order", () => {
       join(work, "package.json"),
       `${JSON.stringify({ name: "release-order-fixture", version: "1.0.0" })}\n`
     );
-    // The npm options come from the real config, so dropping the plugin there fails here.
+    // The real config, with the GitHub Release, the preflight hook and npm's registry
+    // checks turned off. Everything else, the npm options and every plugin, is real.
     writeFileSync(
       join(work, ".release-it.js"),
       [
         `import real from ${JSON.stringify(join(CLI, ".release-it.js"))};`,
-        `const [namespace, options] = real.plugins[${JSON.stringify(PLUGIN)}];`,
         "export default {",
-        // release-it fills `${version}`; the string is its placeholder, not a JS template.
-        // oxlint-disable-next-line no-template-curly-in-string
-        '  git: { requireBranch: "main", tagName: "v${version}" },',
-        "  github: { release: false },",
-        "  plugins: {",
-        `    ${JSON.stringify(join(CLI, PLUGIN))}: [namespace, { ...options, skipChecks: true }],`,
-        "  },",
+        "  ...real,",
+        "  github: { ...real.github, release: false },",
+        "  hooks: {},",
+        "  npm: { ...real.npm, skipChecks: true },",
         "};",
         "",
       ].join("\n")
     );
+    writeFileSync(join(work, ".gitignore"), "CHANGELOG.md\n");
     git(work, "add", "--all");
     git(work, "commit", "--quiet", "--message", "feat: one");
     git(work, "tag", "--annotate", "--message", "v1.0.0", "v1.0.0");
@@ -120,19 +124,57 @@ describe("the release order", () => {
     rmSync(dir, { force: true, recursive: true });
   });
 
-  it("commits, tags and pushes before npm publishes", () => {
+  it("bumps the version, commits, tags and pushes", () => {
     assert.deepEqual(releaseSteps(output), [
+      "npm version",
       "git commit",
       "git tag",
       "git push",
-      "npm publish",
     ]);
   });
 
-  it("publishes once, through the plugin, not through the built-in npm plugin too", () => {
-    assert.equal(
-      releaseSteps(output).filter((step) => step === "npm publish").length,
-      1
-    );
+  it("runs no npm publish", () => {
+    assert.doesNotMatch(output, /\bnpm (?:stage )?publish\b/);
+  });
+});
+
+interface Workflow {
+  on?: unknown;
+  jobs?: Record<string, { environment?: unknown; permissions?: unknown }>;
+}
+
+describe("publish.yml", () => {
+  const text = readFileSync(PUBLISH_WORKFLOW, "utf-8");
+  const workflow = parse(text) as Workflow;
+
+  it("starts only on a push of a v* tag", () => {
+    assert.deepEqual(workflow.on, { push: { tags: ["v*"] } });
+  });
+
+  it("runs every job in the npm environment", () => {
+    const jobs = Object.entries(workflow.jobs ?? {});
+    assert.ok(jobs.length > 0, "publish.yml has no job");
+    for (const [name, job] of jobs) {
+      const environment =
+        typeof job.environment === "object" && job.environment !== null
+          ? (job.environment as { name?: unknown }).name
+          : job.environment;
+      assert.equal(
+        environment,
+        "npm",
+        `job ${name} is not in the npm environment`
+      );
+    }
+  });
+
+  it("publishes with an OIDC token and no NPM_TOKEN secret", () => {
+    for (const job of Object.values(workflow.jobs ?? {})) {
+      assert.deepEqual(job.permissions, {
+        contents: "read",
+        "id-token": "write",
+      });
+    }
+    // The parsed workflow, so the header comment may name the secret it does not use.
+    assert.doesNotMatch(JSON.stringify(workflow), /NPM_TOKEN|NODE_AUTH_TOKEN/);
   });
 });

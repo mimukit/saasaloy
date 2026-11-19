@@ -20,6 +20,7 @@ import { describe, it } from "node:test";
 import {
   BASE_SKILLS,
   benchBriefs,
+  checkTagPublished,
   badFootersMessage,
   benchmarkMessage,
   checkBenchmark,
@@ -40,10 +41,11 @@ import {
   shouldSkipGate,
   staleMainMessage,
   UNATTENDED_CLI_CONTRACT,
+  unpublishedTagMessage,
   updateNoteOptOut,
 } from "./release-preflight.ts";
 import { MVP_MODULES } from "./scaffold-check.ts";
-import type { Git } from "./release-preflight.ts";
+import type { Git, NpmView, NpmViewResult } from "./release-preflight.ts";
 
 describe("shouldSkipGate", () => {
   it("is off when the variable is unset", () => {
@@ -118,6 +120,90 @@ describe("hasGitHubToken", () => {
 describe("missingTokenMessage", () => {
   it("tells the maintainer how to recover", () => {
     assert.match(missingTokenMessage(), /gh auth login/);
+  });
+});
+
+describe("checkTagPublished", () => {
+  /** A fake `npm view` that answers every spec with `result` and records what it was asked. */
+  function npmView(result: NpmViewResult): { view: NpmView; asked: string[] } {
+    const asked: string[] = [];
+    return {
+      asked,
+      view: (spec) => {
+        asked.push(spec);
+        return result;
+      },
+    };
+  }
+
+  it("asks npm for the version of the tag, without the v", () => {
+    const fake = npmView({ status: 0, stdout: "0.8.0\n", stderr: "" });
+    checkTagPublished(fake.view, "saasaloy", "v0.8.0");
+    assert.deepEqual(fake.asked, ["saasaloy@0.8.0"]);
+  });
+
+  it("reads a printed version as published", () => {
+    const fake = npmView({ status: 0, stdout: "0.8.0\n", stderr: "" });
+    assert.deepEqual(checkTagPublished(fake.view, "saasaloy", "v0.8.0"), {
+      state: "published",
+      version: "0.8.0",
+    });
+  });
+
+  it("reads an E404 as missing", () => {
+    const fake = npmView({
+      status: 1,
+      stdout: "",
+      stderr:
+        "npm error code E404\nnpm error 404 No match found for version 0.9.0\n",
+    });
+    assert.deepEqual(checkTagPublished(fake.view, "saasaloy", "v0.9.0"), {
+      state: "missing",
+      version: "0.9.0",
+    });
+  });
+
+  it("reads a network error as unknown, never as missing", () => {
+    const fake = npmView({
+      status: 1,
+      stdout: "",
+      stderr:
+        "npm error code ENOTFOUND\nnpm error request to https://registry.npmjs.org/saasaloy failed\n",
+    });
+    const result = checkTagPublished(fake.view, "saasaloy", "v0.9.0");
+    assert.equal(result.state, "unknown");
+    assert.match(result.state === "unknown" ? result.detail : "", /ENOTFOUND/);
+  });
+
+  it("reads an npm that cannot start as unknown", () => {
+    const fake = npmView({
+      status: null,
+      stdout: "",
+      stderr: "",
+      error: new Error("spawn npm ENOENT"),
+    });
+    assert.equal(
+      checkTagPublished(fake.view, "saasaloy", "v0.9.0").state,
+      "unknown"
+    );
+  });
+
+  it("reads an empty answer with exit 0 as unknown, not as published", () => {
+    const fake = npmView({ status: 0, stdout: "", stderr: "" });
+    assert.equal(
+      checkTagPublished(fake.view, "saasaloy", "v0.9.0").state,
+      "unknown"
+    );
+  });
+});
+
+describe("unpublishedTagMessage", () => {
+  const message = unpublishedTagMessage("saasaloy", "v0.9.0");
+
+  it("names the version, the tag and the workflow to rerun", () => {
+    assert.match(message, /saasaloy@0\.9\.0/);
+    assert.match(message, /v0\.9\.0/);
+    assert.match(message, /publish\.yml/);
   });
 });
 

@@ -26,6 +26,12 @@
 // same reason the update-note check does: it costs seconds, the gate costs minutes. What
 // "the release" holds is defined in `scripts/llms-txt.ts`.
 //
+// The npm check asks the registry whether the version of the last tag is on npm. Since ADR
+// 0064 a tag push starts `publish.yml`, and the owner approves that job on GitHub, so a tag
+// can exist with no publish behind it: a rejected approval, a failed job nobody reran. A
+// second release on top would skip that version on npm for good. A network failure is not
+// read as "missing" or as "published": the preflight stops and names the npm error.
+//
 // The benchmark check reads the changed paths since the last tag. When they touch a base
 // skill, the unattended CLI contract or a module of the MVP set, it refuses the release
 // unless a score report in `docs/research/` for every benchmark brief covers this revision
@@ -276,6 +282,65 @@ export function lateNoteMessage(late: LateNote): string {
   return `${late.shortHash} ${late.subject}: update note added later by ${late.by.join(", ")} (Update-Note-For)`;
 }
 
+/** The output of one `npm view <spec> version` run. */
+export interface NpmViewResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  /** Set when npm could not start at all. */
+  error?: Error;
+}
+
+/** Runs `npm view <spec> version`. The preflight passes the real one, a test a fake. */
+export type NpmView = (spec: string) => NpmViewResult;
+
+export type TagPublished =
+  | { state: "published"; version: string }
+  | { state: "missing"; version: string }
+  | { state: "unknown"; version: string; detail: string };
+
+/**
+ * Whether the version of `tag` (`v1.2.3` reads as `1.2.3`) of `name` is on npm.
+ *
+ * `npm view <name>@<version> version` prints the version and exits 0 when it is there, and
+ * exits 1 with `npm error code E404` when it is not. Anything else, a network error, a
+ * registry outage, a 401, an empty answer, is `unknown`: the preflight cannot tell, so it
+ * stops rather than read a dead network as a skipped version or as a clean one.
+ */
+export function checkTagPublished(
+  npmView: NpmView,
+  name: string,
+  tag: string
+): TagPublished {
+  const version = tag.replace(/^v/, "");
+  const result = npmView(`${name}@${version}`);
+  if (result.error) {
+    return { state: "unknown", version, detail: String(result.error) };
+  }
+  if (result.status === 0 && result.stdout.trim() === version) {
+    return { state: "published", version };
+  }
+  if (result.status !== 0 && /\bcode E404\b/.test(result.stderr)) {
+    return { state: "missing", version };
+  }
+  const detail =
+    result.stderr.trim() ||
+    `exit code ${String(result.status)}, output "${result.stdout.trim()}"`;
+  return { state: "unknown", version, detail };
+}
+
+/** What to print when the version of the last tag is not on npm. */
+export function unpublishedTagMessage(name: string, tag: string): string {
+  const version = tag.replace(/^v/, "");
+  return [
+    `${name}@${version} is not on npm, but the tag ${tag} exists.`,
+    "  The publish.yml run for that tag did not finish: it waits for approval in the",
+    "  `npm` environment, or it failed. Approve or rerun it on GitHub (CONTRIBUTING.md,",
+    `  "If the publish fails"), check \`npm view ${name}@${version} version\`, then start`,
+    "  the release again. A new release on top would skip that version on npm.",
+  ].join("\n");
+}
+
 /** One line for a breaking commit that opted out of a note. */
 export function optOutMessage(optOut: OptOut): string {
   return `${optOut.shortHash} ${optOut.subject}: no update note (${optOut.reason})`;
@@ -404,6 +469,41 @@ async function main(): Promise<void> {
   // --- Does every breaking commit carry an update note? -----------------------------
 
   const tag = runUpdateNoteCheck();
+
+  // --- Is the last tag's version on npm? ----------------------------------------------
+
+  const cliName = (
+    JSON.parse(
+      readFileSync(join(root, "packages", "cli", "package.json"), "utf-8")
+    ) as { name: string }
+  ).name;
+  const published = checkTagPublished(
+    (spec) => {
+      const result = spawnSync("npm", ["view", spec, "version"], {
+        cwd: root,
+        encoding: "utf-8",
+      });
+      return {
+        status: result.status,
+        stdout: result.stdout ?? "",
+        stderr: result.stderr ?? "",
+        ...(result.error ? { error: result.error } : {}),
+      };
+    },
+    cliName,
+    tag
+  );
+  if (published.state === "missing") {
+    fail(`${tag} is not published on npm`, unpublishedTagMessage(cliName, tag));
+  }
+  if (published.state === "unknown") {
+    fail(
+      `could not ask npm whether ${cliName}@${published.version} is published`,
+      published.detail,
+      "Check the network and `npm view` by hand, then start the release again."
+    );
+  }
+  step(`${cliName}@${published.version} (${tag}) is on npm`);
 
   // --- Does a benchmark score report clear this release? ----------------------------
 

@@ -1,0 +1,108 @@
+# Publishes the CLI to npm when a release tag reaches GitHub (ADR 0064).
+#
+# `pnpm release` bumps the version, writes the changelog, commits, tags, pushes and creates
+# the GitHub Release. It never publishes. The `v*` tag push starts this workflow, and the
+# job waits in the GitHub environment `npm` until the owner approves it. So the tag is on
+# GitHub before npm offers the version, by construction (ADR 0062).
+#
+# Auth is npm trusted publishing (OIDC). The trusted publisher on npmjs.com names
+# `mimukit/saasaloy`, this file and the environment `npm`. There is no NPM_TOKEN secret:
+# `id-token: write` lets npm swap the job's OIDC token for a short-lived publish token,
+# and npm records a provenance attestation because the repository is public.
+#
+# The local preflight already ran the full gate and the tarball smoke on this commit, so
+# the checks here are only the ones that prove this tarball is the one the tag names:
+# the tag matches the version, the CLI builds, the tarball installs, and the installed
+# `saasaloy --version` prints that version. `scripts/release-order.test.ts` checks that
+# this workflow starts only on a `v*` tag push and only in the `npm` environment.
+#
+# A failed run: fix the cause if it is outside the tag, then rerun the job on GitHub.
+# CONTRIBUTING.md, "Releasing", has the steps and the emergency token publish.
+name: publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# One publish per tag, never cancelled halfway.
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+
+      # No `version` key: the action reads `packageManager` from package.json, as in ci.yml.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # Trusted publishing needs npm 11.5.1 or later. Node 24 ships npm 11, so this only
+      # names the cause when a Node update brings an older npm.
+      - name: npm is 11.5.1 or later
+        run: |
+          version="$(npm --version)"
+          lowest="$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)"
+          if [ "$lowest" != "11.5.1" ]; then
+            echo "npm $version is below 11.5.1, which trusted publishing needs." >&2
+            exit 1
+          fi
+          echo "npm $version"
+
+      - name: the tag matches the CLI version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(node -p 'require("./packages/cli/package.json").version')"
+          if [ "$TAG" != "v$version" ]; then
+            echo "The tag $TAG does not match packages/cli/package.json version $version." >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: build the CLI
+        run: pnpm --filter saasaloy run build
+
+      # `prepack` copies the root README into packages/cli and builds again.
+      - name: pack the tarball
+        working-directory: packages/cli
+        run: |
+          mkdir -p "$RUNNER_TEMP/pack"
+          pnpm pack --pack-destination "$RUNNER_TEMP/pack"
+          tarball="$(ls "$RUNNER_TEMP"/pack/saasaloy-*.tgz)"
+          echo "TARBALL=$tarball" >> "$GITHUB_ENV"
+          echo "$tarball"
+
+      - name: the tarball installs and prints its version
+        run: |
+          npm install --global --prefix "$RUNNER_TEMP/install" "$TARBALL"
+          printed="$("$RUNNER_TEMP/install/bin/saasaloy" --version)"
+          if [ "$printed" != "$VERSION" ]; then
+            echo "saasaloy --version printed '$printed', expected '$VERSION'." >&2
+            exit 1
+          fi
+          echo "saasaloy --version: $printed"
+
+      - name: npm publish
+        run: npm publish "$TARBALL" --access public --provenance
