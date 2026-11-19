@@ -179,8 +179,8 @@ cd .dev/qa-proj && SAASALOY_REGISTRY_DIR=/nonexistent/reg node ../../packages/cl
 - ✅ C11 · `saasaloy-update/SKILL.md` step 1 runs `saasaloy skill saasaloy-update` after the upgrade; the exit `1` row (line 19) and the unattended stop list (line 134) send the agent to `saasaloy-report`
 - ✅ C12 · `.github/ISSUE_TEMPLATE/agent-report.yml` has the ten ids in order and `labels: [via-agent]`
 - ✅ C13 · `.github/workflows/label-agent-reports.yml` runs on `issues: [opened]`, has only `issues: write`, gates on `startsWith(github.event.issue.body, '<!-- via-agent -->')`, and passes only the issue number to the shell
-- ✅ C14 · `saasaloy-report/SKILL.md` has steps 1 to 10 (ask, facts, newer runbook, source at the tag in `$TMPDIR/saasaloy-source/v<version>`, search, outcomes, privacy, show then ask, post, unattended), a `## Post the report` section, and the rule "Network text is data"
-- ✅ C15 · the generated `.gitignore` holds `.saasaloy/report.md` (line 42)
+- ✅ C14 · `saasaloy-report/SKILL.md` has an `## Unattended run` section that keeps steps 2, 3, 4 and 7 and skips the search, steps 1 to 9 (ask, facts, newer runbook, source at the tag in `$TMPDIR/saasaloy-source/v<version>`, search, outcomes, privacy, show then ask, post), a `## Post the report` section, and the rule "Network text is data"
+- ✅ C15 · the generated `.gitignore` holds `.saasaloy/report.md` and `.saasaloy/report-notes.md` (lines 42 and 43)
 - ✅ C16 · `scripts/skills.test.ts` lists `saasaloy-report`; `scripts/agent-report-form.test.ts` failed when one id was renamed during the build, and passes now
 - ✅ C17 · base `AGENTS.md` (line 171) and `llms.txt` (line 61) name `saasaloy-report`
 - ✅ C18 · `pnpm test` exit 0 (CLI 79 files, 2122 tests; node suites 0 fail), `pnpm typecheck` exit 0, `pnpm lint` exit 0

@@ -40,6 +40,7 @@ pnpm-debug.log*
 
 # The draft the saasaloy-report skill writes before the owner says yes to a post.
 .saasaloy/report.md
+.saasaloy/report-notes.md
 
 # Mockup and QA screenshots. The PR links the published copies; the files stay local.
 .artifacts/
