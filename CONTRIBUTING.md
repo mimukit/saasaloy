@@ -586,6 +586,20 @@ That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHAN
 
 The tag push starts the `publish` workflow. A published CLI reads the modules at its own tag, so the tag must be on GitHub before npm offers the version to anyone, and a publish that starts from the tag push has that order by construction. `scripts/release-order.test.ts` fails the gate when a release-it dry run shows an `npm publish` step, or when `publish.yml` starts on anything but a `v*` tag push, gives an OIDC token to a job outside the `npm` environment, or names an action by tag instead of a commit SHA. See [ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md) and [ADR 0064](docs/adr/0064-adr-the-cli-publishes-from-a-tag-started-approved-oidc-workflow-2026-11-19.md).
 
+### Deploying the docs site
+
+The same release deploys the docs site at saasaloy.com. After the tag, the push and the GitHub Release, release-it runs the `after:release` hook in `packages/cli/.release-it.js`. The hook runs `pnpm -w run release:deploy vX.Y.Z`, which runs `pnpm --filter @saasaloy/web run deploy:release -- vX.Y.Z`. That script builds `apps/web` and runs `wrangler deploy --tag vX.Y.Z --message "saasaloy vX.Y.Z"`, so the Worker version in Cloudflare carries the release tag. The build runs at the release commit, so the docs header shows `saasaloy vX.Y.Z` and no "Built from `main`" banner. Production has no other deploy path. A site-only fix ships with the next patch release.
+
+The hook needs `wrangler` logged in to the Brainaloy Labs account on the machine that runs `pnpm release`. Check it with `pnpm --filter @saasaloy/web exec wrangler whoami` before you release. The site can go live before the `publish` job finishes, because the hook does not wait for it.
+
+If the deploy fails, the tag and the GitHub Release already exist and release-it cannot undo them. The hook prints the rerun command and exits non-zero. Run it from the same checkout:
+
+```sh
+git checkout vX.Y.Z && pnpm --filter @saasaloy/web deploy:production
+```
+
+Return to `main` afterwards with `git checkout main`. `scripts/release-deploy.test.ts` checks the hook and the failure text with a fake failing command, and no test deploys.
+
 ### Approving the publish
 
 The workflow has two jobs. `build` runs at once, with no approval and no OIDC token. `publish` needs `build`, and it runs in the GitHub environment `npm`, which has the maintainer as required reviewer, so it waits until you approve it:
@@ -611,7 +625,7 @@ To see the whole plan without doing any of it:
 pnpm release:dry
 ```
 
-The dry run skips the preflight hook, and it shows no `npm publish` step, because release-it does not publish. Run `pnpm release:preflight` to check the release requirements and the packed artifact.
+The dry run skips the preflight hook and the deploy hook, and it shows no `npm publish` step, because release-it does not publish. It prints the deploy hook as `! pnpm -w run release:deploy vX.Y.Z`, and the `!` marks a command it did not run. Run `pnpm release:preflight` to check the release requirements and the packed artifact.
 
 ### The npm README
 

@@ -4,17 +4,31 @@
 # real browser: axe in both themes at 375, 768 and 1440 px, and one mobile Lighthouse
 # run that must score 95 or more in all four categories.
 #
-# The deploy job comes later. Phase 2 of the plan (Cloudflare access and the analytics
-# variable) is deferred, so this file has no secrets, no `wrangler deploy` and no
-# push trigger yet.
+# The job also checks the docs for freshness (plan 0114, Phase 5): it lists each
+# hand-written wiki page that covers a file the pull request changes while the pull
+# request leaves the page alone. The list goes to the job summary and to one sticky
+# comment that each later run updates. It never fails the job. The `docs: none` label
+# says the pull request needs no docs change, so the job also runs when a label changes.
+#
+# This file has no deploy job, no secrets and no push trigger. The production deploy is
+# the `after:release` hook in `packages/cli/.release-it.js`, run by the owner (plan 0114,
+# Phase 6).
 name: site
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    # The site's own files, and every path a hand-written page covers (`documents:` in
+    # docs/wiki/.wikimap.yaml). `scripts/docs-freshness-comment.test.ts` fails when a page
+    # covers a path that is not listed here.
     paths:
       - apps/web/**
       - modules/**
-      - packages/cli/package.json
+      - packages/cli/**
+      - .agents/**
+      - README.md
+      - CONTRIBUTING.md
+      - scripts/docs-*.ts
       - package.json
       - oxlint.config.mjs
       - docs/wiki/**
@@ -34,8 +48,16 @@ jobs:
   site:
     name: site
     runs-on: ubuntu-latest
+    # The sticky comment is the one write this job makes.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
+      # Full history: the freshness check reads `git log origin/main..HEAD`, and the docs
+      # banner counts commits since the latest `v*` tag.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # No `version` key: the action reads `packageManager` from package.json.
       - uses: pnpm/action-setup@v6
@@ -46,6 +68,35 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # Never fails the job: a stale page is information. A fork's read-only token cannot
+      # write the comment, so the post step may fail too, and the summary still shows.
+      - name: Check docs freshness
+        continue-on-error: true
+        env:
+          DOCS_NONE: "${{ contains(github.event.pull_request.labels.*.name, 'docs: none') }}"
+        run: |
+          pnpm docs:freshness --base origin/main --json > "$RUNNER_TEMP/freshness.json"
+          flag=""
+          if [ "$DOCS_NONE" = "true" ]; then flag="--docs-none"; fi
+          node scripts/docs-freshness-comment.ts "$RUNNER_TEMP/freshness.json" $flag > "$RUNNER_TEMP/freshness.md"
+          cat "$RUNNER_TEMP/freshness.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # One comment per pull request, found by its hidden marker and updated in place.
+      - name: Post the docs freshness comment
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            --jq '.[] | select(.body | startswith("<!-- saasaloy-docs-freshness -->")) | .id' | head -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$id" -F body=@"$RUNNER_TEMP/freshness.md" > /dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$PR/comments" -F body=@"$RUNNER_TEMP/freshness.md" > /dev/null
+          fi
 
       - run: pnpm lint
 

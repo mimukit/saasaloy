@@ -18,6 +18,23 @@ export const docsUi = {
   /** A generated page has no hand edit, so its link says view. */
   viewOnGithub: "View on GitHub",
   rawMarkdown: "Markdown",
+  /** The CLI version in the page header. `{version}` is the number without the `v`. */
+  versionLabel: "saasaloy v{version}",
+  /** A page's stamp. `{sha}` is the short commit, and the label links to it. */
+  verifiedLabel: "Verified against {sha}",
+  /**
+   * The strip a build gets when HEAD is not a `v*` tag: `{before}`, then `main` in mono,
+   * then `{after}`. `{count}` is "1 commit" or "N commits". A shallow clone has no count
+   * to give, so it uses `afterNoCount`.
+   */
+  banner: {
+    before: "Built from ",
+    branch: "main",
+    after: ", {count} after {tag}",
+    afterNoCount: ", after {tag}",
+    one: "1 commit",
+    many: "{count} commits",
+  },
   previous: "Previous",
   next: "Next",
   /** `{count}` is the number of module pages the sidebar folds away. */

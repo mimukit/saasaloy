@@ -35,6 +35,7 @@ import {
 } from "node:fs";
 import { dirname, join, posix, resolve } from "node:path";
 import { DESCRIPTIONS } from "../packages/cli/src/commands/descriptions.ts";
+import type { CliSurface } from "./llms-txt.ts";
 
 const GENERATED_DIR = "docs/wiki/generated";
 const SCRIPT = "scripts/docs-generate.ts";
@@ -668,8 +669,8 @@ function commandSurface(
   return { usage: literal(usage, constants), flags };
 }
 
-function cliPage(root: string): string {
-  const constants = {
+function surfaceConstants(root: string): Record<string, string[]> {
+  return {
     TESTING_MODES: arrayConstant(
       root,
       "packages/cli/src/lib/testing.ts",
@@ -681,6 +682,33 @@ function cliPage(root: string): string {
       "MODULE_TYPES"
     ),
   };
+}
+
+/**
+ * The CLI's commands and each command's flags, read from the sources the way `cli.md` is,
+ * so a check can run before the CLI is built. `saasaloy` itself takes `-h`, `--help`, `-v`
+ * and `--version` (`packages/cli/src/cli.ts`).
+ */
+export function sourceCliSurface(root: string): CliSurface {
+  const constants = surfaceConstants(root);
+  const commands = new Map<string, Set<string>>();
+  for (const name of Object.keys(DESCRIPTIONS)) {
+    const flags = new Set(["-h", "--help"]);
+    for (const [column] of commandSurface(root, name, constants).flags) {
+      for (const part of column.split(", ")) {
+        flags.add(part.split(/[= ]/)[0] ?? part);
+      }
+    }
+    commands.set(name, flags);
+  }
+  return {
+    commands,
+    globalFlags: new Set(["-h", "--help", "-v", "--version"]),
+  };
+}
+
+function cliPage(root: string): string {
+  const constants = surfaceConstants(root);
   const commands = Object.entries(DESCRIPTIONS) as [string, string][];
   const exits = [
     ...readFileSync(

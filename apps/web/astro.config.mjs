@@ -11,7 +11,8 @@ import { defineConfig } from "astro/config";
 import { remarkDocsBlocks } from "./src/lib/docs-blocks.ts";
 import { rehypeCodeFrame } from "./src/lib/docs-code.ts";
 import { remarkDocsLinks } from "./src/lib/docs-links.ts";
-import { remarkDropTitle } from "./src/lib/docs-title.ts";
+import { readBuildInfo } from "./src/lib/docs-build-info.ts";
+import { remarkDropStamp, remarkDropTitle } from "./src/lib/docs-title.ts";
 
 // `astro build` gets its own Vite cache. Both commands keep pre-bundled dependencies under
 // node_modules/.vite, each stamped with a hash of the config that made them. The two
@@ -97,6 +98,12 @@ const cliVersion = JSON.parse(
   readFileSync(join(repoRoot, "packages/cli/package.json"), "utf-8")
 ).version;
 
+// The docs header's version label and "Built from main" banner. `git` runs here, in Node,
+// because a page renders in workerd under `astro dev` and has no `child_process`. The result
+// reaches the pages as the `__DOCS_BUILD_INFO__` constant (src/env.d.ts). See
+// src/lib/docs-build-info.ts.
+const buildInfo = readBuildInfo(repoRoot, cliVersion);
+
 export default defineConfig({
   site: "https://saasaloy.com",
   output: "static",
@@ -125,6 +132,7 @@ export default defineConfig({
       syntaxHighlight: false,
       remarkPlugins: [
         remarkDropTitle,
+        remarkDropStamp,
         [remarkDocsBlocks, { repoRoot }],
         [remarkDocsLinks, { repoRoot, version: cliVersion }],
       ],
@@ -141,6 +149,7 @@ export default defineConfig({
     // globals.css, the tokens in brand.css, and the landing utilities in web.css, which
     // imports brand.css and which Layout.astro imports via `@web/styles/web.css`.
     plugins: [tailwindcss()],
+    define: { __DOCS_BUILD_INFO__: JSON.stringify(buildInfo) },
     server: { strictPort: true },
     // Dev only: pre-bundle every dependency the React components import before the
     // first request. In dev the adapter renders inside workerd, and Vite's scan starts
