@@ -48,7 +48,9 @@ export const docsUi = {
     found: "{count} results.",
     /** `astro dev` has no search index, because Pagefind runs after `astro build`. */
     unavailable: "Search has no index here. Build the site to create it.",
-    shortcutKey: "/",
+    /** The key hint in the search field: `shortcut` by default, `shortcutApple` on a Mac. */
+    shortcut: "Ctrl K",
+    shortcutApple: "⌘K",
   },
   copy: {
     label: "Copy",

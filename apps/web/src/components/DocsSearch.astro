@@ -4,6 +4,8 @@
 // script below loads /pagefind/pagefind.js the first time the dialog opens, so a reader who
 // never searches downloads none of it. `astro dev` has no index, and the dialog says so.
 //
+// ⌘K or Ctrl K opens the dialog from anywhere, and "/" opens it when no text field has focus.
+//
 // A native <dialog> opened with showModal() gives the focus trap, the Escape key and an inert
 // page for free. Its backdrop dims the whole page, the header included. Without JavaScript
 // the field and the icon button stay hidden, because they would do nothing: the `data-theme`
@@ -23,10 +25,12 @@ const { search } = docsUi;
   <SearchIcon className="size-4 shrink-0" aria-hidden="true" />
   <span class="flex-1 truncate">{search.placeholder}</span>
   <kbd
-    class="border-border text-muted-foreground grid size-6 place-items-center border text-xs"
+    class="border-border text-muted-foreground inline-flex h-6 items-center border px-1.5 text-xs whitespace-nowrap"
     aria-hidden="true"
+    data-docs-search-shortcut
+    data-apple={search.shortcutApple}
   >
-    {search.shortcutKey}
+    {search.shortcut}
   </kbd>
 </button>
 <button
@@ -245,7 +249,34 @@ const { search } = docsUi;
         }
       });
 
+      // The hint shows ⌘K on an Apple device and Ctrl K elsewhere. Both keys work everywhere.
+      const apple = /Mac|iPhone|iPad/.test(
+        navigator.userAgentData?.platform ?? navigator.platform
+      );
+      if (apple) {
+        for (const hint of document.querySelectorAll(
+          "[data-docs-search-shortcut]"
+        )) {
+          hint.textContent = hint.dataset.apple ?? hint.textContent;
+        }
+      }
+
       document.addEventListener("keydown", (event) => {
+        // ⌘K or Ctrl K opens the search from anywhere, a text field included.
+        if (
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          !event.shiftKey &&
+          event.key.toLowerCase() === "k"
+        ) {
+          event.preventDefault();
+          if (dialog.open) {
+            input.select();
+          } else {
+            openDialog();
+          }
+          return;
+        }
         const { target } = event;
         const typing =
           target instanceof HTMLElement &&
