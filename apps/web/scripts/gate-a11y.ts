@@ -26,7 +26,14 @@
 import { THEME_STORAGE_KEY } from "../src/lib/theme.ts";
 import { chromiumPath, serveDist } from "./serve-dist.ts";
 
-const ROUTES = ["/", "/404"] as const;
+// `/docs`, one hand-written page and one generated module page stand for the docs shell.
+const ROUTES = [
+  "/",
+  "/404",
+  "/docs",
+  "/docs/how-to/add-a-module",
+  "/docs/modules/email",
+] as const;
 const WIDTHS = [375, 768, 1440] as const;
 const THEMES = ["light", "dark"] as const;
 const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];

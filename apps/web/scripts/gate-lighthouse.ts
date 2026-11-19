@@ -1,5 +1,5 @@
 // The Lighthouse half of the site gate (plan 0091, Gate tooling row). It serves the
-// built site, then runs `lhci autorun` against `/` with lighthouserc.json, which asks
+// built site, then runs `lhci autorun` against `/` and the docs routes with lighthouserc.json, which asks
 // for the mobile profile, takes three runs and asserts 95 or more on the median run in
 // performance, accessibility, best practices and SEO. One run left the gate to runner
 // noise: performance scored 94 to 96 on the same build. The site starts on the light theme, so this is the light
@@ -16,12 +16,21 @@ import { chromiumPath, serveDist } from "./serve-dist.ts";
 const site = await serveDist();
 const chromePath = await chromiumPath();
 
+// `/`, then `/docs`, one hand-written docs page and one generated module page. The 95 floor
+// in lighthouserc.json holds for each URL.
+const ROUTES = [
+  "/",
+  "/docs",
+  "/docs/how-to/add-a-module",
+  "/docs/modules/email",
+] as const;
+
 const child = spawn(
   "lhci",
   [
     "autorun",
     "--config=lighthouserc.json",
-    `--collect.url=${site.origin}/`,
+    ...ROUTES.map((route) => `--collect.url=${site.origin}${route}`),
     `--collect.chromePath=${chromePath}`,
   ],
   { stdio: "inherit" }

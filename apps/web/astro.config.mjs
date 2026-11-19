@@ -1,11 +1,16 @@
 // @ts-check
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 import cloudflare from "@astrojs/cloudflare";
+import { unified } from "@astrojs/markdown-remark";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
+import { rehypeCodeFrame } from "./src/lib/docs-code.ts";
+import { remarkDocsLinks } from "./src/lib/docs-links.ts";
+import { remarkDropTitle } from "./src/lib/docs-title.ts";
 
 // `astro build` gets its own Vite cache. Both commands keep pre-bundled dependencies under
 // node_modules/.vite, each stamped with a hash of the config that made them. The two
@@ -77,6 +82,20 @@ function devPort() {
   return port;
 }
 
+// The wiki pages' Markdown pipeline (plan 0114 Phase 3). Astro 7 renders Markdown with the
+// native Satteri processor unless told otherwise; `unified()` keeps the remark and rehype
+// plugin API, which a later plugin can use from the wider ecosystem. The remark plugin rewrites each
+// relative link to its /docs URL, or to the file on GitHub at the release tag, and fails the
+// build on a link to a wiki page that does not exist. The title plugin drops each page's own
+// H1, which the layout prints. The rehype plugin frames each code block with a Copy button
+// and each table with a scroll region. A later plugin, such as the saasaloy-* blocks, goes in these two
+// lists. Syntax highlighting is off: shiki's inline colours would sit outside the brand
+// tokens, so docs.css styles a code block with the same tokens as the command field.
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const cliVersion = JSON.parse(
+  readFileSync(join(repoRoot, "packages/cli/package.json"), "utf-8")
+).version;
+
 export default defineConfig({
   site: "https://saasaloy.com",
   output: "static",
@@ -99,6 +118,17 @@ export default defineConfig({
   // they release as a pair.
   adapter: cloudflare({ imageService: "compile" }),
   integrations: [react(), separateBuildCache()],
+  markdown: {
+    syntaxHighlight: false,
+    processor: unified({
+      syntaxHighlight: false,
+      remarkPlugins: [
+        remarkDropTitle,
+        [remarkDocsLinks, { repoRoot, version: cliVersion }],
+      ],
+      rehypePlugins: [rehypeCodeFrame],
+    }),
+  },
   // 3000 is the same port as a generated project's web app; a linked worktree takes its
   // hashed port (see devPort above). `strictPort` makes a busy port a loud failure
   // instead of a silent +1.

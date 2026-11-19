@@ -1,0 +1,222 @@
+---
+// The docs search: a field in the header that opens a modal dialog, and the dialog. The index
+// is Pagefind's, which runs on dist/client after `astro build` and writes /pagefind/. The
+// script below loads /pagefind/pagefind.js the first time the dialog opens, so a reader who
+// never searches downloads none of it. `astro dev` has no index, and the dialog says so.
+//
+// A native <dialog> opened with showModal() gives the focus trap, the Escape key and an inert
+// page for free. Its backdrop dims the whole page, the header included. Without JavaScript
+// the field and the icon button stay hidden, because they would do nothing: the `data-theme`
+// attribute that the pre-paint script sets on <html> is the marker, as for the theme toggle.
+import { SearchIcon } from "lucide-react";
+
+import { docsUi } from "@web/content/docs";
+import { interpolate } from "@web/lib/interpolate";
+
+const { search } = docsUi;
+---
+
+<button
+  type="button"
+  data-docs-search-open
+  class="border-border bg-card text-muted-foreground hover:border-ring hover:text-foreground focus-visible:ring-ring/50 in-data-theme:md:flex mx-auto hidden h-10 w-full max-w-md items-center gap-3 border px-3 text-left font-mono text-sm outline-none focus-visible:ring-3"
+>
+  <SearchIcon className="size-4 shrink-0" aria-hidden="true" />
+  <span class="flex-1 truncate">{search.placeholder}</span>
+  <kbd
+    class="border-border text-muted-foreground grid size-6 place-items-center border text-xs"
+    aria-hidden="true"
+  >
+    {search.shortcutKey}
+  </kbd>
+  <span class="sr-only">{search.openLabel}</span>
+</button>
+<button
+  type="button"
+  data-docs-search-open
+  aria-label={search.openLabel}
+  class="border-border text-highlight hover:bg-muted focus-visible:ring-ring/50 in-data-theme:max-md:grid ml-auto hidden size-10 shrink-0 place-items-center border outline-none focus-visible:ring-3"
+>
+  <SearchIcon className="size-4" aria-hidden="true" />
+</button>
+
+<dialog
+  data-docs-search
+  aria-label={search.dialogLabel}
+  class="docs-search"
+  data-unavailable={search.unavailable}
+  data-empty={search.empty}
+>
+  <form method="dialog" class="docs-search-bar">
+    <label class="sr-only" for="docs-search-input">
+      {search.inputLabel}
+    </label>
+    <SearchIcon className="text-highlight size-4 shrink-0" aria-hidden="true" />
+    <input
+      id="docs-search-input"
+      type="search"
+      autocomplete="off"
+      spellcheck="false"
+      placeholder={search.placeholder}
+      data-docs-search-input
+    />
+    <button
+      type="submit"
+      aria-label={search.closeLabel}
+      class="border-border text-highlight hover:bg-muted focus-visible:ring-ring/50 h-8 border px-2 font-mono text-xs outline-none focus-visible:ring-3"
+    >
+      {search.closeKey}
+    </button>
+  </form>
+  <p class="docs-search-note" data-docs-search-note role="status"></p>
+  <ul
+    class="docs-search-results"
+    aria-label={search.resultsLabel}
+    data-docs-search-results
+  ></ul>
+  <p class="docs-search-hints" aria-hidden="true">
+    <span>↑ ↓ {search.hintMove}</span>
+    <span>Enter {search.hintOpen}</span>
+    <span>
+      {search.closeKey} {search.hintClose}
+    </span>
+  </p>
+</dialog>
+
+<script is:inline>
+  (() => {
+    // The Pagefind browser API ships with the build in /pagefind/. This script is inline, so Vite
+    // leaves the dynamic import alone (its bundled form needs a preload table that a path outside
+    // the module graph does not have).
+    const PAGEFIND_PATH = "/pagefind/pagefind.js";
+    const MAX_RESULTS = 8;
+
+    const dialog = document.querySelector("[data-docs-search]");
+    const input = document.querySelector("[data-docs-search-input]");
+    const list = document.querySelector("[data-docs-search-results]");
+    const note = document.querySelector("[data-docs-search-note]");
+
+    let pagefind;
+
+    async function loadPagefind() {
+      if (pagefind === undefined) {
+        try {
+          pagefind = await import(PAGEFIND_PATH);
+        } catch {
+          pagefind = null;
+        }
+      }
+      return pagefind;
+    }
+
+    function say(message) {
+      if (note) {
+        note.textContent = message;
+        note.hidden = message === "";
+      }
+    }
+
+    async function run(query) {
+      if (!list || !dialog) {
+        return;
+      }
+      if (query.trim() === "") {
+        list.replaceChildren();
+        say("");
+        return;
+      }
+      const engine = await loadPagefind();
+      if (!engine) {
+        list.replaceChildren();
+        say(dialog.dataset.unavailable ?? "");
+        return;
+      }
+      const found = await engine.debouncedSearch(query, {}, 120);
+      if (found === null) {
+        return;
+      }
+      const data = await Promise.all(
+        found.results.slice(0, MAX_RESULTS).map((result) => result.data())
+      );
+      say(
+        data.length === 0
+          ? (dialog.dataset.empty ?? "").replace("{query}", `"${query}"`)
+          : ""
+      );
+      list.replaceChildren(
+        ...data.map((item) => {
+          const row = document.createElement("li");
+          const link = document.createElement("a");
+          link.href = item.url;
+          const title = document.createElement("strong");
+          title.textContent = item.meta.title ?? item.url;
+          const excerpt = document.createElement("span");
+          // Pagefind escapes the page text and wraps each match in <mark>, so its excerpt is
+          // markup it made.
+          excerpt.innerHTML = item.excerpt;
+          link.append(title, excerpt);
+          row.append(link);
+          return row;
+        })
+      );
+    }
+
+    function openDialog() {
+      if (dialog && !dialog.open) {
+        dialog.showModal();
+        input?.select();
+      }
+    }
+
+    if (dialog && input && list) {
+      for (const button of document.querySelectorAll(
+        "[data-docs-search-open]"
+      )) {
+        button.addEventListener("click", openDialog);
+      }
+
+      input.addEventListener("input", () => {
+        void run(input.value);
+      });
+
+      // A press on the dimmed page, outside the dialog's box, closes it.
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) {
+          dialog.close();
+        }
+      });
+
+      // The arrow keys walk the field and the results. Enter on a result is its link.
+      dialog.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+          return;
+        }
+        const stops = [input, ...list.querySelectorAll("a")];
+        const at = stops.indexOf(document.activeElement);
+        const next = stops[at + (event.key === "ArrowDown" ? 1 : -1)];
+        if (next) {
+          event.preventDefault();
+          next.focus();
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        const { target } = event;
+        const typing =
+          target instanceof HTMLElement &&
+          (target.isContentEditable ||
+            ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+        if (
+          event.key === "/" &&
+          !typing &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey
+        ) {
+          event.preventDefault();
+          openDialog();
+        }
+      });
+    }
+  })();
+</script>
