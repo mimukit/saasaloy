@@ -91,6 +91,7 @@ export const GATE_SCRIPTS = [
   "test",
   "verify:content",
   "verify:pins",
+  "docs:check",
 ] as const;
 
 const SKIP_GATE_ENV = "SAASALOY_RELEASE_SKIP_GATE";
