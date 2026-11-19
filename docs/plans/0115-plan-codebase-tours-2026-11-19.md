@@ -62,7 +62,7 @@ A tour is a folder of plain Markdown steps. Each step names its code by anchor a
 
 Rejected: a screen recording or video of a session. It cannot be checked and goes stale on the next release. Rejected: an in-browser sandbox (WebContainers) that runs the CLI live. It is the ideal for a reader, but it needs the npm registry and GitHub from the browser, and Workers features the sandbox cannot run. Rejected: tour definitions in a TypeScript file. GitHub and agents would lose the walkthrough.
 
-### Phase 1: approve the tour mockup
+### Phase 1: approve the tour mockup (#363)
 
 Attended: the owner approves the mockup screenshots. Run this phase when #362 is close to merge, with the built docs layout as the reference.
 
@@ -73,7 +73,7 @@ Attended: the owner approves the mockup screenshots. Run this phase when #362 is
 
 Done when: this plan has a "Mockup approved" row with the date, the round, the gist file prefix and the comment URL.
 
-### Phase 2: the tour product brief
+### Phase 2: the tour product brief (#363)
 
 Attended: the owner approves the brief, because it is product copy that the site shows.
 
@@ -82,7 +82,7 @@ Attended: the owner approves the brief, because it is product copy that the site
 
 Done when: the brief folder exists, `node --test scripts/agent-bench/*.test.ts` passes, and the owner has approved the brief in the PR.
 
-### Phase 3: the agent recording
+### Phase 3: the agent recording (#363)
 
 Attended: the owner starts the bench run, because it uses an agent account and takes time.
 
@@ -91,7 +91,7 @@ Attended: the owner starts the bench run, because it uses an agent account and t
 
 Done when: `apps/web/src/content/tour/shiplog/agent/` holds the frozen run with its CLI version and date, and the run's `score.md` shows a pass.
 
-### Phase 4: the CLI recorder
+### Phase 4: the CLI recorder (#363)
 
 - Add `scripts/tour-record.ts` with `pnpm tour:record` and `pnpm tour:check`. It reads the step list from the `saasaloy-step` blocks in `docs/wiki/tour/product/`.
 - Normalize what changes between runs: absolute paths, dates, SHAs, durations and the registry ref.
@@ -100,7 +100,7 @@ Done when: `apps/web/src/content/tour/shiplog/agent/` holds the frozen run with 
 
 Done when: `pnpm tour:record` run twice writes no diff, and changing one `description` in a module descriptor makes `pnpm tour:check` exit non-zero.
 
-### Phase 5: anchors and the tour pages
+### Phase 5: anchors and the tour pages (#363)
 
 - Add the `saasaloy-anchor` and `saasaloy-step` blocks to plan 0114's fenced block plugin, and the anchor search described in Design decisions.
 - Add `/docs/tour/product/[step]` and `/docs/tour/repo/[step]`: the step list, the narrative, the CLI and agent tabs, and the file tree, code and output panels.
@@ -108,14 +108,14 @@ Done when: `pnpm tour:record` run twice writes no diff, and changing one `descri
 
 Done when: the site build fails on an anchor to a missing symbol, a tour step page renders its anchors and its recording, and `gate:a11y` and `gate:lighthouse` pass with one step of each tour in their route lists.
 
-### Phase 6: the repo tour
+### Phase 6: the repo tour (#363)
 
 - Write the repo tour steps in `docs/wiki/tour/repo/`: the repo map, a command's entry point, dependency resolution, the registry read, a module descriptor, the applier and its patch kinds, the lock and the ledger, update and the merge plan, a capability with providers, and the gates.
 - Add each file to `.wikimap.yaml` with its anchor files as `documents:`.
 
 Done when: `/docs/tour/repo` renders every step, every anchor resolves, and `pnpm docs:freshness` lists no tour page.
 
-### Phase 7: the product tour
+### Phase 7: the product tour (#363)
 
 - Write the eleven product tour steps in `docs/wiki/tour/product/`. Each step holds a CLI block and an agent block. The entity step and the deploy step follow their Design decisions rows.
 - Run `pnpm tour:record`, and commit the recordings.
