@@ -37,7 +37,8 @@ Target: no number. The build checks the runbook pointer with tests. The maintain
 | Fix boundary | The agent never patches the installed CLI or a file in `node_modules` as a fix. It may fix inside the project, upgrade the CLI, or report. |
 | Source for diagnosis | The skill tells the agent to make a shallow, sparse clone of `mimukit/saasaloy` at `v<cli version>` into `$TMPDIR/saasaloy-source/v<version>`, and to reuse that folder when it exists. Reports are rare, so a cache with cleanup rules gains nothing. |
 | Tests | Command tests with vitest beside the source in `packages/cli/src/commands/skill.test.ts`, as for every other command. Repo-level checks go in `scripts/*.test.ts`, as `scripts/skills.test.ts` and `scripts/env-presets.test.ts` do. No new kind of test. |
-| Approved outward actions | Phase 1 runs `gh label create via-agent --repo mimukit/saasaloy`, approved by the owner in the grill on 2026-11-19. Phase 5 posts one real report only after a separate yes at that time. |
+| Approved outward actions | Phase 1 runs `gh label create via-agent --repo mimukit/saasaloy`, approved by the owner in the grill on 2026-11-19. An unattended run (afkkit) may run it, and the PR shows the `gh label list` output as proof (re-grill 2026-11-19). The one real test report posts only after the owner's separate yes at that time, in the manual QA below. |
+| The end-to-end report | Not a build phase. It is a manual case in the PR's QA plan, which the owner runs in the review worktree before the merge, so a skill gap gets fixed in the same PR. Before the merge the label workflow does not run from the default branch, so the test issue gets `via-agent` from the triage check in `gh`. A follow-up issue was rejected because the check belongs to this change. An unattended draft only was rejected because it never proves a post (re-grill 2026-11-19). |
 
 ## Approach
 
@@ -53,15 +54,15 @@ The plan adds one small CLI command, one base skill, an issue form and a label w
 
 Rejected: fetch the runbook from `main` as T3 does. A project runs a released CLI, and `main` can describe flags that the release does not have.
 
-### Phase 1: create the `via-agent` label
+### Phase 1: create the `via-agent` label (#359)
 
-Attended: the owner approved this outward action in the grill on 2026-11-19. Run it attended so a person sees the result.
+The owner approved this outward action in the grill on 2026-11-19, and the re-grill on 2026-11-19 lets an unattended run do it. The PR body shows the `gh label list` output.
 
 - Run `gh label create via-agent --repo mimukit/saasaloy --description "Filed by an agent through the saasaloy-report skill"`.
 
 Done when: `gh label list --repo mimukit/saasaloy --search via-agent` prints the label.
 
-### Phase 2: `saasaloy skill`
+### Phase 2: `saasaloy skill` (#359)
 
 - Add `packages/cli/src/commands/skill.ts` and register it in `commands/index.ts` after `doctor`, with a line in `descriptions.ts`.
 - `saasaloy skill <name>` renders `templates/base/_agents/skills/<name>/SKILL.md` with `renderTemplate` and prints it on stdout. Run inside a project, it uses that project's name for the template vars. Outside a project it uses the default vars.
@@ -72,7 +73,7 @@ Done when: `gh label list --repo mimukit/saasaloy --search via-agent` prints the
 
 Done when: `node packages/cli/dist/index.js skill saasaloy-update` run in `.dev` prints the template skill, `skill nope` exits `2`, `pnpm --filter saasaloy test` passes, and `docs/adr/0064-*.md` exists.
 
-### Phase 3: the CLI points to its own runbook
+### Phase 3: the CLI points to its own runbook (#359)
 
 - `renderMergePlan` adds one line under `# Saasaloy merge plan`. It names the CLI version and says: read `saasaloy skill saasaloy-update` before you work this plan. When the project's copy has different bytes, the line adds "differs from this project's copy".
 - `src/index.ts` and the apply failure path in `update.ts` print one stderr line after the error: `Report this to Saasaloy: saasaloy skill saasaloy-report`. The line never prints under `--json`.
@@ -81,7 +82,7 @@ Done when: `node packages/cli/dist/index.js skill saasaloy-update` run in `.dev`
 
 Done when: a test project whose `saasaloy-update` skill differs from the bundled one gets a merge plan whose second line names `saasaloy skill saasaloy-update` and says the copy differs, the hint tests pass, and `pnpm --filter saasaloy test` passes.
 
-### Phase 4: the `saasaloy-report` skill, the issue form and the label workflow
+### Phase 4: the `saasaloy-report` skill, the issue form and the label workflow (#359)
 
 - Add `.github/ISSUE_TEMPLATE/agent-report.yml` with these field ids: `what-happened`, `command`, `diagnosis`, `steps`, `versions`, `environment`, `evidence`, `related`, `workaround`, `agent`. The form applies the label `via-agent`.
 - Add `.github/workflows/label-agent-reports.yml`. On `issues: opened`, it adds `via-agent` when the body starts with `<!-- via-agent -->`. It needs `issues: write` and nothing else.
@@ -103,15 +104,15 @@ Done when: a test project whose `saasaloy-update` skill differs from the bundled
 
 Done when: `pnpm test` passes with the two script tests, `pnpm lint` passes, `saasaloy skill saasaloy-report` prints the new skill, and a project made with `saasaloy init` in `.dev` holds `.claude/skills/saasaloy-report`.
 
-### Phase 5: try one report end to end
+## Manual QA (owner): try one report end to end (#359)
 
-Attended: the owner gives a separate yes before the agent posts the test report.
+Not a build phase. The QA plan of the #359 PR carries these steps as human-only manual cases. The owner runs them in the review worktree before the merge, and gives a separate yes before the agent posts the test report.
 
 - In `.dev`, start an agent on a project and force an unhandled error (for example, an unreachable registry).
 - Check that the CLI prints the hint, and let the agent follow `saasaloy-report` to the point of the issue text.
 - Post it with the owner's yes, then close it as a test. Record what the skill got wrong.
 
-Done when: one issue on `mimukit/saasaloy` carries the `via-agent` label (from the form, the triage flag or the workflow), its body follows the form's headings, and the run record lists each skill gap found.
+Done when: one issue on `mimukit/saasaloy` carries the `via-agent` label (from the form or the triage flag, because the workflow runs only from the default branch), its body follows the form's headings, and the QA plan's run record lists each skill gap found.
 
 ## Open questions
 
