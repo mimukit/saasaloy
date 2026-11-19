@@ -46,7 +46,31 @@
     gap: 0 2.5rem;
     grid-template-areas: "menu main toc";
     grid-template-columns: 16rem minmax(0, 1fr) 14rem;
-    padding-block: 0 5rem;
+    padding-block: 0;
+  }
+
+  /* The two column rules. A sidebar is sticky and only as tall as its list, so a border on
+     it would stop part way down a long page. These two empty grid items sit in the sidebar
+     areas, stretch to the full height of the row and draw the rule there, so both lines run
+     from the header to the footer's blueprint rule. The shell has no bottom padding for
+     the same reason; the space under the page sits inside .docs-main. The footer's
+     blueprint rule (styles/web.css) is 1.0625rem tall with its hairline in the middle, so
+     each line runs on by about half that height to meet the hairline. */
+  .docs-shell::before,
+  .docs-shell::after {
+    margin-bottom: -0.5625rem;
+    content: "";
+    pointer-events: none;
+  }
+
+  .docs-shell::before {
+    border-right: 1px solid var(--border);
+    grid-area: menu;
+  }
+
+  .docs-shell::after {
+    border-left: 1px solid var(--border);
+    grid-area: toc;
   }
 
   .docs-menu,
@@ -67,16 +91,14 @@
 
   .docs-menu {
     padding-right: 1rem;
-    border-right: 1px solid var(--border);
   }
 
   .docs-toc {
     padding-left: 1rem;
-    border-left: 1px solid var(--border);
   }
 
   .docs-main {
-    padding-top: 2rem;
+    padding-block: 2rem 5rem;
   }
 
   .docs-disclosure::details-content {
