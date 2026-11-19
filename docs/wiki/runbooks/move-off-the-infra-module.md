@@ -76,3 +76,5 @@ Before step 7, restore `infra/` and the files step 4 changed from git, run `pnpm
 ## `infra-ci-deploy` is something else
 
 A later module named `infra-ci-deploy` (issue #199) writes a GitHub Actions workflow that runs `pnpm deploy:production` on a push to `main`. It has nothing to do with the deleted `infra` module, holds no Pulumi program, and needs no step from this runbook.
+
+_Verified against `main`@`928b4f03` on 2026-11-19._

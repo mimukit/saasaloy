@@ -21,4 +21,4 @@ saasaloy add <name> --dry-run
 
 To list what a registry offers, including third-party ones, see [`saasaloy list`](reference.md#saasaloy-list). `saasaloy list --json` gives each module's one-line `description`, its `stage` (`validate`, `mvp`, `teams`, `money` or `scale`) and its `needs` (`cloudflare-paid`, `stripe`, `domain`, `vendor-account`), read from the descriptor. To publish a module of your own, start at [Contribute a module](how-to/contribute-a-module.md).
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._

@@ -27,6 +27,7 @@ on:
       - packages/cli/**
       - .agents/**
       - README.md
+      - llms.txt
       - CONTRIBUTING.md
       - scripts/docs-*.ts
       - package.json

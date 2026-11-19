@@ -417,7 +417,7 @@ Registry mode checks one module folder (`saasaloy doctor modules/waitlist`) or a
 
 Project mode opens with a **Base** box: the recorded template name, the CLI version and short template hash it was recorded at, a count of files that match the record, the files that drifted, the files that are missing, and the seed files it does not check. Base drift never fails the run. A **Pending update notes** box follows when an applied `saasaloy update` showed notes that nobody cleared yet, one line per note with the `saasaloy update --done <id>` command that clears it. Like base drift, a pending note never fails the run. An untracked base prints "untracked — no record of which template scaffolded this project." and points at `saasaloy update` to record it.
 
-Below the base box, project mode asks three questions: a module in `installed` that owns no file in the manifest, a module that owns files but was never marked installed, and, on a project running `kv-cloudflare`, whether every registered rate limit policy has the `RL_<NAME>` binding its `consume` resolves to. No findings exits 0 with "No problems found."; findings exit 2 with "N problems in saasaloy.json."
+Below the base box, project mode asks seven questions: a module in `installed` that owns no file in the manifest, a module that owns files but was never marked installed, a capability whose `requiresOneOf` no installed module meets, on a project running `kv-cloudflare` whether every registered rate limit policy has the `RL_<NAME>` binding its `consume` resolves to, whether a leftover `.dev.vars` file hides `.env` from wrangler, and whether a `config` value replaces an env var that a `.env` file still sets. The seventh is whether a retired Pulumi `infra/` workspace is still there, and its finding points at [the runbook](runbooks/move-off-the-infra-module.md). No findings exits 0 with "No problems found."; findings exit 2 with "N problems in saasaloy.json."
 
 A path that does not exist exits 2, and so does a directory with no module folders in it.
 
@@ -466,7 +466,7 @@ Every GitHub API call carries a 15-second timeout and no retry, so a connection 
 and then stalls fails with a message rather than hanging. Every network failure names
 `SAASALOY_REGISTRY_DIR` as the offline path.
 
-The table above is the CLI's own environment. A module declares its own variables in its `registry-item.json` `envVars` map, and `saasaloy env` is what collects them. [The environment reference](generated/env.md) lists every one of them, with its module and the services that read it. Seven capabilities select their implementation with a `<CAP>_PROVIDER` variable, and that page lists each selector and its values. Each value names the provider module you install for it. `LOGGER_PROVIDER` is the only one that may stay unset: unset selects the first registered provider, and with none registered every log call is a silent no-op. It is the deliberate exception to "no default in either direction": a naming typo still throws, but a missing value never does, because an outage caused by the observability layer is worse than one absent knob.
+The table above is the CLI's own environment. A module declares its own variables in its `registry-item.json` `envVars` map, and `saasaloy env` is what collects them. [The environment reference](generated/env.md) lists every one of them, with its module and the services that read it. Eight capabilities select their implementation with a `<CAP>_PROVIDER` variable, and that page lists each selector and its values. Each value names the provider module you install for it. `LOGGER_PROVIDER` is the only one that may stay unset: unset selects the first registered provider, and with none registered every log call is a silent no-op. It is the deliberate exception to "no default in either direction": a naming typo still throws, but a missing value never does, because an outage caused by the observability layer is worse than one absent knob.
 
 ## Email providers
 
@@ -524,9 +524,9 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 Two gaps are load-bearing enough to plan around.
 
 **`remove` leaves the two `package.json` patch kinds behind.**
-[#36](https://github.com/mimukit/saasaloy/issues/36). `remove` undoes the six kinds that
+[#36](https://github.com/mimukit/saasaloy/issues/36). `remove` undoes the seven kinds that
 edit a source or config file — `chained-route`, `wrangler-binding`, `plugin-array`,
-`const-array`, `drizzle-column` and `nav-entry` — taking the
+`const-array`, `const-property`, `drizzle-column` and `nav-entry` — taking the
 named import out with the edit when no other code in the file still references the
 identifier. Removing `email-cloudflare` now takes the `send_email` binding out of
 `apps/api/wrangler.jsonc` and the provider registration out of
@@ -546,4 +546,4 @@ re-running `add` is the intended recovery. The dependency merge and the lockfile
 run after the file writes succeed, so a failed `add` no longer leaves `package.json`
 advertising packages whose code never arrived. The run now says so too: a thrown apply ends on "Partial apply — the manifest, config and lock describe what landed. Re-run `saasaloy add <module>` to complete it.", and an apply left incomplete by a file that changed while the plan was open names each module and asks for the same re-run. What is still missing is the rollback of the files that did land.
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._

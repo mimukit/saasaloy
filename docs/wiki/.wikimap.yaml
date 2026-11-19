@@ -30,6 +30,8 @@ pages:
       - packages/cli/templates/base/_agents/skills/**
       - packages/cli/templates/base/AGENTS.md
       - README.md
+      - llms.txt
+      - modules/agent/registry-item.json
   - path: how-to/make-it-yours.md
     title: Make it yours
     section: Build with an agent
@@ -118,6 +120,10 @@ pages:
     mode: how-to
     documents:
       - packages/cli/templates/base/packages/ui/src/styles/**
+      - packages/cli/templates/base/packages/ui/package.json
+      - packages/cli/templates/base/packages/ui/components.json
+      - packages/cli/templates/base/apps/web/src/layouts/Layout.astro
+      - modules/admin/files/ui/styles/**
   - path: runbooks/move-off-the-infra-module.md
     title: Move off the infra module
     section: Runbooks
@@ -125,6 +131,9 @@ pages:
     documents:
       - modules/infra-ci-deploy/registry-item.json
       - packages/cli/templates/base/package.json
+      - packages/cli/templates/base/packages/env/src/services.ts
+      - packages/cli/templates/base/packages/tooling/src/deploy-production.ts
+      - packages/cli/src/lib/doctor.ts
   - path: reference.md
     title: Reference
     section: Reference

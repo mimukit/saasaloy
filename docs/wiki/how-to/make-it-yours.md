@@ -1,6 +1,6 @@
 # Make the project yours
 
-A freshly scaffolded project runs, but it knows nothing about your product: the site name is `Saasaloy`, the landing page describes Saasaloy itself, and the theme is shadcn's `neutral`. The page has thirteen sections; remove the ones you don't need by deleting their line in `apps/web/src/pages/index.astro` (the project README has the recipe). Three of the seven agent skills that ship with the base fix that. They live as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
+A freshly scaffolded project runs, but it knows nothing about your product: the site name is `Saasaloy`, the landing page describes Saasaloy itself, and the theme uses shadcn's `neutral` base color. The page has thirteen sections; remove the ones you don't need by deleting their line in `apps/web/src/pages/index.astro` (the project README has the recipe). Three of the eleven agent skills that ship with the base fix that. They live as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
 
 Run the first two in order. The third runs whenever you want the look changed.
 
@@ -37,4 +37,4 @@ Every module you install brings its own `saasaloy-<name>` skill into the same `.
 - [Getting started](../getting-started.md) — scaffold and run the project first.
 - [Add a module](add-a-module.md) — install the API, database, auth and features.
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._

@@ -32,3 +32,5 @@ The new admin app imports `@repo/ui/styles/admin.css`, so its build fails until 
 `logo-cloud`, `pain-points`, `how-it-works`, `showcase`, `audience` and `testimonials` came after the first landing page. A project made before them gets the files through `saasaloy update`, and adds each one to its own `apps/web/src/pages/index.astro` by hand, because the page is the owner's.
 
 The blocks need the landing utilities at the end of `web.css`. `web.css` is an owned file, so `update` lists it in the merge plan and never adds them for you. Copy the template's block, from the comment that opens "The landing page's layout" to the `stylelint-enable` line, to the end of your `web.css`. A project made before the theme split skips this copy: `update` creates its `web.css` from the template, block included.
+
+_Verified against `main`@`928b4f03` on 2026-11-19._

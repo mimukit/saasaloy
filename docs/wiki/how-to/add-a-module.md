@@ -31,7 +31,7 @@ Before writing anything, `add` prints what it intends to do:
 
 When the plan writes into `packages/ui/`, `add` also reminds you to run the
 `/saasaloy-design update` skill afterwards, because a write there, such as a new block,
-can invalidate the web app's `apps/web/DESIGN.md`. The reminder also fires for the admin
+can invalidate the web app's `apps/web/DESIGN.md`. The reminder also fires for the `shell`
 module, which writes its own theme file there; that one does not touch the web app's
 contract.
 
@@ -78,7 +78,7 @@ Cannot add database-postgres — module conflict:
   database-d1 is already installed and declares a conflict with database-postgres. Run `saasaloy remove database-d1` first.
 ```
 
-Provider modules are the other shape. A capability such as `email`, `kv`, `queue`, `storage`, `sms` or `logger` takes any number of providers side by side, and a `<CAP>_PROVIDER` environment variable picks the one that runs. The value is always required and there is no default, so `add` lists the variable under **Env vars to set** and `saasaloy env` prompts for it.
+Provider modules are the other shape. A capability such as `email`, `kv`, `queue`, `storage`, `sms`, `logger` or `payment` takes any number of providers side by side, and a `<CAP>_PROVIDER` environment variable picks the one that runs. The value is always required and there is no default, so `add` lists the variable under **Env vars to set** and `saasaloy env` prompts for it.
 
 ## Look before you leap
 
@@ -104,14 +104,15 @@ pnpm install
 Do the same when the plan reported new aliases — those are new workspaces, and pnpm has to
 link them before anything can import them.
 
-Modules also bring environment variables. `add` writes a `.dev.vars.example` in the api workspace with the description of each one, then points at the command that fills them in:
+Modules also bring environment variables. `add` adds each one, with its description, to `packages/env/.env.example`, then points at the two commands that fill them in. `saasaloy env` writes the values into the gitignored `packages/env/.env`, and `pnpm env:setup` copies them into each service's own `.env`:
 
 ```bash
-saasaloy env            # prompt for every unset variable and write it where it is read
-saasaloy env --check    # report what is still missing, prompt for nothing, exit non-zero
+saasaloy env            # prompt for every unset variable and write it to packages/env/.env
+saasaloy env --check    # report what is still missing, prompt for nothing, exit 2
+pnpm env:setup          # write each service's .env from packages/env/.env
 ```
 
-`env` only fills blanks. A value you already typed is never rewritten, and it refuses to write a file git does not ignore. Production secrets are printed as the commands to run, not run for you.
+`env` only fills blanks at the prompt. A value you already typed is never rewritten, except by `--set KEY=VALUE` or `--from-file <path>`, which answer the prompts on the command line. It refuses to write a file git does not ignore. Production secrets are printed as the commands to run, not run for you.
 
 ## Re-running and re-applying
 
@@ -135,8 +136,7 @@ necessarily `main`'s tip — with the module already in the lockfile, that is th
 lock recorded.
 
 A repeat `add` of a module already in `saasaloy-lock.json` reuses the commit SHA the lock
-recorded, so it reproduces the same bytes rather than picking up whatever landed on `main`
-since. That holds only while you are adding from the same `owner/repo` the lock entry
+recorded, so it reproduces the same bytes rather than picking up what the CLI's release tag holds now. That holds only while you are adding from the same `owner/repo` the lock entry
 names. Naming an explicit ref (`owner/repo@v2/module`) overrides it, and so does setting
 `SAASALOY_REGISTRY_DIR` — a local registry is read straight off disk, with no pin.
 
@@ -180,4 +180,4 @@ rough edges in that model are tracked in
 - [Architecture](../architecture.md) for what the applier does with hashes and aliases
 - [Reference](../reference.md#saasaloy-add) for the full flag list
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._

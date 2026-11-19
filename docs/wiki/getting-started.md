@@ -41,7 +41,7 @@ Check the install worked:
 saasaloy --help
 ```
 
-You should see the nine commands: `init`, `add`, `env`, `outdated`, `update`, `remove`, `list`, `new`, `doctor`, and the global `--help`/`--version` flags below them. If the shell can't find
+You should see the eleven commands: `init`, `add`, `env`, `testing`, `outdated`, `update`, `remove`, `list`, `new`, `doctor`, `skill`, and the global `--help`/`--version` flags below them. If the shell can't find
 `saasaloy`, pnpm's global bin directory isn't on your `PATH` — `pnpm setup` puts it there.
 
 > **Working on Saasaloy itself?** Don't install the published CLI. Clone the repo and use
@@ -65,7 +65,7 @@ segment becomes the project name. Omit the name entirely and the CLI asks for it
 `init` copies the base template, then offers to run `pnpm install` for you. Say yes and it
 installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree that tracks it. An ignored directory inside a repository still gets its own. After the install it runs `pnpm env:setup` for the local defaults, and then it commits the scaffold on `main` as `chore(repo): initial commit`. With no git identity it warns and makes no commit.
 
-`init` takes three flags: `--force` scaffolds into a directory that is not empty, `--no-install` never runs `pnpm install` and never asks, and `--no-git` skips `git init` and the first commit. Any other flag stops the command with an error instead of being ignored.
+`init` takes these flags: `--force` scaffolds into a directory that is not empty, `--yes` runs `pnpm install` with no prompt, `--no-install` never runs `pnpm install` and never asks, `--no-git` skips `git init` and the first commit, and `--testing=<off|tests-after|tdd>` sets the project's testing mode (`off` by default, and `init` asks on a terminal when the flag is absent). Any other flag stops the command with an error instead of being ignored.
 
 If the target directory already has files in it, `init` stops and tells you to re-run with
 `--force`. A `.git` directory on its own doesn't count as non-empty, so you can scaffold
@@ -76,12 +76,11 @@ into a freshly cloned repo.
 ```bash
 cd my-app
 pnpm install     # skip if init already did this
+pnpm env:setup   # skip if init already did this
 pnpm dev
 ```
 
-`pnpm dev` runs `turbo run dev`, which starts Astro on port 3000. The port is fixed and
-`strictPort` is on, so a busy port fails loudly instead of quietly moving to 3001. Open
-`http://localhost:3000` and you have the landing page.
+`pnpm dev` runs `turbo run dev`, which starts Astro. In the main checkout the port is 3000, and in a linked git worktree `pnpm dev:ports` gives the project its own port block. `strictPort` is on, so a busy port fails loudly instead of quietly moving to the next one. Open `http://localhost:3000` and you have the landing page.
 
 ## What you just got
 
@@ -90,23 +89,25 @@ my-app/
   apps/web/            Astro landing page (port 3000)
   apps/web/DESIGN.md   the web design contract, derived from what packages/ui ships
   packages/ui/         shared React + Tailwind components
+  packages/config/     the checked-in project values (@repo/config)
+  packages/env/        the env key list and the typed env gate (@repo/env)
+  packages/tooling/    the deploy, release, dev and skill-link scripts
   packages/tsconfig/   shared TypeScript configs
-  .agents/skills/      three bundled agent skills (symlinked from .claude/skills/)
+  .agents/skills/      eleven bundled agent skills (linked into .claude/skills/)
   saasaloy.json        alias map + the list of installed modules
   saasaloy-lock.json   the template and module versions this project was built at
   .saasaloy/manifest.json  one entry per file the CLI wrote, at its hash
   turbo.json
 ```
 
-That is the whole base: a landing page, the two packages it leans on, and a design
+That is the whole base: a landing page, the packages it leans on, and a design
 contract (`apps/web/DESIGN.md`, kept current by the bundled `saasaloy-design` skill). There is no API,
 no database and no auth yet, on purpose. Those are modules, and you install the ones you
 need.
 
 ## Make it yours
 
-The page you are looking at still sells a placeholder product, under a `siteName` that is
-just your directory name. Three of the ten skills in `.agents/skills/` exist to fix that,
+The page you are looking at still sells a placeholder product, under the shipped name `Saasaloy` (`app.name` in `packages/config/src/project.ts`). Three of the eleven skills in `.agents/skills/` exist to fix that,
 and the first two run in order:
 
 1. **`/saasaloy-setup`** interviews you once, in about fifteen questions, and writes `docs/product-brief.md` (the landing answers) and `docs/product-spec.md` (the modules, the database driver and one table for each entity). It ends with one read-back. When you confirm it, the skill starts `saasaloy-build` in the same session, which builds the MVP with no more questions. [Build with an agent](how-to/build-with-an-agent.md) covers that path.
@@ -130,4 +131,4 @@ from any subdirectory.
 - [Architecture](architecture.md) if you want to know what the CLI is doing to your
   project before you let it.
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._
