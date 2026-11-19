@@ -1,6 +1,6 @@
 ---
 name: saasaloy-deploy
-description: Runbook for an AI agent that releases and deploys this project to production with pnpm release and pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "cut a release", "bump the version", "update the changelog", "put this live", "hotfix production", "roll back production", "what is live", "what will the next deploy ship", "is this fix live", "make the first superadmin", or "set up the first deploy", when a question about production behavior needs the live code, when a release or a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, answering a production question against the last deploy tag, the first superadmin before the first deploy, the release and its changelog, the dry-run report, the gates and what clears each one, the CI wait with --wait-ci, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
+description: Runbook for an AI agent that releases and deploys this project to production with pnpm release and pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "cut a release", "bump the version", "update the changelog", "put this live", "hotfix production", "roll back production", "what is live", "what will the next deploy ship", "is this fix live", "write the release walkthrough for v<version>", "write the stakeholder summary for the last release", "make the first superadmin", or "set up the first deploy", when a question about production behavior needs the live code, when a release or a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, answering a production question against the last deploy tag, the first superadmin before the first deploy, the release and its changelog, the release walkthrough and the stakeholder summary when `release.include` lists `docs/release/`, the dry-run report, the gates and what clears each one, the CI wait with --wait-ci, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
 ---
 
 # saasaloy-deploy
@@ -71,20 +71,23 @@ Never do these:
    ```
    Read each file as often as you need. Do not run a dry run again only to see another part of its output: each one reads git and GitHub and runs the env check again. `.artifacts/` is gitignored, so the files do not fail the tree gate.
 4. When the deploy dry run lists migration files, print each `.sql` file it names and read it.
-5. Write the report. Use the template below.
+   When `release.include` in `packages/tooling/src/deploy.config.ts` lists `docs/release/` and `pnpm release:dry` printed a version, write the release walkthrough and draft the stakeholder summary from the changelog entry it printed. Do not ask first: the setting is the owner's request for both. Follow "The release walkthrough" and "The stakeholder summary" below. Leave the walkthrough untracked.
+5. Write the report. Use the template below. When you wrote a walkthrough, add its lines from "The dry-run report". The owner reads the report, the walkthrough and the summary before the go-ahead. When the owner asks for a change to either, make it and show the report again.
 6. Stop. Wait for the owner's go-ahead.
 7. Run the release the owner approved. Then start a dry run that waits for CI, as a background task, with the flags the owner approved for the deploy:
    ```sh
    pnpm release                      # or pnpm release minor, major, <version>
    pnpm deploy:production --dry-run --wait-ci > .artifacts/deploy/deploy-wait.log 2>&1   # add --migrate, --only <service> when approved
    ```
+   When `release.include` lists `docs/release/`, check that `git show --stat HEAD` lists `docs/release/v<version>-walkthrough.md`, and that `git status --short` prints nothing.
+
    Pass the approved flags, because `--wait-ci` waits only when every other gate passes: without an approved `--migrate`, a new migration file fails its gate and nothing waits. With an approved `--skip-ci`, skip this wait, because the two flags conflict. While it runs, draft the result report from the release notes `pnpm release` printed. When it ends, read the log. When every gate is `ok`, go to step 8. A release commit that changes only the root `version` and `CHANGELOG.md` passes on its parent's green run at once, so it usually does not wait. When a gate fails, report the line it printed and stop.
 8. Run the deploy the owner approved, with exactly the flags in the report:
    ```sh
    pnpm deploy:production            # or with --migrate, --skip-ci "<reason>", --only <service>
    ```
 9. Check what the smoke checks do not cover, such as a sign-in flow, in a browser. Use `playwright-cli` when `command -v playwright-cli` finds it. Otherwise list the pages for the owner.
-10. Report the result. Use the template below.
+10. Report the result. Use the template below. When `release.include` lists `docs/release/`, put the final stakeholder summary under it. Fill in the date and the GitHub Release URL, and check the counts against `gh release view v<version>`. Commit nothing after the deploy.
 
 ## Answer a production question against the last deploy tag
 
@@ -147,13 +150,23 @@ Risks: <a commit that changes sign-in, payment or an authorization check; a migr
 
 Leave out a section only when it is empty. Do not claim a commit is safe without reading its diff. Name the files you read.
 
+When `release.include` lists `docs/release/` and the deploy ships a release, add these lines after "Risks":
+
+```markdown
+Walkthrough: [v<version>-walkthrough.md](/abs/path/docs/release/v<version>-walkthrough.md), untracked. `pnpm release` commits and pushes it in the release commit.
+
+Stakeholder summary (draft): <the summary, as "The stakeholder summary" writes it>
+```
+
 ## The release
 
 `pnpm release` runs `packages/tooling/src/release.ts`, which runs release-it with options it builds from `deploy.config.ts`. It reads no `.release-it.json`, and it never asks a question. In one run it:
 
 1. Reads the Conventional Commits since the last release tag and picks the next version: a `fix` bumps the patch, a `feat` the minor, a breaking change the major. Below 1.0 a breaking change bumps the minor (`preMajor`).
 2. Writes the version into the root `package.json` and a new entry at the top of `CHANGELOG.md`.
-3. Commits both as `chore(release): v<version>`, tags the commit `v<version>`, pushes, and creates a GitHub Release.
+3. Stages each `release.include` path, then commits as `chore(release): v<version>`, tags the commit `v<version>`, pushes, and creates a GitHub Release.
+
+`release.include` (default `[]`) lists paths the release commit also carries. A `before:git:release` hook runs `git add -- '<path>'` for each one just before the commit. `requireCleanWorkingDir` runs `git diff --quiet HEAD`, which ignores untracked files, so a new walkthrough does not stop the release. A tracked file that you edited does. Each path is relative to the repository root and uses only `A-Z a-z 0-9 . _ / -`, with no `..` segment. A real release refuses a path that does not exist, because its `git add` would fail after the version bump. A release commit that carries the walkthrough changes more than the version and `CHANGELOG.md`, so the CI gate waits for that commit's own run.
 
 The changelog shows `feat`, `fix`, `perf` and `revert` commits. A commit of any other type shows only when it is breaking, under its own heading, such as `Miscellaneous Chores` for a breaking `chore!`. The first release covers every commit since the project start, so its entry is long.
 
@@ -172,7 +185,80 @@ It refuses to start, and changes nothing, when:
 | `Working dir must be clean` | Commit or ask the owner. Never turn the check off: release-it commits with `git add . --update`, so a dirty file would go into the release commit. |
 | `No upstream configured for current branch` | `git push -u origin <branch>`. |
 | `There are no commits since the latest tag` | Nothing to release. Deploy without one, or wait for a commit. |
+| `release.include path "<path>" is absolute`, `has a .. segment`, or `has a character outside ...` | Fix the path in `release.include` in `deploy.config.ts`. |
+| `release.include names <path>, and nothing is there` | Write the walkthrough first, or remove the path from `release.include`. |
 | `a GitHub Release needs a token and none was found` | `gh auth login`, or set `GITHUB_TOKEN`. The owner may set `release.githubRelease: false` instead. |
+
+## The release walkthrough
+
+This section applies only when `release.include` in `packages/tooling/src/deploy.config.ts` lists `docs/release/`. Otherwise write no walkthrough.
+
+A release walkthrough is a test guide for admin users and stakeholders, most of them not technical. It walks them through every change in one release that they can see on screen or that changes their daily work. The owner downloads the file and shares it, so do not send or post it. When an older `docs/release/v*-walkthrough.md` exists, copy its structure.
+
+Write it before the release, from the `pnpm release:dry` output, so it ships in the release commit. The version and the release tag do not exist yet, so compare against `HEAD`, and use the GitHub Release URL that the dry run printed for the last line.
+
+1. Read the changelog entry that `pnpm release:dry` printed.
+2. Keep each entry that changes a screen or a daily workflow, in the admin app or on a client app. Drop entries for developer tooling, tests, the dev setup, speed, and fixes with no visible effect.
+3. Find what changed on screen. `git diff --stat <previous v* tag> HEAD -- apps packages/ui/src/content` lists the new and changed screens. With no release tag yet, every screen is new.
+4. Take every page name, button label and message from the screen's words in `packages/ui/src/content/`, and, with the `admin` module, the menu and its groups from `apps/admin/src/components/nav.ts`. Never guess a label.
+5. Check where each button sits in its route file, such as `apps/admin/src/routes/<screen>.tsx`. A button in the header, in a menu and in a page section each need a different instruction.
+6. Write the guide with the structure below and save it as `docs/release/v<version>-walkthrough.md`. Leave it untracked. `pnpm release` commits it. Never commit the walkthrough on its own, and never leave it for after the deploy.
+
+Structure:
+
+- A title, the release date, and the live URL of each app that changed.
+- **Before you start.** The guide runs on the live system. Mark every test **Look only** or **Makes a real change**. Warn testers about a real change that reaches people outside the team, such as an email or a text message, and tell them to use a team member's address or phone for it. Name the buttons only a superadmin sees, so a normal admin knows the refusal is correct.
+- One numbered part per area, in the order staff do the work. Put tests that create real records last.
+- One numbered subsection per test, with its label in the heading. Each step is a `- [ ]` tick box with one action and what the tester should see.
+- Name a screen or a button in bold, exactly as the screen shows it. Give the keyboard shortcut in brackets where one exists.
+- Warn against any test that changes things for real users at once.
+- **How to send feedback.** Ask for the part number, what the tester did and expected, a screenshot, and the browser and device.
+- The GitHub Release URL as the last line, in the form `Release notes: https://github.com/<owner>/<repo>/releases/tag/v<version>`.
+
+The guide is prose for a reader outside the project, so it carries no AI tells: no em or en dash as sentence punctuation, no puffery, plain verbs. Use plain words: "the activity record", not "the audit log"; "the website", not "the web app"; no api, route, query or deploy. Use no commit hashes, issue numbers, scopes or file paths. Do not hard-wrap the Markdown.
+
+When you have not opened the live pages, tell the owner that the labels come from the code and that a tester may find a small difference in wording or position.
+
+## The stakeholder summary
+
+This section applies only when `release.include` lists `docs/release/`.
+
+Every release gets a summary for stakeholders. Draft it before the go-ahead, in the dry-run report, and give the final copy under the result report after the deploy. Do not send it, post it or save it to a file. The owner sends it.
+
+1. Find the release notes. Before the release, read the changelog entry in the `pnpm release:dry` output. After it, read the GitHub Release:
+   ```sh
+   gh release view v<version> --json body -q .body
+   ```
+2. Count the `* ` entries under each `###` heading. `### Features` gives the new features and `### Bug Fixes` gives the bug fixes. `### Performance Improvements` gives the improvements. Report `### Reverts` on its own line when it has entries.
+3. When the deploy shipped no release (a hotfix), write the summary after the deploy, and take the commits instead: `git log --no-merges --format=%s <previous deploy-* tag>..<new deploy-* tag>`. Count `feat` as features, `fix` as fixes and `perf` as improvements. Leave out `chore`, `docs`, `test`, `ci`, `refactor`, `style` and `build`.
+4. Check that the counts add up to the total before you write the summary.
+5. Write the summary with the template below. Group the entries by what a user or an admin sees, not by commit. Leave out entries that only change developer tooling, tests or the dev setup, but keep them in the counts.
+
+Above the summary, tell the owner two facts in one or two sentences. Each count is a changelog entry, one per commit, so one feature can span many entries. Name the largest example (an issue number with its entry count) and the number of developer-only entries. Offer counts by user-facing feature when the owner wants them.
+
+The summary is prose for a reader outside the project, with the same rules as the walkthrough. Name the effect for the user, not the code: "the admin app loads faster", not "start the session check with the html". Use no commit hashes, scopes or file paths.
+
+```markdown
+**<Product> v<version> is live (<day month year>)**
+
+This release has <total> changes: <n> new features, <n> bug fixes and <n> performance improvements.
+
+**New features (<n>)**
+
+- <one line per user-facing group, for example "Admin app: new Members screen">
+
+**Bug fixes (<n>)**
+
+- <one line per area, such as sign-in, admin screens, website>
+
+**Performance improvements (<n>)**
+
+- <the effect a user sees>
+
+Full release notes: <GitHub Release URL>
+```
+
+`<Product>` is the product name the project shows its users. For a hotfix without a release, use "<Product> hotfix is live (<date>)" as the title, and use the deploy tag in place of the release notes link. Leave out a section that has no entries.
 
 ## The gates and what clears each one
 
@@ -226,7 +312,7 @@ A failure after the gates:
 - `tagPrefix`: the start of every deploy tag. Change it only before the first deploy, or the engine no longer finds the older tags.
 - `ciWorkflow`: the GitHub Actions workflow file that must pass on HEAD, such as `"ci.yml"`. `undefined` turns the CI gate off.
 - `migrations`: the git pathspec for migration files.
-- `release`: what `pnpm release` writes. `tagPrefix` (default `v`; change it only before the first release), `githubRelease` (default `true`), `preMajor` (default `true`), and `changelogSections`, the `conventionalcommits` preset's `types` list. Unset keeps the preset's sections. A key left out falls back to its default.
+- `release`: what `pnpm release` writes. `tagPrefix` (default `v`; change it only before the first release), `githubRelease` (default `true`), `preMajor` (default `true`), `changelogSections`, the `conventionalcommits` preset's `types` list (unset keeps the preset's sections), and `include` (default `[]`), the untracked paths the release commit also carries. `["docs/release/"]` turns on the release walkthrough and the stakeholder summary. A key left out falls back to its default.
 
 `targets.ts` holds two arrays. Keep each in the shape `export const NAME: Type[] = [...]`, because `saasaloy add` appends its rows there with a `const-array` patch, and `saasaloy remove` takes them out again.
 

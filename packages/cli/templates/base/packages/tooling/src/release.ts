@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { deployConfig } from "./deploy.config.ts";
 import { CHANGELOG_FILE, resolveConfig } from "./deploy-production.ts";
 import type { ResolvedConfig } from "./deploy-production.ts";
@@ -15,7 +15,8 @@ import type { ResolvedConfig } from "./deploy-production.ts";
 // branch list the deploy allows, and the `release` block for the rest. It bumps the root
 // package.json version, writes CHANGELOG.md from the Conventional Commits since the last
 // release, commits `chore(release): v<version>`, tags `v<version>`, pushes, and creates a
-// GitHub Release. Nothing is published to npm. No `.release-it.json` is read.
+// GitHub Release. Nothing is published to npm. No `.release-it.json` is read. Each
+// `release.include` path is staged just before the commit, so the commit carries it too.
 //
 // It never asks a question, so an agent shell does not stall on one. `pnpm release:dry`
 // is the preview. Run `pnpm deploy:production` after it: the deploy names the version
@@ -90,6 +91,66 @@ export function belowOne(version?: string): boolean {
   return (version ?? "0.0.0").startsWith("0.");
 }
 
+const INCLUDE_PATH = /^[A-Za-z0-9._/-]+$/;
+
+/**
+ * The `release.include` paths, checked before release-it runs. release-it runs a hook in
+ * a shell, so a path must be relative, have no `..` segment, and use only
+ * `A-Z a-z 0-9 . _ / -`. Anything else throws, and the release changes nothing.
+ */
+export function checkIncludePaths(paths: readonly string[]): string[] {
+  for (const path of paths) {
+    const problem = path.startsWith("/")
+      ? "is absolute"
+      : path.split("/").includes("..")
+        ? "has a .. segment"
+        : INCLUDE_PATH.test(path)
+          ? undefined
+          : "is empty or has a character outside A-Z a-z 0-9 . _ / -";
+    if (problem !== undefined) {
+      throw new Error(
+        `The release did not start, because release.include path ${JSON.stringify(path)} ${problem}. Give a path relative to the repository root in packages/tooling/src/deploy.config.ts.`
+      );
+    }
+  }
+  return [...paths];
+}
+
+/**
+ * Why a real release may not start, or undefined: a `release.include` path that does not
+ * exist would fail its `git add` after release-it bumped the version and wrote the
+ * changelog. A dry run writes nothing, and the walkthrough comes after it, so it passes.
+ */
+export function missingIncludeProblem(
+  paths: readonly string[],
+  args: ReleaseArgs,
+  exists: (path: string) => boolean
+): string | undefined {
+  const missing = args.dryRun ? [] : paths.filter((path) => !exists(path));
+  if (missing.length === 0) {
+    return undefined;
+  }
+  return `The release did not start, because release.include names ${missing.join(", ")}, and nothing is there. Write the file first, or remove the path from packages/tooling/src/deploy.config.ts.`;
+}
+
+/**
+ * The release-it hooks that stage each `release.include` path just before the release
+ * commit, one `git add` each, so the commit carries an untracked file such as the
+ * release walkthrough. An empty list adds no hook.
+ */
+export function includeHooks(
+  paths: readonly string[]
+): Record<string, string[]> {
+  const checked = checkIncludePaths(paths);
+  if (checked.length === 0) {
+    return {};
+  }
+  // The check above allows no quote, so single quotes keep each path one word.
+  return {
+    "before:git:release": checked.map((path) => `git add -- '${path}'`),
+  };
+}
+
 /** The options release-it runs with. `config: false` keeps any config file out of it. */
 export function releaseItOptions(
   config: ResolvedConfig,
@@ -99,6 +160,7 @@ export function releaseItOptions(
   const { release } = config;
   const ownBump = release.preMajor && belowOne(version);
   const tag = `${release.tagPrefix}\${version}`;
+  const hooks = includeHooks(release.include);
   return {
     config: false,
     ci: true,
@@ -121,6 +183,7 @@ export function releaseItOptions(
       tokenRef: "GITHUB_TOKEN",
     },
     npm: { publish: false },
+    ...(Object.keys(hooks).length === 0 ? {} : { hooks }),
     plugins: {
       "@release-it/conventional-changelog": {
         preset: {
@@ -183,6 +246,7 @@ function isRelease(value: unknown): value is Release {
 async function main(): Promise<void> {
   const args = parseReleaseArgs(process.argv.slice(2));
   const config = resolveConfig(deployConfig);
+  checkIncludePaths(config.release.include);
   const token = findToken(process.env, readGhToken);
   const problem = tokenProblem(token, config, args);
   if (problem !== undefined) {
@@ -205,6 +269,15 @@ async function main(): Promise<void> {
     typeof manifest.version === "string"
       ? manifest.version
       : undefined;
+  const missing = missingIncludeProblem(
+    config.release.include,
+    args,
+    existsSync
+  );
+  if (missing !== undefined) {
+    throw new Error(missing);
+  }
+  const options = releaseItOptions(config, args, version);
   // Loaded here, not at the top, so a test of the functions above loads no release-it.
   // Its type file declares no default export, so the guard below gives the call a type.
   const loaded: { default?: unknown } = await import("release-it");
@@ -213,7 +286,7 @@ async function main(): Promise<void> {
       "release-it has no default export. Run pnpm install, then pnpm release again."
     );
   }
-  await loaded.default(releaseItOptions(config, args, version));
+  await loaded.default(options);
 }
 
 if (import.meta.main) {

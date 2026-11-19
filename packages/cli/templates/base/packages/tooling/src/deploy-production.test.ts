@@ -291,6 +291,7 @@ describe(resolveConfig, () => {
         githubRelease: true,
         preMajor: true,
         changelogSections: undefined,
+        include: [],
       },
     });
   });

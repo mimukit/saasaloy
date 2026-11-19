@@ -26,5 +26,9 @@ export const deployConfig: DeployConfig = {
     // The changelog sections, as the conventionalcommits preset's `types`. Unset keeps
     // the preset's list: feat, fix, perf and revert show, and a breaking commit always does.
     changelogSections: undefined,
+    // Untracked paths the release commit also carries. ["docs/release/"] turns on the
+    // release walkthrough: the saasaloy-deploy skill writes one per release there, and
+    // pnpm release commits it. Unset adds nothing.
+    include: undefined,
   },
 };
