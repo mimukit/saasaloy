@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { GraphData, GraphModule } from "@web/lib/docs-blocks-data";
 import { cn } from "@web/lib/utils";
@@ -191,6 +191,21 @@ function PanelNone() {
 
 export function DocsGraph({ data }: { data: GraphData }) {
   const [selected, setSelected] = useState(data.selected);
+  // A press on a panel button selects another module, and React drops the pressed button.
+  // Focus then moves to the panel's module name, so a keyboard keeps its place.
+  const panelName = useRef<HTMLParagraphElement>(null);
+  const focusPanel = useRef(false);
+  // Runs after each render. The flag holds it to the one render a panel pick caused.
+  useEffect(() => {
+    if (focusPanel.current) {
+      focusPanel.current = false;
+      panelName.current?.focus();
+    }
+  });
+  const pickFromPanel = (name: string): void => {
+    focusPanel.current = true;
+    setSelected(name);
+  };
   const current =
     data.modules.find((item) => item.name === selected) ?? data.modules[0];
   if (!current) {
@@ -221,7 +236,13 @@ export function DocsGraph({ data }: { data: GraphData }) {
         aria-live="polite"
         className="border-border border-t p-4 md:border-t-0 md:border-l"
       >
-        <p className="font-mono text-base font-semibold">{current.name}</p>
+        <p
+          ref={panelName}
+          tabIndex={-1}
+          className="font-mono text-base font-semibold"
+        >
+          {current.name}
+        </p>
         <p className="text-muted-foreground mt-1 text-sm">
           {current.description}
         </p>
@@ -229,7 +250,11 @@ export function DocsGraph({ data }: { data: GraphData }) {
           {current.needs.length === 0 && <PanelNone />}
           {current.needs.map((name) => (
             <li key={name}>
-              <ModuleButton name={name} selected={false} onPick={setSelected} />
+              <ModuleButton
+                name={name}
+                selected={false}
+                onPick={pickFromPanel}
+              />
             </li>
           ))}
         </PanelGroup>
@@ -237,7 +262,11 @@ export function DocsGraph({ data }: { data: GraphData }) {
           {current.usedBy.length === 0 && <PanelNone />}
           {current.usedBy.map((name) => (
             <li key={name}>
-              <ModuleButton name={name} selected={false} onPick={setSelected} />
+              <ModuleButton
+                name={name}
+                selected={false}
+                onPick={pickFromPanel}
+              />
             </li>
           ))}
         </PanelGroup>

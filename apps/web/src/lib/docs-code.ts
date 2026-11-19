@@ -37,9 +37,21 @@ function frame(pre: HastNode): HastNode {
   ]);
 }
 
-/** A table scrolls sideways inside its own box, which a keyboard can focus and scroll. */
+/**
+ * A table scrolls sideways inside its own box, which a keyboard can focus and scroll. The box
+ * is a named region, so a screen reader says what the tab stop is.
+ */
 function scrollBox(table: HastNode): HastNode {
-  return element("div", { className: ["docs-scroll"], tabIndex: 0 }, [table]);
+  return element(
+    "div",
+    {
+      className: ["docs-scroll"],
+      tabIndex: 0,
+      role: "region",
+      ariaLabel: "Table",
+    },
+    [table]
+  );
 }
 
 function wrap(node: HastNode): void {

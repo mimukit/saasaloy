@@ -11,7 +11,6 @@
 import { SearchIcon } from "lucide-react";
 
 import { docsUi } from "@web/content/docs";
-import { interpolate } from "@web/lib/interpolate";
 
 const { search } = docsUi;
 ---
@@ -29,7 +28,6 @@ const { search } = docsUi;
   >
     {search.shortcutKey}
   </kbd>
-  <span class="sr-only">{search.openLabel}</span>
 </button>
 <button
   type="button"
@@ -46,6 +44,8 @@ const { search } = docsUi;
   class="docs-search"
   data-unavailable={search.unavailable}
   data-empty={search.empty}
+  data-found-one={search.foundOne}
+  data-found={search.found}
 >
   <form method="dialog" class="docs-search-bar">
     <label class="sr-only" for="docs-search-input">
@@ -69,6 +69,7 @@ const { search } = docsUi;
     </button>
   </form>
   <p class="docs-search-note" data-docs-search-note role="status"></p>
+  <p class="sr-only" data-docs-search-count role="status"></p>
   <ul
     class="docs-search-results"
     aria-label={search.resultsLabel}
@@ -95,6 +96,7 @@ const { search } = docsUi;
     const input = document.querySelector("[data-docs-search-input]");
     const list = document.querySelector("[data-docs-search-results]");
     const note = document.querySelector("[data-docs-search-note]");
+    const count = document.querySelector("[data-docs-search-count]");
 
     let pagefind;
 
@@ -116,6 +118,14 @@ const { search } = docsUi;
       }
     }
 
+    // The search for the field's latest text. Enter waits on it, so a press that comes before
+    // the results still opens the first one.
+    let pending = Promise.resolve();
+
+    // A search can resolve after the reader typed more or cleared the field. Each step after
+    // an await drops its result when the field no longer holds the query it searched for.
+    const stale = (query) => input?.value !== query;
+
     async function run(query) {
       if (!list || !dialog) {
         return;
@@ -123,26 +133,46 @@ const { search } = docsUi;
       if (query.trim() === "") {
         list.replaceChildren();
         say("");
+        if (count) {
+          count.textContent = "";
+        }
         return;
       }
       const engine = await loadPagefind();
+      if (stale(query)) {
+        return;
+      }
       if (!engine) {
         list.replaceChildren();
         say(dialog.dataset.unavailable ?? "");
         return;
       }
       const found = await engine.debouncedSearch(query, {}, 120);
-      if (found === null) {
+      if (found === null || stale(query)) {
         return;
       }
       const data = await Promise.all(
         found.results.slice(0, MAX_RESULTS).map((result) => result.data())
       );
+      if (stale(query)) {
+        return;
+      }
       say(
         data.length === 0
           ? (dialog.dataset.empty ?? "").replace("{query}", `"${query}"`)
           : ""
       );
+      if (count) {
+        count.textContent =
+          data.length === 0
+            ? ""
+            : data.length === 1
+              ? (dialog.dataset.foundOne ?? "")
+              : (dialog.dataset.found ?? "").replace(
+                  "{count}",
+                  String(data.length)
+                );
+      }
       list.replaceChildren(
         ...data.map((item) => {
           const row = document.createElement("li");
@@ -176,7 +206,7 @@ const { search } = docsUi;
       }
 
       input.addEventListener("input", () => {
-        void run(input.value);
+        pending = run(input.value);
       });
 
       // A press on the dimmed page, outside the dialog's box, closes it.
@@ -186,16 +216,19 @@ const { search } = docsUi;
         }
       });
 
-      // Enter in the field opens the first result. Without this the form closes the dialog.
+      // Enter in the field opens the first result, once the search for the current text is
+      // done. It never submits the form, which would close the dialog.
       input.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") {
           return;
         }
-        const first = list.querySelector("a");
-        if (first) {
-          event.preventDefault();
-          first.click();
-        }
+        event.preventDefault();
+        const query = input.value;
+        void pending.then(() => {
+          if (!stale(query)) {
+            list.querySelector("a")?.click();
+          }
+        });
       });
 
       // The arrow keys walk the field and the results. Enter on a result is its link.

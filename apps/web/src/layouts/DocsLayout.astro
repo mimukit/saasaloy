@@ -105,10 +105,16 @@ const headerLinks = landing.navbar.links.filter(
         {headerLinks.map((link) => (
           <a
             href={link.href}
-            aria-current={link.href === "/docs" ? "page" : undefined}
+            aria-current={
+              link.href === "/docs"
+                ? current.slug === ""
+                  ? "page"
+                  : "true"
+                : undefined
+            }
             target={isExternalHref(link.href) ? "_blank" : undefined}
             rel={isExternalHref(link.href) ? "noopener noreferrer" : undefined}
-            class="text-highlight text-sm font-medium underline-offset-4 hover:underline aria-[current=page]:underline"
+            class="text-highlight text-sm font-medium underline-offset-4 hover:underline aria-[current=page]:underline aria-[current=true]:underline"
           >
             {link.label}
             {isExternalHref(link.href) && (
@@ -246,7 +252,7 @@ const headerLinks = landing.navbar.links.filter(
         </div>
       </article>
 
-      <nav class="docs-pager" aria-label={docsUi.sidebarLabel}>
+      <nav class="docs-pager" aria-label={docsUi.pagerLabel}>
         {previous ? (
           <a href={previous.url} rel="prev">
             <span>{docsUi.previous}</span>
@@ -309,11 +315,23 @@ const headerLinks = landing.navbar.links.filter(
       });
     }
 
-    // The current page's link scrolls into view in the sidebar, and the heading in view marks
-    // its entry in the table of contents.
-    document
-      .querySelector(".docs-sidebar [aria-current=page]")
-      ?.scrollIntoView({ block: "center" });
+    // The current page's link scrolls to the middle of the sidebar, and the heading in view
+    // marks its entry in the table of contents. Only the sidebar scrolls: `scrollIntoView`
+    // would move the window too and open the page below its title.
+    const sidebar = document.querySelector(".docs-sidebar");
+    const current = sidebar?.querySelector("[aria-current=page]");
+    if (
+      sidebar instanceof HTMLElement &&
+      current instanceof HTMLElement &&
+      sidebar.scrollHeight > sidebar.clientHeight
+    ) {
+      const offset =
+        current.getBoundingClientRect().top -
+        sidebar.getBoundingClientRect().top +
+        sidebar.scrollTop;
+      sidebar.scrollTop =
+        offset - (sidebar.clientHeight - current.offsetHeight) / 2;
+    }
     const links = new Map(
       [...document.querySelectorAll(".docs-toc a")].map((link) => [
         link.getAttribute("href")?.slice(1),

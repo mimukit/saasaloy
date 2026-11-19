@@ -656,9 +656,13 @@
 }
 
 /* From 64rem the sidebar and the table of contents stand open, so their summaries hide. This
-   sits last so it wins over the summary's bordered bar above. */
-@media (width >= 64rem) {
-  .docs-disclosure > summary {
-    display: none;
+   sits last so it wins over the summary's bordered bar above. A browser with no
+   ::details-content cannot force a closed <details> open, so there the summary stays and the
+   reader opens it. */
+@supports selector(::details-content) {
+  @media (width >= 64rem) {
+    .docs-disclosure > summary {
+      display: none;
+    }
   }
 }

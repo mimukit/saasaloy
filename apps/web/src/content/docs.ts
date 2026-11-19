@@ -37,6 +37,8 @@ export const docsUi = {
   },
   previous: "Previous",
   next: "Next",
+  /** The landmark around the previous and next links. */
+  pagerLabel: "Previous and next pages",
   /** `{count}` is the number of module pages the sidebar folds away. */
   moreModules: "+{count} more",
   /** The module names the sidebar always shows. A name the wiki lacks drops out. */
@@ -54,6 +56,9 @@ export const docsUi = {
     hintOpen: "open",
     hintClose: "close",
     empty: "No page matches {query}.",
+    /** Read out by a screen reader when results arrive. `{count}` is the number shown. */
+    foundOne: "1 result.",
+    found: "{count} results.",
     /** `astro dev` has no search index, because Pagefind runs after `astro build`. */
     unavailable: "Search has no index here. Build the site to create it.",
     shortcutKey: "/",
