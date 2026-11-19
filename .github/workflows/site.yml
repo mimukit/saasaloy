@@ -54,7 +54,7 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      # Full history: the freshness check reads `git log origin/main..HEAD`, and the docs
+      # Full history: the freshness check reads `git log origin/<base>..HEAD`, and the docs
       # banner counts commits since the latest `v*` tag.
       - uses: actions/checkout@v7
         with:
@@ -76,8 +76,9 @@ jobs:
         continue-on-error: true
         env:
           DOCS_NONE: "${{ contains(github.event.pull_request.labels.*.name, 'docs: none') }}"
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          pnpm docs:freshness --base origin/main --json > "$RUNNER_TEMP/freshness.json"
+          pnpm docs:freshness --base "origin/$BASE_REF" --json > "$RUNNER_TEMP/freshness.json"
           flag=""
           if [ "$DOCS_NONE" = "true" ]; then flag="--docs-none"; fi
           node scripts/docs-freshness-comment.ts "$RUNNER_TEMP/freshness.json" $flag > "$RUNNER_TEMP/freshness.md"

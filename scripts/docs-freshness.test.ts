@@ -80,6 +80,8 @@ describe("findStale", () => {
     commit("feat(cli): change add");
     write("modules/email/item.json", "{}");
     commit("feat(email): add the module");
+    write("src/commands/add.ts", "3");
+    commit("chore(release): v1.2.3");
     write("src/commands/remove.ts", "2");
     write("docs/wiki/how-to/remove.md", "page");
     commit("fix(cli): change remove and its page");
@@ -97,6 +99,14 @@ describe("findStale", () => {
       ["feat(email): add the module", "feat(cli): change add"]
     );
     assert.equal(add?.stamp, stamp);
+  });
+
+  it("skips a release commit, which only bumps versions", () => {
+    const report = findStale({ pages, read, git: repoGit(dir) });
+    const add = report.pages.find((page) => page.path === "how-to/add.md");
+    assert.ok(
+      add?.commits.every((entry) => !entry.subject.startsWith("chore(release)"))
+    );
   });
 
   it("lists a page with no stamp, with a note and no commits", () => {

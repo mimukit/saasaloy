@@ -20,11 +20,13 @@
 // The git calls run here, in Node, and never from a page or the site's build: a Worker
 // has no git (plan 0114, Phase 3 spike).
 //
-// Imports node: builtins and `docs-wikimap.ts`; Node 24 strips the types.
+// Imports node: builtins, `docs-wikimap.ts` and the site's stamp reader
+// (apps/web/src/lib/docs-stamp.ts, import-free); Node 24 strips the types.
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { stampOf as readStamp } from "../apps/web/src/lib/docs-stamp.ts";
 import { handWritten, readWikimap, WIKI_DIR } from "./docs-wikimap.ts";
 import type { WikiPage } from "./docs-wikimap.ts";
 
@@ -62,12 +64,24 @@ export interface Git {
   changed(base: string): string[];
 }
 
-const STAMP =
-  /^_Verified against `[^`]+`@`([0-9a-f]{7,40})` on \d{4}-\d{2}-\d{2}\._\s*$/m;
-
-/** The commit a page's stamp line names, or undefined when it has none. */
+/**
+ * The commit a page's stamp line names, or undefined when it has none. The site's docs header
+ * reads the same line with the same rule.
+ */
 export function stampOf(markdown: string): string | undefined {
-  return STAMP.exec(markdown)?.[1];
+  return readStamp(markdown)?.sha;
+}
+
+/**
+ * A release commit (`chore(release): v0.9.0`, from packages/cli/.release-it.js) bumps the
+ * version in package.json files and writes the changelog. It changes no behavior a page
+ * describes, and it lands on `main` with no pull request, so it would mark the pages that
+ * cover those files stale after every release with no comment to say why.
+ */
+const RELEASE = "chore(release): ";
+
+function behavioral(commits: Commit[]): Commit[] {
+  return commits.filter((commit) => !commit.subject.startsWith(RELEASE));
 }
 
 function listed(
@@ -97,7 +111,7 @@ export function findStale(options: {
       if (changed.includes(`${WIKI_DIR}/${page.path}`)) {
         continue;
       }
-      const commits = git.log(`${base}..HEAD`, page.documents);
+      const commits = behavioral(git.log(`${base}..HEAD`, page.documents));
       if (commits.length > 0) {
         pages.push(listed(page, undefined, commits));
       }
@@ -107,7 +121,7 @@ export function findStale(options: {
     if (stamp === undefined) {
       pages.push(listed(page, undefined, [], "the page has no stamp"));
     } else if (git.has(stamp)) {
-      const commits = git.log(`${stamp}..HEAD`, page.documents);
+      const commits = behavioral(git.log(`${stamp}..HEAD`, page.documents));
       if (commits.length > 0) {
         pages.push(listed(page, stamp, commits));
       }
@@ -192,11 +206,12 @@ function main(argv: string[]): number {
   const json = argv.includes("--json");
   const at = argv.indexOf("--base");
   const base = at === -1 ? undefined : argv[at + 1];
-  const known = argv.filter(
-    (arg, index) => arg !== "--json" && arg !== "--base" && index !== at + 1
+  const unknown = argv.filter(
+    (arg, index) =>
+      arg !== "--json" && arg !== "--base" && !(at !== -1 && index === at + 1)
   );
   if (
-    known.length > 0 ||
+    unknown.length > 0 ||
     (at !== -1 && (base === undefined || base.startsWith("-")))
   ) {
     console.error(
