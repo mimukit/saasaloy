@@ -22,4 +22,6 @@ export const DESCRIPTIONS = {
   new: "scaffold a new module in a registry repo (descriptor + files/ + skill stub)",
   doctor:
     "validate local module descriptors, or a project's saasaloy.json against its manifest",
+  skill:
+    "print a base skill bundled with this CLI, or list them (the runbook that matches this version)",
 } as const satisfies Record<string, string>;

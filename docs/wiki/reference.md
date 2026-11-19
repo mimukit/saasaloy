@@ -22,6 +22,7 @@ saasaloy <command> [options]
 | `list` | list the modules a registry offers, marking the ones installed here |
 | `new` | scaffold a new module in a registry repo (descriptor + `files/` + skill stub) |
 | `doctor` | validate local module descriptors, or a project's `saasaloy.json` against its manifest |
+| `skill` | print a base skill bundled with this CLI, or list them (the runbook that matches this version) |
 
 `saasaloy help`, `saasaloy --help` and `saasaloy -h` all print the command list and exit
 0. Bare `saasaloy` opens a picker over the same list on a terminal, and prints the list
@@ -33,7 +34,7 @@ Every command also answers its own `--help` with its usage and flags.
 walking up from your working directory looking for `saasaloy.json`. `list` marks what the
 current project has installed when it is run inside one, and works anywhere.
 
-`new` is the opposite. It refuses to run inside a generated project, because it authors a module for a registry repo. `doctor` reads the path you give it and picks project mode or registry mode by whether that path carries a `saasaloy.json`.
+`new` is the opposite. It refuses to run inside a generated project, because it authors a module for a registry repo. `doctor` reads the path you give it and picks project mode or registry mode by whether that path carries a `saasaloy.json`. `skill` works anywhere, and inside a project it renders with that project's name.
 
 ### Exit codes
 
@@ -49,7 +50,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 
 ### JSON output
 
-`list`, `doctor`, `outdated`, `env --check` and `add --dry-run` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with a `schemaVersion`. A breaking change to a command's document shape bumps that command's number, and a new field does not. `list`, `doctor`, `outdated` and `env --check` print `"schemaVersion": 1`. `add --dry-run` prints `"schemaVersion": 2`, because its `requested` field changed from a string to a list of names, and its error document carries 2 as well.
+`list`, `doctor`, `outdated`, `env --check`, `add --dry-run` and `skill` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with a `schemaVersion`. A breaking change to a command's document shape bumps that command's number, and a new field does not. `list`, `doctor`, `outdated`, `env --check` and `skill` print `"schemaVersion": 1`. `add --dry-run` prints `"schemaVersion": 2`, because its `requested` field changed from a string to a list of names, and its error document carries 2 as well.
 
 `--json` never prompts. It changes no exit code: `doctor` with findings, `outdated --check` with drift or a pending update note and `env --check` with unset variables still exit 2, and they still print their report. A run that stops before its report, such as an unknown flag, no project, or a refusal, prints an error document instead, so stdout parses on every exit:
 
@@ -438,6 +439,18 @@ Below the base box, project mode asks three questions: a module in `installed` t
 A path that does not exist exits 2, and so does a directory with no module folders in it.
 
 `--json` prints the findings as one document on stdout (see [JSON output](#json-output)), with the exit code unchanged. `mode` is `registry` or `project`. Registry mode carries `path`, `modules` (each with `module`, its `findings` and its `warnings`) and `problems`, the finding count. Project mode carries `path`, `base` (the Base box as data), `pendingNotes` (each pending update note's `id` and `title`), `installed`, `findings`, `warnings` (the deploy warnings) and `problems`. Each finding has `module`, `where` and `message`.
+
+## `saasaloy skill`
+
+```text
+saasaloy skill [<name>] [--json]
+```
+
+Print a base skill from the CLI that runs. A project holds the base skills of the CLI that last wrote its base, so its copy of `saasaloy-update` can describe flags and steps an older CLI had. `saasaloy skill saasaloy-update` prints the copy bundled in this CLI's npm package, with no network, as the same bytes `init` would write. Inside a project the template variables take that project's name; outside one they take `my-app`. Base skills only: a module skill arrives with its module through `add` and `update`.
+
+With no name, `skill` lists each bundled base skill and the `description` from its frontmatter, one per line. `--json` prints that list as `{ "schemaVersion": 1, "skills": [{ "name", "description" }] }`. `skill <name> --json` prints `{ "schemaVersion": 1, "name", "description", "content" }`, where `content` is the text the plain run prints.
+
+stdout carries only the skill text, the list or the JSON document. An unknown name exits 2 and lists the known names on stderr, with nothing on stdout (under `--json`, the error document). An unknown flag exits 2 the same way.
 
 ## Module coordinates
 
