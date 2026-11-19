@@ -1267,8 +1267,9 @@ export interface ActionRow {
   error?: string;
 }
 
+// The value may be quoted. The rewrite in `applyActionPins` writes it unquoted.
 const USES_LINE =
-  /^(\s*(?:-\s+)?uses:\s*)([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(\/[^@\s]*)?@([^\s#]+)(?:\s*#\s*(\S+))?\s*$/;
+  /^(\s*(?:-\s+)?uses:\s*)["']?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(\/[^@\s"']*)?@([^\s#"']+)["']?(?:\s*#\s*(\S+))?\s*$/;
 
 const FULL_SHA = /^[0-9a-f]{40}$/;
 

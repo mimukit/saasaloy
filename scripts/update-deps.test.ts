@@ -393,6 +393,17 @@ describe("github-actions: parseActionPins", () => {
     assert.equal(pin?.repo, "github/codeql-action");
     assert.equal(pin?.action, "github/codeql-action/init");
   });
+
+  it("reads a quoted value", () => {
+    for (const quote of ['"', "'"]) {
+      const [pin] = parseActionPins(
+        "x.yml",
+        `      - uses: ${quote}actions/checkout@v4${quote}`
+      );
+      assert.equal(pin?.action, "actions/checkout");
+      assert.equal(pin?.ref, "v4");
+    }
+  });
 });
 
 describe("github-actions: evaluateActionPin", () => {
