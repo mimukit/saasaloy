@@ -56,6 +56,8 @@ Under `--yes` no prompts run at all, so **every drifted file survives, untracked
 is the designed outcome, not a failure, and the command exits 0. Whatever survives is listed again at the end under **Drift survivors**. If you want drifted files
 gone in a scripted run, delete them yourself afterwards.
 
+A seed file you changed is the one exception to the prompt. `remove` keeps it without asking, tags it `seed, changed → kept (untracked)`, and lists it after the run so you can delete it by hand when nothing imports it.
+
 ## Modules other modules depend on
 
 Installing `waitlist` pulled in `api` and `database`, so those two now have a dependent.
@@ -105,4 +107,4 @@ record is still dropped, so the module stops being tracked either way. Four thin
 - [Add a module](add-a-module.md)
 - [Reference](../reference.md#saasaloy-remove) for the full flag list
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._

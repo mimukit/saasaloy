@@ -1,5 +1,7 @@
 # Architecture
 
+For what Saasaloy is and who it is for, read [the overview](../../CONTEXT.md#overview) first.
+
 Saasaloy is a copy-in tool, not a framework. Nothing it installs is imported from a
 Saasaloy package at runtime; the CLI writes source files into your repo and then gets out
 of the way. That single choice explains most of what follows.
@@ -19,9 +21,9 @@ never merge. The tool repo does not run its own modules on itself
 
 `packages/cli/src/index.ts` is a bootstrap and nothing more: it calls `main()` in
 `cli.ts`, which dispatches against the command registry in `commands/index.ts` and prints
-help for anything else. The registry holds nine commands, in the order help and the picker
-render them: `init`, `add`, `env`, `outdated`, `update`, `remove`, `list`, `new`,
-`doctor`. The work lives in `commands/`, and the reusable machinery under `lib/`, split
+help for anything else. The registry holds eleven commands, in the order help and the picker
+render them: `init`, `add`, `env`, `testing`, `outdated`, `update`, `remove`, `list`,
+`new`, `doctor`, `skill`. The work lives in `commands/`, and the reusable machinery under `lib/`, split
 into seams:
 
 | Seam | File | Responsibility |
@@ -57,7 +59,7 @@ A remote install resolves in this order:
    SHA.
 
 `saasaloy list` is deliberately cheaper: it regexes module names out of the repo's git
-tree and reads no descriptors, which is why a syntactically broken module still appears in
+tree and reads no descriptors (`--json` is the exception and reads them), which is why a syntactically broken module still appears in
 the list and only fails at `add`.
 
 Setting `SAASALOY_REGISTRY_DIR` swaps the remote source for a local `modules/` directory.
@@ -103,7 +105,7 @@ brings its vendor SDK with it and encapsulates it, so nothing else in the projec
 that SDK directly
 ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
 
-The descriptor still knows two types, `saasaloy:capability` and `saasaloy:feature`, but a capability with more than one possible implementation splits its second half into a [provider module](../../CONTEXT.md#provider-module) or a [driver module](../../CONTEXT.md#driver-module), both typed `saasaloy:feature`. A provider adds one file to the capability's `providers/` folder and registers it with a `plugin-array` patch; several coexist, and the runtime env var `<CAP>_PROVIDER` picks one, with no default in either direction ([ADR 0033](../adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `email`, `sms`, `logger`, `queue`, `kv`, `storage` and `subscription` are on that side. A provider that needs a non-`fetch` Worker entry point registers a [handler set](../../CONTEXT.md#handler-set) through the `handlers` table in `apps/api/src/worker.ts`, never through the deploy tooling.
+The descriptor still knows two types, `saasaloy:capability` and `saasaloy:feature`, but a capability with more than one possible implementation splits its second half into a [provider module](../../CONTEXT.md#provider-module) or a [driver module](../../CONTEXT.md#driver-module), both typed `saasaloy:feature`. A provider adds one file to the capability's `providers/` folder and registers it with a `plugin-array` patch; several coexist, and the runtime env var `<CAP>_PROVIDER` picks one, with no default in either direction ([ADR 0033](../adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `email`, `sms`, `logger`, `queue`, `kv`, `storage`, `payment` and `subscription` are on that side. A provider that needs a non-`fetch` Worker entry point registers a [handler set](../../CONTEXT.md#handler-set) through the `handlers` table in `apps/api/src/worker.ts`, never through the deploy tooling.
 
 A driver instead **replaces** files the capability would own, so exactly one is ever installed: `database-d1` and `database-postgres` name each other in `conflictsWith`, and `database` names both in `requiresOneOf` ([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)). Which side a capability lands on is a three-question test, and the deciding question is replace-files versus add-one-file ([ADR 0037](../adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md)).
 
@@ -115,12 +117,20 @@ through AST-aware codemods rather than string replacement
 recorded flat in the manifest
 ([ADR 0019](../adr/0019-adr-module-patches-applied-flat-array-2026-07-24.md)).
 
-The asymmetry to know about: the engine applies eight kinds forward, and six of them have an inverse `remove` can run (`chained-route`, `const-array`, `drizzle-column`, `nav-entry`, `plugin-array`, `wrangler-binding`). The two `package.json` kinds have none, and are dropped from the manifest with a warning. See [Known limitations](reference.md#known-limitations).
+The asymmetry to know about: the engine applies nine kinds forward, and seven of them have an inverse `remove` can run (`chained-route`, `const-array`, `const-property`, `drizzle-column`, `nav-entry`, `plugin-array`, `wrangler-binding`). The two `package.json` kinds have none, and are dropped from the manifest with a warning. See [Known limitations](reference.md#known-limitations).
+
+### The dependency graph
+
+Select a module to see what it depends on, what depends on it, and its providers or drivers. The graph reads the descriptors, so it shows the registry as it is. The [module catalog](generated/modules.md) shows the same graph with every module.
+
+```saasaloy-graph focus=email
+email (capability): depends on api; used by email-react, subscription; providers email-cloudflare, email-console, email-plunk
+```
 
 ## The base is nearly empty
 
-`saasaloy init` writes an Astro landing page, a shared UI package and a shared TypeScript
-config, and stops
+`saasaloy init` writes an Astro landing page, a shared UI package, the `config` and `env` packages, the deploy and release tooling, a shared TypeScript
+config and the bundled agent skills, and stops
 ([ADR 0003](../adr/0003-adr-base-is-landing-page-only-2026-07-22.md)). The design layer —
 tokens, theme, the component styling conventions — ships in that base rather than arriving
 with a later module
@@ -146,4 +156,4 @@ module that ships an agent skill installs it into `.agents/skills/` with a
 Those links are tracked in the manifest, so unlike config patches they are removed when the
 module is.
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._

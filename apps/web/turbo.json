@@ -7,7 +7,9 @@
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/modules/*/registry-item.json",
         "$TURBO_ROOT$/packages/cli/package.json",
-        "$TURBO_ROOT$/llms.txt"
+        "$TURBO_ROOT$/llms.txt",
+        "$TURBO_ROOT$/docs/wiki/**",
+        "$TURBO_ROOT$/docs/wiki/.wikimap.yaml"
       ]
     }
   }

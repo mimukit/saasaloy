@@ -1,0 +1,379 @@
+---
+// The shell of every /docs page: the header with the search field, the sidebar, the page and
+// its table of contents, and the previous and next links. It wraps Layout.astro, which owns
+// <html>, the theme and the skip link, and it imports docs.css for the prose and the search
+// dialog. The look is the approved mockup of plan 0114 (round 1, with its six fixes): square
+// corners, hairlines and tonal surfaces, `primary` page titles, Geist for the sidebar's page
+// names and mono only for group labels and module names.
+//
+// The version label ("saasaloy v0.9.0") and the page's stamp ("Verified against 42cbf03",
+// linked to the commit) sit beside the "Edit on GitHub" link under the title. The version
+// reads `__BUILD_INFO__`, which astro.config.mjs computes in Node (src/lib/build-info.ts).
+// The header sits on the page's three columns from `lg` (plan 0114, round 3, layout A): the
+// wordmark and the Docs tag over the sidebar, the search field over the page, and the links
+// and the theme toggle over the table of contents. docs.css draws the two column rules
+// through it. Under the page sits the landing page's footer, which shows the version and the
+// commit.
+// Layout.astro draws the announcement bar above the header.
+import type { MarkdownHeading } from "astro";
+
+import Layout from "@web/layouts/Layout.astro";
+import DocsSearch from "@web/components/DocsSearch.astro";
+import { Footer } from "@web/blocks/footer";
+import { ThemeToggle } from "@web/blocks/theme-toggle";
+import { docsUi } from "@web/content/docs";
+import { landing, ui } from "@web/content/landing";
+import { groupPages, neighbours } from "@web/lib/docs-nav";
+import type { DocsPage } from "@web/lib/docs-nav";
+import { stampOf } from "@web/lib/docs-stamp";
+import { isExternalHref } from "@web/lib/external-link";
+import { interpolate } from "@web/lib/interpolate";
+import { repoUrl, siteName } from "@web/site";
+import "@web/styles/docs.css";
+
+interface Props {
+  title: string;
+  description?: string;
+  current: DocsPage;
+  pages: readonly DocsPage[];
+  headings: readonly MarkdownHeading[];
+  /** The tier of a module page, shown as a tag after the title. */
+  tier?: string;
+  /** The page's Markdown, where the layout reads the "Verified against" stamp. */
+  stampSource?: string;
+}
+
+const { title, description, current, pages, headings, tier } = Astro.props;
+
+const groups = groupPages(pages);
+const { previous, next } = neighbours(pages, current);
+const featured = new Set(docsUi.featuredModules);
+const isFeatured = (page: DocsPage) =>
+  featured.has(page.slug.replace(/^modules\//, ""));
+
+// The Modules group lists a handful of modules and folds the rest, as the mockup does.
+function visible(list: readonly DocsPage[]) {
+  return list.filter((page) => !page.isModule || isFeatured(page));
+}
+function folded(list: readonly DocsPage[]) {
+  return list.filter((page) => page.isModule && !isFeatured(page));
+}
+
+// The table of contents lists h2 and h3 only, and a page with one heading needs none.
+const toc = headings.filter(
+  (heading) => heading.depth === 2 || heading.depth === 3
+);
+
+const sourceUrl = `${repoUrl}/blob/main/docs/wiki/${current.path}`;
+const rawUrl = `/docs/${current.slug === "" ? "index" : current.slug}.md`;
+const build = __BUILD_INFO__;
+const stamp = stampOf(Astro.props.stampSource ?? "");
+// The header's links, in the approved order. The Docs tag after the wordmark stands in for
+// the landing page's Docs link.
+const headerLinks = (["guide", "github"] as const).flatMap((id) =>
+  landing.navbar.links.filter(
+    (link) => link.id === id && link.label !== "" && link.href !== ""
+  )
+);
+---
+
+<Layout title={title} description={description}>
+  <header class="docs-header">
+    <div class="section-container-hero docs-header-bar">
+      <div class="docs-header-brand">
+        <a
+          href="/"
+          aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
+          class="text-primary text-2xl leading-8 font-semibold tracking-[-0.02em] lowercase"
+        >
+          <span aria-hidden="true">{siteName}</span>
+        </a>
+        <span
+          class="text-muted-foreground font-mono text-sm"
+          aria-hidden="true"
+        >
+          /
+        </span>
+        <a
+          href="/docs"
+          aria-current={current.slug === "" ? "page" : "true"}
+          class="text-foreground hover:text-primary font-mono text-sm font-medium tracking-[0.06em] uppercase underline-offset-4 hover:underline"
+        >
+          {docsUi.headerTag}
+        </a>
+      </div>
+      <div class="docs-header-search">
+        <DocsSearch />
+      </div>
+      <div class="docs-header-tools">
+        <nav
+          aria-label={ui.navbar.mainNavLabel}
+          class="hidden items-center gap-8 md:flex"
+        >
+          {headerLinks.map((link) => (
+            <a
+              href={link.href}
+              target={isExternalHref(link.href) ? "_blank" : undefined}
+              rel={
+                isExternalHref(link.href) ? "noopener noreferrer" : undefined
+              }
+              class="text-highlight text-sm font-medium underline-offset-4 hover:underline"
+            >
+              {link.label}
+              {isExternalHref(link.href) && (
+                <span class="sr-only"> {ui.link.newTab}</span>
+              )}
+            </a>
+          ))}
+        </nav>
+        <ThemeToggle />
+      </div>
+    </div>
+  </header>
+
+  <div class="section-container-hero docs-shell">
+    <details class="docs-disclosure docs-menu">
+      <summary>{docsUi.menuLabel}</summary>
+      <nav aria-label={docsUi.sidebarLabel} class="docs-sidebar" tabindex="0">
+        {groups.map((group) => (
+          <div class="docs-group">
+            <p class="docs-group-label">{group.section}</p>
+            <ul>
+              {visible(group.pages).map((page) => (
+                <li>
+                  <a
+                    href={page.url}
+                    class:list={[{ "docs-mono": page.isModule }]}
+                    aria-current={
+                      page.path === current.path ? "page" : undefined
+                    }
+                  >
+                    {page.title}
+                  </a>
+                </li>
+              ))}
+              {folded(group.pages).length > 0 && (
+                <li>
+                  <details
+                    class="docs-folded"
+                    open={folded(group.pages).some(
+                      (page) => page.path === current.path
+                    )}
+                  >
+                    <summary>
+                      {interpolate(docsUi.moreModules, {
+                        count: folded(group.pages).length,
+                      })}
+                    </summary>
+                    <ul>
+                      {folded(group.pages).map((page) => (
+                        <li>
+                          <a
+                            href={page.url}
+                            class="docs-mono"
+                            aria-current={
+                              page.path === current.path ? "page" : undefined
+                            }
+                          >
+                            {page.title}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </li>
+              )}
+            </ul>
+          </div>
+        ))}
+      </nav>
+    </details>
+
+    {toc.length > 1 && (
+      <details class="docs-disclosure docs-toc">
+        <summary>{docsUi.tocLabel}</summary>
+        <nav aria-label={docsUi.tocLabel} tabindex="0">
+          <p class="docs-group-label docs-toc-label">{docsUi.tocLabel}</p>
+          <ul>
+            {toc.map((heading) => (
+              <li class:list={[{ "docs-toc-sub": heading.depth === 3 }]}>
+                <a href={`#${heading.slug}`}>{heading.text}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </details>
+    )}
+
+    <main id="main" tabindex="-1" class="docs-main">
+      <nav aria-label={docsUi.breadcrumbLabel} class="docs-breadcrumb">
+        <a href="/docs">{docsUi.breadcrumbRoot}</a>
+        {current.slug !== "" && (
+          <>
+            <span aria-hidden="true">/</span>
+            <span>{current.section.toLowerCase()}</span>
+          </>
+        )}
+      </nav>
+      <article data-pagefind-body>
+        <header class="docs-title">
+          <h1>
+            {current.title}
+            {tier && (
+              <span
+                class="docs-tier"
+                title={docsUi.tierLabel}
+                data-pagefind-ignore
+              >
+                {tier}
+              </span>
+            )}
+          </h1>
+          <div class="docs-meta">
+            <span data-pagefind-ignore>
+              {interpolate(docsUi.versionLabel, { version: build.version })}
+            </span>
+            {stamp && (
+              <a
+                href={`${repoUrl}/commit/${stamp.sha}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-pagefind-ignore
+              >
+                {interpolate(docsUi.verifiedLabel, { sha: stamp.sha })}
+                <span class="sr-only"> {ui.link.newTab}</span>
+              </a>
+            )}
+            <a href={sourceUrl} target="_blank" rel="noopener noreferrer">
+              {current.generated ? docsUi.viewOnGithub : docsUi.editOnGithub}
+              <span class="sr-only"> {ui.link.newTab}</span>
+            </a>
+            <a href={rawUrl}>{docsUi.rawMarkdown}</a>
+          </div>
+        </header>
+        <div class="docs-prose">
+          <slot />
+        </div>
+      </article>
+
+      <nav class="docs-pager" aria-label={docsUi.pagerLabel}>
+        {previous ? (
+          <a href={previous.url} rel="prev">
+            <span>{docsUi.previous}</span>
+            <strong>{previous.title}</strong>
+          </a>
+        ) : (
+          <span />
+        )}
+        {next ? (
+          <a href={next.url} rel="next" class="docs-pager-next">
+            <span>{docsUi.next}</span>
+            <strong>{next.title}</strong>
+          </a>
+        ) : (
+          <span />
+        )}
+      </nav>
+    </main>
+  </div>
+
+  <Footer siteName={siteName} />
+
+  <p class="sr-only" role="status" data-docs-status></p>
+
+  <script
+    define:vars={{
+      copied: docsUi.copy.copied,
+      label: docsUi.copy.label,
+      announcement: docsUi.copy.announcement,
+    }}
+  >
+    // Copy buttons. The rehype plugin writes each one hidden; this shows it and wires it up.
+    const status = document.querySelector("[data-docs-status]");
+    for (const button of document.querySelectorAll("[data-docs-copy]")) {
+      button.hidden = false;
+      let timer;
+      button.addEventListener("click", async () => {
+        const code = button.closest("[data-docs-code]")?.querySelector("pre");
+        if (!code) {
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(
+            code.textContent.replace(/\n$/, "")
+          );
+        } catch {
+          // No clipboard access: select the text so the reader can copy it by hand.
+          getSelection()?.selectAllChildren(code);
+          return;
+        }
+        button.textContent = copied;
+        if (status) {
+          status.textContent = announcement;
+        }
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          button.textContent = label;
+          if (status) {
+            status.textContent = "";
+          }
+        }, 2000);
+      });
+    }
+
+    // The current page's link scrolls to the middle of the sidebar, and the heading in view
+    // marks its entry in the table of contents. Only the sidebar scrolls: `scrollIntoView`
+    // would move the window too and open the page below its title.
+    const sidebar = document.querySelector(".docs-sidebar");
+    const current = sidebar?.querySelector("[aria-current=page]");
+    if (
+      sidebar instanceof HTMLElement &&
+      current instanceof HTMLElement &&
+      sidebar.scrollHeight > sidebar.clientHeight
+    ) {
+      const offset =
+        current.getBoundingClientRect().top -
+        sidebar.getBoundingClientRect().top +
+        sidebar.scrollTop;
+      sidebar.scrollTop =
+        offset - (sidebar.clientHeight - current.offsetHeight) / 2;
+    }
+    const links = new Map(
+      [...document.querySelectorAll(".docs-toc a")].map((link) => [
+        link.getAttribute("href")?.slice(1),
+        link,
+      ])
+    );
+    if (links.size > 0 && "IntersectionObserver" in window) {
+      const observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) {
+              for (const link of links.values()) {
+                link.removeAttribute("aria-current");
+              }
+              links
+                .get(entry.target.id)
+                ?.setAttribute("aria-current", "location");
+            }
+          }
+        },
+        { rootMargin: "-10% 0px -80% 0px" }
+      );
+      for (const id of links.keys()) {
+        const heading = id
+          ? document.querySelector(`#${CSS.escape(id)}`)
+          : null;
+        if (heading) {
+          observer.observe(heading);
+        }
+      }
+    }
+  </script>
+  <script>
+    // The `saasaloy-*` blocks keep their plain list until this swaps in the island.
+    import { mountDocsBlocks } from "@web/lib/docs-blocks-client";
+
+    void mountDocsBlocks();
+  </script>
+</Layout>

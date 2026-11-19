@@ -16,6 +16,9 @@ import { fileURLToPath } from "node:url";
 import { links, repoPath } from "./llms-txt.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+/** The public site. `astro.config.mjs` holds the same origin as `site`. */
+const SITE_URL = "https://saasaloy.com/";
 const REPO_URL = "https://github.com/mimukit/saasaloy/";
 
 describe("the link reader", () => {
@@ -50,6 +53,12 @@ describe("llms.txt", () => {
     const hrefs = links(readFileSync(path, "utf-8"));
     assert.ok(hrefs.length > 0, "llms.txt has no links");
     const broken = hrefs.filter((href) => {
+      // A link to the public site must name a route the site serves: a file under
+      // apps/web/src/pages with that path and the `.ts` of an endpoint.
+      if (href.startsWith(SITE_URL)) {
+        const route = href.slice(SITE_URL.length).split("#")[0];
+        return !existsSync(join(ROOT, "apps/web/src/pages", `${route}.ts`));
+      }
       const target = repoPath(href);
       return target === undefined || !existsSync(join(ROOT, target));
     });

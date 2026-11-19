@@ -46,6 +46,7 @@ No env file is needed. A missing `packages/env/.env` reads as empty, so every ke
 
 ## Docs
 
+- [All the docs in one file](https://saasaloy.com/llms-full.txt): every docs page of the site, in reading order, as one Markdown file.
 - [Build with an agent](https://github.com/mimukit/saasaloy/blob/main/docs/wiki/how-to/build-with-an-agent.md): the prompt, the interview, the build log and the human steps.
 - [Getting started](https://github.com/mimukit/saasaloy/blob/main/docs/wiki/getting-started.md): install the CLI and scaffold a project.
 - [Modules](https://github.com/mimukit/saasaloy/blob/main/docs/wiki/modules.md): every module in the default registry. `saasaloy list --json` gives the same data with each module's `stage` and `needs`.

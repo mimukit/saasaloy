@@ -7,6 +7,8 @@ import { landing, ui } from "@web/content/landing";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 import { GITHUB_MARK } from "@web/lib/github-mark";
 import { analyticsToken } from "@web/lib/analytics";
+import { build as siteBuild } from "@web/lib/build";
+import type { BuildInfo } from "@web/lib/build-info";
 import { interpolate } from "@web/lib/interpolate";
 
 // Static, with one inline script. Option B of the footer layout mockup: a blueprint rule
@@ -14,8 +16,14 @@ import { interpolate } from "@web/lib/interpolate";
 // right, each with a small icon. Under it, the lowercase wordmark runs the full width of
 // the container at `wordmark-display`. A dimension line under the wordmark carries the
 // notice, and it names the analytics only when the build loads them. Under the line, a
-// monospace colophon puts the copyright on the left and the credit on the right. The
-// rows stack on mobile.
+// monospace colophon puts the copyright on the left and the credit on the right. On mobile
+// the colophon centers, and each part of the credit between " · " takes a line of its own.
+//
+// The dimension label ends with the build: the CLI version, linked to its GitHub release,
+// and the short commit, linked to the commit (src/lib/build-info.ts), in lowercase inside
+// the uppercase label. The label is centered, so the build sits centered with it (round 2
+// of the plan 0114 mockup, layout B). Production builds at the release tag, so the version
+// and the commit agree there. A build with no git leaves the commit out.
 //
 // The copyright year is the build year in the HTML. YEAR_SCRIPT sets it to the visitor's
 // year, so a page built in December still reads right in January. Without JavaScript the
@@ -125,6 +133,8 @@ export interface FooterProps {
   copyright?: string;
   /** The credit line in the colophon. An empty string hides it. */
   credit?: string;
+  /** The version and commit for the build line. Undefined hides the line. */
+  build?: BuildInfo;
 }
 
 export function Footer({
@@ -134,8 +144,21 @@ export function Footer({
   links = defaultLinks,
   copyright = landing.footer.copyright,
   credit = landing.footer.credit,
+  build = siteBuild,
 }: FooterProps) {
   const { copyrightHolder, sponsor } = landing.footer;
+  const version =
+    build && landing.footer.version !== ""
+      ? {
+          label: interpolate(landing.footer.version, {
+            version: build.version,
+          }),
+          href: interpolate(landing.footer.releaseHref, {
+            version: build.version,
+          }),
+        }
+      : undefined;
+  const commit = build?.commit;
   return (
     <footer>
       <div aria-hidden="true" className="blueprint-rule" />
@@ -177,21 +200,58 @@ export function Footer({
 
         <div className="text-highlight mt-8 flex items-center gap-3 font-mono text-xs tracking-wide uppercase">
           <span aria-hidden="true" className="dimension-arm" />
-          {notice && (
+          {(notice || version) && (
             <p className="text-center text-balance">
-              {notice.split(" · ").map((part, index) => (
-                <Fragment key={index}>
-                  {index > 0 && " · "}
-                  <span className="whitespace-nowrap">{part}</span>
-                </Fragment>
-              ))}
+              {notice &&
+                notice.split(" · ").map((part, index) => (
+                  <Fragment key={index}>
+                    {index > 0 && " · "}
+                    <span className="whitespace-nowrap">{part}</span>
+                  </Fragment>
+                ))}
+              {version && (
+                <>
+                  {notice && (
+                    <span aria-hidden="true" className="hidden md:inline">
+                      {" · "}
+                    </span>
+                  )}
+                  {/* On mobile the build takes its own line under the notice. */}
+                  <span className="block whitespace-nowrap md:inline">
+                    <a
+                      href={version.href}
+                      {...externalLinkProps(version.href)}
+                      className="normal-case underline underline-offset-4"
+                    >
+                      {version.label}
+                      {newTabHint(version.href)}
+                    </a>
+                    {commit && (
+                      <>
+                        {" · "}
+                        <a
+                          href={interpolate(landing.footer.commitHref, {
+                            sha: commit,
+                          })}
+                          {...externalLinkProps(landing.footer.commitHref)}
+                          className="normal-case underline underline-offset-4"
+                        >
+                          <span className="sr-only">{ui.footer.commit} </span>
+                          {commit.slice(0, 7)}
+                          {newTabHint(landing.footer.commitHref)}
+                        </a>
+                      </>
+                    )}
+                  </span>
+                </>
+              )}
             </p>
           )}
           <span aria-hidden="true" className="dimension-arm" />
         </div>
 
         {(copyright || credit) && (
-          <div className="text-muted-foreground flex flex-col gap-2 py-6 font-mono text-xs tracking-wide md:flex-row md:justify-between md:gap-8">
+          <div className="text-muted-foreground flex flex-col gap-2 py-6 text-center font-mono text-xs tracking-wide md:flex-row md:justify-between md:gap-8 md:text-left">
             {copyright && (
               <p>
                 {fillNodes(copyright, {
@@ -201,18 +261,29 @@ export function Footer({
               </p>
             )}
             {credit && (
-              <p>
-                {fillNodes(credit, {
-                  heart: (
-                    <>
-                      <span aria-hidden="true" className="text-highlight">
-                        ♥
+              <p className="flex flex-col gap-2 md:block">
+                {credit.split(" · ").map((part, index) => (
+                  <Fragment key={index}>
+                    {index > 0 && (
+                      <span aria-hidden="true" className="hidden md:inline">
+                        {" · "}
                       </span>
-                      <span className="sr-only">{ui.footer.heart}</span>
-                    </>
-                  ),
-                  sponsor: <CreditLink {...sponsor} />,
-                })}
+                    )}
+                    <span>
+                      {fillNodes(part, {
+                        heart: (
+                          <>
+                            <span aria-hidden="true" className="text-highlight">
+                              ♥
+                            </span>
+                            <span className="sr-only">{ui.footer.heart}</span>
+                          </>
+                        ),
+                        sponsor: <CreditLink {...sponsor} />,
+                      })}
+                    </span>
+                  </Fragment>
+                ))}
               </p>
             )}
             {copyright.includes("{year}") && (

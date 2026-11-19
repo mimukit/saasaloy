@@ -1,0 +1,741 @@
+/* The docs shell and the prose of a wiki page. DocsLayout.astro imports this file, so the
+   landing page ships none of it. It is plain CSS over the semantic tokens of brand.css and
+   uses no value of its own: square corners, hairlines and tonal surfaces, no shadow, glow or
+   gradient (apps/web/DESIGN.md). Tailwind utilities in the markup carry the rest.
+
+   The shell is one grid with three areas. Below 64rem the sidebar and the table of contents
+   are closed <details> above the page. From 64rem both stand open beside it: the
+   `::details-content` rule shows a closed <details> body, and the summary hides. */
+
+.docs-header {
+  position: sticky;
+  z-index: 40;
+  top: 0;
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  background-color: color-mix(in oklch, var(--background) 92%, transparent);
+}
+
+/* The header bar. Below 64rem it is one row: the wordmark and the Docs tag on the left, the
+   search and the tools on the right. The search field takes the free width from 48rem, and
+   below that the search is an icon beside the theme toggle. */
+.docs-header-bar {
+  display: flex;
+  height: 3.5rem;
+  align-items: center;
+  gap: 1rem;
+}
+
+.docs-header-brand,
+.docs-header-tools {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.docs-header-brand {
+  gap: 0.625rem;
+}
+
+.docs-header-search {
+  display: flex;
+  margin-left: auto;
+}
+
+.docs-header-tools {
+  gap: 1.5rem;
+}
+
+@media (width >= 48rem) {
+  .docs-header-bar {
+    gap: 2rem;
+  }
+
+  .docs-header-search {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+.docs-shell {
+  display: grid;
+  gap: 1rem;
+  grid-template-areas:
+    "menu"
+    "toc"
+    "main";
+  grid-template-columns: minmax(0, 1fr);
+  padding-block: 1rem 4rem;
+}
+
+.docs-menu {
+  grid-area: menu;
+}
+
+.docs-toc {
+  grid-area: toc;
+}
+
+.docs-main {
+  min-width: 0;
+  grid-area: main;
+  outline: none;
+}
+
+@media (width >= 64rem) {
+  /* From 64rem the header takes the shell's three columns, and its cells draw the two
+     column rules, so each rule runs from the top of the page to the footer. */
+  .docs-header-bar {
+    display: grid;
+    align-items: stretch;
+    gap: 0 2.5rem;
+    grid-template-columns: 16rem minmax(0, 1fr) 14rem;
+  }
+
+  .docs-header-brand {
+    border-right: 1px solid var(--border);
+  }
+
+  .docs-header-search {
+    align-items: center;
+    margin-left: 0;
+  }
+
+  .docs-header-tools {
+    justify-content: flex-end;
+    padding-left: 1rem;
+    border-left: 1px solid var(--border);
+  }
+
+  .docs-shell {
+    gap: 0 2.5rem;
+    grid-template-areas: "menu main toc";
+    grid-template-columns: 16rem minmax(0, 1fr) 14rem;
+    padding-block: 0;
+  }
+
+  /* The two column rules. A sidebar is sticky and only as tall as its list, so a border on
+     it would stop part way down a long page. These two empty grid items sit in the sidebar
+     areas, stretch to the full height of the row and draw the rule there, so both lines run
+     from the header to the footer's blueprint rule. The shell has no bottom padding for
+     the same reason; the space under the page sits inside .docs-main. The footer's
+     blueprint rule (styles/web.css) is 1.0625rem tall with its hairline in the middle, so
+     each line runs on by about half that height to meet the hairline. */
+  .docs-shell::before,
+  .docs-shell::after {
+    margin-bottom: -0.5625rem;
+    content: "";
+    pointer-events: none;
+  }
+
+  .docs-shell::before {
+    border-right: 1px solid var(--border);
+    grid-area: menu;
+  }
+
+  .docs-shell::after {
+    border-left: 1px solid var(--border);
+    grid-area: toc;
+  }
+
+  .docs-menu,
+  .docs-toc {
+    position: sticky;
+    top: 3.5rem;
+    align-self: start;
+    padding-top: 2rem;
+  }
+
+  /* The list scrolls inside the sticky column. The <nav> is the scroll box, and it takes a
+     tab stop so a keyboard can scroll it (WCAG 2.1.1). The box runs from under the header's
+     3.5rem and the column's 2rem top padding to the bottom of the window, and the column has
+     no bottom padding, so at the end of the page the box stops on the footer's rule. */
+  .docs-menu nav,
+  .docs-toc nav {
+    max-height: calc(100dvh - 3.5rem - 2rem);
+    overflow-y: auto;
+  }
+
+  .docs-menu {
+    padding-right: 1rem;
+  }
+
+  .docs-toc {
+    padding-left: 1rem;
+  }
+
+  .docs-main {
+    padding-block: 2rem 5rem;
+  }
+
+  .docs-disclosure::details-content {
+    display: block;
+    content-visibility: visible;
+  }
+}
+
+/* The two disclosures below 64rem: a bordered bar, a chevron, the body underneath. */
+.docs-disclosure > summary,
+.docs-folded > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.docs-disclosure > summary {
+  display: flex;
+  height: 2.5rem;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding-inline: 0.75rem;
+}
+
+.docs-disclosure > summary::after,
+.docs-folded > summary::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--highlight);
+  border-bottom: 2px solid var(--highlight);
+  content: "";
+  rotate: 45deg;
+  translate: 0 -0.125rem;
+}
+
+.docs-folded > summary::before {
+  margin-right: 0.75rem;
+  rotate: -45deg;
+  translate: 0;
+}
+
+.docs-folded[open] > summary::before {
+  rotate: 45deg;
+  translate: 0 -0.125rem;
+}
+
+.docs-disclosure > summary::-webkit-details-marker,
+.docs-folded > summary::-webkit-details-marker {
+  display: none;
+}
+
+.docs-disclosure > summary:focus-visible,
+.docs-menu nav:focus-visible,
+.docs-toc nav:focus-visible,
+.docs-folded > summary:focus-visible,
+.docs-sidebar a:focus-visible,
+.docs-toc a:focus-visible,
+.docs-breadcrumb a:focus-visible,
+.docs-meta a:focus-visible,
+.docs-pager a:focus-visible,
+.docs-prose a:focus-visible,
+.docs-prose [tabindex="0"]:focus-visible,
+.docs-copy:focus-visible {
+  outline: 3px solid color-mix(in oklch, var(--ring) 50%, transparent);
+  outline-offset: 2px;
+}
+
+/* The sidebar. Page names are Geist, module names and group labels are mono (fix 2). */
+.docs-sidebar {
+  padding-block: 0.75rem;
+}
+
+.docs-group + .docs-group {
+  margin-top: 1.5rem;
+}
+
+.docs-group-label {
+  margin-bottom: 0.375rem;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.docs-sidebar ul,
+.docs-toc ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.docs-sidebar a,
+.docs-toc a {
+  display: block;
+  padding: 0.3125rem 0.75rem;
+  border-left: 2px solid transparent;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.docs-sidebar a:hover,
+.docs-toc a:hover {
+  background-color: var(--muted);
+}
+
+.docs-sidebar a[aria-current="page"],
+.docs-toc a[aria-current="location"] {
+  border-left-color: var(--highlight);
+  background-color: var(--muted);
+  color: var(--highlight);
+  font-weight: 500;
+}
+
+.docs-sidebar a.docs-mono {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.docs-folded > summary {
+  display: flex;
+  align-items: center;
+  padding: 0.3125rem 0.75rem;
+  color: var(--highlight);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.docs-toc-label {
+  padding-left: 0.75rem;
+  margin-top: 0;
+}
+
+.docs-toc-sub a {
+  padding-left: 1.5rem;
+}
+
+/* The breadcrumb, the title and the meta row. Every title is `primary` (fix 6). */
+.docs-breadcrumb {
+  display: flex;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  gap: 0.5rem;
+}
+
+.docs-breadcrumb a {
+  color: var(--highlight);
+}
+
+.docs-title h1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.75rem;
+  color: var(--primary);
+  font-size: clamp(2rem, 1.6rem + 1.6vw, 3rem);
+  font-weight: 700;
+  gap: 0.75rem 1rem;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.docs-tier {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--border);
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1rem;
+}
+
+.docs-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+  margin-top: 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  gap: 0.5rem 1.5rem;
+}
+
+.docs-meta a {
+  color: var(--highlight);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* The prose of a page. Body text is Geist, and a command, a path or a name is mono. */
+.docs-prose {
+  padding-top: 1.5rem;
+  font-size: 1rem;
+  line-height: 1.625;
+  overflow-wrap: break-word;
+}
+
+.docs-prose > * + * {
+  margin-top: 1rem;
+}
+
+.docs-prose h2,
+.docs-prose h3,
+.docs-prose h4 {
+  scroll-margin-top: 4.5rem;
+}
+
+.docs-prose h2 {
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+  margin-top: 3rem;
+  color: var(--primary);
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 2.25rem;
+}
+
+.docs-prose > h2:first-child {
+  padding-top: 0;
+  border-top: 0;
+  margin-top: 0;
+}
+
+.docs-prose h3 {
+  margin-top: 2rem;
+  color: var(--foreground);
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1.75rem;
+}
+
+.docs-prose h4,
+.docs-prose h5,
+.docs-prose h6 {
+  margin-top: 1.5rem;
+  font-weight: 600;
+}
+
+.docs-prose a {
+  color: var(--highlight);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.docs-prose ul,
+.docs-prose ol {
+  padding-left: 1.5rem;
+}
+
+.docs-prose ul {
+  list-style: none;
+}
+
+.docs-prose ul > li {
+  position: relative;
+}
+
+.docs-prose ul > li::before {
+  position: absolute;
+  top: 0.6em;
+  left: -1.125rem;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  background-color: var(--highlight);
+  content: "";
+}
+
+.docs-prose li + li,
+.docs-prose li > ul,
+.docs-prose li > ol {
+  margin-top: 0.375rem;
+}
+
+.docs-prose ol > li::marker {
+  color: var(--highlight);
+  font-family: var(--font-mono);
+}
+
+.docs-prose blockquote {
+  padding-left: 1rem;
+  border-left: 2px solid var(--highlight);
+  color: var(--muted-foreground);
+}
+
+.docs-prose hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin-block: 2rem;
+}
+
+.docs-prose img {
+  max-width: 100%;
+  height: auto;
+}
+
+.docs-prose :not(pre) > code {
+  padding: 0.0625rem 0.375rem;
+  border: 1px solid var(--border);
+  background-color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+/* A fenced block is a command field: a bordered mono field with a solid Copy button flush
+   against its top right corner (fix 4). The block scrolls sideways, and the field keeps its
+   own padding clear of the button. */
+.docs-code {
+  position: relative;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+}
+
+.docs-code pre {
+  padding: 0.75rem 5.5rem 0.75rem 1rem;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.5rem;
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+.docs-code pre code {
+  font-family: inherit;
+}
+
+.docs-copy {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  min-width: 4.5rem;
+  height: 2.5rem;
+  border: 1px solid var(--primary);
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding-inline: 0.75rem;
+  transition: background-color 0.15s var(--ease-out-soft);
+}
+
+.docs-copy:hover {
+  background-color: color-mix(in oklab, var(--primary) 85%, var(--foreground));
+}
+
+.docs-copy[hidden] {
+  display: none;
+}
+
+/* A `saasaloy-*` block (src/lib/docs-blocks.ts). Its plain list reads as a list of the
+   page's prose; the island's lists are controls, so they drop the prose bullet. */
+.docs-prose .saasaloy-list {
+  padding-left: 0;
+}
+
+.docs-prose .saasaloy-list > li::before {
+  content: none;
+}
+
+.docs-prose .saasaloy-list > li + li {
+  margin-top: 0;
+}
+
+/* A table scrolls inside its own box instead of widening the page. */
+.docs-scroll {
+  overflow-x: auto;
+}
+
+.docs-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  line-height: 1.375;
+}
+
+.docs-prose th,
+.docs-prose td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.docs-prose th {
+  background-color: var(--muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Previous and next. */
+.docs-pager {
+  display: grid;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  margin-top: 3rem;
+  gap: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.docs-pager a {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  gap: 0.25rem;
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+
+.docs-pager a:hover {
+  border-color: var(--ring);
+}
+
+.docs-pager-next {
+  grid-column: 2;
+}
+
+.docs-pager span {
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.docs-pager strong {
+  color: var(--highlight);
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+/* The search dialog (DocsSearch.astro). The backdrop dims the whole page, the header
+   included (fix 3). */
+.docs-search {
+  overflow: hidden;
+  width: min(48rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 6rem);
+  padding: 0;
+  border: 1px solid var(--ring);
+  margin: 4rem auto auto;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+.docs-search[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.docs-search::backdrop {
+  background-color: color-mix(in oklch, var(--foreground) 35%, transparent);
+}
+
+.docs-search-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  gap: 0.75rem;
+}
+
+.docs-search-bar input {
+  min-width: 0;
+  height: 2.5rem;
+  flex: 1;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  padding-inline: 0.75rem;
+}
+
+.docs-search-bar input:focus-visible {
+  border-color: var(--ring);
+  outline: 3px solid color-mix(in oklch, var(--ring) 50%, transparent);
+  outline-offset: 0;
+}
+
+.docs-search-note {
+  padding: 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.docs-search-note[hidden] {
+  display: none;
+}
+
+.docs-search-results {
+  flex: 1;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.docs-search-results li + li {
+  border-top: 1px solid var(--border);
+}
+
+.docs-search-results a {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid transparent;
+  color: var(--foreground);
+  gap: 0.25rem;
+  text-decoration: none;
+}
+
+.docs-search-results a:hover,
+.docs-search-results a:focus-visible {
+  border-left-color: var(--highlight);
+  background-color: var(--muted);
+  outline: none;
+}
+
+.docs-search-results strong {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.docs-search-results span {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  line-height: 1.375;
+}
+
+.docs-search-results mark {
+  background-color: var(--secondary);
+  color: var(--secondary-foreground);
+}
+
+.docs-search-hints {
+  display: flex;
+  justify-content: center;
+  padding: 0.625rem 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  gap: 1.5rem;
+}
+
+/* From 64rem the sidebar and the table of contents stand open, so their summaries hide. This
+   sits last so it wins over the summary's bordered bar above. A browser with no
+   ::details-content cannot force a closed <details> open, so there the summary stays and the
+   reader opens it. */
+@supports selector(::details-content) {
+  @media (width >= 64rem) {
+    .docs-disclosure > summary {
+      display: none;
+    }
+  }
+}

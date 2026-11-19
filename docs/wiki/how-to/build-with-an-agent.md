@@ -2,7 +2,7 @@
 
 An AI coding agent can build a Saasaloy MVP for you in one session. You give it one sentence, answer its questions once, and confirm one read-back. Then it builds with no more questions, and ends at a local app that runs, has seed data and passes its tests, on a branch you review. This page covers what you say, what the agent asks, what comes back, and what stays your job.
 
-The MVP it builds is the README's "Build the MVP" row: sign-in through the customer `app`, an `admin` app, transactional email through the console provider, landing copy from your answers, and every entity of your product from the database to the screen. The modules you pick in the interview come on top.
+The MVP it builds is the README's "Build the MVP" row: sign-in through the customer `app`, an `admin` app, transactional email through the console provider, access for AI agents (the `agent` module, with `api-keys` and `api-keys-user`), landing copy from your answers, and every entity of your product from the database to the screen. The modules you pick in the interview come on top.
 
 ## 1. Give the prompt
 
@@ -56,7 +56,7 @@ The agent then starts the `saasaloy-build` skill in the same session. It asks yo
 | `## Intake` | the brief and spec checks, the env step, the testing mode, and each wish that is not in this build |
 | `## Brand` | the product name and locale, the landing copy, the theme preset |
 | `## Validate` | the database, api, logger and validators modules, and your picks of that stage |
-| `## MVP` | `shell`, `auth`, `app`, `admin`, `email` and `email-console`, and your other picks |
+| `## MVP` | `shell`, `auth`, `app`, `admin`, `email`, `email-console`, `agent`, `api-keys` and `api-keys-user`, and your other picks |
 | `## Feature: <table>` | one section for each entity of the spec, in your order |
 | `## Blocked` | what stopped the build, when something did |
 | `## Left for a human` | each step only you can take |
@@ -103,3 +103,5 @@ The build never does these, and it lists them under `## Left for a human`:
 - Create a vendor account: a paid Cloudflare plan, a domain, a mail or payment provider. The build installs the local provider and names the vendor step.
 - Edit a secret, or set a production value.
 - Delete data outside the local dev database.
+
+_Verified against `main`@`928b4f03` on 2026-11-19._

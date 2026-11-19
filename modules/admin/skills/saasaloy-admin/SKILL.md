@@ -69,8 +69,6 @@ function Widgets() {
 }
 ```
 
-```
-
 That is the whole registration. The file is a child of `src/routes/__root.tsx`, so it inherits the
 shell and the access gate with no work of its own. `src/routes/users.tsx` is the worked example in
 the scaffold; copy from it.

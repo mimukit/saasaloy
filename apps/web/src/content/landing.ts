@@ -55,7 +55,9 @@
 import { repoUrl } from "@web/site";
 
 const REPO = repoUrl;
-const DOCS = `${REPO}/blob/main/docs/wiki`;
+// The docs live on this site (src/pages/docs), so a docs link is a path and stays in the
+// tab. src/lib/docs-slug.ts holds the rule that maps a wiki page to its path.
+const DOCS = "/docs";
 
 /** Marketing copy. The whole of what a landing-copy pass may rewrite. */
 export const landing = {
@@ -75,9 +77,9 @@ export const landing = {
   // externalLinkProps (shape rule 5a). An empty label hides its link.
   navbar: {
     links: [
-      { id: "docs", label: "Docs", href: `${DOCS}/index.md` },
+      { id: "docs", label: "Docs", href: DOCS },
       { id: "github", label: "GitHub", href: REPO },
-      { id: "guide", label: "Guide", href: `${DOCS}/getting-started.md` },
+      { id: "guide", label: "Guide", href: `${DOCS}/getting-started` },
     ],
   },
 
@@ -106,7 +108,7 @@ export const landing = {
       {
         id: "getting-started",
         label: "Getting started",
-        href: `${DOCS}/getting-started.md`,
+        href: `${DOCS}/getting-started`,
       },
       { id: "github", label: "GitHub", href: REPO },
     ],
@@ -197,8 +199,7 @@ export const landing = {
   // stage's name is its catalog tab label (`catalog.tabs`), so the two sections say one
   // thing. `module` names the folder on the stage's slab in the drawing, `command` is the
   // command beside the name (5b), and `href` links the name to that module's docs (5a).
-  // The row link uses a text fragment, because a Markdown table row has no anchor; a
-  // browser without text fragments opens the page at the top. `modulesLabel` takes
+  // The name links to the module's own page in the docs. `modulesLabel` takes
   // `{count}`, the stage's tile count, and selects the stage's catalog tab.
   stages: {
     title: "Add code when the product needs it.",
@@ -211,7 +212,7 @@ export const landing = {
         command: "add waitlist",
         description:
           "Start with the landing page, then collect sign-ups to test the idea.",
-        href: `${DOCS}/modules.md#:~:text=a%20waitlist%20form%20plus%20its%20API%20route`,
+        href: `${DOCS}/modules/waitlist`,
       },
       {
         id: "mvp",
@@ -219,7 +220,7 @@ export const landing = {
         command: "add auth",
         description:
           "Add sign-in, the user app and the admin console when people sign up.",
-        href: `${DOCS}/modules.md#:~:text=workspace%20wrapping%20Better%20Auth`,
+        href: `${DOCS}/modules/auth`,
       },
       {
         id: "teams",
@@ -227,7 +228,7 @@ export const landing = {
         command: "add teams",
         description:
           "Add team accounts and tenant isolation when users ask for them.",
-        href: `${DOCS}/modules.md#:~:text=Better%20Auth%20organizations%2C%20memberships`,
+        href: `${DOCS}/modules/teams`,
       },
       {
         id: "money",
@@ -235,7 +236,7 @@ export const landing = {
         command: "add payment",
         description:
           "Add one-off payments and subscriptions when someone wants to pay.",
-        href: `${DOCS}/modules.md#:~:text=workspace%20with%20the%20provider%20contract%2C%20the%20status%20machine`,
+        href: `${DOCS}/modules/payment`,
       },
       {
         id: "scale",
@@ -243,7 +244,7 @@ export const landing = {
         command: "add queue",
         description:
           "Add background jobs, file uploads, feature flags, API keys and rate limits as usage grows.",
-        href: `${DOCS}/modules.md#:~:text=a%20job%20table%2C%20a%20schedule%20table`,
+        href: `${DOCS}/modules/queue`,
       },
     ],
   },
@@ -364,7 +365,7 @@ export const landing = {
     detail:
       "Every module you add brings its own skill file, and one `pnpm check` tells the agent whether its change holds.",
     sourceLabel: "Read the agent guide",
-    sourceHref: `${DOCS}/how-to/make-it-yours.md`,
+    sourceHref: `${DOCS}/how-to/make-it-yours`,
   },
 
   // The closing block after the FAQ. `command` is the command field's text (5b), and the
@@ -467,7 +468,7 @@ export const landing = {
       {
         id: "getting-started",
         label: "Getting started",
-        href: `${DOCS}/getting-started.md`,
+        href: `${DOCS}/getting-started`,
       },
       {
         id: "changelog",
@@ -487,6 +488,14 @@ export const landing = {
     },
     credit: "Developed with {heart} from Bangladesh · Sponsored by {sponsor}",
     sponsor: { label: "Brainaloy Labs", href: "https://brainaloy.com" },
+    /**
+     * The build at the end of the dimension label: the CLI version, linked to its GitHub
+     * release, and the short commit, linked to the commit. `{version}` is the number without the `v`, and
+     * `{sha}` is the full commit. An empty `version` hides both.
+     */
+    version: "v{version}",
+    releaseHref: `${REPO}/releases/tag/v{version}`,
+    commitHref: `${REPO}/commit/{sha}`,
   },
 };
 
@@ -495,6 +504,11 @@ export const ui = {
   layout: {
     /** The skip link, the first thing a keyboard reaches on every page. */
     skipToContent: "Skip to content",
+  },
+
+  announcement: {
+    /** Accessible name for the announcement bar's landmark. */
+    label: "Announcement",
   },
 
   link: {
@@ -528,5 +542,7 @@ export const ui = {
     navLabel: "Footer",
     /** Screen-reader text for the heart in the credit line. */
     heart: "love",
+    /** Screen-reader text before the short commit in the dimension label. */
+    commit: "Commit",
   },
 };

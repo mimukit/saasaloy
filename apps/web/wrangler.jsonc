@@ -39,5 +39,9 @@
     // "single-page-application" — that is the admin app's setting, and here it would
     // answer every typo with the home page at status 200.
     "not_found_handling": "404-page",
+    // `/docs/x` serves dist/client/docs/x/index.html, and `/docs/x/` redirects to it. The
+    // default, "auto-trailing-slash", redirects the other way, which would send every docs
+    // link, sitemap entry and canonical URL (all slash-free) through a redirect.
+    "html_handling": "drop-trailing-slash",
   },
 }

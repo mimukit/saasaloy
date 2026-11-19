@@ -1,14 +1,19 @@
 // /sitemap.xml, prerendered at build time from `site` in astro.config.mjs. It lists the
-// indexable pages by hand: today only the home page, since 404 and 500 are `noindex`.
-// Add a page's path to PATHS when it ships, or move to `@astrojs/sitemap` once the site
-// has more pages than this list can keep up with (exclude /404 and /500 there).
+// indexable pages: the home page by hand, since 404 and 500 are `noindex`, and every docs
+// page from the same collection that renders /docs, so a new wiki page joins the sitemap
+// with no edit here. Add another page's path to PATHS when it ships, or move to
+// `@astrojs/sitemap` once the site has more pages than this list can keep up with (exclude
+// /404 and /500 there).
 
 import type { APIRoute } from "astro";
 
+import { loadDocs } from "@web/lib/docs";
+
 const PATHS = ["/"];
 
-export const GET: APIRoute = ({ site }) => {
-  const urls = PATHS.map(
+export const GET: APIRoute = async ({ site }) => {
+  const { pages } = await loadDocs();
+  const urls = [...PATHS, ...pages.map((page) => page.url)].map(
     (path) => `  <url>\n    <loc>${new URL(path, site).href}</loc>\n  </url>`
   );
   const body = [

@@ -34,6 +34,12 @@ export default {
   },
   hooks: {
     "before:init": ["pnpm -w run release:preflight"],
+    // After the tag, the push and the GitHub Release, deploy the docs site at the tag
+    // (plan 0114, Phase 6). It runs `scripts/release-deploy.ts`, which prints the rerun
+    // command and exits non-zero when the deploy fails, because release-it cannot undo
+    // the tag by then. It deploys the site only: npm publishes from the tag-started
+    // workflow, so the site can go live before the package does.
+    "after:release": [`pnpm -w run release:deploy ${TAG}`],
   },
   plugins: {
     "@release-it/conventional-changelog": {

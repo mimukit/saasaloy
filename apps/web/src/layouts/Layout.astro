@@ -2,8 +2,10 @@
 // The one document shell for every page. It owns <html>/<head>/<body> and the single
 // import of the web theme, so a page is only ever its own content — no page may
 // duplicate the shell or import a stylesheet again. web.css imports brand.css, the
-// tokens, and brand.css imports the shared globals.css.
+// tokens, and brand.css imports the shared globals.css. It also draws the announcement bar
+// (components/Announcement.astro), so every page gets it above its header.
 import "@web/styles/web.css";
+import Announcement from "@web/components/Announcement.astro";
 import { locale, siteName } from "@web/site";
 import { landing, ui } from "@web/content/landing";
 import { interpolate } from "@web/lib/interpolate";
@@ -25,8 +27,11 @@ interface Props {
 const { title, description, noindex = false, jsonLd } = Astro.props;
 
 // `Astro.site` is the `site` origin in astro.config.mjs. It is always set there, so the
-// canonical URL never falls back to the dev server's host.
-const canonical = new URL(Astro.url.pathname, Astro.site).href;
+// canonical URL never falls back to the dev server's host. The path has no trailing slash,
+// as the docs links and /sitemap.xml do: the Worker serves `/docs/x` from `docs/x/index.html`
+// and redirects `/docs/x/` to it (`html_handling` in wrangler.jsonc).
+const path = Astro.url.pathname.replace(/(.)\/$/, "$1");
+const canonical = new URL(path, Astro.site).href;
 
 // The link preview image, 1200×630. public/og.png is the README module-map banner, padded
 // to that ratio. The URL is absolute, because a preview crawler resolves nothing.
@@ -132,6 +137,7 @@ const analyticsBeacon = analyticsToken
     >
       {ui.layout.skipToContent}
     </a>
+    <Announcement />
     <slot />
     <script is:inline set:html={LOOP_SCRIPT} />
   </body>

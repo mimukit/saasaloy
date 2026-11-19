@@ -109,7 +109,7 @@ Anyone who hit this needs one of two things:
 Merging publishes to every `@main` reader
 ([ADR 0012](../../adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md), [ADR 0062](../../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)),
 and CI does not validate descriptors. `.github/workflows/ci.yml` runs `pnpm lint`,
-`pnpm typecheck`, `pnpm test` and `pnpm verify:content` on every push and pull request, and
+`pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins` and `pnpm docs:check` on every push and pull request, and
 no step calls `saasaloy doctor` over `modules/`. Review is still the only thing between a
 descriptor and every downstream install.
 [#46](https://github.com/mimukit/saasaloy/issues/46) adds the gate that would have caught
@@ -118,4 +118,4 @@ this.
 Until then, the cheap prevention is `saasaloy doctor modules` or step 2, run *before* the merge. See
 [Contribute a module](../how-to/contribute-a-module.md#test-it-before-you-open-the-pr).
 
-_Verified against `main`@`42cbf03` on 2026-09-11._
+_Verified against `main`@`928b4f03` on 2026-11-19._
