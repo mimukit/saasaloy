@@ -151,29 +151,54 @@ describe("publish.yml", () => {
     assert.deepEqual(workflow.on, { push: { tags: ["v*"] } });
   });
 
-  it("runs every job in the npm environment", () => {
-    const jobs = Object.entries(workflow.jobs ?? {});
-    assert.ok(jobs.length > 0, "publish.yml has no job");
-    for (const [name, job] of jobs) {
-      const environment =
-        typeof job.environment === "object" && job.environment !== null
-          ? (job.environment as { name?: unknown }).name
-          : job.environment;
-      assert.equal(
-        environment,
-        "npm",
-        `job ${name} is not in the npm environment`
-      );
-    }
-  });
+  function environmentOf(job: { environment?: unknown }): unknown {
+    return typeof job.environment === "object" && job.environment !== null
+      ? (job.environment as { name?: unknown }).name
+      : job.environment;
+  }
 
-  it("publishes with an OIDC token and no NPM_TOKEN secret", () => {
-    for (const job of Object.values(workflow.jobs ?? {})) {
+  it("gives an OIDC token only to a job in the npm environment", () => {
+    const jobs = Object.entries(workflow.jobs ?? {});
+    const publishing = jobs.filter(
+      ([, job]) =>
+        typeof job.permissions === "object" &&
+        job.permissions !== null &&
+        "id-token" in job.permissions
+    );
+    assert.equal(publishing.length, 1, "publish.yml needs one publish job");
+    for (const [name, job] of publishing) {
+      assert.equal(
+        environmentOf(job),
+        "npm",
+        `job ${name} can mint a token outside the npm environment`
+      );
       assert.deepEqual(job.permissions, {
         contents: "read",
         "id-token": "write",
       });
     }
+    for (const [name, job] of jobs) {
+      if (!publishing.some(([other]) => other === name)) {
+        assert.deepEqual(
+          job.permissions,
+          { contents: "read" },
+          `job ${name} has more than contents: read`
+        );
+      }
+    }
+  });
+
+  it("pins every action to a 40-character commit SHA", () => {
+    const uses = [...text.matchAll(/^\s*-?\s*uses:\s*(\S+)/gm)].map(
+      (match) => match[1] ?? ""
+    );
+    assert.ok(uses.length > 0, "publish.yml has no uses: line");
+    for (const action of uses) {
+      assert.match(action, /@[0-9a-f]{40}$/, action);
+    }
+  });
+
+  it("publishes with no NPM_TOKEN secret", () => {
     // The parsed workflow, so the header comment may name the secret it does not use.
     assert.doesNotMatch(JSON.stringify(workflow), /NPM_TOKEN|NODE_AUTH_TOKEN/);
   });

@@ -12,9 +12,15 @@
 #
 # The local preflight already ran the full gate and the tarball smoke on this commit, so
 # the checks here are only the ones that prove this tarball is the one the tag names:
-# the tag matches the version, the CLI builds, the tarball installs, and the installed
-# `saasaloy --version` prints that version. `scripts/release-order.test.ts` checks that
-# this workflow starts only on a `v*` tag push and only in the `npm` environment.
+# the tagged commit is on main, the tag matches the version, the CLI builds, the tarball
+# installs, and the installed `saasaloy --version` prints that version.
+#
+# Two jobs. `build` installs the dependencies, runs every check and packs the tarball, with
+# no OIDC token and no npm cache. `publish` waits in the environment `npm` for the owner's
+# approval, then runs only `npm publish` on that tarball. So no dependency install script
+# and no build step runs in the job that can mint a publish token. Every `uses:` is pinned
+# to a commit SHA for the same reason (ADR 0064). `scripts/release-order.test.ts` checks
+# that this workflow starts only on a `v*` tag push and that only the `npm` job can publish.
 #
 # A failed run: fix the cause if it is outside the tag, then rerun the job on GitHub.
 # CONTRIBUTING.md, "Releasing", has the steps and the emergency token publish.
@@ -34,41 +40,32 @@ permissions:
   contents: read
 
 jobs:
-  publish:
-    name: publish
+  build:
+    name: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: npm
     permissions:
       contents: read
-      id-token: write
+    env:
+      HUSKY: "0"
     steps:
-      - uses: actions/checkout@v7
+      # Full history, so the next step can see `origin/main`.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      # No `version` key: the action reads `packageManager` from package.json, as in ci.yml.
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-
-      - run: pnpm install --frozen-lockfile
-
-      # Trusted publishing needs npm 11.5.1 or later. Node 24 ships npm 11, so this only
-      # names the cause when a Node update brings an older npm.
-      - name: npm is 11.5.1 or later
+      # Only a commit on main is released. A tag on a branch commit stops here, before the
+      # approval screen, which shows the tag but not its branch.
+      - name: the tagged commit is on main
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          version="$(npm --version)"
-          lowest="$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)"
-          if [ "$lowest" != "11.5.1" ]; then
-            echo "npm $version is below 11.5.1, which trusted publishing needs." >&2
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "The tag $TAG names $GITHUB_SHA, which is not on main." >&2
             exit 1
           fi
-          echo "npm $version"
 
       - name: the tag matches the CLI version
         env:
@@ -80,6 +77,16 @@ jobs:
             exit 1
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      # No `version` key: the action reads `packageManager` from package.json, as in ci.yml.
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      # No `cache:`. A cache any main workflow can write must not feed a release build.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - run: pnpm install --frozen-lockfile
 
       - name: build the CLI
         run: pnpm --filter saasaloy run build
@@ -104,5 +111,47 @@ jobs:
           fi
           echo "saasaloy --version: $printed"
 
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tarball
+          path: ${{ env.TARBALL }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tarball
+          path: ${{ runner.temp }}/pack
+
+      # No checkout, so no .nvmrc. 24 is the major .nvmrc names.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or later. Node 24 ships npm 11, so this only
+      # names the cause when a Node update brings an older npm.
+      - name: npm is 11.5.1 or later
+        run: |
+          version="$(npm --version)"
+          lowest="$(printf '%s\n' 11.5.1 "$version" | sort -V | head -n 1)"
+          if [ "$lowest" != "11.5.1" ]; then
+            echo "npm $version is below 11.5.1, which trusted publishing needs." >&2
+            exit 1
+          fi
+          echo "npm $version"
+
       - name: npm publish
-        run: npm publish "$TARBALL" --access public --provenance
+        run: |
+          tarball="$(ls "$RUNNER_TEMP"/pack/saasaloy-*.tgz)"
+          npm publish "$tarball" --access public --provenance

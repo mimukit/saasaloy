@@ -584,20 +584,20 @@ Both release scripts read `GITHUB_TOKEN` from your shell and fall back to `gh au
 
 That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHANGELOG.md` written from the commits, commits it as `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, and creates the GitHub Release. It prompts before each step. It does not publish to npm: `packages/cli/.release-it.js` sets `npm: { publish: false }`, so release-it's npm plugin only bumps the version.
 
-The tag push starts the `publish` workflow. A published CLI reads the modules at its own tag, so the tag must be on GitHub before npm offers the version to anyone, and a publish that starts from the tag push has that order by construction. `scripts/release-order.test.ts` fails the gate when a release-it dry run shows an `npm publish` step, or when `publish.yml` starts on anything but a `v*` tag push or runs outside the `npm` environment. See [ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md) and [ADR 0064](docs/adr/0064-adr-the-cli-publishes-from-a-tag-started-approved-oidc-workflow-2026-11-19.md).
+The tag push starts the `publish` workflow. A published CLI reads the modules at its own tag, so the tag must be on GitHub before npm offers the version to anyone, and a publish that starts from the tag push has that order by construction. `scripts/release-order.test.ts` fails the gate when a release-it dry run shows an `npm publish` step, or when `publish.yml` starts on anything but a `v*` tag push, gives an OIDC token to a job outside the `npm` environment, or names an action by tag instead of a commit SHA. See [ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md) and [ADR 0064](docs/adr/0064-adr-the-cli-publishes-from-a-tag-started-approved-oidc-workflow-2026-11-19.md).
 
 ### Approving the publish
 
-The `publish` job runs in the GitHub environment `npm`, which has the maintainer as required reviewer, so it waits until you approve it:
+The workflow has two jobs. `build` runs at once, with no approval and no OIDC token. `publish` needs `build`, and it runs in the GitHub environment `npm`, which has the maintainer as required reviewer, so it waits until you approve it:
 
 1. Open the `publish` run for the tag: `gh run list --workflow publish.yml --limit 1`, or the repository's Actions tab.
 2. Select **Review deployments**, tick `npm`, and select **Approve and deploy**.
 3. Wait for the job to finish: `gh run watch <run id>`.
 4. Check the result: `npm view saasaloy@X.Y.Z dist.attestations` prints the provenance attestation.
 
-The job checks that the tag equals `v` plus the `packages/cli` version, builds the CLI, packs the tarball with `pnpm pack`, installs the tarball and checks that `saasaloy --version` prints the version. Then it runs `npm publish <tarball> --access public --provenance`. It does not run the gate again, because the preflight ran it on the same commit. It fails by name when `npm --version` is below 11.5.1, the first npm with trusted publishing.
+The `build` job checks that the tagged commit is on `main` and that the tag equals `v` plus the `packages/cli` version. Then it builds the CLI with no dependency cache, packs the tarball with `pnpm pack`, installs the tarball, checks that `saasaloy --version` prints the version, and uploads the tarball as an artifact. The `publish` job downloads that tarball and runs `npm publish <tarball> --access public --provenance`, and nothing else. So no install script and no build step runs in the job that can get a publish token. Neither job runs the gate again, because the preflight ran it on the same commit. `publish` fails by name when `npm --version` is below 11.5.1, the first npm with trusted publishing. Every `uses:` in `publish.yml` is pinned to a commit SHA.
 
-npm authenticates the job with trusted publishing (OIDC). The job has `id-token: write`, and the repository holds no `NPM_TOKEN` secret. The trusted publisher in the `saasaloy` package settings on npmjs.com names `mimukit/saasaloy`, `publish.yml` and the environment `npm`. If you rename the workflow file or the environment, change the trusted publisher too, or the publish fails with a 404.
+npm authenticates the `publish` job with trusted publishing (OIDC). Only that job has `id-token: write`, and the repository holds no `NPM_TOKEN` secret. The trusted publisher in the `saasaloy` package settings on npmjs.com names `mimukit/saasaloy`, `publish.yml` and the environment `npm`. If you rename the workflow file or the environment, change the trusted publisher too, or the publish fails with a 404.
 
 To lint the workflow after you change it, run actionlint from its Docker image, pinned by digest. Nothing is installed on the box:
 
