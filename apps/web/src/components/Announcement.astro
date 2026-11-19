@@ -1,0 +1,38 @@
+---
+// The announcement bar: one line of project news above the header, on every page. Layout.astro
+// renders it, so the landing page and the docs share it. The words come from
+// src/content/announcement.ts, and an empty message renders nothing. A tonal surface and a
+// hairline, no colour of its own, so it passes contrast in both themes. Pagefind skips it.
+import { announcement } from "@web/content/announcement";
+import { ui } from "@web/content/landing";
+import { isExternalHref } from "@web/lib/external-link";
+
+const message = announcement.message.trim();
+const { label, href } = announcement.link;
+const link = label !== "" && href !== "" ? { label, href } : undefined;
+const external = link !== undefined && isExternalHref(link.href);
+---
+
+{message !== "" && (
+  <aside
+    aria-label={ui.announcement.label}
+    class="border-border bg-muted text-foreground border-b px-4 py-2 text-center text-sm text-balance"
+    data-pagefind-ignore
+  >
+    {message}
+    {link && (
+      <>
+        {" "}
+        <a
+          href={link.href}
+          target={external ? "_blank" : undefined}
+          rel={external ? "noopener noreferrer" : undefined}
+          class="text-highlight font-medium whitespace-nowrap underline underline-offset-4"
+        >
+          {link.label}
+          {external && <span class="sr-only"> {ui.link.newTab}</span>}
+        </a>
+      </>
+    )}
+  </aside>
+)}

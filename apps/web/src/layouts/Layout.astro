@@ -2,8 +2,10 @@
 // The one document shell for every page. It owns <html>/<head>/<body> and the single
 // import of the web theme, so a page is only ever its own content — no page may
 // duplicate the shell or import a stylesheet again. web.css imports brand.css, the
-// tokens, and brand.css imports the shared globals.css.
+// tokens, and brand.css imports the shared globals.css. It also draws the announcement bar
+// (components/Announcement.astro), so every page gets it above its header.
 import "@web/styles/web.css";
+import Announcement from "@web/components/Announcement.astro";
 import { locale, siteName } from "@web/site";
 import { landing, ui } from "@web/content/landing";
 import { interpolate } from "@web/lib/interpolate";
@@ -135,6 +137,7 @@ const analyticsBeacon = analyticsToken
     >
       {ui.layout.skipToContent}
     </a>
+    <Announcement />
     <slot />
     <script is:inline set:html={LOOP_SCRIPT} />
   </body>

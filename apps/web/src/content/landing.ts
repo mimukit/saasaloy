@@ -506,6 +506,11 @@ export const ui = {
     skipToContent: "Skip to content",
   },
 
+  announcement: {
+    /** Accessible name for the announcement bar's landmark. */
+    label: "Announcement",
+  },
+
   link: {
     /** Screen-reader text after every link that opens another site in a new tab. */
     newTab: "(opens in a new tab)",
