@@ -92,6 +92,21 @@ describe("providersData", () => {
     );
   });
 
+  it("marks a selector that takes a comma list", () => {
+    assert.equal(providersData(REGISTRY, "email").list, false);
+    const listed = REGISTRY.map((item) =>
+      item.name === "email"
+        ? {
+            ...item,
+            envVars: {
+              EMAIL_PROVIDER: "Providers, as a comma list in priority order.",
+            },
+          }
+        : item
+    );
+    assert.equal(providersData(listed, "email").list, true);
+  });
+
   it("rejects a module with no provider and a capability with no selector", () => {
     assert.throws(() => providersData(REGISTRY, "api"), /capability=api/);
     assert.throws(

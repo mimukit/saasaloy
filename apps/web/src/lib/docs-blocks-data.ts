@@ -44,6 +44,11 @@ export interface ProvidersData {
   description: string;
   /** The env var that picks one provider at runtime, such as `EMAIL_PROVIDER`. */
   selector: string;
+  /**
+   * True when the selector takes a comma list in priority order (`PAYMENT_PROVIDER`), as its
+   * `envVars` description says, rather than one name.
+   */
+  list: boolean;
   providers: ProviderOption[];
 }
 
@@ -104,6 +109,7 @@ export function providersData(
     capability,
     description: row.description,
     selector,
+    list: /comma list/i.test(descriptor.envVars?.[selector] ?? ""),
     providers: providers.map((variant) => ({
       name: variant.name,
       value: variant.label,

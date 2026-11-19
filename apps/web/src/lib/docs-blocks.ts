@@ -128,9 +128,17 @@ function providersBlock(data: ProvidersData): MdastNode {
   return block("providers", data, [
     paragraph([
       mono(data.capability),
-      text(" picks its provider at runtime. Set "),
+      text(
+        data.list
+          ? " picks its providers at runtime. Set "
+          : " picks its provider at runtime. Set "
+      ),
       mono(data.selector),
-      text(" to one of these values."),
+      text(
+        data.list
+          ? " to one or more of these values, as a comma list in priority order."
+          : " to one of these values."
+      ),
     ]),
     bulletList(
       data.providers.map((provider) => [
