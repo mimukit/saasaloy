@@ -95,3 +95,29 @@ export function formatFailure(error: unknown): string {
   }
   return lines.join("\n");
 }
+
+/**
+ * The one stderr line that sends an agent to the report runbook (#359, ADR 0064). It
+ * prints in two places only: after an error escapes `main`, and after `update` fails to
+ * apply its plan. Not on every exit 1, because exit 1 also means "you cancelled"; never
+ * after exit 2 or 3, which are expected outcomes; and never under `--json`, whose stdout
+ * and stderr a caller parses.
+ */
+export const REPORT_HINT =
+  "Report this to Saasaloy: saasaloy skill saasaloy-report";
+
+/**
+ * What the bootstrap prints and exits with when `main` rejects: the formatted failure,
+ * then `REPORT_HINT` unless the error is a refusal or `argv` asks for `--json`.
+ */
+export function unhandledFailure(
+  error: unknown,
+  argv: readonly string[]
+): { code: number; lines: string[] } {
+  const code = exitCodeFor(error);
+  const lines = [formatFailure(error)];
+  if (code === EXIT_FAILURE && !argv.includes("--json")) {
+    lines.push(REPORT_HINT);
+  }
+  return { code, lines };
+}

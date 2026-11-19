@@ -8,6 +8,8 @@ import {
   formatFailure,
   isRefusal,
   RefusalError,
+  REPORT_HINT,
+  unhandledFailure,
 } from "./exit.js";
 
 afterEach(() => {
@@ -67,5 +69,29 @@ describe(formatFailure, () => {
     process.env[DEBUG_ENV] = "";
     const error = new Error("outer", { cause: new Error("inner") });
     expect(formatFailure(error)).toBe("outer");
+  });
+});
+
+describe(unhandledFailure, () => {
+  it("follows a failure with the report hint", () => {
+    expect(unhandledFailure(new Error("broke"), ["add"])).toStrictEqual({
+      code: EXIT_FAILURE,
+      lines: ["broke", REPORT_HINT],
+    });
+  });
+
+  it("prints the hint exactly as the report skill's command names it", () => {
+    expect(REPORT_HINT).toBe(
+      "Report this to Saasaloy: saasaloy skill saasaloy-report"
+    );
+  });
+
+  it("leaves the hint off a refusal and off a --json run", () => {
+    expect(
+      unhandledFailure(new RefusalError("no"), ["add"]).lines
+    ).toStrictEqual(["no"]);
+    expect(
+      unhandledFailure(new Error("broke"), ["doctor", "--json"]).lines
+    ).toStrictEqual(["broke"]);
   });
 });

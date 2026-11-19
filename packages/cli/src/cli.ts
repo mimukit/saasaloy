@@ -6,7 +6,12 @@ import {
 import pc from "picocolors";
 import type { CommandRegistry } from "./commands/index.js";
 import { COMMANDS } from "./commands/index.js";
-import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "./lib/exit.js";
+import {
+  EXIT_FAILURE,
+  EXIT_OK,
+  EXIT_REFUSED,
+  unhandledFailure,
+} from "./lib/exit.js";
 import { isInteractive } from "./lib/tui.js";
 import { readVersion } from "./version.js";
 
@@ -143,4 +148,26 @@ export async function main(
   }
 
   return command.run(rest);
+}
+
+/**
+ * `main`, plus what happens when it rejects: the bootstrap's whole job short of
+ * `process.exit`, kept here so a test can drive it. formatFailure prints the `cause`
+ * chain when SAASALOY_DEBUG is set; the chain registry.ts attaches used to stop at the
+ * bootstrap and never reach a bug report (#98). An error that gets this far is a bug, so
+ * the report hint follows it, unless it is a refusal or the run asked for `--json` (#359).
+ */
+export async function runCli(
+  argv: string[],
+  deps: Partial<CliDeps> = {}
+): Promise<number> {
+  try {
+    return await main(argv, deps);
+  } catch (error) {
+    const failure = unhandledFailure(error, argv);
+    for (const line of failure.lines) {
+      console.error(line);
+    }
+    return failure.code;
+  }
 }

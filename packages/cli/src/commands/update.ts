@@ -1,4 +1,4 @@
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import {
   basename,
   dirname,
@@ -37,6 +37,7 @@ import {
   EXIT_REFUSED,
   exitCodeFor,
   formatFailure,
+  REPORT_HINT,
 } from "../lib/exit.js";
 import { pathExists, resolveWithinRoot } from "../lib/fs-utils.js";
 import { workingTreeState } from "../lib/git-state.js";
@@ -60,7 +61,8 @@ import {
   setPendingNotes,
 } from "../lib/manifest.js";
 import type { PendingNote } from "../lib/manifest.js";
-import { renderMergePlan } from "../lib/merge-plan.js";
+import { PROJECT_RUNBOOK, renderMergePlan } from "../lib/merge-plan.js";
+import type { RunbookLine } from "../lib/merge-plan.js";
 import {
   matchDone,
   mergePendingNotes,
@@ -102,6 +104,7 @@ import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
 import { previewBackfill, reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
+import { renderBundledSkill } from "./skill.js";
 import {
   buildUpdatePlan,
   compareBase,
@@ -854,6 +857,9 @@ export async function runUpdate(argv: string[]): Promise<number> {
   const sources: RegistrySource[] = [];
   // Temp renders of the bundled template, dropped with the sources.
   const cleanups: (() => Promise<void>)[] = [];
+  // Set once the run starts to write its plan (#359). A failure from then on is one the
+  // owner cannot fix by changing the input, so the catch adds the report hint.
+  let applying = false;
   try {
     // `update base` names the template, which ships with the CLI and has no ref to move.
     const wantsBase = !opts.name || opts.name === BASE_MODULE;
@@ -1270,7 +1276,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
         skipNotes
       );
       const notesPlan = notesOnlyPlan(merged, skipped);
-      const notesDocument = renderMergePlan(notesPlan);
+      const notesDocument = renderMergePlan(
+        notesPlan,
+        await runbookFor(root, project.name, cliVersion)
+      );
       if (!preview) {
         const declined = await finishUpToDate({
           backfill,
@@ -1632,7 +1641,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // --dry-run and --diff both preview only: nothing is written anywhere, including
     // `--out`. The merge plan still renders to stdout so the preview is complete.
     if (preview) {
-      const document = renderMergePlan(plan);
+      const document = renderMergePlan(
+        plan,
+        await runbookFor(root, project.name, cliVersion)
+      );
       if (document) {
         process.stdout.write(document);
       }
@@ -1651,6 +1663,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
     if (declined !== undefined) {
       return declined;
     }
+    applying = true;
 
     // Copy everything the plan will touch, the backfill's targets and the state files,
     // before a byte moves. `saasaloy update --abort` puts this back.
@@ -1707,7 +1720,11 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     // Phase 4: the merge plan is emitted only after the clean path has run, so it
     // describes what is actually left to do rather than what might have been.
-    const document = renderMergePlan(plan);
+    // Read after the apply: the base may have just rewritten the project's runbook.
+    const document = renderMergePlan(
+      plan,
+      await runbookFor(root, project.name, cliVersion)
+    );
     if (document) {
       await emitMergePlan(document, opts.out);
       note(
@@ -1747,7 +1764,11 @@ export async function runUpdate(argv: string[]): Promise<number> {
       : EXIT_OK;
   } catch (error) {
     cancel(formatFailure(error), TUI_ON_STDERR);
-    return exitCodeFor(error);
+    const code = exitCodeFor(error);
+    if (applying && code === EXIT_FAILURE) {
+      process.stderr.write(`${REPORT_HINT}\n`);
+    }
+    return code;
   } finally {
     // Each remote source extracted its modules to a temp dir; drop them all.
     for (const source of sources) {
@@ -1807,6 +1828,28 @@ export async function finishUpToDate(
   }
   await steps.writeBackfill(backfill);
   return undefined;
+}
+
+/**
+ * The merge plan's line about the runbook (#359): the running CLI's version, and whether
+ * the project's `saasaloy-update` skill has other bytes than the one this CLI bundles,
+ * rendered the way `init` and `saasaloy skill` render it. A project with no copy is not
+ * flagged: there is nothing on disk for the agent to have read instead.
+ */
+export async function runbookFor(
+  root: string,
+  projectName: string,
+  cliVersion: string
+): Promise<RunbookLine> {
+  const copy = join(root, PROJECT_RUNBOOK);
+  if (!(await pathExists(copy))) {
+    return { cliVersion, differs: false };
+  }
+  const [mine, bundled] = await Promise.all([
+    readFile(copy),
+    renderBundledSkill("saasaloy-update", projectName),
+  ]);
+  return { cliVersion, differs: !mine.equals(Buffer.from(bundled, "utf-8")) };
 }
 
 /**

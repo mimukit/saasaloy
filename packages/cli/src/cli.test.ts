@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { SelectPrompt } from "./cli.js";
-import { main, printHelp, readVersion } from "./cli.js";
+import { main, printHelp, readVersion, runCli } from "./cli.js";
 import type { Command, CommandRegistry } from "./commands/index.js";
 import { COMMANDS } from "./commands/index.js";
+import {
+  EXIT_FAILURE,
+  EXIT_REFUSED,
+  EXIT_WORK_PENDING,
+  RefusalError,
+  REPORT_HINT,
+} from "./lib/exit.js";
 
 // Dispatch is exercised through the injected seam (`main(argv, deps)`) rather than a
 // module mock — the package mocks nothing anywhere else, and a parameter already gives
@@ -352,5 +359,81 @@ describe("main — version", () => {
 
   it("reads a real version off the package, not a placeholder", async () => {
     await expect(readVersion()).resolves.toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+// #359: an error that escapes a command is a bug, so the bootstrap's catch sends the agent
+// to the report runbook. A cancel, a refusal, exit 3 and any `--json` run stay quiet.
+describe("runCli — the report hint (#359)", () => {
+  function registryWith(run: Command["run"]): CommandRegistry {
+    return { boom: { describe: "test command", run } };
+  }
+
+  async function runQuiet(
+    argv: string[],
+    deps: Parameters<typeof runCli>[1]
+  ): Promise<{ code: number; err: string }> {
+    const captured = capture();
+    try {
+      const code = await runCli(argv, deps);
+      return { code, err: captured.err.join("\n") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("prints the failure and then the hint on stderr after an unhandled error", async () => {
+    const { code, err } = await runQuiet(["boom"], {
+      registry: registryWith(() => {
+        throw new Error("registry unreachable");
+      }),
+    });
+    expect(code).toBe(EXIT_FAILURE);
+    expect(err.split("\n")).toStrictEqual([
+      "registry unreachable",
+      REPORT_HINT,
+    ]);
+  });
+
+  it("prints no hint after an unhandled error under --json", async () => {
+    const { code, err } = await runQuiet(["boom", "--json"], {
+      registry: registryWith(() => {
+        throw new Error("registry unreachable");
+      }),
+    });
+    expect(code).toBe(EXIT_FAILURE);
+    expect(err).toContain("registry unreachable");
+    expect(err).not.toContain(REPORT_HINT);
+  });
+
+  it("prints no hint after an unhandled refusal, which exits 2", async () => {
+    const { code, err } = await runQuiet(["boom"], {
+      registry: registryWith(() => {
+        throw new RefusalError("invalid saasaloy.json");
+      }),
+    });
+    expect(code).toBe(EXIT_REFUSED);
+    expect(err).not.toContain(REPORT_HINT);
+  });
+
+  it("prints no hint when a command returns 1, 2 or 3 on its own", async () => {
+    for (const exit of [EXIT_FAILURE, EXIT_REFUSED, EXIT_WORK_PENDING]) {
+      const { code, err } = await runQuiet(["boom"], {
+        registry: registryWith(() => exit),
+      });
+      expect(code).toBe(exit);
+      expect(err).not.toContain(REPORT_HINT);
+    }
+  });
+
+  it("prints no hint when the picker is cancelled", async () => {
+    setTTY(true);
+    const { code, err } = await runQuiet([], {
+      registry,
+      select: recordSelect(CANCELLED).select,
+      isCancel,
+    });
+    expect(code).toBe(EXIT_FAILURE);
+    expect(err).not.toContain(REPORT_HINT);
   });
 });
