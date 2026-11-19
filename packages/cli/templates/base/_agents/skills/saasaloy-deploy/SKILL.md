@@ -166,7 +166,7 @@ Stakeholder summary (draft): <the summary, as "The stakeholder summary" writes i
 2. Writes the version into the root `package.json` and a new entry at the top of `CHANGELOG.md`.
 3. Stages each `release.include` path, then commits as `chore(release): v<version>`, tags the commit `v<version>`, pushes, and creates a GitHub Release.
 
-`release.include` (default `[]`) lists paths the release commit also carries. A `before:git:release` hook runs `git add -- '<path>'` for each one just before the commit. `requireCleanWorkingDir` runs `git diff --quiet HEAD`, which ignores untracked files, so a new walkthrough does not stop the release. A tracked file that you edited does. Each path is relative to the repository root and uses only `A-Z a-z 0-9 . _ / -`, with no `..` segment. A real release refuses a path that does not exist, because its `git add` would fail after the version bump. A release commit that carries the walkthrough changes more than the version and `CHANGELOG.md`, so the CI gate waits for that commit's own run.
+`release.include` (default `[]`) lists paths the release commit also carries. A `before:git:release` hook runs `git add -- '<path>'` for each one just before the commit. `requireCleanWorkingDir` runs `git diff --quiet HEAD`, which ignores untracked files, so a new walkthrough does not stop the release. A tracked file that you edited does. Each path is relative to the repository root and uses only `A-Z a-z 0-9 . _ / -`, with no `..` segment, and it names something below the root, never `.`. A real release refuses a path that does not exist or that git ignores, because its `git add` would fail after the version bump. A release commit that carries the walkthrough changes more than the version and `CHANGELOG.md`, so the CI gate waits for that commit's own run.
 
 The changelog shows `feat`, `fix`, `perf` and `revert` commits. A commit of any other type shows only when it is breaking, under its own heading, such as `Miscellaneous Chores` for a breaking `chore!`. The first release covers every commit since the project start, so its entry is long.
 
@@ -185,8 +185,9 @@ It refuses to start, and changes nothing, when:
 | `Working dir must be clean` | Commit or ask the owner. Never turn the check off: release-it commits with `git add . --update`, so a dirty file would go into the release commit. |
 | `No upstream configured for current branch` | `git push -u origin <branch>`. |
 | `There are no commits since the latest tag` | Nothing to release. Deploy without one, or wait for a commit. |
-| `release.include path "<path>" is absolute`, `has a .. segment`, or `has a character outside ...` | Fix the path in `release.include` in `deploy.config.ts`. |
+| `release.include path "<path>" is absolute`, `has a .. segment`, `names the repository root`, or `has a character outside ...` | Fix the path in `release.include` in `deploy.config.ts`. |
 | `release.include names <path>, and nothing is there` | Write the walkthrough first, or remove the path from `release.include`. |
+| `git ignores release.include path <path>` | Remove the `.gitignore` rule that matches the path, or remove the path from `release.include`. |
 | `a GitHub Release needs a token and none was found` | `gh auth login`, or set `GITHUB_TOKEN`. The owner may set `release.githubRelease: false` instead. |
 
 ## The release walkthrough

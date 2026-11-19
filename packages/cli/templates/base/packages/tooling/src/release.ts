@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { deployConfig } from "./deploy.config.ts";
 import { CHANGELOG_FILE, resolveConfig } from "./deploy-production.ts";
@@ -93,20 +93,33 @@ export function belowOne(version?: string): boolean {
 
 const INCLUDE_PATH = /^[A-Za-z0-9._/-]+$/;
 
+/** Why one `release.include` path is refused, or undefined. */
+function includePathProblem(path: string): string | undefined {
+  if (path.startsWith("/")) {
+    return "is absolute";
+  }
+  if (path.split("/").includes("..")) {
+    return "has a .. segment";
+  }
+  if (!INCLUDE_PATH.test(path)) {
+    return "is empty or has a character outside A-Z a-z 0-9 . _ / -";
+  }
+  if (path.split("/").every((part) => part === "" || part === ".")) {
+    return "names the repository root";
+  }
+  return undefined;
+}
+
 /**
  * The `release.include` paths, checked before release-it runs. release-it runs a hook in
- * a shell, so a path must be relative, have no `..` segment, and use only
- * `A-Z a-z 0-9 . _ / -`. Anything else throws, and the release changes nothing.
+ * a shell, so a path must be relative, have no `..` segment, use only
+ * `A-Z a-z 0-9 . _ / -`, and name something below the root: `.` would stage every
+ * untracked file into the release commit. Anything else throws, and the release changes
+ * nothing.
  */
 export function checkIncludePaths(paths: readonly string[]): string[] {
   for (const path of paths) {
-    const problem = path.startsWith("/")
-      ? "is absolute"
-      : path.split("/").includes("..")
-        ? "has a .. segment"
-        : INCLUDE_PATH.test(path)
-          ? undefined
-          : "is empty or has a character outside A-Z a-z 0-9 . _ / -";
+    const problem = includePathProblem(path);
     if (problem !== undefined) {
       throw new Error(
         `The release did not start, because release.include path ${JSON.stringify(path)} ${problem}. Give a path relative to the repository root in packages/tooling/src/deploy.config.ts.`
@@ -118,19 +131,33 @@ export function checkIncludePaths(paths: readonly string[]): string[] {
 
 /**
  * Why a real release may not start, or undefined: a `release.include` path that does not
- * exist would fail its `git add` after release-it bumped the version and wrote the
- * changelog. A dry run writes nothing, and the walkthrough comes after it, so it passes.
+ * exist, or that git ignores, would fail its `git add` after release-it bumped the version
+ * and wrote the changelog. A dry run writes nothing, and the walkthrough comes after it,
+ * so it passes.
  */
 export function missingIncludeProblem(
   paths: readonly string[],
   args: ReleaseArgs,
-  exists: (path: string) => boolean
+  exists: (path: string) => boolean,
+  ignored: (path: string) => boolean = () => false
 ): string | undefined {
-  const missing = args.dryRun ? [] : paths.filter((path) => !exists(path));
-  if (missing.length === 0) {
+  if (args.dryRun) {
     return undefined;
   }
-  return `The release did not start, because release.include names ${missing.join(", ")}, and nothing is there. Write the file first, or remove the path from packages/tooling/src/deploy.config.ts.`;
+  const missing = paths.filter((path) => !exists(path));
+  if (missing.length > 0) {
+    return `The release did not start, because release.include names ${missing.join(", ")}, and nothing is there. Write the file first, or remove the path from packages/tooling/src/deploy.config.ts.`;
+  }
+  const skipped = paths.filter((path) => ignored(path));
+  if (skipped.length > 0) {
+    return `The release did not start, because git ignores release.include path ${skipped.join(", ")}, so git add would refuse it. Remove its .gitignore rule, or remove the path from packages/tooling/src/deploy.config.ts.`;
+  }
+  return undefined;
+}
+
+/** Whether git ignores `path`. `git check-ignore -q` exits 0 for an ignored path. */
+function gitIgnores(path: string): boolean {
+  return spawnSync("git", ["check-ignore", "-q", "--", path]).status === 0;
 }
 
 /**
@@ -272,7 +299,8 @@ async function main(): Promise<void> {
   const missing = missingIncludeProblem(
     config.release.include,
     args,
-    existsSync
+    existsSync,
+    gitIgnores
   );
   if (missing !== undefined) {
     throw new Error(missing);

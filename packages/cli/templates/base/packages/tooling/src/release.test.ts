@@ -168,6 +168,11 @@ describe(includeHooks, () => {
     expect(() => checkIncludePaths(["docs/my notes.md"])).toThrow(
       /character outside/
     );
+    for (const root of [".", "./", "./."]) {
+      expect(() => checkIncludePaths([root])).toThrow(
+        /names the repository root/
+      );
+    }
     expect(() =>
       releaseItOptions(
         resolveConfig({ release: { include: ["docs/'; rm -rf ~; '"] } }),
@@ -188,6 +193,16 @@ describe(missingIncludeProblem, () => {
     ).toBeUndefined();
     expect(
       missingIncludeProblem(["docs/release/"], { dryRun: false }, () => true)
+    ).toBeUndefined();
+  });
+
+  it("refuses a real release whose include path git ignores", () => {
+    const all = (): boolean => true;
+    expect(
+      missingIncludeProblem(["docs/release/"], { dryRun: false }, all, all)
+    ).toMatch(/git ignores release\.include path docs\/release\//);
+    expect(
+      missingIncludeProblem(["docs/release/"], { dryRun: true }, all, all)
     ).toBeUndefined();
   });
 });
