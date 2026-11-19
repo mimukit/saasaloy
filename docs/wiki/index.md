@@ -9,7 +9,7 @@ The CLI ships eleven commands: `init`, `add`, `env`, `testing`, `outdated`, `upd
 
 Two things worth knowing before you pick a page:
 
-- **The CLI is published to npm as `saasaloy`** (0.9.0 today). `npm install -g saasaloy` installs it, or prefix commands with `npx`. [Getting started](getting-started.md) walks that path.
+- **The CLI is published to npm as `saasaloy`.** The page header shows the current version. `npm install -g saasaloy` installs it, or prefix commands with `npx`. [Getting started](getting-started.md) walks that path.
 - **The registry is this repo.** `mimukit/saasaloy` is the default registry, so
   `saasaloy add waitlist` fetches `modules/waitlist/` from it on GitHub at a resolved
   commit SHA. There is no package registry in between.
