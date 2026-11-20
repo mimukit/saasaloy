@@ -14,13 +14,13 @@ The owner decided on 2026-11-19 and 2026-11-20 to write the engine again as one 
 
 Goal: an agent takes a Saasaloy update with less merge work, and the CLI can undo every edit it makes.
 
-Target: on the PrimeShopr 0.8.0 replay, at most 45 files need an agent (proposed; baseline 80 from research 0013; the owner accepted it on 2026-11-20). No edit of the engine lacks an undo (baseline: 106 patches with no inverse on `main` at `673e1230`). With the grill answers below, the estimate from the replay data is 38 to 41 files.
+Target: on the PrimeShopr 0.8.0 replay, at most 45 files need an agent (proposed; baseline 80 from research 0013; the owner accepted it on 2026-11-20). No edit of the engine lacks an undo (baseline: 106 patches with no inverse on `main` at `673e1230`). With the grill answers below, the estimate from the replay data is 38 to 41 files. The re-grill makes `saasaloy.json` and `packages/env/.env.example` `merged`, which research 0013 counted in one row; the target stays at most 45, and Phase 5 measures it (re-grill Q5, defaulted).
 
 Merge gate: the work can start now, but the pull request merges only after 0.9.0 is released (#358). From that release a CLI reads the modules at its own tag (ADR 0062), so `main` can change the payload without a break for released CLIs (grill Q23, asked).
 
 ## Design decisions (settled)
 
-Rows from the planning session name the owner and a date. Rows from the grill of 2026-11-20 name their question and say "asked" or "defaulted".
+Rows from the planning session name the owner and a date. Rows from the grill of 2026-11-20 name their question and say "asked" or "defaulted". Rows marked "re-grill" come from the second grill of 2026-11-20, after the unattended run stopped in Phase 4 because `add` could not register a module in a `once` file ([#365 comment](https://github.com/mimukit/saasaloy/issues/365#issuecomment-7035209008)).
 
 ### Scope and shape
 
@@ -42,10 +42,13 @@ Rows from the planning session name the owner and a date. Rows from the grill of
 | One operation | `apply(oldLock, newLock)`. `init` is an apply from nothing, `add X` adds X to the requested set, `remove X` takes it out, and `update` moves the version. One code path decides every write. |
 | Render | `render({ payload, requested, options })` returns a map from path to bytes and class. It reads no disk and no network. The caller loads the payload first. |
 | Patches inside the render | A patch becomes a transform that the render applies in memory, in one fixed order: dependency order, then module name. The insert side of each codemod in `packages/cli/src/lib/patch/` is reused. No inverse and no reversal refusal is necessary, because a remove is a render without the module. |
-| File classes | Each rendered file has one class. `generated`: the CLI writes it in full on every run. `merged`: three-way merge. `once`: written when the path is new, then left alone. Today's `seedFiles`, `ownedFiles` and the module `seed` flag (ADR 0060) all map to `once`. |
-| An owned file that holds a table | The table moves to a generated file in Phase 7, and the rest of the file stays `once`. Four files hold five tables: `packages/env/src/services.ts`, `packages/env/src/sources.ts`, `packages/tooling/src/targets.ts` and `packages/ui/src/blocks/navbar.tsx` (grill Q11, defaulted). |
+| File classes | Each rendered file has one class. `generated`: the CLI writes it in full on every run. `merged`: three-way merge. `once`: written when the path is new, then left alone. Today's `seedFiles`, `ownedFiles` and the module `seed` flag (ADR 0060) all map to `once`, with the three exceptions in the rows below (re-grill Q1 to Q3, asked). |
+| An owned file that holds a table | The table moves to a generated file in Phase 7, and the rest of the file stays `once`. Four files hold five tables: `packages/env/src/services.ts`, `packages/env/src/sources.ts`, `packages/tooling/src/targets.ts` and `packages/ui/src/blocks/navbar.tsx` (grill Q11, defaulted). Until Phase 7 moves its table out, each of the four files is `merged`, so `add` can register a module and the `scaffold:check` and `release:smoke` gates of Phases 4 and 6 stay where they are. The interim class never ships, because the branch merges after Phase 7 (re-grill Q1, asked). |
+| The key list `packages/env/.env.example` | `merged`, not `once`. A three-way merge keeps every value the owner typed, adds the keys of a new module, and drops the keys of a removed module that the owner did not edit (re-grill Q2, asked). |
+| `saasaloy.json` | `merged` with the JSON merge by key, not `once`, so the module aliases and the `installed` list stay true and an owner's own alias survives (re-grill Q3, asked). |
+| Where the class exceptions live during the build | A rule in `engine/classes.ts` in Phases 4 and 5, because the old engine still reads `_saasaloy-base.json`. Phase 6 removes `saasaloy.json` from `seedFiles` and `packages/env/.env.example` from `ownedFiles`, and Phase 7 drops the interim rule for the four table files (re-grill Q4, defaulted). |
 | Text merge | `git merge-file` through `execFile`, with `--zdiff3` from git 2.35 and `--diff3` below it. A run that needs a merge and finds no git refuses with exit 2. A run with no merge needs no git (grill Q16, defaulted). |
-| JSON merge | `package.json`, `wrangler.jsonc`, `tsconfig.json` and `turbo.json` merge by key, with `jsonc-parser`. A key that both sides changed gets conflict markers in the file, around that key. The engine first applies every key that does not conflict to all three sides, then runs the text merge, so only the conflicting keys still differ (grill Q3, asked; Q26, defaulted). |
+| JSON merge | `package.json`, `wrangler.jsonc`, `tsconfig.json`, `turbo.json` and `saasaloy.json` merge by key, with `jsonc-parser`. A key that both sides changed gets conflict markers in the file, around that key. The engine first applies every key that does not conflict to all three sides, then runs the text merge, so only the conflicting keys still differ (grill Q3, asked; Q26, defaulted). |
 | The base of a merge | The render of the old lock, from the payload at the old ref. The engine accepts it only when its sha256 equals the hash in the manifest. A file whose hash on disk equals the manifest needs no base. |
 | Where the payload lives | A cache for each user: `$XDG_CACHE_HOME/saasaloy/payload/<source>@<ref>/`, else `~/.cache/…`. `SAASALOY_CACHE_DIR` overrides it for tests. A cold cache with no network refuses a run that needs a merge, with exit 2. No copy of the base lives in the project (grill Q2, asked; Q31, defaulted). |
 | What the manifest hash means | Always the sha256 of the raw render, before Prettier, never the bytes on disk. A Prettier upgrade then cannot break the base check. The flags `adopted`, `mergedWith` and `deleted` go (grill Q17, defaulted). |
@@ -82,7 +85,7 @@ Rows from the planning session name the owner and a date. Rows from the grill of
 
 | Decision | Resolution |
 |----------|-----------|
-| Which old projects convert | Any version 1 manifest that records `hash` and `from` for its files. Another project gets a refusal that names the last old-engine CLI to update with first (grill Q29, defaulted). |
+| Which old projects convert | Any version 1 manifest that records `hash` and `from` for its files. Another project gets a refusal that names the last old-engine CLI to update with first (grill Q29, defaulted). The version 1 records of `saasaloy.json` and `packages/env/.env.example` convert like any tracked file: the base by hash, or a both-sides file when no base is found (re-grill Q6, defaulted). |
 | An old project with inline tables | The base of each table file is the shipped file, proved by its hash. The conflicts go to the agent with an update note. Phase 7 measures the count on PrimeShopr at its head, and the count is not a gate (grill Q18, defaulted). |
 | One branch while `main` moves | The table conversion of Phase 7 stays a script in the branch until the merge. A rebase runs the script again, so nobody merges 56 descriptors by hand (grill Q34, defaulted). |
 | Tests | vitest unit tests beside the source in `packages/cli/src/engine/`, the registry round trip in `packages/cli/test/matrix/`, and command runs in `packages/cli/test/e2e/`. These are the runners and folders the CLI uses today. No new kind of test. |
@@ -201,6 +204,7 @@ Done when: `node scripts/replay-update.ts /home/dev/projects/primeshopr d9cc35fc
 ### Phase 6: Cut over and delete the old engines (#365)
 
 - The new engine becomes the default, and the flag goes.
+- Remove `saasaloy.json` from `seedFiles` and `packages/env/.env.example` from `ownedFiles` in `_saasaloy-base.json`, and drop the matching rule from `engine/classes.ts`.
 - Delete `applier.ts`, `updater.ts`, `remover.ts`, `merge-plan.ts`, `backfill.ts`, `commands/backfill-report.ts`, the inverse and refusal tables in `patch/index.ts`, and the tests that cover only them. Delete `--resolved` and `--from`.
 - Replace the `saasaloy-update` skill in the base template with the new one. Fix every file that names the merge plan, `--resolved` or `saasaloy update <module>`: `llms.txt`, `README.md`, `CONTEXT.md`, `docs/wiki/reference.md`, the base `AGENTS.md`, and the `admin`, `auth`, `feature-flags` and `shell` skills.
 - Write the ADRs with domainkit: one for the engine (it replaces the write rules of ADRs 0019 and 0031 and keeps ADR 0034 by construction), one for the three file classes (it widens ADR 0060), and one for the base by hash and the user cache (it replaces the snapshot rule of ADR 0059).
@@ -215,7 +219,8 @@ Done when: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm scaffold:check` and
 - Each file that holds a table today imports the generated file in its place. The owner's own entries go in the file the owner keeps, after the generated ones.
 - The render writes each table sorted by `order`, then module name. `DEPLOY_TARGETS` already carries an `order` field in its entries, and it keeps that value.
 - Delete the four table codemods. Write the update notes for a project that holds inline tables.
-- Tables that Phase 1 could not move stay as transforms.
+- Tables that Phase 1 could not move stay as transforms. Phase 1 moved both, so none stays.
+- Drop the interim `merged` rule for the four owned files that held a table. The rest of each file is `once`.
 
 Done when: no descriptor in `modules/` holds a patch of the four table kinds (`jq` over `modules/*/registry-item.json` prints 0), `pnpm scaffold:check` and `pnpm release:smoke` pass, `prettier --check` passes on the generated files of the `full` preset, the Phase 4 round trip still passes, and `node scripts/replay-update.ts /home/dev/projects/primeshopr d9cc35fc` still prints at most 45. The pull request body records the conflict count of the table move on PrimeShopr at its head.
 
