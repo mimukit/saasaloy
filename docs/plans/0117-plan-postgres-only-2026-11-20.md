@@ -42,7 +42,7 @@ Target: 0 `onlyWith` entries (baseline 34), 0 twin files (baseline 17), and 0 fi
 | Merge gate and release | The work can start now. The PR merges only after 0.9.0 is released (#358), and the change ships in 0.10.0. The CHANGELOG entry goes under an `Unreleased` heading that the 0.10.0 release takes. |
 | Order against #365 | #366 merges before #365. #365 rebases onto it and never implements `onlyWith`; its Phase 7 conversion script runs again on that rebase. |
 | README vendor | Name Neon with its numbers, link https://neon.com/pricing, and put the Hyperdrive limit of 100,000 queries a day in `docs/wiki/reference.md`. |
-| Follow-up work | Two `needs-planning` issues, filed during the grill on 2026-11-20: the merge of `database-postgres` into `database`, blocked by #365, and the simplification of code that works around a D1 limit. |
+| Follow-up work | Two `needs-planning` issues, filed during the grill on 2026-11-20: #371 merges `database-postgres` into `database`, blocked by #365, and #372 simplifies the code that works around a D1 limit. |
 | Outward actions | Only the afkkit authorization: commits on the issue branch, one push, one PR. The runner does not merge, and it files no issue. |
 | Docker on the box | `scaffold:check` and `release:smoke` start Postgres through the Docker backend of `db:setup`. The devaloy box has Docker. |
 | Test runner | The existing runners: `node:test` for scripts and module payload, the CLI's own suite for `packages/cli`. No new kind of test. |
