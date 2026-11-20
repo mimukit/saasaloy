@@ -12,6 +12,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -78,7 +79,8 @@ describe(
     const result = bench(runs);
     const runId =
       readdirSync(runs).find((name) => !name.endsWith(".out")) ?? "";
-    const runDir = join(runs, runId);
+    // Node resolves macOS's /var link in process.cwd(), which the fake agent records.
+    const runDir = realpathSync(join(runs, runId));
     const outDir = `${runDir}.out`;
     const seen = (): Seen[] =>
       readFileSync(join(outDir, "state", "fake-agent.jsonl"), "utf-8")
