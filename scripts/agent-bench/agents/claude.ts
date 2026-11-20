@@ -27,6 +27,10 @@
 //     fresh config folder.
 //   - The question-picker tool is turned off. A picker call cannot be answered with no
 //     terminal, so the agent asks in text, which the harness reads.
+//   - Background work is turned off with `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS`. `claude
+//     -p` exits when the agent ends its turn and kills what still runs in the background.
+//     A Prepline run lost its build that way: the agent started the build as a background
+//     subagent after the read-back, ended its turn, and the build stopped mid-stage.
 //
 // Imports nothing but node: builtins. Node 24 strips the types.
 
@@ -67,6 +71,18 @@ export function claudeArgs(call: ClaudeCall): string[] {
     settings,
     ...call.extra,
   ];
+}
+
+/** The environment of one `claude` call. See the header for each variable. */
+export function claudeEnv(
+  env: NodeJS.ProcessEnv,
+  configDir: string
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    CLAUDE_CONFIG_DIR: configDir,
+    CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+  };
 }
 
 function fail(message: string): never {
@@ -112,7 +128,7 @@ async function main(): Promise<void> {
     home: homedir(),
   });
   const child = spawn("claude", args, {
-    env: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
+    env: claudeEnv(process.env, configDir),
     stdio: ["ignore", "inherit", "inherit"],
   });
   const code = await new Promise<number>((done) => {

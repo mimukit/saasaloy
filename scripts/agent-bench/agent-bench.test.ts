@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 
-import { claudeArgs } from "./agents/claude.ts";
+import { claudeArgs, claudeEnv } from "./agents/claude.ts";
 import { isInside } from "./harness.ts";
 
 const root = resolve(import.meta.dirname, "../..");
@@ -207,6 +207,15 @@ describe("agent-bench refuses a runs folder inside the repo", () => {
     );
     assert.equal(result.status, 2);
     assert.match(result.stderr, /inside this repo/);
+  });
+});
+
+describe("claudeEnv", () => {
+  it("turns background work off and points at the run's config folder", () => {
+    const env = claudeEnv({ PATH: "/bin" }, "/state/claude-config");
+    assert.equal(env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1");
+    assert.equal(env.CLAUDE_CONFIG_DIR, "/state/claude-config");
+    assert.equal(env.PATH, "/bin");
   });
 });
 
