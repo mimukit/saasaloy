@@ -45,7 +45,7 @@
     "play:smoke": "node scripts/play-smoke.ts",
     "docs:generate": "node scripts/docs-generate.ts",
     "docs:check": "node scripts/docs-generate.ts --check",
-    "docs:freshness": "node scripts/docs-freshness.ts",
+    "docs:stale": "node scripts/docs-stale.ts",
     "deps:check": "node scripts/update-deps.ts --check",
     "deps:update": "node scripts/update-deps.ts",
     "deps:verify": "pnpm run verify:pins && pnpm run play:init && pnpm -C .dev/playground build && pnpm -C .dev/playground lint && node scripts/verify-css.ts && pnpm -C .dev/playground typecheck",

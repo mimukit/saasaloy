@@ -1,5 +1,5 @@
 // Reads `docs/wiki/.wikimap.yaml` for the docs checks (plan 0114, Phase 5): which pages are
-// hand-written, and which repo paths each one covers. `docs-freshness.ts` and
+// hand-written, and which repo paths each one covers. `docs-stale.ts` and
 // `docs-names.ts` share it, and `apps/web/src/lib/docs-nav.ts` reads the same file for the
 // sidebar. Imports `yaml` and node: builtins only; Node 24 strips the types.
 

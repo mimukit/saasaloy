@@ -1,4 +1,4 @@
-// Tests for `scripts/docs-freshness.ts` (plan 0114, Phase 5): the stamp reader, both modes
+// Tests for `scripts/docs-stale.ts` (plan 0114, Phase 5): the stamp reader, both modes
 // against a throwaway git repository, and the guarantee that a generated page is never
 // listed.
 
@@ -8,7 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { findStale, formatReport, repoGit, stampOf } from "./docs-freshness.ts";
+import { findStale, formatReport, repoGit, stampOf } from "./docs-stale.ts";
 import type { WikiPage } from "./docs-wikimap.ts";
 
 describe("stampOf", () => {
@@ -65,7 +65,7 @@ describe("findStale", () => {
   };
 
   before(() => {
-    dir = mkdtempSync(join(tmpdir(), "saasaloy-docs-freshness-"));
+    dir = mkdtempSync(join(tmpdir(), "saasaloy-docs-stale-"));
     git("init", "--quiet", "--initial-branch=main");
     git("config", "user.email", "t@example.com");
     git("config", "user.name", "t");

@@ -3,7 +3,7 @@
 //   _Verified against `main`@`42cbf03` on 2026-09-11._
 //
 // The docs header shows it as "Verified against 42cbf03", linked to the commit, beside the
-// version label. `scripts/docs-freshness.ts` reads the same line to find the commits a page
+// version label. `scripts/docs-stale.ts` reads the same line to find the commits a page
 // has missed. A page with no stamp shows no label.
 
 const STAMP =

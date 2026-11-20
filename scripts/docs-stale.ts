@@ -7,13 +7,13 @@
 //
 // Two modes answer two questions:
 //
-//   pnpm docs:freshness                  which pages have a covered path changed after their
+//   pnpm docs:stale                  which pages have a covered path changed after their
 //                                        stamp commit? (`git log <stamp>..HEAD -- <paths>`)
-//   pnpm docs:freshness --base <ref>     which pages cover a path this pull request changes
+//   pnpm docs:stale --base <ref>     which pages cover a path this pull request changes
 //                                        while the pull request leaves the page alone?
 //                                        (`git log <ref>..HEAD`, minus the pages it edits)
 //
-// `--json` prints the result for `docs-freshness-comment.ts`. The command always exits 0
+// `--json` prints the result for `docs-stale-comment.ts`. The command always exits 0
 // after a clean read: a stale page is information, never a failure, and the site workflow
 // must not turn red on it. Only a bad flag or a missing git exits non-zero.
 //
@@ -182,13 +182,13 @@ export function repoGit(root: string): Git {
 export function formatReport(report: Report): string {
   if (report.pages.length === 0) {
     return report.base === undefined
-      ? "docs:freshness: every hand-written page is current.\n"
-      : `docs:freshness: no page covers a file this change touches without changing the page (base ${report.base}).\n`;
+      ? "docs:stale: every hand-written page is current.\n"
+      : `docs:stale: no page covers a file this change touches without changing the page (base ${report.base}).\n`;
   }
   const lines = [
     report.base === undefined
-      ? `docs:freshness: ${report.pages.length} page(s) have covered files that changed after their stamp.`
-      : `docs:freshness: ${report.pages.length} page(s) cover files this change touches (base ${report.base}).`,
+      ? `docs:stale: ${report.pages.length} page(s) have covered files that changed after their stamp.`
+      : `docs:stale: ${report.pages.length} page(s) cover files this change touches (base ${report.base}).`,
   ];
   for (const page of report.pages) {
     lines.push("", `${WIKI_DIR}/${page.path} (${page.title})`);
@@ -214,15 +214,13 @@ function main(argv: string[]): number {
     unknown.length > 0 ||
     (at !== -1 && (base === undefined || base.startsWith("-")))
   ) {
-    console.error(
-      "usage: node scripts/docs-freshness.ts [--base <ref>] [--json]"
-    );
+    console.error("usage: node scripts/docs-stale.ts [--base <ref>] [--json]");
     return 2;
   }
   const root = resolve(import.meta.dirname, "..");
   const git = repoGit(root);
   if (base !== undefined && !git.has(base)) {
-    console.error(`docs:freshness: the base "${base}" is not a commit here.`);
+    console.error(`docs:stale: the base "${base}" is not a commit here.`);
     return 2;
   }
   const report = findStale({

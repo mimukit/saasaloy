@@ -1,9 +1,9 @@
-// Builds the sticky pull request comment of the freshness check (plan 0114, Phase 5). The
-// `site` workflow runs `docs-freshness.ts --base origin/main --json`, pipes the result here,
+// Builds the sticky pull request comment of the stale-docs check (plan 0114, Phase 5). The
+// `site` workflow runs `docs-stale.ts --base origin/main --json`, pipes the result here,
 // and posts the text as the job summary and as one comment that later runs update. The
 // hidden MARKER on the first line is how the workflow finds that comment again.
 //
-// Three cases, each a test in `docs-freshness-comment.test.ts`:
+// Three cases, each a test in `docs-stale-comment.test.ts`:
 //
 //   stale pages      list each page with the commits that touched its covered files;
 //   none stale       say no page needs a look;
@@ -12,13 +12,13 @@
 //
 // The text never tells the author the check failed, because it never fails the job.
 //
-//   node scripts/docs-freshness-comment.ts <report.json> [--docs-none]
+//   node scripts/docs-stale-comment.ts <report.json> [--docs-none]
 
 import { readFileSync } from "node:fs";
-import type { Report } from "./docs-freshness.ts";
+import type { Report } from "./docs-stale.ts";
 
 /** The first line of the comment. GitHub hides an HTML comment, and the workflow finds it. */
-export const MARKER = "<!-- saasaloy-docs-freshness -->";
+export const MARKER = "<!-- saasaloy-docs-stale -->";
 
 /** The label that marks a pull request as needing no docs change. */
 export const LABEL = "docs: none";
@@ -32,7 +32,7 @@ function plural(count: number, word: string): string {
 /** The Markdown body of the comment, MARKER first. */
 export function buildComment(report: Report, docsNone: boolean): string {
   const count = report.pages.length;
-  const lines = [MARKER, "### Docs freshness", ""];
+  const lines = [MARKER, "### Stale docs", ""];
   if (docsNone) {
     lines.push(
       `This pull request has the \`${LABEL}\` label, so it needs no docs change.`
@@ -75,7 +75,7 @@ if (import.meta.main) {
   const [file, ...flags] = process.argv.slice(2);
   if (file === undefined || flags.some((flag) => flag !== "--docs-none")) {
     console.error(
-      "usage: node scripts/docs-freshness-comment.ts <report.json> [--docs-none]"
+      "usage: node scripts/docs-stale-comment.ts <report.json> [--docs-none]"
     );
     process.exitCode = 2;
   } else {

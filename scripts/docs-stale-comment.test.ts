@@ -1,4 +1,4 @@
-// Tests for the freshness comment (plan 0114, Phase 5): the three cases the pull request
+// Tests for the stale-docs comment (plan 0114, Phase 5): the three cases the pull request
 // shows, plus a check that `site.yml` wires the check the way the plan says.
 
 import assert from "node:assert/strict";
@@ -7,8 +7,8 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
-import { buildComment, LABEL, MARKER } from "./docs-freshness-comment.ts";
-import type { Report } from "./docs-freshness.ts";
+import { buildComment, LABEL, MARKER } from "./docs-stale-comment.ts";
+import type { Report } from "./docs-stale.ts";
 import { handWritten, readWikimap } from "./docs-wikimap.ts";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -103,7 +103,7 @@ describe("the site workflow", () => {
   });
 
   it("builds the comment with the script and finds it by the marker", () => {
-    assert.match(text, /docs-freshness-comment\.ts/);
+    assert.match(text, /docs-stale-comment\.ts/);
     assert.ok(text.includes(MARKER));
   });
 });
