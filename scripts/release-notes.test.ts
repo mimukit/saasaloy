@@ -31,7 +31,11 @@ describe("releaseNotes", () => {
 
 describe(".release-it.js", () => {
   it("passes releaseNotes to github.releaseNotes", async () => {
-    const { default: config } = await import("../packages/cli/.release-it.js");
+    // A computed specifier, like `release-deploy.test.ts`: the config is plain JS with no
+    // declaration file, so a literal path fails `tsc` with TS7016.
+    const { default: config } = (await import(
+      new URL("../packages/cli/.release-it.js", import.meta.url).href
+    )) as { default: { github: { releaseNotes: unknown } } };
     assert.equal(config.github.releaseNotes, releaseNotes);
   });
 });
