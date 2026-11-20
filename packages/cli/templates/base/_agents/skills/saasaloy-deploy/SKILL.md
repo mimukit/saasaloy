@@ -315,7 +315,7 @@ A failure after the gates:
 - `migrations`: the git pathspec for migration files.
 - `release`: what `pnpm release` writes. `tagPrefix` (default `v`; change it only before the first release), `githubRelease` (default `true`), `preMajor` (default `true`), `changelogSections`, the `conventionalcommits` preset's `types` list (unset keeps the preset's sections), and `include` (default `[]`), the untracked paths the release commit also carries. `["docs/release/"]` turns on the release walkthrough and the stakeholder summary. A key left out falls back to its default.
 
-`targets.ts` holds two arrays. Keep each in the shape `export const NAME: Type[] = [...]`, because `saasaloy add` appends its rows there with a `const-array` patch, and `saasaloy remove` takes them out again.
+`targets.ts` holds two arrays. Each spreads a generated table from `targets.generated.ts`: `saasaloy add` writes a module's `tooling.deployTargets` and `tooling.smokeChecks` rows there, and `saasaloy remove` takes them out again. A row of your own goes after the spread, never in the generated file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
 
 - `DEPLOY_TARGETS`: `{ service, order }`. `service` is the directory under `apps/`. The base adds `web` (30), the api module `api` (10) and the admin module `admin` (20). A new Worker needs its own row, or the deploy stops and names it.
 - `SMOKE_CHECKS`: `{ id, service, path, status, body? }`. `body` is text the response body must contain. The `id` stays unique.

@@ -53,7 +53,7 @@ No module patches `access.ts`. A project owns it outright.
 
 `owner`, `admin` and `member` are static, and they stay that way. Two things enforce it:
 
-- `roleLockGuard()`, a Better Auth `before` hook on `/organization/create-role`, `/update-role` and `/delete-role`. Two `plugin-array` patches register it on both instances, `auth` and `adminAuth`, so the lock holds on the client session and on the admin session that the `/roles` screen uses. It refuses any request naming a base role with 403 `base role is locked: <name>`, and it runs before the plugin's own `ac` check, so an owner holding every statement cannot get past it.
+- `roleLockGuard()`, a Better Auth `before` hook on `/organization/create-role`, `/update-role` and `/delete-role`. Two rows, in the `auth.plugins` and `adminAuth.plugins` tables, register it on both instances, `auth` and `adminAuth`, so the lock holds on the client session and on the admin session that the `/roles` screen uses. It refuses any request naming a base role with 403 `base role is locked: <name>`, and it runs before the plugin's own `ac` check, so an owner holding every statement cannot get past it.
 - The `/roles` screen renders base roles with no edit or delete control.
 
 The reason is the merge. `dynamicAccessControl` makes `hasPermission` load an organization's stored rows and merge each one **over** the static role of the same name. A stored row called `admin` would widen the static `admin` invisibly, and a row called `member` would widen every ordinary member in that organization at once. Neither shows up in a code review, and both survive a deploy.
@@ -106,9 +106,9 @@ An empty demand — `{}` — is refused, not allowed. It is a bug at the call si
 
 `dynamicAccessControl` is what makes the `organization_roles` table live. Turning the option off does not remove the table; drop both together, or `createRole` writes into nothing.
 
-The descriptor applies six `plugin-array` patches, three per instance. `organizationPlugin()` and `roleLockGuard()` go into the `plugins` arrays of both `auth` and `adminAuth` in `packages/auth/src/auth.ts`, and `organizationClientPlugin()` goes into both `authClientPlugins` and `adminAuthClientPlugins` in `packages/auth/src/client.ts`. The client session and the admin session each need the plugin, because the `/teams` screen runs on the admin session and invitation acceptance runs on the client session. A route that calls the organization API itself uses `authFor(c).api.*` from `@repo/auth/server`, so it reads the session `x-auth-audience` names. A project made before the client/admin split gets the `adminAuth` patches from the same `saasaloy update` that merges the new `auth.ts`; see the `saasaloy-auth` skill. Keep both calls at zero arguments because the patch engine inserts that exact shape. That is why the options live in the two wrapper files and not in the patch.
+The descriptor declares six table rows, three per instance. `organizationPlugin()` and `roleLockGuard()` go into the `plugins` arrays of both `auth` and `adminAuth` in `packages/auth/src/auth.ts`, and `organizationClientPlugin()` goes into both `authClientPlugins` and `adminAuthClientPlugins` in `packages/auth/src/client.ts`. The client session and the admin session each need the plugin, because the `/teams` screen runs on the admin session and invitation acceptance runs on the client session. A route that calls the organization API itself uses `authFor(c).api.*` from `@repo/auth/server`, so it reads the session `x-auth-audience` names. A project made before the client/admin split gets the `adminAuth` rows from the same `saasaloy update` that merges the new `auth.ts`; see the `saasaloy-auth` skill. Keep both calls at zero arguments, because a table row names a bare call and the CLI prints it with no arguments. That is why the options live in the two wrapper files and not in the row.
 
-The descriptor also applies a `nav-entry` patch, which adds `{ to: "/teams", label: "Teams", icon: UsersRoundIcon }` to the `Manage` group of the `/` area in `apps/admin/src/components/nav.ts`, and adds the `UsersRoundIcon` import that row needs. Its stable identity is the `to` value `/teams`. Editing the label in a generated project does not create a duplicate on update, and `saasaloy remove` takes the row out along with its icon import, unless another row still uses that icon.
+The descriptor also declares an `admin.nav` row, which adds `{ to: "/teams", label: "Teams", icon: UsersRoundIcon }` to the `Manage` group of the `/` area, and the `UsersRoundIcon` import that row needs. The CLI writes both into `apps/admin/src/components/nav.generated.ts`. Its stable identity is the `to` value `/teams`, so the table prints one row for it. Change the label in the descriptor's row, not in the generated file, which the CLI overwrites; `saasaloy remove` takes the row out along with its icon import.
 
 ## Schema and migrations
 
@@ -163,7 +163,7 @@ A project that installed `teams` before the tables became plural has `organizati
 
 ## Upgrading from rbac
 
-A project that installed the retired `rbac` module gets `permission-rules.ts`, `plugins/role-lock.ts` and the two `roleLockGuard()` patches from `saasaloy update`, after `saasaloy remove rbac`. Run the whole sequence in the `saasaloy-multitenant` skill's "Upgrading from rbac" section, in its order: `remove rbac`, then `update`. `add multitenant` is not a step, because `add` skips an installed module.
+A project that installed the retired `rbac` module gets `permission-rules.ts`, `plugins/role-lock.ts` and the two `roleLockGuard()` rows from `saasaloy update`, after `saasaloy remove rbac`. Run the whole sequence in the `saasaloy-multitenant` skill's "Upgrading from rbac" section, in its order: `remove rbac`, then `update`. `add multitenant` is not a step, because `add` skips an installed module.
 
 ## Next
 

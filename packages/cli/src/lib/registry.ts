@@ -218,7 +218,7 @@ export async function loadModuleFolder(
       { cause: error }
     );
   }
-  const result = await validateRegistryItem(parsed);
+  const result = await validateRegistryItem(dropLegacyTablePatches(parsed));
   if (!result.valid) {
     // A descriptor this CLI cannot validate is most often one written for a newer CLI,
     // so the refusal reads its `requires.saasaloy` floor first (#205).
@@ -238,6 +238,40 @@ export async function loadModuleFolder(
     );
   }
   return { dir, item };
+}
+
+/**
+ * The four patch kinds that wrote a registration table into a file the owner keeps, up to
+ * the release that moved every table into a generated file (plan 0116, Phase 7).
+ */
+export const LEGACY_TABLE_KINDS: ReadonlySet<string> = new Set([
+  "chained-route",
+  "const-array",
+  "nav-entry",
+  "plugin-array",
+]);
+
+/**
+ * A descriptor with its legacy table patches taken out, in place. The render of an old
+ * release still has to load that release's descriptors: it is the base of a merge and
+ * the render a conversion proves a hash against. Its table patches are dropped, not run,
+ * so the base of a file that held a table is the file the module shipped, which is the
+ * file a version 1 manifest hashed (plan 0116, "An old project with inline tables").
+ */
+export function dropLegacyTablePatches(parsed: unknown): unknown {
+  if (typeof parsed !== "object" || parsed === null) {
+    return parsed;
+  }
+  const item = parsed as { patches?: unknown };
+  if (Array.isArray(item.patches)) {
+    item.patches = item.patches.filter(
+      (patch: unknown) =>
+        typeof patch !== "object" ||
+        patch === null ||
+        !LEGACY_TABLE_KINDS.has(String((patch as { kind?: unknown }).kind))
+    );
+  }
+  return parsed;
 }
 
 // --- Local source (SAASALOY_REGISTRY_DIR) ---------------------------------------

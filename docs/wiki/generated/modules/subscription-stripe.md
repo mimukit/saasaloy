@@ -13,7 +13,7 @@ A subscription provider on Stripe through stripe and @better-auth/stripe; needs 
 | Tier | provider |
 | Stage | money |
 | Needs | `stripe` |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`subscription`](subscription.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -36,13 +36,22 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/subscription/src/index.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
 | `packages/subscription/package.json` | `package-json-dependency` |
 | `packages/subscription/package.json` | `package-json-dependency` |
 | `packages/subscription/package.json` | `package-json-dependency` |
-| `packages/subscription/src/env-preset.ts` | `plugin-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `subscription.providers` | 1 |
+| `auth.plugins` | 1 |
+| `adminAuth.plugins` | 1 |
+| `subscription.envPresets` | 1 |
 
 ## See the rest
 

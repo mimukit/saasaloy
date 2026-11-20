@@ -8,6 +8,7 @@ import { landing, ui } from "@repo/ui/content/landing";
 import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
+import { uiPageLinks } from "./navbar.generated";
 
 // Marketing blocks are self-contained on purpose: one file, one exported component, no
 // shared block barrel — but the words all live in ../content/landing.ts. Astro renders
@@ -52,11 +53,10 @@ const sectionLinks: NavbarLink[] = [
   { label: landing.navbar.linkFaq, href: "/#faq" },
 ];
 
-// Pages a module adds to the site, after the sections. `saasaloy add cms` appends
-// `{ label: "Blog", href: "/blog" }` with a `const-array` patch keyed on `href`, and
-// `remove` takes it back out. Keep this a module-scope array literal, or the patch has
-// nothing to append to.
-const pageLinks: NavbarLink[] = [];
+// Pages a module adds to the site, after the sections. The CLI writes them into
+// `./navbar.generated.ts` on every run: `saasaloy add cms` adds `{ label: "Blog", href:
+// "/blog" }`, and `remove` takes it back out. A page of your own goes after the spread.
+const pageLinks: NavbarLink[] = [...uiPageLinks];
 
 const defaultLinks: NavbarLink[] = [...sectionLinks, ...pageLinks].filter(
   (link) => link.label !== ""

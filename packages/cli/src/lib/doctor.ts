@@ -546,8 +546,12 @@ export function checkProject(args: ProjectCheckArgs): Finding[] {
 // The rate limit policy rule (#129).
 // ---------------------------------------------------------------------------
 
-/** Where `kv` keeps its registry, and the file the `plugin-array` patches write into. */
+/** Where `kv` keeps its registry: the owner's own policies sit after the generated ones. */
 export const KV_INDEX_FILE = "packages/kv/src/index.ts";
+/** The generated `kv.policies` table: the policies the installed modules register. */
+export const KV_POLICIES_FILE = "packages/kv/src/policies.generated.ts";
+/** The export of `KV_POLICIES_FILE`, the camelCase of the table id. */
+const KV_POLICIES_EXPORT = "kvPolicies";
 /** The Worker config `kv-cloudflare` puts its `ratelimits` entries in. */
 export const WRANGLER_FILE = "apps/api/wrangler.jsonc";
 /** The provider whose limiter needs a binding per policy. Without it there is nothing to check. */
@@ -556,7 +560,9 @@ const CLOUDFLARE_KV_MODULE = "kv-cloudflare";
 export interface PolicyBindingArgs {
   /** The source of `packages/kv/src/index.ts`. */
   index: string;
-  /** Import specifier, exactly as `index.ts` writes it, → that module's source. */
+  /** The source of `packages/kv/src/policies.generated.ts`, when the project has one. */
+  generated?: string;
+  /** Import specifier, exactly as `index.ts` or the generated file writes it, → source. */
   policySources: Record<string, string>;
   /** The source of `apps/api/wrangler.jsonc`. */
   wrangler: string;
@@ -575,8 +581,9 @@ export interface PolicyBindingArgs {
  * binding is different — `consume` throws `not_supported` on the first request through
  * the route, which is a broken deploy rather than a preference.
  *
- * The policy array is read the same way the `plugin-array` patch writes it: through
- * magicast, off `export const kv = defineKv({ policies: [...] })`. Two element shapes
+ * The policies are read through magicast: first the generated table, `export const
+ * kvPolicies = [...]`, then every element of `export const kv = defineKv({ policies:
+ * [...] })` in `index.ts` except the spread of that table. Two element shapes
  * carry a name. An inline `definePolicy({ name: "burst", ... })` holds it in its own
  * first argument. A bare factory call holds it in the `definePolicy({ name })` literal in
  * the file that call is imported from — there the callee is not the name
@@ -652,30 +659,50 @@ interface RegisteredPolicy {
   name: string | undefined;
 }
 
-/** Every element of the `policies` array, in registration order. */
+/** Every registered policy, in registration order: the generated table, then the owner's. */
 function registeredPolicies(args: PolicyBindingArgs): RegisteredPolicy[] {
-  let mod;
-  try {
-    mod = parseModule(args.index);
-  } catch {
-    return [];
-  } // unparseable — `add` would have refused it, and this rule is not the place to say so
-
-  const callArg = mod.exports.kv?.$args?.[0];
-  const array: unknown = callArg?.policies;
-  if (!Array.isArray(array)) {
-    return [];
-  }
-
-  const imports = mod.imports as unknown as ModuleImports;
   const policies: RegisteredPolicy[] = [];
-  // Indexed, not for-of: magicast's array proxy hands raw AST nodes to an iterator and
-  // the wrapped proxy (with `$callee`) only to an index read. ts-module.ts does the same.
-  // oxlint-disable-next-line typescript/prefer-for-of
-  for (let i = 0; i < array.length; i++) {
-    const element: unknown = array[i];
-    policies.push({ index: i, name: policyNameOf(element, args, imports) });
-  }
+  const read = (
+    source: string | undefined,
+    pick: (exports: Record<string, unknown>) => unknown
+  ): void => {
+    if (source === undefined) {
+      return;
+    }
+    let mod;
+    try {
+      mod = parseModule(source);
+    } catch {
+      return;
+    } // unparseable: the project's typecheck says so, and this rule is not the place to
+    const array: unknown = pick(mod.exports);
+    if (!Array.isArray(array)) {
+      return;
+    }
+    const elements = (array as { $ast?: { elements?: { type?: string }[] } })
+      .$ast?.elements;
+    const imports = mod.imports as unknown as ModuleImports;
+    // Indexed, not for-of: magicast's array proxy hands raw AST nodes to an iterator and
+    // the wrapped proxy (with `$callee`) only to an index read.
+    // oxlint-disable-next-line typescript/prefer-for-of
+    for (let i = 0; i < array.length; i++) {
+      if (elements?.[i]?.type === "SpreadElement") {
+        continue; // `...kvPolicies`: read from the generated file itself
+      }
+      const element: unknown = array[i];
+      policies.push({
+        index: policies.length,
+        name: policyNameOf(element, args, imports),
+      });
+    }
+  };
+  read(args.generated, (exports) => exports[KV_POLICIES_EXPORT]);
+  read(
+    args.index,
+    (exports) =>
+      (exports.kv as { $args?: { policies?: unknown }[] } | undefined)
+        ?.$args?.[0]?.policies
+  );
   return policies;
 }
 
@@ -823,9 +850,16 @@ export async function readPolicyState(
   if (index === undefined || wrangler === undefined) {
     return undefined;
   }
+  const generated = await readIfPresent(
+    resolveWithinRoot(root, KV_POLICIES_FILE)
+  );
 
   const policySources: Record<string, string> = {};
-  for (const specifier of relativeImportsIn(index)) {
+  const specifiers = new Set([
+    ...relativeImportsIn(index),
+    ...(generated === undefined ? [] : relativeImportsIn(generated)),
+  ]);
+  for (const specifier of specifiers) {
     const source = await readIfPresent(
       resolveWithinRoot(
         root,
@@ -836,10 +870,15 @@ export async function readPolicyState(
       policySources[specifier] = source;
     }
   }
-  return { index, policySources, wrangler };
+  return {
+    index,
+    policySources,
+    wrangler,
+    ...(generated === undefined ? {} : { generated }),
+  };
 }
 
-/** Every relative specifier `index.ts` imports from — the candidates a policy can live in. */
+/** Every relative specifier a file imports from — the candidates a policy can live in. */
 function relativeImportsIn(index: string): string[] {
   let mod;
   try {
@@ -993,6 +1032,9 @@ export function hasRetiredInfra(root: string): Promise<boolean> {
 
 /** The owned file whose `DEPLOY_TARGETS` rows order `pnpm deploy:production`. */
 export const DEPLOY_TARGETS_FILE = "packages/tooling/src/targets.ts";
+/** The generated `tooling.deployTargets` table: the rows the installed modules add. */
+export const GENERATED_TARGETS_FILE =
+  "packages/tooling/src/targets.generated.ts";
 
 /** The production migration task name the base and `database-d1` retired. */
 const RETIRED_MIGRATE_TASK = "db:migrate:prod";
@@ -1011,6 +1053,8 @@ export interface DeployCheckArgs {
   deployable: string[];
   /** The text of `packages/tooling/src/targets.ts`, or `undefined` when it is missing. */
   targets: string | undefined;
+  /** The text of `packages/tooling/src/targets.generated.ts`, when the project has one. */
+  generatedTargets?: string;
   /** Whether `packages/tooling/src/release.ts` exists. */
   releaseWrapper?: boolean;
   /** Whether the root `package.json` has a `release` script. */
@@ -1064,7 +1108,7 @@ export function checkDeploy(args: DeployCheckArgs): Finding[] {
     );
     return findings;
   }
-  const services = targetServices(args.targets);
+  const services = targetServices(args.targets, args.generatedTargets);
   if (typeof services === "string") {
     findings.push(finding("deploy", where, services));
     return findings;
@@ -1075,7 +1119,7 @@ export function checkDeploy(args: DeployCheckArgs): Finding[] {
         finding(
           "deploy",
           where,
-          `apps/${service} deploys and has no DEPLOY_TARGETS row, so pnpm deploy:production stops before it builds anything. Add { service: "${service}", order: <number> } to ${DEPLOY_TARGETS_FILE}. A lower order deploys first.`
+          `apps/${service} deploys and has no DEPLOY_TARGETS row, so pnpm deploy:production stops before it builds anything. Add { service: "${service}", order: <number> } to DEPLOY_TARGETS in ${DEPLOY_TARGETS_FILE}, after the spread. A lower order deploys first.`
         )
       );
     }
@@ -1083,8 +1127,14 @@ export function checkDeploy(args: DeployCheckArgs): Finding[] {
   return findings;
 }
 
-/** The `service` of every `DEPLOY_TARGETS` row, or a message saying why there is none. */
-function targetServices(source: string): string[] | string {
+/**
+ * The `service` of every `DEPLOY_TARGETS` row, or a message saying why there is none:
+ * the rows written in `targets.ts`, and the rows of the generated table it spreads.
+ */
+function targetServices(
+  source: string,
+  generated: string | undefined
+): string[] | string {
   let program: Program;
   try {
     program = parseModule(source).$ast as unknown as Program;
@@ -1093,12 +1143,27 @@ function targetServices(source: string): string[] | string {
   }
   const array = findConstArray(program, "DEPLOY_TARGETS");
   if (!array) {
-    return `${DEPLOY_TARGETS_FILE} has no DEPLOY_TARGETS array literal. Keep it as export const DEPLOY_TARGETS: DeployTarget[] = [...], so saasaloy add can append a module's row.`;
+    return `${DEPLOY_TARGETS_FILE} has no DEPLOY_TARGETS array literal. Keep it as export const DEPLOY_TARGETS: DeployTarget[] = [...], with the spread of the generated rows in it.`;
   }
-  return array.elements
+  const elements = [...array.elements];
+  if (generated !== undefined) {
+    try {
+      const table = findConstArray(
+        parseModule(generated).$ast as unknown as Program,
+        GENERATED_TARGETS_EXPORT
+      );
+      elements.push(...(table?.elements ?? []));
+    } catch {
+      return `${GENERATED_TARGETS_FILE} could not be parsed. Run \`saasaloy update --restore ${GENERATED_TARGETS_FILE}\` to write it again.`;
+    }
+  }
+  return elements
     .map((element) => entryValue(element, "service"))
     .filter((service): service is string => typeof service === "string");
 }
+
+/** The export of `GENERATED_TARGETS_FILE`, the camelCase of the table id. */
+const GENERATED_TARGETS_EXPORT = "toolingDeployTargets";
 
 /** Read what `checkDeploy` needs off a project on disk. */
 export async function readDeployState(root: string): Promise<DeployCheckArgs> {
@@ -1145,6 +1210,7 @@ export async function readDeployState(root: string): Promise<DeployCheckArgs> {
     turbo: await readIfPresent(resolveWithinRoot(root, "turbo.json")),
     deployable,
     targets: await readIfPresent(resolveWithinRoot(root, DEPLOY_TARGETS_FILE)),
+    ...(await generatedTargets(root)),
     releaseWrapper: await pathExists(resolveWithinRoot(root, RELEASE_WRAPPER)),
     releaseScript,
   };
@@ -1455,4 +1521,13 @@ export async function readConfigState(root: string): Promise<ConfigCheckArgs> {
   return {
     envFiles: await readEnvFiles(root),
   };
+}
+
+async function generatedTargets(
+  root: string
+): Promise<{ generatedTargets?: string }> {
+  const text = await readIfPresent(
+    resolveWithinRoot(root, GENERATED_TARGETS_FILE)
+  );
+  return text === undefined ? {} : { generatedTargets: text };
 }

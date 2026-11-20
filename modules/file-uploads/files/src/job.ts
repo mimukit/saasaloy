@@ -10,12 +10,13 @@ import { sweep } from "./sweep";
 // `packages/queue` that reached the database would pull the schema barrel's
 // `import.meta.glob` into a workspace that does not compile with Vite's types.
 //
-// So the job ships here unconditionally and goes nowhere until the two `plugin-array`
-// patches register it, exactly as `packages/subscription` registers its own. In a project
-// without `queue` those patches are skipped with a warning and this file is dead code.
+// So the job ships here unconditionally and goes nowhere until the `queue.jobs` and
+// `queue.schedules` rows register it, exactly as `packages/subscription` registers its own.
+// In a project without `queue` those rows are skipped with a warning and this file is dead
+// code.
 //
 // Factories, not bare constants, because the tables register a *call* — that is what the
-// patch appends and what `saasaloy remove` takes back out.
+// row names and what `saasaloy remove` takes back out.
 
 /** The job's name, as the schedule below and a `jobs` table trace both spell it. */
 export const STORAGE_SWEEP_JOB = "file-uploads.storage-sweep";

@@ -5,7 +5,7 @@
   "description": "Subscriptions in a packages/subscription workspace: the provider contract, plans.ts, the subscription projection and the plan entitlements.",
   "stage": "money",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
   "dependencies": [],
   "envVars": {
@@ -37,17 +37,6 @@
       "range": "workspace:*"
     },
     {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "subscriptionConfigSection",
-      "import": {
-        "name": "subscriptionConfigSection",
-        "from": "./sections/subscription"
-      }
-    },
-    {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -62,59 +51,6 @@
       "range": "workspace:*"
     },
     {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/subscription",
-      "call": "subscriptionRoute",
-      "import": {
-        "name": "subscriptionRoute",
-        "from": "./routes/subscription"
-      }
-    },
-    {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "jobs",
-      "call": "subscriptionEventJob",
-      "import": {
-        "name": "subscriptionEventJob",
-        "from": "@repo/subscription"
-      }
-    },
-    {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "jobs",
-      "call": "pastDueLockoutJob",
-      "import": {
-        "name": "pastDueLockoutJob",
-        "from": "@repo/subscription"
-      }
-    },
-    {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "schedules",
-      "call": "pastDueLockoutSchedule",
-      "import": {
-        "name": "pastDueLockoutSchedule",
-        "from": "@repo/subscription"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Manage",
-      "entry": { "to": "/subscription", "label": "Subscription" },
-      "icon": { "name": "CreditCardIcon", "from": "lucide-react" }
-    },
-    {
       "file": "packages/db/src/schema/auth.ts",
       "kind": "drizzle-column",
       "exportName": "users",
@@ -127,12 +63,77 @@
       "exportName": "users",
       "column": "subscriptionCustomerId",
       "value": "\"plain\""
+    }
+  ],
+  "tables": [
+    {
+      "id": "subscription.providers",
+      "file": "@subscription/providers.generated.ts",
+      "shape": "calls"
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "id": "subscription.envPresets",
+      "file": "@subscription/env-preset.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "config.sections",
+      "call": "subscriptionConfigSection",
+      "import": {
+        "name": "subscriptionConfigSection",
+        "from": "./sections/subscription"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/subscription",
+      "call": "subscriptionRoute",
+      "import": {
+        "name": "subscriptionRoute",
+        "from": "./routes/subscription"
+      }
+    },
+    {
+      "table": "queue.jobs",
+      "call": "subscriptionEventJob",
+      "import": {
+        "name": "subscriptionEventJob",
+        "from": "@repo/subscription"
+      }
+    },
+    {
+      "table": "queue.jobs",
+      "call": "pastDueLockoutJob",
+      "import": {
+        "name": "pastDueLockoutJob",
+        "from": "@repo/subscription"
+      }
+    },
+    {
+      "table": "queue.schedules",
+      "call": "pastDueLockoutSchedule",
+      "import": {
+        "name": "pastDueLockoutSchedule",
+        "from": "@repo/subscription"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Manage",
+      "entry": {
+        "to": "/subscription",
+        "label": "Subscription"
+      },
+      "import": {
+        "name": "CreditCardIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "api.envPresets",
       "call": "subscriptionEnv",
       "import": {
         "name": "subscriptionEnv",

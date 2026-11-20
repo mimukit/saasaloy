@@ -21,7 +21,7 @@ now honored at `add` time; author the full descriptor and it all applies.
 | --- | --- |
 | `files[]` | ✅ copied to their `@alias` targets |
 | `files[].onlyWith` | ✅ the entry is copied only when the module it names is in the resolved install set; two entries may share one `target` under disjoint conditions (also honored on a scaffold's `files[]`) |
-| `files[].when`, `patches[].when` | ✅ the entry ships only while its condition holds: `testing: true` needs a testing mode other than `off`, `installed` needs every named module; a tracked entry stays managed in every mode (also honored on a scaffold's `files[]`) (ADR 0054) |
+| `files[].when`, `patches[].when`, `entries[].when` | ✅ the entry ships only while its condition holds: `testing: true` needs a testing mode other than `off`, `installed` needs every named module; a tracked entry stays managed in every mode (also honored on a scaffold's `files[]`) (ADR 0054) |
 | `files[].seed` | ✅ written once and recorded as a seed; `update` never overwrites or merges it and restores it when missing, `remove` keeps it once changed (also honored on a scaffold's `files[]`) (ADR 0060) |
 | `files[].untested` | ✅ read by the test guards, which print the reason instead of failing |
 | `enablesTesting` | ✅ `add` turns an `off` project to `tests-after` once the apply lands, then backfills (ADR 0054) |
@@ -33,23 +33,19 @@ now honored at `add` time; author the full descriptor and it all applies.
 | `requiresOneOf[]` | ✅ `add` refuses when none of the modules you name is installed or in the same graph; on a terminal it prompts for one instead |
 | `envVars` | ✅ reported to the user (never written to files) |
 | `scaffolds[]` | ✅ births the workspace (root-relative files + registers its aliases into `saasaloy.json`) (ADR 0013) |
-| `patches` | ✅ applied by the config-patch engine — read file → codemod → write, idempotent (ADR 0019) |
+| `patches` | ✅ applied by the render as an in-memory transform of the target file, idempotent (ADR 0019) |
+| `tables` | ✅ each table is written as a `<name>.generated.ts` file, in full, on every run (plan 0116) |
+| `entries` | ✅ each row is written into the generated file of its table, sorted by `order` and then by module name |
 
-Consequence to know while authoring: a **capability** whose files all live in `scaffolds[]` (like
-`api`) lands its whole workspace on disk from `add`, registers its aliases, and applies any
-`patches` (e.g. `database`'s D1 binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise
-such a module through the `.dev/` playground to see it end to end. A patch mutates a file another
-module owns, so patched files are **not** manifest-tracked as clean copies. `remove` reverses the seven
-kinds that edit a source or config file (`chained-route`, `wrangler-binding`,
-`plugin-array`, `const-array`, `const-property`, `drizzle-column`, `nav-entry`) and drops the two `package.json` kinds with
-a warning telling the user to hand-revert them; generalising the inverse is #36. Everything else the applier does is fully
-described by the descriptor.
+Consequence to know while authoring: a **capability** whose files all live in `scaffolds[]` (like `api`) lands its whole workspace on disk from `add`, registers its aliases, and applies any `patches` (e.g. `database`'s D1 binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise such a module through the `.dev/` playground to see it end to end.
+
+A `remove` is a render without the module. The CLI renders the project from the modules that stay, so a file, a patch or a table row of the removed module is not in the result, and the merge takes it out of the project. No patch kind has an inverse of its own, and the old "remove reverses the patch" rule no longer applies. Everything else the applier does is fully described by the descriptor.
 
 ## Shape of a module
 
 ```
 modules/<name>/
-  registry-item.json     # name, type, description, stage, needs[], requires{}, dependsOn[], dependencies[], files[], envVars{}, patches, scaffolds[], agent{}
+  registry-item.json     # name, type, description, stage, needs[], requires{}, dependsOn[], dependencies[], files[], envVars{}, patches, tables[], entries[], scaffolds[], agent{}
   files/                 # template files, copied to alias (or scaffold-root) targets in the consumer project
   skills/saasaloy-<name>/  # Claude skill folder (SKILL.md), copied verbatim into .claude/skills/saasaloy-<name>/
 ```
@@ -79,7 +75,7 @@ you're adding a route + a table + some UI to things that already exist, it's a f
 
 > **Authoring a provider?** A module that supplies one implementation of an existing capability's
 > provider interface (`email-cloudflare`, `email-console`, a future `email-resend`) is a feature
-> with a much narrower shape — one file, one registration patch, the vendor dep patched into the
+> with a much narrower shape — one file, one table row, the vendor dep patched into the
 > capability's workspace. Use [`create-provider`](../create-provider/SKILL.md) for those; it
 > assumes everything on this page and adds only the differences.
 
@@ -112,7 +108,7 @@ Use this annotated feature example (waitlist) as the field reference:
   "description": "A waitlist form on the landing page, with its API route and table, to collect early sign-ups.",
   "stage": "validate",                        // validate | mvp | teams | money | scale
   "needs": [],                                // cloudflare-paid | stripe | domain | vendor-account
-  "requires": { "saasaloy": ">=0.3" },        // optional — semver range the consumer's CLI must satisfy
+  "requires": { "saasaloy": ">=0.10.0" },     // semver range the consumer's CLI must satisfy; >=0.10.0 for `entries`
   "dependsOn": ["api", "database"],           // capabilities this needs; resolved recursively
   "dependencies": ["zod@4.0.5"],              // consumer `dependencies` — exact-pinned name@version
   "devDependencies": ["@types/node@26.1.1"],  // optional — consumer `devDependencies` (@types/*, tooling)
@@ -122,14 +118,12 @@ Use this annotated feature example (waitlist) as the field reference:
     { "path": "files/ui/blocks/waitlist.tsx",          "target": "@ui/blocks/waitlist.tsx" }
   ],
   "envVars": {},                              // env keys the module needs (documented for the user)
-  "patches": [                                // a route file is dropped, but registered by patch
+  "entries": [                                // a route file is dropped, but registered by a table row
     {
-      "file": "apps/api/src/index.ts",        // project-relative POSIX path, no @alias
-      "kind": "chained-route",
-      "exportName": "default",                // the exported chain — followed to `const app = …`
-      "path": "/waitlist",                    // also the match key for the inverse
-      "call": "waitlist",
-      "import": { "name": "waitlist", "from": "./routes/waitlist" }
+      "table": "api.routes",                  // the `id` of a table another module declares
+      "path": "/waitlist",                    // the mount path, unique in the table
+      "call": "waitlist",                     // the router the route file exports by name
+      "import": { "name": "waitlist", "from": "./routes/waitlist" }  // relative to the generated file
     }
   ],
   "agent": {                                  // AI context this module contributes (see Step 4)
@@ -209,42 +203,61 @@ Field notes:
   is for the file that genuinely cannot be written once, never a shortcut around writing it once.
   A target whose entries are **all** conditional and none matches makes `add` refuse and name the
   candidates, so a missing variant is a refusal rather than a file that quietly never arrived.
-- **`when`** — an optional condition on a `files[]` entry, a scaffold `files[]` entry, or a `patches` op (ADR 0054). `{ "testing": true }` ships it only when the project's testing mode is `tests-after` or `tdd`. `{ "installed": ["e2e"] }` ships it only when every named module is installed. Both keys together mean both. The applier asks `when` before `onlyWith`, and a target whose entries `when` drops is skipped, not refused. `when` decides the first write only: once the file is in the manifest it stays managed in every mode. A later `saasaloy testing tests-after`, `add` or `update` backfills an entry whose condition turned true, and `remove X` takes every entry whose `installed` names X. Use `testing` for every test file, and `installed` for a file that only makes sense beside another module, such as a journey spec beside `e2e`.
+- **`when`** — an optional condition on a `files[]` entry, a scaffold `files[]` entry, a `patches` op, or an `entries` row (ADR 0054). `{ "testing": true }` ships it only when the project's testing mode is `tests-after` or `tdd`. `{ "installed": ["e2e"] }` ships it only when every named module is installed. Both keys together mean both. The applier asks `when` before `onlyWith`, and a target whose entries `when` drops is skipped, not refused. `when` decides the first write only: once the file is in the manifest it stays managed in every mode. A later `saasaloy testing tests-after`, `add` or `update` backfills an entry whose condition turned true, and `remove X` takes every entry whose `installed` names X. Use `testing` for every test file, and `installed` for a file that only makes sense beside another module, such as a journey spec beside `e2e`.
 - **`seed`** — `true` on a `files[]` or scaffold `files[]` entry the project is meant to change: an extension point a managed file imports, such as `apps/admin/src/extend/payments.ts`. `add` and backfill write it once and the manifest records it as a seed. `update` never overwrites or merges it, and writes it again only when it is missing. `remove` deletes it while unchanged and keeps it, with a warning, once the project changed it. Keep a seed small and stable: a project that already holds it never sees a later change to its content, so a change to what it exports needs an update note. Use it in place of asking the owner to edit a managed file in place, and set `requires.saasaloy` to `>=0.9.0`, the first CLI that reads the flag (ADR 0060).
 - **`untested`** — on a `files[]` entry, a one-line reason the file ships with no test beside it (`"untested": "generated types"`). The test guards print it instead of failing.
 - **`enablesTesting`** — `true` on a module whose whole point is tests (`e2e`). Adding it to a project with testing `off` sets `tests-after` after the apply succeeds and backfills. It leaves `tdd` alone, and `remove` never changes the mode.
 - **`envVars`** — keys the module needs (e.g. `RESEND_API_KEY`); surfaced to the user, never
   invented secrets committed to files.
-- **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal. Each op
-  names its own target `file` and a codemod `kind`; the engine defines the payload per kind:
+- **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal. A registration table is never a patch: it is a generated file, declared in `tables` and filled from `entries` (below). Each op names its own target `file` and a codemod `kind`; the engine defines the payload per kind:
 
   | `kind` | What it does | Payload |
   | --- | --- | --- |
   | `wrangler-binding` | upserts a binding into a `wrangler.jsonc` array, top-level or nested | `bindingType`, `entry`, `matchOn` |
   | `package-json-dependency` | upserts one dependency into a `package.json` section | `section`, `name`, `range` |
   | `package-json-script` | upserts one entry into a `package.json` `scripts` map | `name`, `value` |
-  | `plugin-array` | appends a call into a TS module's plugin array | `exportName`, `arrayProp`, `call`, `import` |
-  | `chained-route` | appends `.route(path, handler)` to a TS module's exported call chain | `exportName`, `path`, `call`, `import` |
   | `drizzle-column` | adds one column to a Drizzle table another module ships | `exportName`, `column`, `value`, `import?` |
+  | `const-property` | replaces `property: undefined` on a module-scope const object with a JSON value | `constName`, `property`, `value` |
 
-  `bindingType` takes a dotted path when the binding lives under a parent object — `queues.producers`, `queues.consumers`, `triggers.crons`. The engine creates the missing parent on `add` and unwinds it on `remove`, so the file comes back byte-identical. A value with no dot addresses a top-level array, exactly as before. Do not invent a patch kind for a nested binding (ADR 0033).
+  These five are the only kinds (`packages/cli/src/lib/patch/index.ts`). The four kinds that wrote a registration table into a file the owner keeps (`plugin-array`, `const-array`, `chained-route`, `nav-entry`) are deleted, and the schema rejects them.
 
-  **A non-`fetch` Worker export registers in the handler table**, not through the deploy tooling. `apps/api/src/worker.ts` is the Worker entry, and its `defineWorker({ fetch: app.fetch, handlers: [] })` call holds a `handlers` array. A module that ships a `queue` consumer or a `scheduled` tick exports a function returning `{ queue?, scheduled? }` and appends the call with a `plugin-array` patch on `exportName: "worker"`, `arrayProp: "handlers"`. `apps/api/src/index.ts` stays the Hono app, so the `chained-route` patch point is untouched. A module that needs both a binding and a handler carries both patches; the one-file rule constrains its runtime surface, not its descriptor.
+  `bindingType` takes a dotted path when the binding lives under a parent object — `queues.producers`, `queues.consumers`, `triggers.crons`. The engine creates the missing parent when it applies the patch, and a render without the module has neither the parent nor the entry. A value with no dot addresses a top-level array, exactly as before. Do not invent a patch kind for a nested binding (ADR 0033).
 
-  Every kind is idempotent and never clobbers. Each one has a match key it checks first (the
-  binding name, the dependency name, the script name, the callee, the route path), and an entry
-  already there is left exactly as the user last edited it, so a re-`add` is a byte-for-byte
-  no-op. `chained-route` is one of five kinds `remove` reverses, taking the link back out, and the
-  named import with it when the file no longer references the binding anywhere else; the other
-  four are dropped from the manifest with a warning until #36 generalises the inverse.
+  **A non-`fetch` Worker export registers in the handler table**, not through the deploy tooling. `apps/api/src/worker.ts` is the Worker entry, and it spreads `workerHandlers` from `./worker.generated.ts`, the `worker.handlers` table. A module that ships a `queue` consumer or a `scheduled` tick exports a function returning `{ queue?, scheduled? }` and adds the call as an `entries` row: `{ "table": "worker.handlers", "call": "cloudflareQueueHandlers", "import": { "name": "cloudflareQueueHandlers", "from": "@repo/queue/providers/cloudflare" } }`. `apps/api/src/index.ts` stays the Hono app. A module that needs both a binding and a handler carries a `wrangler-binding` patch and an `entries` row; the one-file rule constrains its runtime surface, not its descriptor.
 
-  The match key locates an edit; it does not prove the edit is still yours. `chained-route`
-  checks identity on both sides, and **skips with a warning rather than guessing**: `add`
-  refuses when the entry file already binds your import's local name to a different module,
-  because wiring the route would point it at the wrong handler, and `remove` leaves the link
-  alone when the recorded path now routes to something other than your `call`. Both cases mean
-  a user owns that line. Design the module for the skip: `add` reports the file and the reason,
-  and records nothing, so the user wires it by hand.
+  Every kind is idempotent and never clobbers. Each one has a match key it checks first (the binding name, the dependency name, the script name, the column, the property), and an entry already there is left exactly as the user last edited it, so a second render is a byte-for-byte no-op. The render applies each patch in memory as a transform, so only the insert side exists. A remove is a render without the module, and the merge takes the edit back out.
+- **`tables`** — the registration tables this module owns. A registration table is a list that other modules add rows to, such as a capability's providers or the api route chain. The CLI writes each table into a generated file, in full, on every run. Each item takes three fields and one optional field:
+
+  | Field | Meaning |
+  | --- | --- |
+  | `id` | Unique across the payload, `<owner>.<table>`, such as `email.providers`. The generated file exports the table under the camelCase of the id: `email.providers` is `emailProviders`, `api.baseRoutes` is `apiBaseRoutes`. |
+  | `file` | The generated file, as a project path or an `@alias` path. Name it `<name>.generated.ts` and put it beside the file that holds the table: `@email/providers.generated.ts` beside `@email/index.ts`. Several tables may share one file (`api.routes` and `api.baseRoutes` both live in `@api/routes.generated.ts`). |
+  | `shape` | What the export looks like. See the shape table below. |
+  | `type` | `objects` only. A `{ name, from }` import of the element type, imported as a type, so the export reads `T[]`: `{ "name": "Service", "from": "./services.ts" }`. |
+
+  | `shape` | The generated export | Fields a row needs |
+  | --- | --- | --- |
+  | `calls` | `export const emailProviders = [consoleEmail(), cloudflare()];` | `call`, `import` |
+  | `objects` | `export const envServices: Service[] = [{ … }, { … }];` | `entry` |
+  | `routes` | `export function apiRoutes(app)` that chains `.route(path, router)` for each row onto the Hono app it takes, so the type of each link carries to `AppType` | `path`, `call`, `import` |
+  | `nav` | `export const adminNav = [{ area, group, …entry, icon }] as const;` | `area`, `group`, `entry` (with `entry.to`), `import` (the icon) |
+
+  The generated file starts with one header line that names the CLI (`// Generated by saasaloy. Do not edit: …`). Its file class is `generated`: the CLI writes it in full on every run, `update` refuses with exit 2 when the owner edited it, and `--force` overwrites the edit. The file that holds the table imports the export and spreads it. Entries the owning module ships inline go first, then the spread, then the owner's own entries: `export const email = defineEmail({ providers: [...emailProviders] });`. Better Auth's `audience()` stays first in `packages/auth/src/auth.ts` for this reason. Tell the owner, in the module's skill, to add an entry of their own after the spread and never in the generated file. The base template declares its own tables in `packages/cli/templates/base/_saasaloy-base.json` under `tables` (`env.services`, `config.sections`, `tooling.deployTargets`, `ui.pageLinks` and others).
+- **`entries`** — the rows this module adds to tables, its own or another module's. A row names its table, and the shape of that table decides which other fields it needs. The render refuses a row that does not fit its shape.
+
+  | Field | Meaning |
+  | --- | --- |
+  | `table` | Required. The `id` of the table. |
+  | `call` | `calls`: the factory, printed `call()`. `routes`: the router, printed `.route(path, call)`. |
+  | `import` | `calls` and `routes`: the `{ name, from }` import of `call`. `nav`: the icon component, printed `icon: <name>`. `from` is relative to the generated file, which sits beside the file that holds the table, so a specifier that worked there works here. A package name also works. |
+  | `path` | `routes`: the mount path, such as `/waitlist`. It starts with `/`. |
+  | `entry` | `objects`: the JSON object of the row. `nav`: the row without its icon (`to`, `label`, `shortcut`, …). |
+  | `area` | `nav`: the `to` of the area the row goes into, such as `/`. |
+  | `group` | `nav`: the label of the group. A group the area does not have yet is added after its last group. |
+  | `order` | Sort key, 1000 when absent. A lower order comes first. Equal orders sort by module name, and one module's rows keep their descriptor order. `/health` is the `api` module's own row in `api.routes`, at order 0. A `tooling.deployTargets` row carries an `order` equal to its object's `order`. |
+  | `when` | Write this row only while the condition holds, the same `when` as on a file or a patch: `{ "installed": ["command"] }`. |
+
+  A row that repeats the identity of an earlier row in the same table is written once: the same `call`, the same route `path`, the same nav `area` and `to`, or an equal `objects` entry. A remove is a render without the module, so the row leaves the generated file and its import goes with it. A descriptor that holds `tables` or `entries` sets `requires.saasaloy` to `>=0.10.0`, the first CLI that reads them.
 - **`agent.skills[]`** — skill folder(s) under this module (`skills/saasaloy-<name>`) copied into
   the consumer's `.claude/skills/saasaloy-<name>/` by `add` (see Step 4). Module skills are
   **always `saasaloy-`-prefixed** so they can't collide with the user's own installed skills.
@@ -289,23 +302,15 @@ Convention-based extension points are what make granular modules safe: **no modu
 another module's internals**, so there's no drift-seam. A feature adds behavior by dropping a
 file where a capability already auto-discovers it.
 
-- **`api`** scaffolds `apps/api` with a **statically chained route table** in `src/index.ts`. Add a
-  route in two parts: drop `files/api/routes/<feature>.ts` → `@api/routes/<feature>.ts`, then
-  register it with a `chained-route` patch (below). The drop alone mounts nothing.
-- **`config`** ships in the base and holds a **section registry**, a plain array literal in
-  `packages/config/src/sections.ts`. A capability that owns a checked-in constant contributes one
-  section, the same two-part shape as a job. Drop `files/config/<key>.ts` →
-  `@config/sections/<key>.ts`, exporting a factory that returns `defineSection("<key>", { … })`,
-  then register the call with a `plugin-array` patch on `exportName: "sections"`,
-  `arrayProp: "sections"`. The key is the module name, it must be unique, and `saasaloy add`
-  refuses two modules claiming one. Read the value anywhere with `import { config } from
-  "@repo/config"`.
+- **`api`** scaffolds `apps/api` with a **statically chained route table**, the `api.routes` table in `src/routes.generated.ts`. Add a route in two parts: drop `files/api/routes/<feature>.ts` → `@api/routes/<feature>.ts`, then add an `api.routes` row to `entries` (below). The drop alone mounts nothing.
+- **`config`** ships in the base and holds a **section registry**, the `config.sections` table in `packages/config/src/sections.generated.ts`. A capability that owns a checked-in constant contributes one section, the same two-part shape as a job. Drop `files/config/<key>.ts` → `@config/sections/<key>.ts`, exporting a factory that returns `defineSection("<key>", { … })`, then add the call as a `config.sections` row. The key is the module name, it must be unique, and `saasaloy add` refuses two modules claiming one. Read the value anywhere with `import { config } from "@repo/config"`.
 
   ```jsonc
-  { "path": "files/config/shop.ts", "target": "@config/sections/shop.ts" },
-  { "file": "packages/config/src/sections.ts", "kind": "plugin-array",
-    "exportName": "sections", "arrayProp": "sections", "call": "shopConfig",
-    "import": { "name": "shopConfig", "from": "./sections/shop" } }
+  "files": [{ "path": "files/config/shop.ts", "target": "@config/sections/shop.ts" }],
+  "entries": [
+    { "table": "config.sections", "call": "shopConfig",
+      "import": { "name": "shopConfig", "from": "./sections/shop" } }
+  ]
   ```
 
   Three rules the file itself has to follow. It imports its helper by subpath,
@@ -320,24 +325,15 @@ file where a capability already auto-discovers it.
 - **Every table ships its seed slice.** Drop `files/db/seed/<table-in-kebab-case>.ts` → `@db/seed/slices/<table-in-kebab-case>.ts`, one row for each state the UI shows differently, and `rows: {}` for a table that stays empty. `scripts/seed-slices.test.ts` fails when a module ships a table without one. The `saasaloy-database` skill, "Seed data", has the slice contract.
 - **A Vitest test file is `<name>.vitest.ts` in the module and `<name>.test.ts` in the project.** Set the rename in the descriptor, and gate it on the testing mode (`"path": "files/api/routes/auth.vitest.ts", "target": "@api/routes/auth.test.ts", "when": { "testing": true }`), so a project with testing `off` receives no module test (ADR 0054). `pnpm lint` applies the project's Vitest rules to every `.vitest.ts` file here, so a violation fails in this repo before a scaffold sees it.
 - **A journey spec ships in the feature module, gated on `e2e`.** Drop `files/e2e/<module>-<journey>.spec.ts` → `@e2e/specs/<module>-<journey>.spec.ts` with `"when": { "installed": ["e2e"] }`. A journey that crosses three or more modules belongs in `modules/e2e` instead (ADR 0054). `pnpm test:modules` runs `node --test` over `modules/*/files/**/*.test.ts`, and it would fail on a file that imports `vitest`.
-- **`queue`** scaffolds `packages/queue` with a **job table** and a **schedule table**, both plain
-  array literals in `src/index.ts`. Background work is two parts, the same shape as a route. Drop
-  `files/queue/jobs/<feature>.ts` → `@queue/jobs/<feature>.ts`, exporting a **factory**
-  (`export const sendDigestJob = (): Job => defineJob({ name: "send-digest", handler })`), then
-  register the call with a `plugin-array` patch on `exportName: "queue"`, `arrayProp: "jobs"`. A
-  job that also runs on a clock adds a second `plugin-array` patch on `arrayProp: "schedules"`,
-  whose `call` is a `defineSchedule({ name, cron, job })` factory. The drop alone registers
-  nothing: nothing scans `jobs/`, and an unregistered job name fails `enqueue` with `unknown_job`.
-  A factory, not a bare constant, because the table registers a *call* and that is what the patch
-  appends and `remove` takes back out.
+- **`queue`** scaffolds `packages/queue` with a **job table** and a **schedule table**, `queue.jobs` in `src/jobs.generated.ts` and `queue.schedules` in `src/schedules.generated.ts`. Background work is two parts, the same shape as a route. Drop `files/queue/jobs/<feature>.ts` → `@queue/jobs/<feature>.ts`, exporting a **factory** (`export const sendDigestJob = (): Job => defineJob({ name: "send-digest", handler })`), then add the call as a `queue.jobs` row. A job that also runs on a clock adds a `queue.schedules` row, whose `call` is a `defineSchedule({ name, cron, job })` factory. The drop alone registers nothing: nothing scans `jobs/`, and an unregistered job name fails `enqueue` with `unknown_job`. A factory, not a bare constant, because a `calls` table prints `call()`.
 
   ```jsonc
-  { "file": "packages/queue/src/index.ts", "kind": "plugin-array",
-    "exportName": "queue", "arrayProp": "jobs", "call": "sendDigestJob",
-    "import": { "name": "sendDigestJob", "from": "./jobs/digest" } },
-  { "file": "packages/queue/src/index.ts", "kind": "plugin-array",
-    "exportName": "queue", "arrayProp": "schedules", "call": "nightlyDigest",
-    "import": { "name": "nightlyDigest", "from": "./jobs/digest" } }
+  "entries": [
+    { "table": "queue.jobs", "call": "sendDigestJob",
+      "import": { "name": "sendDigestJob", "from": "./jobs/digest" } },
+    { "table": "queue.schedules", "call": "nightlyDigest",
+      "import": { "name": "nightlyDigest", "from": "./jobs/digest" } }
+  ]
   ```
 
   A feature module `dependsOn` `queue`, never a provider. The user picks `queue-cloudflare` or
@@ -361,33 +357,17 @@ file where a capability already auto-discovers it.
   every error in it. And Astro serializes island props, so a function cannot cross from `.astro`
   into an island anyway — the page has to render the app-side file. `waitlist` is the worked
   example: `blocks/waitlist.tsx` plus `apps/web/src/components/WaitlistForm.tsx`.
-- **An admin page is a route file on the admin shell, not a block.** A module that adds an admin screen drops `@admin/routes/<feature>.tsx` and registers its nav row with a `nav-entry` patch. The page renders inside the page frame the admin root route provides, so it writes no `<main>`, no centred `max-w-*` wrapper, no outer padding and no `h1`. It renders `PageHeader` from `@repo/ui/blocks/shell/page-header`, puts a list in `DataTable` inside `PageLayout` with a `DetailPanel` for the selected record, and puts anything else in `PageBody`. Every control comes from the shell primitive set at `@repo/ui/components/shell/*`: `Field` and `Input` in forms, `Switch` for a toggle, `Dialog` for a create flow, `AlertDialog` before a destructive action, and `toastManager.add` for each mutation result. A lint rule fails any base `@repo/ui/components/*` import under `apps/admin/**`. The router supplies a skeleton and an error screen for every route, so a page writes its own only when its words differ. A module block that only the admin page renders goes in `@ui/blocks/admin/<name>.tsx` and uses the shell set too; `feature-flags` is the worked example. The `saasaloy-shell` skill documents every block and container.
+- **An admin page is a route file on the admin shell, not a block.** A module that adds an admin screen drops `@admin/routes/<feature>.tsx` and registers its nav row as an `admin.nav` row in `entries`: `{ "table": "admin.nav", "area": "/", "group": "Manage", "entry": { "to": "/teams", "label": "Teams" }, "import": { "name": "UsersRoundIcon", "from": "lucide-react" } }`. The `app` shell takes the same row in `app.nav`. The page renders inside the page frame the admin root route provides, so it writes no `<main>`, no centred `max-w-*` wrapper, no outer padding and no `h1`. It renders `PageHeader` from `@repo/ui/blocks/shell/page-header`, puts a list in `DataTable` inside `PageLayout` with a `DetailPanel` for the selected record, and puts anything else in `PageBody`. Every control comes from the shell primitive set at `@repo/ui/components/shell/*`: `Field` and `Input` in forms, `Switch` for a toggle, `Dialog` for a create flow, `AlertDialog` before a destructive action, and `toastManager.add` for each mutation result. A lint rule fails any base `@repo/ui/components/*` import under `apps/admin/**`. The router supplies a skeleton and an error screen for every route, so a page writes its own only when its words differ. A module block that only the admin page renders goes in `@ui/blocks/admin/<name>.tsx` and uses the shell set too; `feature-flags` is the worked example. The `saasaloy-shell` skill documents every block and container.
 - Non-UI files still drop into their own app (`@web/...`, `@api/...`).
 
-Only when a change is genuinely structural — and no convention exists for it — use a **small,
-tested AST patch** in `patches`: a D1 binding in `wrangler.jsonc`, a plugin inserted into Better
-Auth's array, a `db:generate` command in the app's `package.json`. That's the 10%, not the spine.
-If you reach for a patch to edit another *module's* file, stop — add or use a convention instead.
+Only when a change is genuinely structural — and no convention exists for it — use a **small, tested AST patch** in `patches`: a D1 binding in `wrangler.jsonc`, a column on another module's Drizzle table, a `db:generate` command in the app's `package.json`. A plugin in Better Auth's array is a table row (`auth.plugins`), not a patch. That's the 10%, not the spine. If you reach for a patch to edit another *module's* file, stop — add or use a convention instead.
 
-**Registering a route is the exception to that rule, and it is not optional.** `apps/api` used to
-glob `routes/*.ts`, so a drop was enough; it no longer does. `src/index.ts` now names every route
-in one `.route()` chain, because `hc<AppType>` reads its paths, inputs and response shapes off
-`typeof app`, and a glob gives that type nothing to carry. So a route module drops its handler
-file **and** adds one `chained-route` patch. The drop on its own leaves a file nothing imports.
-ADR 0028 records the trade.
+**Registering a route is not optional.** `apps/api` used to glob `routes/*.ts`, so a drop was enough; it no longer does. Every route is one `.route()` link in a single chain, because `hc<AppType>` reads its paths, inputs and response shapes off `typeof app`, and a glob gives that type nothing to carry. So a route module drops its handler file **and** adds one row to `entries`. The drop on its own leaves a file nothing imports. ADR 0028 records the trade.
 
-The patch kind is the reversible one, which is what makes this affordable: `saasaloy remove` takes
-the link and its import back out, and the entry file comes back byte-identical. Two rules for the
-descriptor:
+The CLI writes the chain into `apps/api/src/routes.generated.ts`, and `apps/api/src/index.ts` does `const app = apiRoutes(base)`. A remove is a render without the module, so the link and its import leave the generated file. An owner adds a route of their own after the generated ones: `apiRoutes(base).route("/reports", reports)`. Two rules for the descriptor:
 
-- **`exportName` names the export in the *target* file, not in your route file.** Use
-  `"default"` for a typed route — that is `apps/api/src/index.ts`'s `export default app`, which
-  the codemod follows to `const app = …` so `AppType` picks the link up. Use `"base"` only for a
-  mount that must stay *out* of `AppType`, such as an opaque catch-all like `auth`'s.
-- **Your route file exports its sub-app by name, as one chained expression.** `export const
-  <feature> = new Hono().get(...)`, matching `import.name`. The codemod refuses to wire a link
-  whose binding resolves to a default import, and a broken-up chain exports a type that has
-  forgotten its own routes.
+- **Pick the table by whether the route belongs in `AppType`.** Use `api.routes` for a typed route: `apiRoutes` chains it onto `base`, and `AppType` picks the link up. Use `api.baseRoutes` only for a mount that must stay *out* of `AppType`, such as an opaque catch-all like `auth`'s `/auth`. `apiBaseRoutes` mounts it on `base` after the middleware.
+- **Your route file exports its sub-app by name, as one chained expression.** `export const <feature> = new Hono().get(...)`, matching `import.name`. The generated file imports the router by name, so a default export does not work, and a broken-up chain exports a type that has forgotten its own routes.
 
 ## Step 4 — Contribute agent context
 
@@ -460,9 +440,8 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
   convention-based drop points instead: a table into `packages/db/schema/`, a UI component
   into `apps/web`. Only genuinely structural edits (a D1 binding, a Better Auth plugin) use
   small, tested AST patches.
-- **A route is the exception: drop the handler, then register it with a `chained-route`
-  patch.** `apps/api/src/index.ts` names every route statically so `AppType` carries them;
-  nothing globs `routes/` (ADR 0028).
+- **A route is the exception: drop the handler, then register it with an `api.routes` row in `entries`.** The generated `apps/api/src/routes.generated.ts` names every route statically so `AppType` carries them; nothing globs `routes/` (ADR 0028).
+- **A registration goes in `entries`, never in a file the owner keeps.** The owning module declares the table in `tables`, the CLI writes it as a `<name>.generated.ts` file, and the file the owner keeps spreads it.
 - **UI ships as a `@ui/blocks/` block, and the owner places it.** No module puts itself on a page,
   and no applier edits one. A module with such a file ships a skill whose `## Wire-up` section
   carries the import, the tag and a suggested anchor.

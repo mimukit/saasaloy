@@ -58,6 +58,8 @@ interface Descriptor {
   envOptional: string[];
   envServices: Record<string, string[]>;
   patches: Patch[];
+  tables: Table[];
+  entries: Row[];
   files: FileEntry[];
   scaffolds: Scaffold[];
   skills: string[];
@@ -66,7 +68,18 @@ interface Descriptor {
 interface Patch {
   file: string;
   kind: string;
-  arrayProp?: string;
+}
+
+/** A registration table the module owns: the CLI writes `file` on every run. */
+interface Table {
+  id: string;
+  file: string;
+  shape: string;
+}
+
+/** A row the module adds to a table. */
+interface Row {
+  table: string;
 }
 
 interface FileEntry {
@@ -157,14 +170,18 @@ function readDescriptor(root: string, folder: string): Descriptor | undefined {
     envVars: stringMap(raw.envVars),
     envOptional: strings(raw.envOptional),
     envServices,
-    patches: records(raw.patches).map((patch) => {
-      const arrayProp = field(patch, "arrayProp");
-      return {
-        file: field(patch, "file"),
-        kind: field(patch, "kind"),
-        ...(arrayProp === "" ? {} : { arrayProp }),
-      };
-    }),
+    patches: records(raw.patches).map((patch) => ({
+      file: field(patch, "file"),
+      kind: field(patch, "kind"),
+    })),
+    tables: records(raw.tables).map((owned) => ({
+      id: field(owned, "id"),
+      file: field(owned, "file"),
+      shape: field(owned, "shape"),
+    })),
+    entries: records(raw.entries).map((row) => ({
+      table: field(row, "table"),
+    })),
     files: fileEntries(raw.files),
     scaffolds: records(raw.scaffolds).map((scaffold) => ({
       workspace: field(scaffold, "workspace"),
@@ -278,8 +295,8 @@ export function tierOf(item: Descriptor, all: readonly Descriptor[]): Tier {
   if (all.some((other) => other.requiresOneOf.includes(item.name))) {
     return "driver";
   }
-  const registersProvider = item.patches.some(
-    (patch) => patch.kind === "plugin-array" && patch.arrayProp === "providers"
+  const registersProvider = item.entries.some((row) =>
+    row.table.endsWith(".providers")
   );
   return registersProvider ? "provider" : "feature";
 }
@@ -543,6 +560,16 @@ function modulePage(
     code(patch.file),
     code(patch.kind),
   ]);
+  const owned = item.tables.map((held) => [
+    code(held.id),
+    code(held.file),
+    code(held.shape),
+  ]);
+  const rowCounts = new Map<string, number>();
+  for (const row of item.entries) {
+    rowCounts.set(row.table, (rowCounts.get(row.table) ?? 0) + 1);
+  }
+  const rows = [...rowCounts].map(([id, count]) => [code(id), String(count)]);
 
   sections.push(
     "## Environment variables",
@@ -555,6 +582,14 @@ function modulePage(
     patches.length === 0
       ? "This module patches no file."
       : table(["File", "Kind"], patches),
+    "## Tables it owns",
+    owned.length === 0
+      ? "This module owns no registration table."
+      : `The CLI writes each table in full on every run, from the rows of the installed modules.\n\n${table(["Table", "Generated file", "Shape"], owned)}`,
+    "## Rows it adds to tables",
+    rows.length === 0
+      ? "This module adds no row to a table."
+      : table(["Table", "Rows"], rows),
     "## See the rest",
     `Run ${code(`saasaloy add ${item.name} --dry-run`)} to print every file and patch the module writes, in install order, and write nothing.`,
     "## What your agent reads",

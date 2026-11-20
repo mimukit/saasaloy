@@ -15,7 +15,8 @@ import {
 } from "../phone";
 
 // The rules that make the phone code a sign-up step and not a second way to sign in. It
-// sits on `auth` after `phoneNumberPlugin()`, through the same `plugin-array` patch kind.
+// sits on `auth` after `phoneNumberPlugin()`, through a row of the same `auth.plugins`
+// table.
 //
 // - A sign-up code (`send-otp`) and its check (`verify`) answer 409 `PHONE_NUMBER_EXIST`
 //   for a number that already has an account, before a code goes out or a session opens.

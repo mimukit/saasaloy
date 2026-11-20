@@ -18,11 +18,10 @@ import { z } from "zod";
 // Route module contract: export a Hono sub-app under a NAMED export matching the file,
 // built as ONE chained expression. Split it into separate `adminUsers.get(...)`
 // statements and the exported type forgets the route, which empties it out of `AppType`.
-// The name has to be an `export const`: the `chained-route` codemod writes
-// `import { adminUsers } from "./routes/admin-users"` and refuses to wire a binding that
-// resolves to a default import.
+// The name has to be an `export const`: the generated `routes.generated.ts` imports it by
+// name, as `import { adminUsers } from "./routes/admin-users"`.
 //
-// This module's `chained-route` patch mounts it at `/admin` on the exported chain, so
+// This module's `api.routes` row mounts it at `/admin` on the exported chain, so
 // `get("/users")` serves `GET /admin/users` and `hc<AppType>` types it. Paths here are
 // relative to that mount.
 //

@@ -20,9 +20,9 @@ import { authRefusal, splitMembers } from "../lib/members";
 import type { GroupUser } from "../lib/members";
 
 // The members routes, mounted at `/admin/members` by the admin module's second
-// `chained-route` patch, so `hc<AppType>` types them for the admin app as
+// `api.routes` row, so `hc<AppType>` types them for the admin app as
 // `api.admin.members`. The mount is its own path because `/admin` already routes
-// `admin-users`, and a `chained-route` patch skips a path the chain already routes.
+// `admin-users`, and the route table keeps only the first row for a path.
 //
 // A member is an account in the admin group (`ADMIN_ROLES`). The routes:
 //

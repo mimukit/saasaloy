@@ -1,5 +1,7 @@
 import { defineKv } from "./define";
 import type { KvEnv } from "./provider";
+import { kvPolicies } from "./policies.generated";
+import { kvProviders } from "./providers.generated";
 
 export { cacheAside } from "./cached";
 export type { CacheAsideStore } from "./cached";
@@ -22,16 +24,17 @@ export type {
   ResolvedConsumeRequest,
 } from "./provider";
 
-// The provider registry and the policy table, and the two patch points the modules
-// around this one write into. `saasaloy add kv-memory` adds its import and appends
-// `memory()` to `providers`; `saasaloy add ratelimit` appends its `definePolicy(...)`
-// calls to `policies`. Both are idempotent, so re-running an install changes nothing.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with real array literals. The codemod behind the `plugin-array` patch kind
-// (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into otherwise, and an
-// install fails silently. Never omit `providers` or `policies`, even while they're empty.
-export const kv = defineKv({ policies: [], providers: [] });
+// The provider registry and the policy table. The modules around this one add rows to
+// the `kv.providers` and `kv.policies` tables, and the CLI writes
+// `./providers.generated.ts` and `./policies.generated.ts` from them on every run:
+// `saasaloy add kv-memory` adds `memory()` to `providers`, and `saasaloy add ratelimit`
+// adds its policy calls to `policies`. `saasaloy remove` takes the row back out. An entry
+// of your own goes after the spread, never in a generated file: the CLI overwrites it,
+// and `saasaloy update` refuses when it was edited.
+export const kv = defineKv({
+  policies: [...kvPolicies],
+  providers: [...kvProviders],
+});
 
 /**
  * Get a store for this request's environment. Mirrors `createEmail(c.env)`: it takes the

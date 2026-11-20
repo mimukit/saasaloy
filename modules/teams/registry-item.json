@@ -5,89 +5,12 @@
   "description": "Organizations, memberships, roles and copy-ID invitations on Better Auth, plus a site-admin Teams screen.",
   "stage": "teams",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
     "The deployed organizations, members, invitations, and organization_roles tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
-  ],
-  "patches": [
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "auth",
-      "arrayProp": "plugins",
-      "call": "organizationPlugin",
-      "import": {
-        "name": "organizationPlugin",
-        "from": "./plugins/organization"
-      }
-    },
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuth",
-      "arrayProp": "plugins",
-      "call": "organizationPlugin",
-      "import": {
-        "name": "organizationPlugin",
-        "from": "./plugins/organization"
-      }
-    },
-    {
-      "file": "packages/auth/src/client.ts",
-      "kind": "plugin-array",
-      "exportName": "authClientPlugins",
-      "arrayProp": "plugins",
-      "call": "organizationClientPlugin",
-      "import": {
-        "name": "organizationClientPlugin",
-        "from": "./plugins/organization-client"
-      }
-    },
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "auth",
-      "arrayProp": "plugins",
-      "call": "roleLockGuard",
-      "import": {
-        "name": "roleLockGuard",
-        "from": "./plugins/role-lock"
-      }
-    },
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuth",
-      "arrayProp": "plugins",
-      "call": "roleLockGuard",
-      "import": {
-        "name": "roleLockGuard",
-        "from": "./plugins/role-lock"
-      }
-    },
-    {
-      "file": "packages/auth/src/client.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuthClientPlugins",
-      "arrayProp": "plugins",
-      "call": "organizationClientPlugin",
-      "import": {
-        "name": "organizationClientPlugin",
-        "from": "./plugins/organization-client"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Manage",
-      "entry": { "to": "/teams", "label": "Teams" },
-      "icon": { "name": "UsersRoundIcon", "from": "lucide-react" }
-    }
   ],
   "files": [
     {
@@ -163,6 +86,69 @@
     {
       "path": "files/db/column-classes/organizations.ts",
       "target": "@db/column-classes/organizations.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "auth.plugins",
+      "call": "organizationPlugin",
+      "import": {
+        "name": "organizationPlugin",
+        "from": "./plugins/organization"
+      }
+    },
+    {
+      "table": "adminAuth.plugins",
+      "call": "organizationPlugin",
+      "import": {
+        "name": "organizationPlugin",
+        "from": "./plugins/organization"
+      }
+    },
+    {
+      "table": "client.plugins",
+      "call": "organizationClientPlugin",
+      "import": {
+        "name": "organizationClientPlugin",
+        "from": "./plugins/organization-client"
+      }
+    },
+    {
+      "table": "auth.plugins",
+      "call": "roleLockGuard",
+      "import": {
+        "name": "roleLockGuard",
+        "from": "./plugins/role-lock"
+      }
+    },
+    {
+      "table": "adminAuth.plugins",
+      "call": "roleLockGuard",
+      "import": {
+        "name": "roleLockGuard",
+        "from": "./plugins/role-lock"
+      }
+    },
+    {
+      "table": "adminClient.plugins",
+      "call": "organizationClientPlugin",
+      "import": {
+        "name": "organizationClientPlugin",
+        "from": "./plugins/organization-client"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Manage",
+      "entry": {
+        "to": "/teams",
+        "label": "Teams"
+      },
+      "import": {
+        "name": "UsersRoundIcon",
+        "from": "lucide-react"
+      }
     }
   ],
   "agent": {

@@ -5,7 +5,7 @@
   "description": "A payment provider on the SSLCOMMERZ hosted checkout for cards and wallets in Bangladesh; needs an SSLCOMMERZ store.",
   "stage": "money",
   "needs": ["vendor-account"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["payment"],
   "dependencies": [],
   "envVars": {
@@ -22,30 +22,6 @@
     "SSLCOMMERZ payments already in the payments table survive this removal. The core refuses to refund a payment whose provider is not registered, so finish refunds first or make them in the SSLCOMMERZ merchant panel.",
     "The IPN URL stays registered in the SSLCOMMERZ merchant panel if you set one there. Remove it, or the gateway keeps posting to /payment/callback/sslcommerz/ipn, which then answers 404."
   ],
-  "patches": [
-    {
-      "file": "packages/payment/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "payment",
-      "arrayProp": "providers",
-      "call": "sslcommerz",
-      "import": {
-        "name": "sslcommerz",
-        "from": "./providers/sslcommerz"
-      }
-    },
-    {
-      "file": "packages/payment/src/env-preset.ts",
-      "kind": "plugin-array",
-      "exportName": "paymentPreset",
-      "arrayProp": "extends",
-      "call": "sslcommerzEnv",
-      "import": {
-        "name": "sslcommerzEnv",
-        "from": "./env/sslcommerz"
-      }
-    }
-  ],
   "files": [
     {
       "path": "files/sslcommerz.ts",
@@ -54,6 +30,24 @@
     {
       "path": "files/env.ts",
       "target": "@payment/env/sslcommerz.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "payment.providers",
+      "call": "sslcommerz",
+      "import": {
+        "name": "sslcommerz",
+        "from": "./providers/sslcommerz"
+      }
+    },
+    {
+      "table": "payment.envPresets",
+      "call": "sslcommerzEnv",
+      "import": {
+        "name": "sslcommerzEnv",
+        "from": "./env/sslcommerz"
+      }
     }
   ],
   "scaffolds": []

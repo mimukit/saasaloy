@@ -94,8 +94,8 @@ export interface LoggerVariables {
 }
 
 /**
- * Build the provider registry. The `providers` array is the patch point every
- * `logger-<provider>` module appends to — see `src/index.ts`.
+ * Build the provider registry. The `providers` array holds the `logger.providers` table,
+ * one generated row for every `logger-<provider>` module. See `src/index.ts`.
  */
 export function defineLogger(config: LoggerConfig): LoggerRegistry {
   const { providers } = config;

@@ -9,9 +9,11 @@ import { BASE_MODULE, ownedMatcher } from "../lib/base.js";
 //   once       written when the path is new, then left alone
 //
 // Three spellings of "the owner rewrites this" all map to `once`: the base's `seedFiles`
-// and `ownedFiles` (`_saasaloy-base.json`) and a module entry's `seed` flag (ADR 0060),
-// except the base files in `INTERIM_MERGED`. Nothing is `generated` until the tables move
-// in Phase 7.
+// and `ownedFiles` (`_saasaloy-base.json`) and a module entry's `seed` flag (ADR 0060).
+// A registration table is `generated`: the render sets that class itself on each table
+// file it prints (`engine/tables.ts`), so no path rule here names one. The four owned
+// base files that held a table (`services.ts`, `sources.ts`, `targets.ts`, `navbar.tsx`)
+// spread their generated file now, and the rest of each is `once` like any owned file.
 
 export type FileClass = "generated" | "merged" | "once";
 
@@ -20,20 +22,6 @@ export const FILE_CLASSES: readonly FileClass[] = [
   "merged",
   "once",
 ];
-
-/**
- * Owned base files classed `merged` during the build (plan 0116, re-grill Q1 and Q4): the
- * four that hold a registration table, so `add` can register a module in them until
- * Phase 7 moves each table to a generated file and drops this rule. `saasaloy.json` and
- * `packages/env/.env.example` are `merged` by the declaration itself (Q2, Q3): neither is
- * a seed or an owned file.
- */
-export const INTERIM_MERGED: ReadonlySet<string> = new Set([
-  "packages/env/src/services.ts",
-  "packages/env/src/sources.ts",
-  "packages/tooling/src/targets.ts",
-  "packages/ui/src/blocks/navbar.tsx",
-]);
 
 export interface ClassInput {
   /** Project-relative POSIX path of the rendered file. */
@@ -54,9 +42,6 @@ export function classifier(
   const seeds = new Set(declaration.seedFiles);
   return ({ path, module, entry }) => {
     if (module === BASE_MODULE) {
-      if (INTERIM_MERGED.has(path)) {
-        return "merged";
-      }
       return seeds.has(path) || owned(path) ? "once" : "merged";
     }
     return entry?.seed === true ? "once" : "merged";

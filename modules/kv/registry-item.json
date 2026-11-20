@@ -5,7 +5,7 @@
   "description": "A packages/kv workspace with the provider interface, namespaced keys and the consume contract for rate limits.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -23,12 +23,28 @@
       "section": "dependencies",
       "name": "@repo/kv",
       "range": "workspace:*"
+    }
+  ],
+  "tables": [
+    {
+      "id": "kv.policies",
+      "file": "@kv/policies.generated.ts",
+      "shape": "calls"
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "id": "kv.providers",
+      "file": "@kv/providers.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "kv.envPresets",
+      "file": "@kv/env-preset.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.envPresets",
       "call": "kvEnv",
       "import": {
         "name": "kvEnv",

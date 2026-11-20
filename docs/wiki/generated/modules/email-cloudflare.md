@@ -13,7 +13,7 @@ An email provider on Cloudflare Email Sending, which needs a paid Workers plan a
 | Tier | provider |
 | Stage | mvp |
 | Needs | `cloudflare-paid`, `domain` |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`email`](email.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -33,8 +33,17 @@ Files:
 | File | Kind |
 |---|---|
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
-| `packages/email/src/index.ts` | `plugin-array` |
 | `packages/email/package.json` | `package-json-dependency` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `email.providers` | 1 |
 
 ## See the rest
 

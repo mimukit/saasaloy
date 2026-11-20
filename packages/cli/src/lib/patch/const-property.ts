@@ -13,8 +13,8 @@ import type { AstNode, Identifier, Program } from "./ts-array.js";
 // `packages/tooling/src/deploy.config.ts` ships `ciWorkflow: undefined`, and the `ci`
 // module names its workflow there (#244). The file is the owner's, so the patch only
 // fills a property that still reads `undefined`: a value the owner set is theirs, and the
-// patch leaves it alone and says so. The splice is byte-level, like `const-array`, so the
-// comments around the property survive.
+// patch leaves it alone and says so. The splice is byte-level, so the comments around the
+// property survive.
 
 export interface ConstProperty {
   /** Module-scope const holding the object, e.g. `deployConfig`. */

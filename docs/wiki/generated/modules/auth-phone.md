@@ -13,7 +13,7 @@ Phone number sign-up, sign-in and password reset by SMS code on Better Auth's cl
 | Tier | feature |
 | Stage | mvp |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.8` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`auth`](auth.md), [`sms`](sms.md), [`ratelimit`](ratelimit.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -61,25 +61,30 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/config/src/sections.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
-| `packages/auth/src/client.ts` | `plugin-array` |
-| `apps/api/src/routes/auth.ts` | `plugin-array` |
-| `apps/api/src/routes/auth.ts` | `plugin-array` |
 | `packages/auth/package.json` | `package-json-dependency` |
 | `packages/db/src/schema/auth.ts` | `drizzle-column` |
 | `packages/db/src/schema/auth.ts` | `drizzle-column` |
 | `packages/db/src/schema/auth.ts` | `drizzle-column` |
 | `packages/db/src/column-classes/users.ts` | `drizzle-column` |
 | `packages/db/src/column-classes/users.ts` | `drizzle-column` |
-| `packages/db/src/seed/slices/users.ts` | `plugin-array` |
-| `packages/db/src/seed/slices/accounts.ts` | `plugin-array` |
-| `apps/app/src/lib/redirect.ts` | `const-array` |
-| `apps/app/src/lib/redirect.ts` | `const-array` |
-| `apps/app/src/lib/redirect.ts` | `const-array` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `config.sections` | 1 |
+| `auth.plugins` | 2 |
+| `client.plugins` | 1 |
+| `auth.routeGuards` | 2 |
+| `seed.users` | 1 |
+| `seed.accounts` | 1 |
+| `app.authScreens` | 3 |
+| `api.routes` | 1 |
+| `admin.nav` | 1 |
 
 ## See the rest
 
@@ -130,7 +135,7 @@ A customer signs up by phone with an SMS code, sets a password, signs in with ph
 
 It also adds `users.phone_number` and `users.phone_number_verified` to `packages/db/src/schema/auth.ts`. Run `pnpm --filter @repo/db db:generate` after `add`.
 
-With `app` installed, it adds the three phone paths to `AUTH_SCREENS` in `apps/app/src/lib/redirect.ts` with `const-array` patches, so the root guard lets an anonymous visitor open them and `resolveDestination()` never returns to one. `apps/app`'s `typecheck` script runs `tsr generate` first, so the committed `src/routeTree.gen.ts` picks up the new route files. `pnpm dev` and `pnpm build` rewrite it too.
+With `app` installed, it adds the three phone paths to `AUTH_SCREENS` in `apps/app/src/lib/redirect.ts` with `app.authScreens` rows, so the root guard lets an anonymous visitor open them and `resolveDestination()` never returns to one. `apps/app`'s `typecheck` script runs `tsr generate` first, so the committed `src/routeTree.gen.ts` picks up the new route files. `pnpm dev` and `pnpm build` rewrite it too.
 
 #### The flow
 
@@ -168,7 +173,7 @@ These hold on better-auth 1.7.7. Check them again after a Better Auth upgrade, b
 
 #### Admin login codes screen
 
-With `admin` installed, `auth-phone` mounts `GET /admin/login-codes` with a `chained-route` patch and adds a "Login codes" row under "SMS" in the admin nav with a `nav-entry` patch. The screen lists every `login_code` SMS of the last 30 minutes, newest first: the phone, the account it belongs to, the purpose, the state, the tries left, the send result, and the send error through `maskCodes()`.
+With `admin` installed, `auth-phone` mounts `GET /admin/login-codes` with an `api.routes` row and adds a "Login codes" row under "SMS" in the admin nav with an `admin.nav` row. The screen lists every `login_code` SMS of the last 30 minutes, newest first: the phone, the account it belongs to, the purpose, the state, the tries left, the send result, and the send error through `maskCodes()`.
 
 The state comes from Better Auth's `verifications` row for the code. A sign-up or sign-in code sits under the identifier `<phone>`, a reset code under `<phone>-request-password-reset`, and the value is `<code>:<wrong tries>`. A request is `live` when it is the newest for its identifier and its row has tries left before `expiresAt`. A gone code is `ended` inside `codeTtlSeconds` (used, out of tries, or replaced by a newer code) and `expired` after it.
 

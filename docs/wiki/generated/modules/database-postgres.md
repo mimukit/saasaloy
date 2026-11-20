@@ -13,7 +13,7 @@ The Postgres database driver over postgres.js, with a Hyperdrive-aware getDb and
 | Tier | driver |
 | Stage | validate |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`database`](database.md) |
 | Requires one of | none |
 | Conflicts with | [`database-d1`](database-d1.md) |
@@ -66,7 +66,16 @@ Files:
 | `packages/db/package.json` | `package-json-dependency` |
 | `packages/db/package.json` | `package-json-dependency` |
 | `packages/db/package.json` | `package-json-dependency` |
-| `apps/api/src/env.ts` | `plugin-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.envPresets` | 1 |
 
 ## See the rest
 

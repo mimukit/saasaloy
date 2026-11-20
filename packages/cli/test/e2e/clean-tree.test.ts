@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFile, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -92,13 +92,18 @@ describe("e2e — add on the render engine and the clean-tree rule", () => {
   });
 
   it("refuses with exit 2 when the run must merge a file with uncommitted changes", async () => {
-    const index = join(project, "apps/api/src/index.ts");
-    await appendFile(index, "\n// mine, not committed\n", "utf-8");
-    const before = await readFile(index, "utf-8");
+    // `add feature-flags` merges a dependency into `apps/api/package.json`. Its routes go
+    // to the generated route table, so `apps/api/src/index.ts` is not part of the run.
+    const manifest = join(project, "apps/api/package.json");
+    const edited = (await readFile(manifest, "utf-8")).replace(
+      /^\{\n/,
+      '{\n  "description": "mine, not committed",\n'
+    );
+    await writeFile(manifest, edited, "utf-8");
     const run = await cli(["add", "feature-flags", "--yes"]);
     assertCode(run, 2);
-    expect(run.output).toContain("apps/api/src/index.ts");
-    await expect(readFile(index, "utf-8")).resolves.toBe(before);
+    expect(run.output).toContain("apps/api/package.json");
+    await expect(readFile(manifest, "utf-8")).resolves.toBe(edited);
     expect(git("status", "--porcelain")).not.toContain(
       "packages/feature-flags"
     );

@@ -214,6 +214,121 @@ describe(render, () => {
   });
 });
 
+describe("generated tables (plan 0116, Phase 7)", () => {
+  const owner = moduleOf(
+    {
+      files: [{ path: "files/index.ts", target: "@web/index.ts" }],
+      name: "email",
+      tables: [
+        {
+          file: "@web/providers.generated.ts",
+          id: "email.providers",
+          shape: "calls",
+        },
+      ],
+    },
+    { "files/index.ts": "export {};\n" }
+  );
+  const provider = (name: string, extra: Partial<RegistryItem> = {}) =>
+    moduleOf({
+      dependsOn: ["email"],
+      entries: [
+        {
+          call: `${name}Email`,
+          import: { from: `./providers/${name}`, name: `${name}Email` },
+          table: "email.providers",
+        },
+      ],
+      name,
+      ...extra,
+    });
+
+  it("writes the table as a generated file owned by its module, rows sorted by module name", () => {
+    const payload = payloadOf([owner, provider("plunk"), provider("console")]);
+    const result = renderOf(payload, ["plunk", "console"]);
+    const file = result.files.get("apps/web/src/providers.generated.ts");
+    expect(file).toMatchObject({ class: "generated", module: "email" });
+    expect(file?.content).toContain(
+      "export const emailProviders = [consoleEmail(), plunkEmail()];"
+    );
+    expect(
+      renderOf(payload, ["console", "plunk"]).files.get(
+        "apps/web/src/providers.generated.ts"
+      )?.content
+    ).toBe(file?.content);
+  });
+
+  it("puts a lower order first and drops the row of a module outside the set", () => {
+    const first = provider("zeta", {
+      entries: [
+        {
+          call: "zetaEmail",
+          import: { from: "./providers/zeta", name: "zetaEmail" },
+          order: 10,
+          table: "email.providers",
+        },
+      ],
+    });
+    const payload = payloadOf([owner, first, provider("alpha")]);
+    expect(
+      renderOf(payload, ["zeta", "alpha"]).files.get(
+        "apps/web/src/providers.generated.ts"
+      )?.content
+    ).toContain("[zetaEmail(), alphaEmail()]");
+    expect(
+      renderOf(payload, ["alpha"]).files.get(
+        "apps/web/src/providers.generated.ts"
+      )?.content
+    ).toContain("[alphaEmail()]");
+  });
+
+  it("writes an empty table when no module adds a row", () => {
+    const result = renderOf(payloadOf([owner]), ["email"]);
+    expect(
+      result.files.get("apps/web/src/providers.generated.ts")?.content
+    ).toContain("export const emailProviders = [];");
+  });
+
+  it("skips a row whose when fails, and warns about a row with no table", () => {
+    const gated = provider("gated", {
+      entries: [
+        {
+          call: "gatedEmail",
+          import: { from: "./providers/gated", name: "gatedEmail" },
+          table: "email.providers",
+          when: { testing: true },
+        },
+        {
+          call: "lost",
+          import: { from: "./lost", name: "lost" },
+          table: "nowhere.list",
+        },
+      ],
+    });
+    const result = renderOf(payloadOf([owner, gated]), ["gated"]);
+    expect(
+      result.files.get("apps/web/src/providers.generated.ts")?.content
+    ).toContain("export const emailProviders = [];");
+    expect(result.warnings).toStrictEqual([
+      "gated: row for table nowhere.list not written — no module in the set owns that table.",
+    ]);
+  });
+
+  it("refuses a table whose file a module also ships", () => {
+    const clash = moduleOf(
+      {
+        dependsOn: ["email"],
+        files: [{ path: "files/p.ts", target: "@web/providers.generated.ts" }],
+        name: "clash",
+      },
+      { "files/p.ts": "x\n" }
+    );
+    expect(() => renderOf(payloadOf([owner, clash]), ["clash"])).toThrow(
+      RefusalError
+    );
+  });
+});
+
 describe("onlyWith reads as a when.installed gate", () => {
   const widget = moduleOf(
     {

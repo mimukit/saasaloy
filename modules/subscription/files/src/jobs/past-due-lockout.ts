@@ -122,7 +122,7 @@ export async function runPastDueLockout(
 /**
  * The job, as the `jobs` table registers it. A factory returning a job, not a bare
  * constant, for the reason `./event.ts` records: the table registers a *call*, which is what
- * the `plugin-array` patch appends and `saasaloy remove` takes back out.
+ * a `queue.jobs` row names and `saasaloy remove` takes back out.
  */
 export const pastDueLockoutJob = (): RegisteredJob => ({
   durable: false,

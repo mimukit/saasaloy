@@ -44,15 +44,14 @@ import type { FlagsBindings, FlagsRequestContext } from "../lib/flags";
 // Route module contract: export a Hono sub-app under a NAMED export matching the file, built
 // as ONE chained expression. Split it into separate `featureFlags.get(...)` statements and
 // the exported type forgets the route, which empties it out of `AppType`. The name has to be
-// an `export const`: the `chained-route` codemod writes
-// `import { featureFlags } from "./routes/feature-flags"` and refuses to wire a binding that
-// resolves to a default import.
+// an `export const`: the generated `routes.generated.ts` imports it by name, as
+// `import { featureFlags } from "./routes/feature-flags"`.
 //
-// This module's `chained-route` patch mounts it at `/admin/flags`, so `get("/")` serves
+// This module's `api.routes` row mounts it at `/admin/flags`, so `get("/")` serves
 // `GET /admin/flags` and `hc<AppType>` types it for the admin app as `api.admin.flags`.
 // Paths here are relative to that mount. It sits under `/admin/` so the admin gate test
 // and the audit coverage test see its routes. The mount is `/admin/flags` and not `/admin`
-// because a `chained-route` patch matches on its path, and `admin` already routes `/admin`.
+// because the route table keeps one row per path, and `admin` already routes `/admin`.
 //
 // Every route lists `adminGate` first, before `validateValue`, so a caller with no admin
 // session gets a 401 and never a 400 that describes the flag value. A read still calls

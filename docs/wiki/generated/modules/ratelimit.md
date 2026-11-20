@@ -13,7 +13,7 @@ Per-route rate limit middleware with named policies and a 429 carrying Retry-Aft
 | Tier | feature |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md), [`kv`](kv.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -31,11 +31,17 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/kv/src/index.ts` | `plugin-array` |
-| `packages/kv/src/index.ts` | `plugin-array` |
-| `packages/kv/src/index.ts` | `plugin-array` |
+| `kv.policies` | 3 |
 
 ## See the rest
 

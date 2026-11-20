@@ -11,8 +11,8 @@ import { declare } from "../contract";
 // `packages/tooling/src/targets.ts`.
 //
 // It is separate from `GET /health`, which the api module owns and which proves only that
-// the Worker answers. The database module mounts this file at `/health/db` with a
-// `chained-route` patch, so `get("/")` serves `GET /health/db`.
+// the Worker answers. The database module mounts this file at `/health/db` with an
+// `api.routes` row, so `get("/")` serves `GET /health/db`.
 //
 // One file serves both drivers. `withDb` is the call shape `database-d1` and
 // `database-postgres` both export, and the query goes through Drizzle's builder, which is

@@ -5,7 +5,7 @@
   "description": "A waitlist form on the landing page, with its API route and table, to collect early sign-ups.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "database", "validators"],
   "dependencies": [],
   "envVars": {
@@ -15,17 +15,6 @@
     "default": ["web"]
   },
   "patches": [
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/waitlist",
-      "call": "waitlist",
-      "import": {
-        "name": "waitlist",
-        "from": "./routes/waitlist"
-      }
-    },
     {
       "file": "apps/web/package.json",
       "kind": "package-json-dependency",
@@ -46,6 +35,17 @@
       "section": "devDependencies",
       "name": "@cloudflare/workers-types",
       "range": "5.20261001.1"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.routes",
+      "path": "/waitlist",
+      "call": "waitlist",
+      "import": {
+        "name": "waitlist",
+        "from": "./routes/waitlist"
+      }
     }
   ],
   "files": [

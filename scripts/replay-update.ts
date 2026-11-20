@@ -1,13 +1,18 @@
 // Replay a project's update through the render engine (plan 0116, Phase 5), and count the
 // files that need an agent.
 //
-//   node scripts/replay-update.ts <project> <commit> [--to <version>] [--no-format]
+//   node scripts/replay-update.ts <project> <commit> [--to <version> | --to-local] [--no-format]
 //
 // The project at <commit> is a version 1 project, made by the old engine. The script
 // copies it with `git archive` into a temporary folder, so nothing writes to the project
 // repo, its working tree or its worktree list. There it converts the manifest and the
 // lock (`engine/convert.ts`), then updates the copy to <version> with the engine's own
 // classes, merges and `apply`, and prints how many files each result kind holds.
+//
+// `--to-local` updates the copy to this checkout instead: the render of the project's set
+// from this repo's own `modules/` and base template, uncommitted edits included, labelled
+// with this CLI's version. Plan 0116 Phase 7 measures the move of the registration tables
+// this way, on a project at its head. Each file that held a table is marked in the list.
 //
 // The default <version> is 0.8.0: research 0013 replayed the PrimeShopr update from
 // d9cc35fc to 0.8.0, and plan 0116 sets its target (at most 45 files for an agent) on
@@ -43,6 +48,7 @@ import type * as LockModule from "../packages/cli/src/lib/lock.ts";
 import type * as PayloadModule from "../packages/cli/src/engine/payload.ts";
 import type * as ProjectModule from "../packages/cli/src/engine/project.ts";
 import type * as VersionModule from "../packages/cli/src/version.ts";
+import { TABLES } from "./convert-tables.ts";
 
 const REPO = resolve(import.meta.dirname, "..");
 const CLI_SRC = join(REPO, "packages/cli/src");
@@ -59,7 +65,7 @@ const AGENT_KINDS = new Set([
 
 function usage(): never {
   process.stderr.write(
-    "usage: node scripts/replay-update.ts <project> <commit> [--to <version>] [--no-format]\n"
+    "usage: node scripts/replay-update.ts <project> <commit> [--to <version> | --to-local] [--no-format]\n"
   );
   process.exit(2);
 }
@@ -68,10 +74,12 @@ function parseArgs(argv: readonly string[]): {
   project: string;
   commit: string;
   to: string;
+  local: boolean;
   format: boolean;
 } {
   const positional: string[] = [];
   let to = DEFAULT_TO;
+  let local = false;
   let format = true;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i] ?? "";
@@ -82,6 +90,8 @@ function parseArgs(argv: readonly string[]): {
       to = arg.slice("--to=".length);
     } else if (arg === "--no-format") {
       format = false;
+    } else if (arg === "--to-local") {
+      local = true;
     } else if (arg.startsWith("-")) {
       usage();
     } else {
@@ -92,7 +102,7 @@ function parseArgs(argv: readonly string[]): {
   if (project === undefined || commit === undefined || positional.length > 2) {
     usage();
   }
-  return { commit, format, project: resolve(project), to };
+  return { commit, format, local, project: resolve(project), to };
 }
 
 // Node 24 (`.nvmrc`) still has the `transform` mode, which turns the parameter properties
@@ -185,6 +195,9 @@ async function main(): Promise<number> {
     `${CLI_SRC_URL}version.ts`
   )) as typeof VersionModule;
 
+  if (args.local) {
+    args.to = await readVersion();
+  }
   const scratch = await mkdtemp(join(tmpdir(), "saasaloy-replay-"));
   const copy = join(scratch, "project");
   const cache = process.env[CACHE_DIR_ENV] ?? join(scratch, "cache");
@@ -260,6 +273,7 @@ async function main(): Promise<number> {
       },
       context
     );
+    // `--to-local`: the render of this checkout, read as a local registry.
     const next = await loadSide(
       {
         coordinates: state.coordinates,
@@ -267,7 +281,12 @@ async function main(): Promise<number> {
         requested: state.requested,
         version: args.to,
       },
-      context
+      args.local
+        ? {
+            ...context,
+            env: { ...env, SAASALOY_REGISTRY_DIR: join(REPO, "modules") },
+          }
+        : context
     );
     const bases = await loadBaseSides(state, previousVersion, context);
     const report = await apply({
@@ -282,8 +301,11 @@ async function main(): Promise<number> {
       ...(format === undefined ? {} : { format }),
     });
 
+    const tableFiles = new Set(
+      Object.keys(TABLES).map((key) => key.split("|")[0] ?? "")
+    );
     const lines: string[] = [
-      `replay: ${args.project} at ${args.commit}, update to saasaloy ${args.to}`,
+      `replay: ${args.project} at ${args.commit}, update to saasaloy ${args.to}${args.local ? " (this checkout)" : ""}`,
       "",
       `conversion: ${String(conversion.files.length)} tracked files, base found for ${String(found.length)}`,
     ];
@@ -338,9 +360,25 @@ async function main(): Promise<number> {
         result.conflicts === undefined
           ? ""
           : ` ${String(result.conflicts)} conflict${result.conflicts === 1 ? "" : "s"}`;
+      const table = tableFiles.has(result.path) ? "  (table file)" : "";
       lines.push(
-        `  ${pad(result.kind, 30)} ${pad(result.class, 7)}${conflicts}  ${result.path}`
+        `  ${pad(result.kind, 30)} ${pad(result.class, 7)}${conflicts}  ${result.path}${table}`
       );
+    }
+    const hunks = agent.reduce(
+      (sum, result) => sum + (result.conflicts ?? 0),
+      0
+    );
+    const tableAgent = agent.filter((result) => tableFiles.has(result.path));
+    lines.push(
+      "",
+      `conflict hunks: ${String(hunks)}; table files among the files that need an agent: ${String(tableAgent.length)} (${String(tableAgent.reduce((sum, result) => sum + (result.conflicts ?? 0), 0))} hunks)`
+    );
+    const tableOther = report.results.filter(
+      (result) => tableFiles.has(result.path) && !agent.includes(result)
+    );
+    for (const result of tableOther) {
+      lines.push(`  table file, ${result.kind}: ${result.path}`);
     }
     const once = report.results.filter((result) => result.kind === "once-left");
     if (once.length > 0) {

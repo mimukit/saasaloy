@@ -13,7 +13,7 @@ An sms provider that logs each message instead of sending it.
 | Tier | provider |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`sms`](sms.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -30,9 +30,17 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/sms/src/index.ts` | `plugin-array` |
+| `sms.providers` | 1 |
 
 ## See the rest
 

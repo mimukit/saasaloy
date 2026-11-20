@@ -105,12 +105,12 @@ describe("e2e — add app on a project with no admin (#227)", () => {
   });
 
   it("registers the app for env:setup and the deploy", async () => {
-    await expect(read("packages/env/src/services.ts")).resolves.toContain(
-      'name: "app"'
-    );
-    await expect(read("packages/tooling/src/targets.ts")).resolves.toContain(
-      'service: "app"'
-    );
+    await expect(
+      read("packages/env/src/services.generated.ts")
+    ).resolves.toContain('name: "app"');
+    await expect(
+      read("packages/tooling/src/targets.generated.ts")
+    ).resolves.toContain('service: "app"');
     await expect(read("packages/env/.env.example")).resolves.toMatch(
       /# @services [a-z ]*\bapp\b/
     );

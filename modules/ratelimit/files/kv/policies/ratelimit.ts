@@ -4,9 +4,9 @@
 // This file lands in `packages/kv`, not in `apps/api`, because the policy table belongs
 // to the capability: `createKv(env).consume({ policy })` resolves a name here, so nothing
 // in `packages/kv` has to reach into an app to learn what "strict" means. Each export is
-// a factory rather than a plain object, because `saasaloy add ratelimit` registers it by
-// appending a bare `strictPolicy()` call to the `policies` array in `src/index.ts` (the
-// `plugin-array` patch kind).
+// a factory rather than a plain object, because `saasaloy add ratelimit` registers it as
+// a bare `strictPolicy()` call in a `kv.policies` row, which the CLI writes into
+// `src/policies.generated.ts`.
 //
 // THE NUMBERS HERE ARE NOT THE NUMBERS THAT APPLY on `kv-cloudflare`. Cloudflare's Rate
 // Limiting binding keeps its own `limit` and `period` in `apps/api/wrangler.jsonc` under

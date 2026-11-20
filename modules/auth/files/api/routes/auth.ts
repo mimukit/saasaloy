@@ -3,25 +3,26 @@ import type { MiddlewareHandler } from "hono";
 import { adminAuth, auth, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
 import { declare } from "../contract";
+import { authRouteGuards } from "./auth-guards.generated";
 
-/** Identity, so `authGuards` keeps the call shape the `plugin-array` codemod reads. */
+/** Identity, so `authGuards` reads as a registry call like every other table. */
 function defineGuards(config: { guards: MiddlewareHandler[] }) {
   return config;
 }
 
-// The guard patch point. A feature module appends a factory call here with a
-// `plugin-array` patch (`exportName: "authGuards"`, `arrayProp: "guards"`), and the call
+// The guard table. A feature module adds a factory call as a row of the `auth.routeGuards`
+// table, which the CLI writes into `./auth-guards.generated.ts`, and the call
 // returns a Hono middleware that runs ahead of Better Auth on `/auth` only, never on
 // `/admin/auth`. A guard owns a few paths: on every other path it calls `next()` and
 // returns. It runs inside `withAuthScope`, so `authDb` from `@repo/auth/server` is this
-// request's client. Keep the line in this exact shape and never omit `guards`.
+// request's client. A guard of your own goes after the spread.
 //
 // The array is read once, when this module loads, so a guard cannot be added at runtime.
-export const authGuards = defineGuards({ guards: [] });
+export const authGuards = defineGuards({ guards: [...authRouteGuards] });
 
 // Two forwards, one per Better Auth instance: `authRoute` at `/auth` for the client group
 // and `adminAuthRoute` at `/admin/auth` for the admin group. This module's two
-// `chained-route` patches mount them. Each patch targets `base`, the pre-chain binding
+// `api.baseRoutes` rows mount them. Both rows land on `base`, the pre-chain binding
 // in `apps/api/src/index.ts`, not the exported chain: a catch-all answers every path
 // under its prefix with whatever Better Auth decides, so there is no
 // per-path request or response type for `hc` to read. Mounting it on the annotated
@@ -43,8 +44,8 @@ export const authGuards = defineGuards({ guards: [] });
 // file, both drivers — `AuthDbBindings` is whichever binding shape the installed driver
 // declares. See packages/auth/src/db-scope.ts.
 //
-// The export is named, not default: the codemod writes `import { authRoute } from
-// "./routes/auth"` and refuses to wire a link whose binding is a default import.
+// The export is named, not default: `apps/api/src/routes.generated.ts` imports it as
+// `import { authRoute } from "./routes/auth"`.
 export const authRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
   ["GET", "POST"],
   "/*",

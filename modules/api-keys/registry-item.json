@@ -5,7 +5,7 @@
   "description": "API keys on the Better Auth api-key plugin, stored as a hash; pick api-keys-organization or api-keys-user as the owner.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["auth"],
   "requiresOneOf": ["api-keys-organization", "api-keys-user"],
   "dependencies": [],
@@ -15,10 +15,16 @@
   ],
   "patches": [
     {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@better-auth/api-key",
+      "range": "1.7.7"
+    }
+  ],
+  "entries": [
+    {
+      "table": "config.sections",
       "call": "apiKeysConfig",
       "import": {
         "name": "apiKeysConfig",
@@ -26,17 +32,7 @@
       }
     },
     {
-      "file": "packages/auth/package.json",
-      "kind": "package-json-dependency",
-      "section": "dependencies",
-      "name": "@better-auth/api-key",
-      "range": "1.7.7"
-    },
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "auth",
-      "arrayProp": "plugins",
+      "table": "auth.plugins",
       "call": "apiKeyPlugin",
       "import": {
         "name": "apiKeyPlugin",
@@ -44,10 +40,7 @@
       }
     },
     {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuth",
-      "arrayProp": "plugins",
+      "table": "adminAuth.plugins",
       "call": "apiKeyPlugin",
       "import": {
         "name": "apiKeyPlugin",
@@ -55,10 +48,7 @@
       }
     },
     {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "auth",
-      "arrayProp": "plugins",
+      "table": "auth.plugins",
       "call": "apiKeyScopeGuard",
       "import": {
         "name": "apiKeyScopeGuard",
@@ -66,10 +56,7 @@
       }
     },
     {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuth",
-      "arrayProp": "plugins",
+      "table": "adminAuth.plugins",
       "call": "apiKeyScopeGuard",
       "import": {
         "name": "apiKeyScopeGuard",
@@ -77,10 +64,7 @@
       }
     },
     {
-      "file": "packages/auth/src/client.ts",
-      "kind": "plugin-array",
-      "exportName": "authClientPlugins",
-      "arrayProp": "plugins",
+      "table": "client.plugins",
       "call": "apiKeyClientPlugin",
       "import": {
         "name": "apiKeyClientPlugin",
@@ -88,10 +72,7 @@
       }
     },
     {
-      "file": "packages/auth/src/client.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuthClientPlugins",
-      "arrayProp": "plugins",
+      "table": "adminClient.plugins",
       "call": "apiKeyClientPlugin",
       "import": {
         "name": "apiKeyClientPlugin",

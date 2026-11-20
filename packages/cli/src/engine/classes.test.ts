@@ -63,7 +63,9 @@ describe(classOf, () => {
     ).toBe("merged");
   });
 
-  it("merges the owned table files until Phase 7 (re-grill Q1)", () => {
+  // Plan 0116, Phase 7: the tables moved to generated files, so the four owned files that
+  // held one are `once` like any other owned file.
+  it("writes the owned files that held a table once", () => {
     const owned = {
       ownedFiles: [
         "packages/env/src/services.ts",
@@ -81,20 +83,13 @@ describe(classOf, () => {
       "packages/ui/src/blocks/navbar.tsx",
     ]) {
       expect(classOf({ declaration: owned, module: "base", path })).toBe(
-        "merged"
+        "once"
       );
     }
-    expect(
-      classOf({
-        declaration: owned,
-        module: "base",
-        path: "packages/ui/src/blocks/hero.tsx",
-      })
-    ).toBe("once");
   });
 
   // Re-grill Q2 to Q4: the declaration lists neither, so both are `merged` by the rule for
-  // any other base file, and the interim rule names neither.
+  // any other base file.
   it("reads saasaloy.json and the key list as merged once the declaration leaves them out", () => {
     const shipped = {
       ownedFiles: ["packages/ui/src/blocks/**"],

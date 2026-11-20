@@ -12,7 +12,7 @@ import { z } from "@repo/env/zod";
 // when something reads it, rather than shipping the value to a browser.
 
 export const appEnv = createEnv({
-  /** Keep this an array literal — `saasaloy add` patches into it. */
+  /** No module adds a preset here, so a preset of your own goes in this array by hand. */
   extends: [],
   client: {
     PUBLIC_API_URL: z

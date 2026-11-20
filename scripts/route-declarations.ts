@@ -4,9 +4,10 @@
 //
 // A route is one method link on the exported route chain of a route file, such as
 // `.get("/", declare({...}), validateList, (c) => ...)`. The chain is the one a module's
-// `chained-route` patch mounts, so the files and their mount paths come from the
-// descriptors rather than from a folder scan: a helper file under `routes/` (a fixture, a
-// shared gate) is not a route, and a new route file is seen the day its patch lands.
+// row in the `api.routes` or `api.baseRoutes` table mounts, so the files and their mount
+// paths come from the descriptors rather than from a folder scan: a helper file under
+// `routes/` (a fixture, a shared gate) is not a route, and a new route file is seen the
+// day its row lands.
 //
 // It reads the files as text, like `table-names.test.ts`. A route file imports `hono`,
 // `@repo/db` and the rest, which this repo's root `node_modules` does not carry, so the
@@ -346,10 +347,13 @@ export function routeLinks(source: string, exportName: string): RouteLink[] {
   }
 }
 
+/** The two route tables of `apps/api/src/routes.generated.ts` (plan 0116, Phase 7). */
+const ROUTE_TABLES = new Set(["api.routes", "api.baseRoutes"]);
+
 interface Descriptor {
   name: string;
-  patches?: {
-    kind?: string;
+  entries?: {
+    table?: string;
     path?: string;
     import?: { name: string; from: string };
   }[];
@@ -357,20 +361,10 @@ interface Descriptor {
   scaffolds?: { files?: { path: string; target: string }[] }[];
 }
 
-/**
- * Every route chain a module mounts through a `chained-route` patch, plus the base `api`
- * module's own `/health`, which `modules/api/files/src/index.ts` mounts by hand.
- */
+/** Every route chain a module mounts through a row of a route table, `/health` included. */
 export function mountedChains(root: string): MountedChain[] {
   const modules = join(root, "modules");
-  const chains: MountedChain[] = [
-    {
-      exportName: "health",
-      file: "modules/api/files/src/routes/health.ts",
-      module: "api",
-      mount: "/health",
-    },
-  ];
+  const chains: MountedChain[] = [];
   for (const name of readdirSync(modules).toSorted()) {
     let descriptor: Descriptor;
     try {
@@ -384,22 +378,25 @@ export function mountedChains(root: string): MountedChain[] {
       ...(descriptor.files ?? []),
       ...(descriptor.scaffolds ?? []).flatMap((s) => s.files ?? []),
     ];
-    for (const patch of descriptor.patches ?? []) {
-      if (patch.kind !== "chained-route" || !patch.import || !patch.path) {
+    for (const row of descriptor.entries ?? []) {
+      if (!ROUTE_TABLES.has(row.table ?? "") || !row.import || !row.path) {
         continue;
       }
-      const target = `@api/${patch.import.from.replace(/^\.\//, "")}.ts`;
-      const file = files.find((f) => f.target === target);
+      const target = `@api/${row.import.from.replace(/^\.\//, "")}.ts`;
+      const scaffolded = `src/${row.import.from.replace(/^\.\//, "")}.ts`;
+      const file = files.find(
+        (f) => f.target === target || f.target === scaffolded
+      );
       if (!file) {
         throw new Error(
-          `${name}: its chained-route patch imports ${patch.import.from}, and no file targets ${target}`
+          `${name}: its ${String(row.table)} row imports ${row.import.from}, and no file targets ${target}`
         );
       }
       chains.push({
-        exportName: patch.import.name,
+        exportName: row.import.name,
         file: `modules/${name}/${file.path}`,
         module: name,
-        mount: patch.path,
+        mount: row.path,
       });
     }
   }

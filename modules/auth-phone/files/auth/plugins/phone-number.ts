@@ -5,8 +5,8 @@ import type { SmsEnv } from "@repo/sms";
 import { isAllowedPhone, placeholderEmail, sendLoginCode } from "../phone";
 
 // Better Auth's `phoneNumber()` plugin with this project's numbers, on the client instance
-// only (`auth`, at `/auth`). `auth-phone` adds the call to `auth`'s `plugins` with a
-// `plugin-array` patch, and that patch kind appends a call with no arguments, so the
+// only (`auth`, at `/auth`). `auth-phone` adds the call to `auth`'s `plugins` with an
+// `auth.plugins` row, and a table row names a call with no arguments, so the
 // options live here and not in `auth.ts`. Admins keep email sign-in on `adminAuth`.
 //
 // The code proves the phone. Sign-up is `send-otp`, then `verify`, which creates the

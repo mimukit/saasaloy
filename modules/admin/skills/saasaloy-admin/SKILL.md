@@ -133,13 +133,13 @@ export const NAV_AREAS = [
 ] as const;
 ```
 
-- **A new nav row** is one entry in an existing group's `items`. It needs `to`, `label` and `icon`, and takes an optional `count` and an optional `shortcut`, `G` then a letter written as `"G R"`. Pick the letter by hand and keep it unique; the tool repo's `commands.test.ts` fails on two rows with one shortcut, and the `command` module reports a conflict. A feature module adds its row with a `nav-entry` patch.
+- **A new nav row** is one entry in an existing group's `items`. It needs `to`, `label` and `icon`, and takes an optional `count` and an optional `shortcut`, `G` then a letter written as `"G R"`. Pick the letter by hand and keep it unique; the tool repo's `commands.test.ts` fails on two rows with one shortcut, and the `command` module reports a conflict. A feature module adds its row with an `admin.nav` table row (`area`, `group`, `entry` and the icon `import`), which the CLI writes into `src/components/nav.generated.ts`. A row of your own goes in `nav.ts`, never in the generated file.
 - **A new group** is one entry in an area's `groups`, with a `label` and its own `items`. The sidebar renders it under the ones above it, with its label.
 - **A new area** is one entry in `NAV_AREAS`. The sidebar lists every area's groups in order, and `areaFor(pathname)` picks the area whose label starts the header's page path.
 
 Keep the `as const`. It is what holds every `to` at a literal type the router can check, so a nav entry naming a route that does not exist fails `pnpm typecheck` instead of 404-ing in the browser. The shell in `@repo/ui` reads the entries through structural types with `to: string`; the one cast from that string back to a route lives in `AppShell`'s link component.
 
-Every row becomes a "Go to <label>" command in `src/components/commands.ts`, next to sign out and the three theme choices. `AppShell` declares them in the `global` scope, and a page declares its own with `useCommands(commands, { scope: "route", label })`, as `src/routes/users.tsx` does for its filters. They do nothing until the `command` module is installed; see "Declare a screen's commands" in the `saasaloy-shell` skill. `src/components/shell-extensions.ts` is the list a module such as `command` appends itself to; keep its `extensions` property even while it is empty.
+Every row becomes a "Go to <label>" command in `src/components/commands.ts`, next to sign out and the three theme choices. `AppShell` declares them in the `global` scope, and a page declares its own with `useCommands(commands, { scope: "route", label })`, as `src/routes/users.tsx` does for its filters. They do nothing until the `command` module is installed; see "Declare a screen's commands" in the `saasaloy-shell` skill. `src/components/shell-extensions.ts` is the list a module such as `command` adds itself to, through an `admin.shellExtensions` row in `shell-extensions.generated.ts`; an extension of your own goes after the spread.
 
 `nav.ts` holds the data and the rules that read it, and nothing else, so its rules stay unit-testable without React. Read an optional count through the `navCount(entry)` helper rather than `entry.count`.
 
@@ -147,17 +147,16 @@ Every row becomes a "Go to <label>" command in `src/components/commands.ts`, nex
 
 A static `count` in `NAV_AREAS` is a number fixed at build time. A number that changes, such as how many payments wait for a review, is a live count. `NAV_COUNTS` in `src/components/nav-counts.ts` lists them, one `{ to, path }` per row. `to` is the row's `to` in `NAV_AREAS`. `path` is an api path that answers `{ count: number }` behind the admin session.
 
-A module adds its entry with a `const-array` patch keyed on `to`. The payment module's patch is the example:
+A module adds its entry with a row of the `admin.navCounts` table. The CLI writes it into `src/components/nav-counts.generated.ts`, and `NAV_COUNTS` spreads that file. The payment module's row is the example:
 
 ```json
 {
-  "file": "apps/admin/src/components/nav-counts.ts",
-  "kind": "const-array",
-  "constName": "NAV_COUNTS",
-  "key": "to",
+  "table": "admin.navCounts",
   "entry": { "to": "/payments", "path": "/admin/payment/review-count" }
 }
 ```
+
+A count of your own goes after the spread in `nav-counts.ts`, never in the generated file. The CLI overwrites that file, and `saasaloy update` refuses when it was edited.
 
 `AppShell` runs one TanStack query per entry under the key `["nav-count", to]`. Each query fetches `PUBLIC_API_URL` plus `path` with the session cookie and `x-auth-audience: admin`, the same `API_HEADERS` and `API_CREDENTIALS` that `src/lib/api.ts` gives the typed client. The queries refetch on window focus and every 60 s, and TanStack Query does not run the interval in a hidden tab. `AppShell` passes the numbers to `ShellLayout` as `counts`, keyed by `to`.
 
@@ -276,7 +275,7 @@ export const Route = createFileRoute("/reports")({
 
 The screen needs no guard of its own. It is a child of `__root.tsx`, so it inherits `beforeLoad`, and a non-admin never reaches its loader. That inheritance is exactly what makes the server half easy to forget: the screen behaves correctly while the endpoint behind it answers anyone.
 
-`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` lists `adminGate` and its query validator, calls `requireAdmin` for the session, then `adminAuth.api.listUsers` (the admin plugin's endpoints answer only on the admin instance, and only to server code: the forward answers 404 to `/admin/auth/admin/*`), and answers `{ users, total }`. A `chained-route` patch registers it on api's exported chain, so `hc<AppType>` types it here for free. `src/routes/users.tsx` renders it, so both halves of the gate are live in the scaffold and the next route has a pattern to copy on each side.
+`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` lists `adminGate` and its query validator, calls `requireAdmin` for the session, then `adminAuth.api.listUsers` (the admin plugin's endpoints answer only on the admin instance, and only to server code: the forward answers 404 to `/admin/auth/admin/*`), and answers `{ users, total }`. An `api.routes` row registers it on api's exported chain, so `hc<AppType>` types it here for free. `src/routes/users.tsx` renders it, so both halves of the gate are live in the scaffold and the next route has a pattern to copy on each side.
 
 Prove the server half yourself rather than trusting the screen. Sign in as a client through `POST /auth/sign-in/email`, take the cookie jar, and call the endpoint directly:
 
@@ -314,7 +313,7 @@ There is deliberately **no sign-up route** here, and `adminAuth` sets `disableSi
 
 ## Add an admin write route, in four steps
 
-1. **Name the action.** Add an entry to your module's action file, `apps/api/src/audit/<module>.ts`: the route as `METHOD /admin/...` exactly as Hono lists it, the target type, the area, and a `label` such as "Confirmed a payment". Give one entry of a new area an `areaLabel`. A module ships that file with a `plugin-array` patch into `AUDIT_ACTIONS` in `apps/api/src/lib/audit-actions.ts`, the way `payment` and `feature-flags` do, so `saasaloy remove` takes the actions with the module.
+1. **Name the action.** Add an entry to your module's action file, `apps/api/src/audit/<module>.ts`: the route as `METHOD /admin/...` exactly as Hono lists it, the target type, the area, and a `label` such as "Confirmed a payment". Give one entry of a new area an `areaLabel`. A module ships that file with an `audit.actions` row, which the CLI writes into `apps/api/src/lib/audit-actions.generated.ts` for `AUDIT_ACTIONS` to spread, the way `payment` and `feature-flags` do, so `saasaloy remove` takes the actions with the module.
 2. **Gate the route.** List `adminGate` first, then the validator, then a handler that opens with `adminWrite(c, async ({ db, actor, audit, afterCommit }) => ...)`. Use `db` for every query of the change. When Better Auth makes the change, use `adminAuthWrite(c, async ({ actor, audit }) => ...)` and call `adminAuth.api.*` with `headers: c.req.raw.headers`, so the plugin's permissions and `rank-guard` run as the caller.
 3. **Write the row.** Call `audit({ action, target: { id, label }, before, after })` once per change, with the fields the change touched. A create passes `after` only, a delete `before` only. Never pass a password: `adminWrite` throws on a key that matches `/password/i`, and `adminAuthWrite` drops it and logs at `error`. Put an email or any other side effect in `afterCommit`.
 4. **Prove it.** `audit-coverage.test.ts` fails until step 1 names the route, and `admin-gate.test.ts` fails if the validator runs before the gate. Neither proves the row is written, so add a route test beside the route that signs in a seeded admin, calls it, and reads `audit_events` for the row. `admin-members.test.ts` is the model.

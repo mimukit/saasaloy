@@ -9,9 +9,8 @@ import { z } from "@repo/env/zod";
 // `pnpm test:scripts` fails when a key is in one and not the other.
 
 /**
- * Keep this line in exactly this shape: `export const authPreset = definePreset({ extends: [...] })`
- * with a real array literal. A provider module appends its own preset with a
- * `plugin-array` patch, and it fails silently otherwise.
+ * No module adds a preset to `extends`, so it is a plain array with no generated table
+ * behind it. A preset of your own goes in it by hand.
  */
 export const authPreset = definePreset({
   module: "@repo/auth",

@@ -3,13 +3,14 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { Patch } from "./patch/index.js";
 import { validateRegistryItem } from "./schema.js";
+import type { RegistryEntry } from "./schema.js";
 
-// `queue-cloudflare` is the first module to patch three files at once, two of them
-// through a nested `bindingType` that has to create its parent object on the way in
-// (`queues.producers`, `triggers.crons`). The property the whole install/remove contract
-// rests on is that the way back out is exact: `saasaloy remove queue-cloudflare` must
-// leave `wrangler.jsonc`, `worker.ts` and `packages/queue/src/index.ts` byte-identical to
-// what the `api` and `queue` modules shipped.
+// `queue-cloudflare` patches `wrangler.jsonc` through a nested `bindingType` that has to
+// create its parent object on the way in (`queues.producers`, `triggers.crons`), and adds
+// a row to two generated tables: the queue's providers and the Worker's handlers. The
+// property the whole install/remove contract rests on is that the way back out is exact:
+// `saasaloy remove queue-cloudflare` is a render without it, so `wrangler.jsonc` comes
+// back byte-identical to what the `api` module shipped.
 //
 // These tests drive the real descriptor against the real shipped files, not a fixture, so
 // an edit to either side that breaks the round trip fails here rather than in a user's
@@ -24,11 +25,9 @@ function repoFile(path: string): string {
 
 const DESCRIPTOR = repoFile("modules/queue-cloudflare/registry-item.json");
 
-/** The files each module ships before `queue-cloudflare` is added to a project. */
+/** The files `queue-cloudflare` patches, as the `api` module ships them. */
 const PRISTINE: Record<string, string> = {
   "apps/api/wrangler.jsonc": repoFile("modules/api/files/wrangler.jsonc"),
-  "apps/api/src/worker.ts": repoFile("modules/api/files/src/worker.ts"),
-  "packages/queue/src/index.ts": repoFile("modules/queue/files/src/index.ts"),
 };
 
 interface Descriptor {
@@ -39,6 +38,7 @@ interface Descriptor {
   files: { path: string; target: string }[];
   scaffolds: unknown[];
   patches: (Patch & { file: string })[];
+  entries: RegistryEntry[];
 }
 
 async function readDescriptor(): Promise<Descriptor> {
@@ -106,34 +106,26 @@ describe("queue-cloudflare descriptor", () => {
   });
 
   it("registers itself with the capability and the Worker's handler table", async () => {
-    const { patches } = await readDescriptor();
+    const { entries } = await readDescriptor();
 
-    expect(patches).toStrictEqual(
-      expect.arrayContaining([
-        {
-          file: "packages/queue/src/index.ts",
-          kind: "plugin-array",
-          exportName: "queue",
-          arrayProp: "providers",
-          call: "cloudflare",
-          import: { name: "cloudflare", from: "./providers/cloudflare" },
+    expect(entries).toStrictEqual([
+      {
+        table: "queue.providers",
+        call: "cloudflare",
+        import: { name: "cloudflare", from: "./providers/cloudflare" },
+      },
+      {
+        table: "worker.handlers",
+        call: "cloudflareQueueHandlers",
+        import: {
+          name: "cloudflareQueueHandlers",
+          from: "@repo/queue/providers/cloudflare",
         },
-        {
-          file: "apps/api/src/worker.ts",
-          kind: "plugin-array",
-          exportName: "worker",
-          arrayProp: "handlers",
-          call: "cloudflareQueueHandlers",
-          import: {
-            name: "cloudflareQueueHandlers",
-            from: "@repo/queue/providers/cloudflare",
-          },
-        },
-      ])
-    );
+      },
+    ]);
   });
 
-  it("touches only files the api and queue modules ship", async () => {
+  it("patches only the file the api module ships", async () => {
     const { patches } = await readDescriptor();
 
     expect(

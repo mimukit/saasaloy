@@ -13,7 +13,7 @@ Opt-in JSX email templates on React Email in a packages/email-react workspace, w
 | Tier | feature |
 | Stage | mvp |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`email`](email.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -32,8 +32,17 @@ This module declares no environment variables.
 
 | File | Kind |
 |---|---|
-| `packages/env/src/services.ts` | `const-array` |
 | `apps/api/package.json` | `package-json-dependency` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `env.services` | 1 |
 
 ## See the rest
 

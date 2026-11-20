@@ -2,6 +2,8 @@ import { readdir } from "node:fs/promises";
 import { join, posix } from "node:path";
 import { readIfPresent } from "./fs-utils.js";
 import { BASE_DECLARATION, renderedName } from "./scaffold.js";
+import { TABLE_SHAPES } from "./schema.js";
+import type { RegistryTable } from "./schema.js";
 
 export { BASE_DECLARATION } from "./scaffold.js";
 
@@ -31,6 +33,12 @@ export interface BaseDeclaration {
    * one.
    */
   ownedFiles: string[];
+  /**
+   * The registration tables the template's own files hold (plan 0116, Phase 7), in the
+   * descriptor's `tables` form. Each one renders as a generated file beside the file
+   * that spreads it.
+   */
+  tables?: RegistryTable[];
 }
 
 /**
@@ -87,6 +95,7 @@ export async function readBaseDeclaration(
     seedFiles?: unknown;
     retiredSeedFiles?: unknown;
     ownedFiles?: unknown;
+    tables?: unknown;
   };
   const seedFiles = parsed.seedFiles;
   if (
@@ -117,14 +126,43 @@ export async function readBaseDeclaration(
       `${BASE_DECLARATION} must declare "ownedFiles" as a list of project-relative globs.`
     );
   }
+  const tables = parsed.tables ?? [];
+  if (!Array.isArray(tables) || !tables.every(isTable)) {
+    throw new Error(
+      `${BASE_DECLARATION} must declare "tables" as a list of { id, file, shape } objects.`
+    );
+  }
   return {
     seedFiles: [...(seedFiles as string[]), ...(retiredSeedFiles as string[])],
     retiredSeedFiles: retiredSeedFiles as string[],
     ownedFiles: ownedFiles as string[],
+    ...(tables.length > 0 ? { tables } : {}),
   };
 }
 
-/** Every file the template ships, sorted by target, the declaration excluded. */
+function isTable(value: unknown): value is RegistryTable {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const table = value as Partial<Record<keyof RegistryTable, unknown>>;
+  return (
+    typeof table.id === "string" &&
+    typeof table.file === "string" &&
+    (TABLE_SHAPES as readonly unknown[]).includes(table.shape)
+  );
+}
+
+/**
+ * Whether a template file is the render of a generated table (plan 0116, Phase 7). The
+ * template holds one for each of its tables, the render with no module rows, so the
+ * template's own tests can import the file that spreads it. It never ships: the render
+ * writes each generated file itself.
+ */
+export function isGeneratedFile(name: string): boolean {
+  return name.endsWith(".generated.ts");
+}
+
+/** Every file the template ships, sorted by target, the declaration and the generated tables excluded. */
 export async function listTemplateFiles(
   templateDir: string
 ): Promise<TemplateFile[]> {
@@ -144,7 +182,7 @@ export async function listTemplateFiles(
       const abs = join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(abs, from, target, false);
-      } else if (entry.isFile()) {
+      } else if (entry.isFile() && !isGeneratedFile(entry.name)) {
         out.push({ from, target, abs });
       }
     }

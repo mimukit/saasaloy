@@ -52,7 +52,7 @@ import { declare } from "../contract";
 //
 // Route module contract, from `modules/admin/files/api/routes/admin-users.ts`: a NAMED
 // export built as ONE chained expression, or the exported type forgets the route and it
-// empties out of `AppType`. This module's `chained-route` patch mounts it at `/projects`.
+// empties out of `AppType`. This module's `api.routes` row mounts it at `/projects`.
 
 // The body of `GET /projects`, the one route here an agent may call. It sits beside the
 // route because this worked example has no `@repo/validators` file; a real entity puts its

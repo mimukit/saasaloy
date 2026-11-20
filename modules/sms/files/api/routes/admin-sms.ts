@@ -10,7 +10,7 @@ import { Hono } from "hono";
 import { declare } from "../contract";
 
 // The admin api behind the SMS screen: the message log, newest first, 50 rows a page.
-// Read only. This module's `chained-route` patch mounts it at `/admin/sms`, so
+// Read only. This module's `api.routes` row mounts it at `/admin/sms`, so
 // `get("/")` serves `GET /admin/sms`, and `hc<AppType>` types it.
 //
 // The log stores no body, but a provider's error text can echo the message it refused,

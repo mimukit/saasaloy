@@ -22,10 +22,10 @@ import { paymentErrorStatus } from "./payment";
 import type { PaymentBindings } from "./payment";
 
 // The staff half of the payment capability, mounted at `/admin/payment` by this module's
-// second `chained-route` patch, so `get("/payments")` serves `GET /admin/payment/payments`
+// second `api.routes` row, so `get("/payments")` serves `GET /admin/payment/payments`
 // and `hc<AppType>` types it for the admin app as `api.admin.payment.payments`. The mount
-// is `/admin/payment` and not `/admin` because a `chained-route` patch matches on its path,
-// and `admin` already routes `/admin`: a second `/admin` link would be skipped as present.
+// is `/admin/payment` and not `/admin` because the route table keeps one row per path,
+// and `admin` already routes `/admin`: a second `/admin` row would be dropped.
 //
 // Five routes: the queue, the review count, one payment, a review decision, and a refund.
 // Every one lists `adminGate` first, before its validator, so a caller with no admin

@@ -1,5 +1,6 @@
 import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
+import { smsEnvPresets } from "./env-preset.generated";
 
 // The environment keys the sms capability reads. `apps/api/src/env.ts` folds this preset in, so a missing
 // key is named at the gate rather than thrown from inside a factory on the first request
@@ -9,13 +10,12 @@ import { z } from "@repo/env/zod";
 // `pnpm test:scripts` fails when a key is in one and not the other.
 
 /**
- * Keep this line in exactly this shape: `export const smsPreset = definePreset({ extends: [...] })`
- * with a real array literal. A provider module appends its own preset with a
- * `plugin-array` patch, and it fails silently otherwise.
+ * The capability's preset, then every provider preset. A provider module adds its own to
+ * `./env-preset.generated.ts`, which the CLI writes on every run.
  */
 export const smsPreset = definePreset({
   module: "@repo/sms",
-  extends: [],
+  extends: [...smsEnvPresets],
   server: {
     SMS_PROVIDER: z
       .string()

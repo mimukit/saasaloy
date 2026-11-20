@@ -6,116 +6,13 @@
   "stage": "mvp",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.8"
+    "saasaloy": ">=0.10.0"
   },
   "dependsOn": ["api", "database", "auth", "app", "validators", "shell"],
   "dependencies": [],
   "removeWarnings": [
     "The deployed notifications and notification_opt_outs tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
     "Every notify() call you added to your own routes loses its import when this module goes. Search apps/api for \"lib/notify\" before you remove it."
-  ],
-  "patches": [
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/notifications",
-      "call": "notifications",
-      "import": {
-        "name": "notifications",
-        "from": "./routes/notifications"
-      }
-    },
-    {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "notificationConfig",
-      "import": {
-        "name": "notificationConfig",
-        "from": "./sections/notification"
-      }
-    },
-    {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "jobs",
-      "call": "pruneNotificationsJob",
-      "import": {
-        "name": "pruneNotificationsJob",
-        "from": "./jobs/notifications"
-      },
-      "when": {
-        "installed": ["queue"]
-      }
-    },
-    {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "schedules",
-      "call": "pruneNotificationsSchedule",
-      "import": {
-        "name": "pruneNotificationsSchedule",
-        "from": "./jobs/notifications"
-      },
-      "when": {
-        "installed": ["queue"]
-      }
-    },
-    {
-      "file": "apps/api/src/worker.ts",
-      "kind": "plugin-array",
-      "exportName": "worker",
-      "arrayProp": "handlers",
-      "call": "notificationPruneHandlers",
-      "import": {
-        "name": "notificationPruneHandlers",
-        "from": "./lib/notification-prune"
-      },
-      "when": {
-        "installed": ["queue"]
-      }
-    },
-    {
-      "file": "apps/app/src/components/shell-extensions.ts",
-      "kind": "plugin-array",
-      "exportName": "shellExtensions",
-      "arrayProp": "extensions",
-      "call": "notificationExtension",
-      "import": {
-        "name": "notificationExtension",
-        "from": "@app/components/notification-extension"
-      }
-    },
-    {
-      "file": "apps/app/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Workspace",
-      "entry": {
-        "to": "/notifications",
-        "label": "Notifications",
-        "shortcut": "G N"
-      },
-      "icon": {
-        "name": "BellIcon",
-        "from": "lucide-react"
-      }
-    },
-    {
-      "file": "apps/app/src/components/nav-counts.ts",
-      "kind": "const-array",
-      "constName": "NAV_COUNTS",
-      "key": "to",
-      "entry": {
-        "to": "/notifications",
-        "path": "/notifications/unread-count"
-      }
-    }
   ],
   "files": [
     {
@@ -223,6 +120,87 @@
     {
       "path": "files/app/routes/notifications.tsx",
       "target": "@app/routes/notifications.tsx"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.routes",
+      "path": "/notifications",
+      "call": "notifications",
+      "import": {
+        "name": "notifications",
+        "from": "./routes/notifications"
+      }
+    },
+    {
+      "table": "config.sections",
+      "call": "notificationConfig",
+      "import": {
+        "name": "notificationConfig",
+        "from": "./sections/notification"
+      }
+    },
+    {
+      "table": "queue.jobs",
+      "call": "pruneNotificationsJob",
+      "import": {
+        "name": "pruneNotificationsJob",
+        "from": "./jobs/notifications"
+      },
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "table": "queue.schedules",
+      "call": "pruneNotificationsSchedule",
+      "import": {
+        "name": "pruneNotificationsSchedule",
+        "from": "./jobs/notifications"
+      },
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "table": "worker.handlers",
+      "call": "notificationPruneHandlers",
+      "import": {
+        "name": "notificationPruneHandlers",
+        "from": "./lib/notification-prune"
+      },
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "table": "app.shellExtensions",
+      "call": "notificationExtension",
+      "import": {
+        "name": "notificationExtension",
+        "from": "@app/components/notification-extension"
+      }
+    },
+    {
+      "table": "app.nav",
+      "area": "/",
+      "group": "Workspace",
+      "entry": {
+        "to": "/notifications",
+        "label": "Notifications",
+        "shortcut": "G N"
+      },
+      "import": {
+        "name": "BellIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "app.navCounts",
+      "entry": {
+        "to": "/notifications",
+        "path": "/notifications/unread-count"
+      }
     }
   ],
   "agent": {

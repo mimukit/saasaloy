@@ -17,8 +17,8 @@ import { z } from "@repo/env/zod";
 
 export const webEnv = createEnv({
   /**
-   * Keep this an array literal. `saasaloy add` appends a capability's preset here with a
-   * `plugin-array` patch, and it fails silently otherwise.
+   * No module adds a preset here, so this is a plain array with no generated table behind
+   * it. A preset of your own goes in it by hand.
    */
   extends: [],
   client: {

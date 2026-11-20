@@ -2,6 +2,7 @@ import { config } from "@repo/config";
 import { users as usersTable } from "../../schema/auth";
 import { defineSlice } from "../slice";
 import type { SliceOptions } from "../slice";
+import { seedUsers } from "./users.generated";
 
 // Seed users, one for each way the admin app shows a user: the superadmin, an admin, a
 // plain user and a banned one. Each signs in with the dev password in `./accounts.ts`.
@@ -25,10 +26,10 @@ function moreRows(input: { rows: readonly UserRows[] }): UserRows {
   return all;
 }
 
-// Rows another module adds to this slice, such as `auth-phone`'s phone accounts. A
-// `plugin-array` patch appends the module's factory call to the array, and `remove` takes
-// it back out. Keep the shape `export const <name> = <fn>({ rows: [...] })`.
-export const extraUsers = moreRows({ rows: [] });
+// Rows another module adds to this slice, such as `auth-phone`'s phone accounts. The
+// module adds its factory call as a row of the `seed.users` table, which the CLI writes
+// into `./users.generated.ts`, and `remove` takes it back out.
+export const extraUsers = moreRows({ rows: [...seedUsers] });
 
 export const users = defineSlice(usersTable, {
   rows: {

@@ -4,9 +4,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // Drizzle adapter binds once at module load. Both database drivers share this file;
 // `./db-provider.ts` is the per-driver half that enters the scope.
 //
-// Why a scope at all. `./auth.ts` builds `auth` at module scope, because the
-// plugin-array patch point needs a module-scope `export const` (the comment there
-// records it). `drizzleAdapter` takes a bound client rather than a factory, so the
+// Why a scope at all. `./auth.ts` builds `auth` at module scope, as one `export const`
+// that spreads the generated `auth.plugins` table (the comment there records why).
+// `drizzleAdapter` takes a bound client rather than a factory, so the
 // naive reading is that the client has to be module-scope too. Under
 // `database-postgres` that is a bug with a two-request fuse: a Workers isolate
 // outlives the request that created it, an open socket does not, and reusing one

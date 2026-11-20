@@ -287,7 +287,7 @@ those three names. Read the driver skill your project has.
 
 ## The database health check: `GET /health/db`
 
-`saasaloy add database` mounts `apps/api/src/routes/health-db.ts` at `/health/db` with a `chained-route` patch. It runs one `select 1` through the request's database client, through `withDb`, so the same file serves both drivers.
+`saasaloy add database` mounts `apps/api/src/routes/health-db.ts` at `/health/db` with an `api.routes` row. It runs one `select 1` through the request's database client, through `withDb`, so the same file serves both drivers.
 
 - A reachable database answers `200 {"status":"ok"}`.
 - A failure answers `503 { "error": { "code": "database_unavailable", "message": "The api could not reach its database." } }`. The message is fixed. The driver's error can carry a host, a user name or a query, so it goes only to the request's logger (`c.get("log")`).

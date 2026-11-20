@@ -18,7 +18,7 @@ import {
 
 // The `notification` module's part of the app shell: the bell in the header and the menu
 // it opens. The list in ./shell-extensions.ts gets a bare
-// `notificationExtension()` call from this module's `plugin-array` patch.
+// `notificationExtension()` call from this module's `app.shellExtensions` row.
 //
 // The bell's number is the sidebar badge's number: both read `["nav-count",
 // "/notifications"]`, which app-shell.tsx fetches through the NAV_COUNTS entry. The menu
@@ -84,9 +84,9 @@ function NotificationBell() {
 }
 
 /**
- * The `notification` module's shell extension. The app appends a bare
- * `notificationExtension()` call to its `shellExtensions` list; this module's descriptor
- * writes it with a `plugin-array` patch.
+ * The `notification` module's shell extension. The app spreads a bare
+ * `notificationExtension()` call into its `shellExtensions` list; this module's descriptor
+ * adds it as an `app.shellExtensions` row.
  */
 export function notificationExtension(): ShellExtension {
   return {

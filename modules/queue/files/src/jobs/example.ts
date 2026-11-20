@@ -5,9 +5,8 @@ import type { Job } from "../provider";
 // this one and its line from the `jobs` table in `src/index.ts`.
 //
 // A job is a factory returning `defineJob(...)`, not a bare constant, because the `jobs`
-// table registers a *call* — `exampleJob()` — and that is the shape the `plugin-array`
-// patch appends and removes. Keep it that way and `saasaloy remove` can take the line
-// back out.
+// table registers a *call* — `exampleJob()` — and that is the shape a `queue.jobs` row
+// names. Keep it that way and `saasaloy remove` can take the row back out.
 //
 // Enqueue it from a route:
 //

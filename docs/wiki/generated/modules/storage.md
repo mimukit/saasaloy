@@ -13,7 +13,7 @@ File storage in a packages/storage workspace: the provider interface, signed lin
 | Tier | capability |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -51,11 +51,25 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/config/src/sections.ts` | `plugin-array` |
-| `apps/api/src/index.ts` | `chained-route` |
 | `apps/api/package.json` | `package-json-dependency` |
 | `packages/ui/package.json` | `package-json-dependency` |
-| `apps/api/src/env.ts` | `plugin-array` |
+
+## Tables it owns
+
+The CLI writes each table in full on every run, from the rows of the installed modules.
+
+| Table | Generated file | Shape |
+|---|---|---|
+| `storage.providers` | `@storage/providers.generated.ts` | `calls` |
+| `storage.envPresets` | `@storage/env-preset.generated.ts` | `calls` |
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `config.sections` | 1 |
+| `api.routes` | 1 |
+| `api.envPresets` | 1 |
 
 ## See the rest
 
@@ -257,7 +271,7 @@ Selecting the provider happens earlier, in `createStorage(env)`, and a bad `STOR
 
 #### Write a provider
 
-Follow `.agents/skills/create-provider/`. A provider is one file in `src/providers/` plus a `plugin-array` patch that appends it to the array in `src/index.ts`. Implement `put`, `get`, `head`, `delete` and `list`; add presigning and multipart only if the vendor has them. Read what you need from the `env` you are handed, and never from `process.env`.
+Follow `.agents/skills/create-provider/`. A provider is one file in `src/providers/` plus a `storage.providers` row, which the CLI writes into `src/providers.generated.ts` for the array in `src/index.ts` to spread. Implement `put`, `get`, `head`, `delete` and `list`; add presigning and multipart only if the vendor has them. Read what you need from the `env` you are handed, and never from `process.env`.
 
 If a new provider would need more than one file and a registration patch, the contract is wrong. Fix the contract.
 
@@ -269,9 +283,9 @@ If a new provider would need more than one file and a registration patch, the co
 
 Remove the dependents first. `storage-cloudflare` and `storage-memory` depend on `storage`, and so does `file-uploads`. `remove storage` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
 
-`saasaloy remove storage-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array, plus any binding patches it carries. The R2 bucket and every object in it survive. Copy or delete them by hand.
+`saasaloy remove storage-<provider>` deletes the provider file, the render without the module drops its row from `providers.generated.ts`, and `remove` reverses any binding patches it carries. The R2 bucket and every object in it survive. Copy or delete them by hand.
 
-`saasaloy remove storage` then deletes `apps/api/src/routes/storage.ts` and the `packages/storage` workspace (`index.ts`, `define.ts`, `provider.ts`, `keys.ts`, `token.ts`, `env-preset.ts`). It reverses the `chained-route` patch that mounts `/storage` in `apps/api/src/index.ts` and the `plugin-array` patch that adds the storage preset to `apps/api/src/env.ts`. The same run takes the `@repo/storage` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `STORAGE_PROVIDER`, `STORAGE_URL_SECRET` and `STORAGE_PROXY_URL` lines by hand. `remove` deletes `packages/config/src/sections/storage.ts` and takes its entry out of `packages/config/src/sections.ts`; an override of `storage` left in `packages/config/src/project.ts` then fails `typecheck`, so delete it too.
+`saasaloy remove storage` then deletes `apps/api/src/routes/storage.ts` and the `packages/storage` workspace (`index.ts`, `define.ts`, `provider.ts`, `keys.ts`, `token.ts`, `env-preset.ts`). It drops the `api.routes` row that mounts `/storage` from `apps/api/src/routes.generated.ts` and the `api.envPresets` row that adds the storage preset to `apps/api/src/env.generated.ts`. The same run takes the `@repo/storage` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `STORAGE_PROVIDER`, `STORAGE_URL_SECRET` and `STORAGE_PROXY_URL` lines by hand. `remove` deletes `packages/config/src/sections/storage.ts` and takes its row out of `packages/config/src/sections.generated.ts`; an override of `storage` left in `packages/config/src/project.ts` then fails `typecheck`, so delete it too.
 
 Every route that imports `@repo/storage` stops compiling. Every upload or download link already issued stops working, because the `/storage` proxy route is gone.
 

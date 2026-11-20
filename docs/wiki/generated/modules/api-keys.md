@@ -13,7 +13,7 @@ API keys on the Better Auth api-key plugin, stored as a hash; pick api-keys-orga
 | Tier | feature |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`auth`](auth.md) |
 | Requires one of | [`api-keys-organization`](api-keys-organization.md), [`api-keys-user`](api-keys-user.md) |
 | Conflicts with | none |
@@ -35,14 +35,21 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/config/src/sections.ts` | `plugin-array` |
 | `packages/auth/package.json` | `package-json-dependency` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
-| `packages/auth/src/client.ts` | `plugin-array` |
-| `packages/auth/src/client.ts` | `plugin-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `config.sections` | 1 |
+| `auth.plugins` | 2 |
+| `adminAuth.plugins` | 2 |
+| `client.plugins` | 1 |
+| `adminClient.plugins` | 1 |
 
 ## See the rest
 
@@ -66,14 +73,14 @@ Skill source: `modules/api-keys/skills/saasaloy-api-keys/SKILL.md`
 The core, `api-keys`, holds what both owners share:
 
 - the `@better-auth/api-key` line in `packages/auth/package.json`;
-- `packages/auth/src/plugins/api-key-client.ts` and its patches into `authClientPlugins` and `adminAuthClientPlugins` in `client.ts`;
-- the four `plugin-array` patches into `auth.ts` that call `apiKeyPlugin()` and `apiKeyScopeGuard()` on both instances, `auth` and `adminAuth` (ADR 0050);
+- `packages/auth/src/plugins/api-key-client.ts` and its `client.plugins` and `adminClient.plugins` rows, which `client.ts` spreads into `authClientPlugins` and `adminAuthClientPlugins`;
+- the four `auth.plugins` and `adminAuth.plugins` rows that call `apiKeyPlugin()` and `apiKeyScopeGuard()` on both instances, `auth` and `adminAuth` (ADR 0050);
 - `packages/auth/src/plugins/api-key-options.ts`: the shared plugin options (`API_KEY_OPTIONS`), `GUARDED_PATHS`, `scopeOf`, the bearer parsing (`hasBearer`, `bearerKey`) and `INVALID_API_KEY`;
 - this skill.
 
 Each owner ships `packages/auth/src/plugins/api-key.ts` at the same path, so the `auth.ts` import line is the same in both modes. The owner's file adds `references` and the `schema.apikey` rename to the shared options, and it holds that owner's `apiKeyScopeGuard()`. Each owner also ships `packages/db/src/schema/api-keys.ts`, with `organization_id` or `user_id` as the owner column.
 
-- `api-keys-organization` adds `packages/auth/src/resolvers/api-key.ts` (the bearer resolver, patched into `multitenant`'s `tenantResolvers`), the `/api-keys` screen in `apps/admin`, and its `NAV_ITEMS` entry.
+- `api-keys-organization` adds `packages/auth/src/resolvers/api-key.ts` (the bearer resolver, a row of `multitenant`'s `tenantResolvers` table), the `/api-keys` screen in `apps/admin`, and its `NAV_ITEMS` entry.
 - `api-keys-user` adds `packages/auth/src/caller.ts` (`requireCaller`, `requireScope`, and `apiKeyUser()`), `packages/auth/src/api-key-rules.ts` (the import-free rules `scopeDenial`, `keyAllows` and `ownerMayUseKeys`), and `packages/auth/src/api-key-scopes.ts` (the key vocabulary). It has no screen. One patch puts `apiKeyAdminGuard()` into `adminAuth.plugins`; the other appends `apiKeyUser()` to `userResolvers` in `packages/auth/src/user-caller.ts`, so a route that opens with `requireUser(c, demand)` accepts a user's key as that user, limited to its scope. The shipped notification and file reads open that way, and the `saasaloy-agent` skill describes the gate.
 
 #### Picking an owner
@@ -182,7 +189,7 @@ export const API_KEY_SCOPES: Readonly<Record<string, readonly string[]>> = {
 
 ##### Issuing, listing and revoking keys
 
-Keys live on the client instance, under `/auth`, only. The core registers the plugin on `adminAuth` too, for the organization owner's screen, so this owner patches `apiKeyAdminGuard()` into `adminAuth.plugins`. It refuses every `/admin/auth/api-key/*` call with 403 `API_KEYS_ON_CLIENT_ONLY`, so an admin session can neither mint nor verify a user-owned key, and a credential counts only where it was issued (ADR 0050).
+Keys live on the client instance, under `/auth`, only. The core registers the plugin on `adminAuth` too, for the organization owner's screen, so this owner adds `apiKeyAdminGuard()` as an `adminAuth.plugins` row. It refuses every `/admin/auth/api-key/*` call with 403 `API_KEYS_ON_CLIENT_ONLY`, so an admin session can neither mint nor verify a user-owned key, and a credential counts only where it was issued (ADR 0050).
 
 There is no key screen in user mode. Call the client plugin from the signed-in user's browser. `authClient` here is the client `createClient(baseURL)` from `@repo/auth/client` returns:
 

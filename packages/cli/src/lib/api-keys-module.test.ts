@@ -7,7 +7,7 @@ import { satisfies } from "./semver.js";
 // The `api-keys` split (#229, ADR 0055), read off disk. The core holds what every owner
 // shares, and each owner holds what differs. An installed project moves from the old
 // single module to the pair by `add api-keys-organization`, which only works while the
-// moved files keep their targets and the `auth.ts` patches stay in the core. So the
+// moved files keep their targets and the `auth.ts` rows stay in the core. So the
 // split itself is under test here, not just the descriptors' validity.
 
 const MODULES = new URL("../../../../modules/", import.meta.url);
@@ -27,9 +27,8 @@ interface FileEntry {
   onlyWith?: string;
 }
 
-interface PatchEntry {
-  file: string;
-  kind: string;
+interface RowEntry {
+  table: string;
   call?: string;
   import?: { name: string; from: string };
 }
@@ -65,32 +64,22 @@ describe("the api-keys core", () => {
     expect(satisfies(cli.version, range ?? "")).toBeTruthy();
   });
 
-  it("registers its config section and keeps the auth.ts and client.ts patches, importing from the owner's fixed path", async () => {
-    const patches = (await readDescriptor("api-keys")).patches as PatchEntry[];
+  it("registers its config section and keeps the auth.ts and client.ts rows, importing from the owner's fixed path", async () => {
+    const descriptor = await readDescriptor("api-keys");
+    const patches = descriptor.patches as { file: string; kind: string }[];
+    const rows = descriptor.entries as RowEntry[];
 
-    expect(
-      patches.map((patch) => [patch.file, patch.kind, patch.import?.from])
-    ).toStrictEqual([
-      [
-        "packages/config/src/sections.ts",
-        "plugin-array",
-        "./sections/api-keys",
-      ],
-      ["packages/auth/package.json", "package-json-dependency", undefined],
-      ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
-      ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
-      ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
-      ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
-      [
-        "packages/auth/src/client.ts",
-        "plugin-array",
-        "./plugins/api-key-client",
-      ],
-      [
-        "packages/auth/src/client.ts",
-        "plugin-array",
-        "./plugins/api-key-client",
-      ],
+    expect(patches.map((patch) => [patch.file, patch.kind])).toStrictEqual([
+      ["packages/auth/package.json", "package-json-dependency"],
+    ]);
+    expect(rows.map((row) => [row.table, row.import?.from])).toStrictEqual([
+      ["config.sections", "./sections/api-keys"],
+      ["auth.plugins", "./plugins/api-key"],
+      ["adminAuth.plugins", "./plugins/api-key"],
+      ["auth.plugins", "./plugins/api-key"],
+      ["adminAuth.plugins", "./plugins/api-key"],
+      ["client.plugins", "./plugins/api-key-client"],
+      ["adminClient.plugins", "./plugins/api-key-client"],
     ]);
   });
 
@@ -163,12 +152,12 @@ describe("the api-keys-organization owner", () => {
   });
 
   it("owns the tenant resolver and the sidebar entry", async () => {
-    const patches = (await readDescriptor("api-keys-organization"))
-      .patches as PatchEntry[];
+    const rows = (await readDescriptor("api-keys-organization"))
+      .entries as RowEntry[];
 
-    expect(patches.map((patch) => [patch.file, patch.kind])).toStrictEqual([
-      ["packages/auth/src/tenant.ts", "plugin-array"],
-      ["apps/admin/src/components/nav.ts", "nav-entry"],
+    expect(rows.map((row) => row.table)).toStrictEqual([
+      "multitenant.resolvers",
+      "admin.nav",
     ]);
   });
 
@@ -232,35 +221,14 @@ describe("the api-keys-user owner", () => {
     ]);
   });
 
-  it("patches one guard into adminAuth alone, and its key into requireUser's resolvers (ADR 0050, ADR 0063)", async () => {
-    const patches = (await readDescriptor("api-keys-user"))
-      .patches as (PatchEntry & {
-      exportName?: string;
-    })[];
+  it("adds one guard to adminAuth alone, and its key to requireUser's resolvers (ADR 0050, ADR 0063)", async () => {
+    const rows = (await readDescriptor("api-keys-user")).entries as RowEntry[];
 
     expect(
-      patches.map((patch) => [
-        patch.file,
-        patch.kind,
-        patch.exportName,
-        patch.call,
-        patch.import?.from,
-      ])
+      rows.map((row) => [row.table, row.call, row.import?.from])
     ).toStrictEqual([
-      [
-        "packages/auth/src/user-caller.ts",
-        "plugin-array",
-        "userResolvers",
-        "apiKeyUser",
-        "./caller",
-      ],
-      [
-        "packages/auth/src/auth.ts",
-        "plugin-array",
-        "adminAuth",
-        "apiKeyAdminGuard",
-        "./plugins/api-key",
-      ],
+      ["userCaller.resolvers", "apiKeyUser", "./caller"],
+      ["adminAuth.plugins", "apiKeyAdminGuard", "./plugins/api-key"],
     ]);
   });
 

@@ -5,16 +5,19 @@
   "description": "A kv provider that keeps entries in memory, for local development and tests.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["kv"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
     {
-      "file": "packages/kv/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "kv",
-      "arrayProp": "providers",
+      "path": "files/memory.ts",
+      "target": "@kv/providers/memory.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "kv.providers",
       "call": "memory",
       "import": {
         "name": "memory",
@@ -22,6 +25,5 @@
       }
     }
   ],
-  "files": [{ "path": "files/memory.ts", "target": "@kv/providers/memory.ts" }],
   "scaffolds": []
 }

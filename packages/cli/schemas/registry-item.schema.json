@@ -28,6 +28,23 @@
           }
         }
       }
+    },
+    "tableImport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "from"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$",
+          "description": "The imported binding, also its local name."
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The module specifier, relative to the generated file (it sits beside the file that holds the table, so a specifier that worked there works here) or a package name."
+        }
+      }
     }
   },
   "properties": {
@@ -224,7 +241,7 @@
     },
     "patches": {
       "type": "array",
-      "description": "Structural config patches applied at `add` time by the patch engine (issue #7). A flat array where each op names its own target `file` and codemod `kind` (wrangler.jsonc bindings, package.json dependency merges, package.json script entries, Better Auth plugin-array insertions, router chain `.route()` links); kind-specific payload fields are defined by the engine. An empty array means no patches (ADR 0019).",
+      "description": "Structural config patches the render applies to a file another module or the base ships (issue #7). A flat array where each op names its own target `file` and codemod `kind` (wrangler.jsonc bindings, package.json dependency merges, package.json script entries, Drizzle columns, one const property); kind-specific payload fields are defined by the engine. A registration table is not a patch: it goes in `tables` and `entries`. An empty array means no patches (ADR 0019).",
       "items": {
         "type": "object",
         "required": ["file", "kind"],
@@ -242,47 +259,21 @@
               "wrangler-binding",
               "package-json-dependency",
               "package-json-script",
-              "plugin-array",
-              "const-array",
-              "chained-route",
               "drizzle-column",
-              "nav-entry",
               "const-property"
             ],
-            "description": "Which codemod applies this patch. `const-array`, `const-property`, `plugin-array`, `chained-route`, `wrangler-binding`, `drizzle-column` and `nav-entry` have removal inverses."
+            "description": "Which codemod applies this patch. The four table kinds of the old engine (`plugin-array`, `const-array`, `chained-route`, `nav-entry`) are gone: a module adds a row to a table with `entries`."
           },
           "when": { "$ref": "#/$defs/when" }
         },
         "allOf": [
           {
             "if": {
-              "properties": { "kind": { "const": "const-array" } },
-              "required": ["kind"]
-            },
-            "then": {
-              "required": ["constName", "key", "entry"],
               "properties": {
-                "constName": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Name of the module-scope const array to extend."
-                },
-                "key": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Entry property whose JSON value identifies the entry for add and remove."
-                },
-                "entry": {
-                  "type": "object",
-                  "minProperties": 1,
-                  "description": "JSON object literal appended to the named array."
+                "kind": {
+                  "const": "const-property"
                 }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": { "kind": { "const": "const-property" } },
+              },
               "required": ["kind"]
             },
             "then": {
@@ -307,67 +298,11 @@
           },
           {
             "if": {
-              "properties": { "kind": { "const": "nav-entry" } },
-              "required": ["kind"]
-            },
-            "then": {
-              "required": ["constName", "area", "group", "entry", "icon"],
               "properties": {
-                "constName": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Name of the module-scope const holding the nav areas (NAV_AREAS)."
-                },
-                "area": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Which area to add to, named by its `to` value."
-                },
-                "group": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Which of that area's groups to add to, named by its `label`."
-                },
-                "entry": {
-                  "type": "object",
-                  "required": ["to", "label"],
-                  "properties": {
-                    "to": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Route the row links to. Identifies the row for add and remove."
-                    },
-                    "label": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Text the row shows."
-                    }
-                  },
-                  "description": "The nav row, minus its icon. Written as a JSON object literal."
-                },
-                "icon": {
-                  "type": "object",
-                  "required": ["name", "from"],
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Component rendered as the row's `icon`, e.g. UsersRoundIcon."
-                    },
-                    "from": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Module the icon is imported from, e.g. lucide-react."
-                    }
-                  },
-                  "description": "The icon component. Rendered as an identifier, not a string, and its named import is added on apply and dropped on remove."
+                "kind": {
+                  "const": "package-json-script"
                 }
-              }
-            }
-          },
-          {
-            "if": {
-              "properties": { "kind": { "const": "package-json-script" } },
+              },
               "required": ["kind"]
             },
             "then": {
@@ -388,7 +323,11 @@
           },
           {
             "if": {
-              "properties": { "kind": { "const": "drizzle-column" } },
+              "properties": {
+                "kind": {
+                  "const": "drizzle-column"
+                }
+              },
               "required": ["kind"]
             },
             "then": {
@@ -429,52 +368,93 @@
                 }
               }
             }
-          },
-          {
-            "if": {
-              "properties": { "kind": { "const": "chained-route" } },
-              "required": ["kind"]
-            },
-            "then": {
-              "required": ["exportName", "path", "call", "import"],
-              "properties": {
-                "exportName": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Exported binding whose call chain to extend — `default`, or the name in `export const <name> = …`. A bare `export default app` is followed to its declaration."
-                },
-                "path": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Route path — `.route()`'s first argument (e.g. /waitlist). Also the match key: a chain already routing this path is left alone, and `remove` finds the link by it."
-                },
-                "call": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Identifier passed as `.route()`'s second argument (e.g. waitlist) — the sub-router the import supplies."
-                },
-                "import": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "required": ["name", "from"],
-                  "description": "Named import to add for `call`, dropped again on `remove` (with its statement, when it was the only specifier).",
-                  "properties": {
-                    "name": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Imported binding name (e.g. waitlist)."
-                    },
-                    "from": {
-                      "type": "string",
-                      "minLength": 1,
-                      "description": "Module specifier to import from (e.g. ./routes/waitlist.js)."
-                    }
-                  }
-                }
-              }
-            }
           }
         ]
+      }
+    },
+    "tables": {
+      "type": "array",
+      "description": "Registration tables this module owns (plan 0116, Phase 7). The render writes each table into its `file` in full on every run, class `generated`, sorted by each entry's `order` and then by module name. The file that holds the table imports the export and spreads it after the entries the module ships inline; the owner's own entries go after the spread.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "file", "shape"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][A-Za-z0-9]*(\\.[a-z][A-Za-z0-9]*)+$",
+            "description": "Unique across the payload, `<owner>.<table>` such as `email.providers`. The generated file exports the table under the camelCase of the id: `email.providers` is `emailProviders`."
+          },
+          "file": {
+            "type": "string",
+            "pattern": "^([^/@]|@[a-z0-9][a-z0-9-]*/).*\\.generated\\.ts$",
+            "not": {
+              "pattern": "(^|/)\\.\\.?(/|$)"
+            },
+            "description": "The generated file: a project path or an `@alias` path, named `<name>.generated.ts` beside the file that holds the table. Several tables may share one file."
+          },
+          "shape": {
+            "type": "string",
+            "enum": ["calls", "objects", "routes", "nav"],
+            "description": "`calls` exports `[a(), b()]` (entries name `call` and `import`). `objects` exports `[{ … }]` (entries name `entry`). `routes` exports a function that chains `.route(path, router)` onto the Hono app it takes (entries name `path`, `call` and `import`). `nav` exports `[{ area, group, …entry, icon }] as const` (entries name `area`, `group`, `entry` and the icon as `import`)."
+          },
+          "type": {
+            "$ref": "#/$defs/tableImport",
+            "description": "`objects` only: the element type, imported as a type, so the export reads `T[]`."
+          }
+        }
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "Rows this module adds to tables, its own or another module's (plan 0116, Phase 7). Which fields a row needs depends on the shape of its table; the render refuses a row that does not fit.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["table"],
+        "properties": {
+          "table": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The `id` of the table."
+          },
+          "call": {
+            "type": "string",
+            "pattern": "^[A-Za-z_$][A-Za-z0-9_$]*$",
+            "description": "`calls`: the factory the table calls, printed `call()`. `routes`: the router, printed `.route(path, call)`."
+          },
+          "import": {
+            "$ref": "#/$defs/tableImport",
+            "description": "`calls` and `routes`: the import of `call`. `nav`: the icon component, printed `icon: <name>`."
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/",
+            "description": "`routes`: the mount path, such as `/waitlist`."
+          },
+          "entry": {
+            "type": "object",
+            "minProperties": 1,
+            "description": "`objects`: the JSON object of the row. `nav`: the row without its icon (`to`, `label`, `shortcut`, …)."
+          },
+          "area": {
+            "type": "string",
+            "minLength": 1,
+            "description": "`nav`: the `to` of the area the row goes into."
+          },
+          "group": {
+            "type": "string",
+            "minLength": 1,
+            "description": "`nav`: the label of the group. A group the area does not have yet is added after its last group."
+          },
+          "order": {
+            "type": "number",
+            "description": "Sort key. Absent means 1000. A lower order comes first; equal orders sort by module name, and one module's rows keep their descriptor order."
+          },
+          "when": {
+            "$ref": "#/$defs/when"
+          }
+        }
       }
     },
     "scaffolds": {

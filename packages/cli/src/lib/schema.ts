@@ -203,6 +203,63 @@ export interface RegistryAgent {
 // included, so the structural match `remove` untracks with stays stable (A7).
 export type RegistryPatch = { file: string; when?: When } & Patch;
 
+/** The four layouts a generated table takes (plan 0116, "Formats"). */
+export const TABLE_SHAPES = ["calls", "objects", "routes", "nav"] as const;
+export type TableShape = (typeof TABLE_SHAPES)[number];
+
+/** A named import an entry needs in the generated file: `import { name } from "from"`. */
+export interface TableImport {
+  name: string;
+  from: string;
+}
+
+/**
+ * A registration table the module owns (plan 0116, Phase 7). The render writes `file` in
+ * full on every run, class `generated`, holding one export for each table of that file.
+ * The export's name is the camelCase of `id`: `email.providers` is `emailProviders`. The
+ * file that held the table before imports that export and spreads it, after the entries
+ * the owning module ships inline and before the owner's own.
+ */
+export interface RegistryTable {
+  /** Unique across the payload: `<owner>.<table>`, such as `email.providers`. */
+  id: string;
+  /** Project path of the generated file, `@alias` allowed. Ends in `.generated.ts`. */
+  file: string;
+  /**
+   * `calls` exports `[a(), b()]`; `objects` exports `[{ … }]`; `routes` exports a function
+   * that chains `.route(path, router)` onto the app it takes; `nav` exports `[{ area,
+   * group, …row, icon }] as const`.
+   */
+  shape: TableShape;
+  /** The element type of an `objects` table, imported as a type: `T[]`. */
+  type?: TableImport;
+}
+
+/**
+ * One row a module adds to a table. The render writes each table sorted by `order`, then
+ * by module name; the entries of one module keep their descriptor order.
+ */
+export interface RegistryEntry {
+  /** The `id` of the table this row goes into. */
+  table: string;
+  /** `calls`: the factory, printed `call()`. `routes`: the router, `.route(path, call)`. */
+  call?: string;
+  /** `calls` and `routes`: the import of `call`. `nav`: the icon component. */
+  import?: TableImport;
+  /** `routes`: the mount path, such as `/waitlist`. */
+  path?: string;
+  /** `objects`: the JSON object. `nav`: the row without its icon (`to`, `label`, …). */
+  entry?: Record<string, unknown>;
+  /** `nav`: the `to` of the area the row goes into. */
+  area?: string;
+  /** `nav`: the label of the group; a missing group is added after the area's last one. */
+  group?: string;
+  /** Sort key, 1000 when absent. A lower order comes first. */
+  order?: number;
+  /** Write this row only while the condition holds; see {@link When}. */
+  when?: When;
+}
+
 /** The `stage` enum in registry-item.schema.json, in product order (#223). */
 export const MODULE_STAGES = [
   "validate",
@@ -257,6 +314,10 @@ export interface RegistryItem {
   /** Warnings persisted at add time and printed before this module is removed. */
   removeWarnings?: string[];
   patches?: RegistryPatch[];
+  /** Registration tables this module owns; the render writes each one as a generated file. */
+  tables?: RegistryTable[];
+  /** Rows this module adds to tables, its own or another module's. */
+  entries?: RegistryEntry[];
   scaffolds?: RegistryScaffold[];
   agent?: RegistryAgent;
   /**

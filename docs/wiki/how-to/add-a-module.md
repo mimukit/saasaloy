@@ -1,6 +1,6 @@
 # Add a module
 
-`saasaloy add` puts a module in the lock's `requested` list, renders the project with it, and writes the difference: the module's files, the files of whatever it depends on, and its patches into files other modules own. It records each file it wrote in `.saasaloy/manifest.json`. Run it from anywhere inside a Saasaloy project; the
+`saasaloy add` puts a module in the lock's `requested` list, renders the project with it, and writes the difference: the module's files, the files of whatever it depends on, its patches into files other modules own, and the generated table files its rows go into (such as `apps/api/src/routes.generated.ts`). It records each file it wrote in `.saasaloy/manifest.json`. Run it from anywhere inside a Saasaloy project; the
 CLI walks up to the directory holding `saasaloy.json`.
 
 ## See what's available
@@ -20,7 +20,7 @@ saasaloy add waitlist
 Before writing anything, `add` prints what it intends to do:
 
 - **Dependencies** — the prerequisites it resolved. `waitlist` declares `dependsOn: ["api", "database", "validators"]`, so all four install, prerequisites first.
-- **Plan** — every path the run changes, with its result: a new file, an updated file, a three-way merge (clean or with conflicts), or a file left alone. A file another module owns appears here when a patch of the new module changes it, such as `apps/api/src/index.ts` or `package.json`.
+- **Plan** — every path the run changes, with its result: a new file, an updated file, a three-way merge (clean or with conflicts), or a file left alone. A file another module owns appears here when a patch of the new module changes it, such as `package.json`, and a generated table file appears when the module adds a row to it, such as `apps/api/src/routes.generated.ts`.
 - **Env vars to set** — variables the module needs, with the descriptor's own
   description. `waitlist` asks for `PUBLIC_API_URL`.
 

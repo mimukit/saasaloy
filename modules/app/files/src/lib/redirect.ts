@@ -1,3 +1,5 @@
+import { appAuthScreens } from "./redirect.generated";
+
 // Where a visitor lands when there is nothing to return to, or when what was asked for
 // cannot be trusted.
 export const DEFAULT_DESTINATION = "/";
@@ -5,11 +7,15 @@ export const DEFAULT_DESTINATION = "/";
 /**
  * The auth screens: the ones an anonymous visitor may open, and the ones a signed-in
  * visitor never returns to. Sending someone back to the sign-in form they just used would
- * look like the sign-in failed. A module that ships its own auth screen adds a row with a
- * `const-array` patch (`constName: "AUTH_SCREENS"`, `key: "path"`), and both the root
- * guard and `resolveDestination()` read it.
+ * look like the sign-in failed. A module that ships its own auth screen adds a row to
+ * `./redirect.generated.ts`, which the CLI writes on every run, and both the root guard and
+ * `resolveDestination()` read it.
  */
-export const AUTH_SCREENS = [{ path: "/sign-in" }, { path: "/sign-up" }];
+export const AUTH_SCREENS = [
+  { path: "/sign-in" },
+  { path: "/sign-up" },
+  ...appAuthScreens,
+];
 
 /** The paths of `AUTH_SCREENS`. */
 export const AUTH_PATHS: ReadonlySet<string> = new Set(

@@ -6,7 +6,7 @@
   "stage": "mvp",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.9.0"
+    "saasaloy": ">=0.10.0"
   },
   "dependsOn": ["api", "database", "auth", "shell"],
   "dependencies": [],
@@ -18,112 +18,6 @@
   },
   "removeWarnings": [
     "The deployed audit_events table survives this removal. It is the only record of which staff member changed what, so export it before you run db:generate and apply the resulting drop migration."
-  ],
-  "patches": [
-    {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "adminConfig",
-      "import": {
-        "name": "adminConfig",
-        "from": "./sections/admin"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/admin",
-      "call": "adminUsers",
-      "import": {
-        "name": "adminUsers",
-        "from": "./routes/admin-users"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/admin/members",
-      "call": "adminMembers",
-      "import": {
-        "name": "adminMembers",
-        "from": "./routes/admin-members"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/admin/audit-events",
-      "call": "adminAudit",
-      "import": {
-        "name": "adminAudit",
-        "from": "./routes/admin-audit"
-      }
-    },
-    {
-      "file": "packages/env/src/services.ts",
-      "kind": "const-array",
-      "constName": "SERVICES",
-      "key": "name",
-      "entry": {
-        "name": "admin",
-        "file": "apps/admin/.env",
-        "environment": "dev",
-        "omit": [],
-        "devPort": 3001
-      }
-    },
-    {
-      "file": "packages/tooling/src/targets.ts",
-      "kind": "const-array",
-      "constName": "DEPLOY_TARGETS",
-      "key": "service",
-      "entry": {
-        "service": "admin",
-        "order": 20
-      }
-    },
-    {
-      "file": "packages/tooling/src/targets.ts",
-      "kind": "const-array",
-      "constName": "SMOKE_CHECKS",
-      "key": "id",
-      "entry": {
-        "id": "admin-home",
-        "service": "admin",
-        "path": "/",
-        "status": 200
-      }
-    },
-    {
-      "file": "apps/admin/src/components/shell-extensions.ts",
-      "kind": "plugin-array",
-      "exportName": "shellExtensions",
-      "arrayProp": "extensions",
-      "call": "commandExtension",
-      "import": {
-        "name": "commandExtension",
-        "from": "@repo/ui/containers/command/command-root"
-      },
-      "when": {
-        "installed": ["command"]
-      }
-    },
-    {
-      "file": "apps/api/src/lib/audit-actions.ts",
-      "kind": "plugin-array",
-      "exportName": "AUDIT_ACTIONS",
-      "arrayProp": "actions",
-      "call": "adminAuditActions",
-      "import": {
-        "name": "adminAuditActions",
-        "from": "../audit/admin"
-      }
-    }
   ],
   "files": [
     {
@@ -225,6 +119,115 @@
     {
       "path": "files/ui/styles/admin.css",
       "target": "@ui/styles/admin.css"
+    }
+  ],
+  "tables": [
+    {
+      "id": "admin.navCounts",
+      "file": "@admin/components/nav-counts.generated.ts",
+      "shape": "objects",
+      "type": {
+        "from": "./nav-counts",
+        "name": "NavCountSource"
+      }
+    },
+    {
+      "id": "admin.nav",
+      "file": "@admin/components/nav.generated.ts",
+      "shape": "nav"
+    },
+    {
+      "id": "admin.shellExtensions",
+      "file": "@admin/components/shell-extensions.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "audit.actions",
+      "file": "@api/lib/audit-actions.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "config.sections",
+      "call": "adminConfig",
+      "import": {
+        "name": "adminConfig",
+        "from": "./sections/admin"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/admin",
+      "call": "adminUsers",
+      "import": {
+        "name": "adminUsers",
+        "from": "./routes/admin-users"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/admin/members",
+      "call": "adminMembers",
+      "import": {
+        "name": "adminMembers",
+        "from": "./routes/admin-members"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/admin/audit-events",
+      "call": "adminAudit",
+      "import": {
+        "name": "adminAudit",
+        "from": "./routes/admin-audit"
+      }
+    },
+    {
+      "table": "env.services",
+      "entry": {
+        "name": "admin",
+        "file": "apps/admin/.env",
+        "environment": "dev",
+        "omit": [],
+        "devPort": 3001
+      }
+    },
+    {
+      "table": "tooling.deployTargets",
+      "entry": {
+        "service": "admin",
+        "order": 20
+      },
+      "order": 20
+    },
+    {
+      "table": "tooling.smokeChecks",
+      "entry": {
+        "id": "admin-home",
+        "service": "admin",
+        "path": "/",
+        "status": 200
+      }
+    },
+    {
+      "table": "admin.shellExtensions",
+      "call": "commandExtension",
+      "import": {
+        "name": "commandExtension",
+        "from": "@repo/ui/containers/command/command-root"
+      },
+      "when": {
+        "installed": ["command"]
+      }
+    },
+    {
+      "table": "audit.actions",
+      "call": "adminAuditActions",
+      "import": {
+        "name": "adminAuditActions",
+        "from": "../audit/admin"
+      }
     }
   ],
   "scaffolds": [

@@ -13,7 +13,7 @@ A queue provider that runs jobs in-process, with no binding and no env var.
 | Tier | provider |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`queue`](queue.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -30,9 +30,17 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/queue/src/index.ts` | `plugin-array` |
+| `queue.providers` | 1 |
 
 ## See the rest
 

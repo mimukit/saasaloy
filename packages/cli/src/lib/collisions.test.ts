@@ -7,7 +7,7 @@ import {
   declaredSectionKey,
   formatSectionKeyMismatches,
   sectionFileOf,
-  CONFIG_SECTIONS_FILE,
+  CONFIG_SECTIONS_TABLE,
   describeStaleOwner,
   detectCollisions,
   detectOwnedCollisions,
@@ -26,7 +26,7 @@ import type {
   StaleOwner,
 } from "./collisions.js";
 import type { LoadedModule } from "./registry.js";
-import type { RegistryPatch } from "./schema.js";
+import type { RegistryEntry } from "./schema.js";
 
 // The rule under test: two modules in one run may share a file target only when one of
 // them reaches the other through `dependsOn`. Core-plus-driver stays legal, an unrelated
@@ -450,48 +450,37 @@ describe(describeStaleOwner, () => {
 // overlap — `dependsOn` cannot express consent to losing your values.
 // ---------------------------------------------------------------------------
 
-function sectionPatch(
+function sectionRow(
   from: string,
-  file = CONFIG_SECTIONS_FILE
-): RegistryPatch {
+  table = CONFIG_SECTIONS_TABLE
+): RegistryEntry {
   return {
-    file,
-    kind: "plugin-array",
-    exportName: "sections",
-    arrayProp: "sections",
     call: "someConfig",
     import: { name: "someConfig", from },
+    table,
   };
 }
 
 describe(sectionKeyOf, () => {
   it("reads the key off the import specifier", () => {
-    expect(sectionKeyOf(sectionPatch("./sections/auth"))).toBe("auth");
+    expect(sectionKeyOf(sectionRow("./sections/auth"))).toBe("auth");
   });
 
   it("tolerates an explicit extension", () => {
-    expect(sectionKeyOf(sectionPatch("./sections/subscription.ts"))).toBe(
+    expect(sectionKeyOf(sectionRow("./sections/subscription.ts"))).toBe(
       "subscription"
     );
   });
 
-  it("ignores a plugin-array patch on any other file", () => {
+  it("ignores a row of any other table", () => {
     expect(
-      sectionKeyOf(
-        sectionPatch("./providers/memory", "packages/kv/src/index.ts")
-      )
+      sectionKeyOf(sectionRow("./providers/memory", "kv.providers"))
     ).toBeUndefined();
   });
 
-  it("ignores a patch of another kind on the sections file", () => {
+  it("ignores a sections row with no import", () => {
     expect(
-      sectionKeyOf({
-        file: CONFIG_SECTIONS_FILE,
-        kind: "package-json-dependency",
-        section: "dependencies",
-        name: "@repo/config",
-        range: "workspace:*",
-      })
+      sectionKeyOf({ entry: { key: "auth" }, table: CONFIG_SECTIONS_TABLE })
     ).toBeUndefined();
   });
 });
@@ -536,16 +525,16 @@ describe(detectSectionCollisions, () => {
 });
 
 describe(sectionClaims, () => {
-  it("picks the section patches out of a descriptor's patches", () => {
+  it("picks the section rows out of a descriptor's rows", () => {
     expect(
       sectionClaims("auth", [
-        sectionPatch("./providers/memory", "packages/kv/src/index.ts"),
-        sectionPatch("./sections/auth"),
+        sectionRow("./providers/memory", "kv.providers"),
+        sectionRow("./sections/auth"),
       ])
     ).toStrictEqual([{ module: "auth", key: "auth" }]);
   });
 
-  it("reads a module with no patches as claiming nothing", () => {
+  it("reads a module with no rows as claiming nothing", () => {
     expect(sectionClaims("waitlist")).toStrictEqual([]);
   });
 });
@@ -632,7 +621,7 @@ describe(formatSectionKeyMismatches, () => {
 });
 
 describe("every module's section file", () => {
-  it("declares the key its patch claims", () => {
+  it("declares the key its row claims", () => {
     const modulesDir = fileURLToPath(
       new URL("../../../../modules", import.meta.url)
     );
@@ -643,10 +632,10 @@ describe("every module's section file", () => {
         continue;
       }
       const item = JSON.parse(readFileSync(descriptor, "utf-8")) as {
-        patches?: RegistryPatch[];
+        entries?: RegistryEntry[];
         files?: { path: string; target: string }[];
       };
-      for (const { key } of sectionClaims(name, item.patches)) {
+      for (const { key } of sectionClaims(name, item.entries)) {
         const file = sectionFileOf(item.files, key);
         // A section patch with no file to back it is its own failure, named here.
         expect(file?.target).toBe(`@config/sections/${key}.ts`);

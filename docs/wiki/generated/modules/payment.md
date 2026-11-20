@@ -13,7 +13,7 @@ One-off payments in a packages/payment workspace: the provider contract, the sta
 | Tier | capability |
 | Stage | money |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.9.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md), [`database`](database.md), [`auth`](auth.md), [`admin`](admin.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -64,13 +64,27 @@ Files:
 |---|---|
 | `apps/api/package.json` | `package-json-dependency` |
 | `apps/api/package.json` | `package-json-dependency` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/api/src/env.ts` | `plugin-array` |
 | `apps/admin/package.json` | `package-json-dependency` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav-counts.ts` | `const-array` |
-| `apps/api/src/lib/audit-actions.ts` | `plugin-array` |
+
+## Tables it owns
+
+The CLI writes each table in full on every run, from the rows of the installed modules.
+
+| Table | Generated file | Shape |
+|---|---|---|
+| `payment.listeners` | `@payment/listeners.generated.ts` | `calls` |
+| `payment.providers` | `@payment/providers.generated.ts` | `calls` |
+| `payment.envPresets` | `@payment/env-preset.generated.ts` | `calls` |
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.routes` | 2 |
+| `api.envPresets` | 1 |
+| `admin.nav` | 1 |
+| `admin.navCounts` | 1 |
+| `audit.actions` | 1 |
 
 ## See the rest
 
@@ -122,7 +136,7 @@ A rejected or cancelled payment frees its transaction id. The partial unique ind
 
 #### Start a payment: the shopper route pattern
 
-The core ships no shopper routes. Only your app knows whether this user may pay for this order, so your route checks that first and then calls the core. Put it in `apps/api/src/routes/<feature>.ts` and register it with a `chained-route` link like any other route.
+The core ships no shopper routes. Only your app knows whether this user may pay for this order, so your route checks that first and then calls the core. Put it in `apps/api/src/routes/<feature>.ts` and mount it after the generated routes in `apps/api/src/index.ts` like any other route of your own.
 
 ```ts
 import { createPayment, PaymentError } from "@repo/payment";
@@ -243,7 +257,7 @@ A refund is allowed only on a `successful` payment, and the sum of a payment's r
 
 ##### Audit rows of the staff writes
 
-The two write routes run through `adminWrite` from `apps/api/src/lib/admin-write.ts`, so each staff decision leaves one row in `audit_events`. The actions live in `apps/api/src/audit/payment.ts`, which this module's `plugin-array` patch registers in `apps/api/src/lib/audit-actions.ts`.
+The two write routes run through `adminWrite` from `apps/api/src/lib/admin-write.ts`, so each staff decision leaves one row in `audit_events`. The actions live in `apps/api/src/audit/payment.ts`, which this module's `audit.actions` row registers in `apps/api/src/lib/audit-actions.generated.ts`.
 
 | Route | Audit action | `before` | `after` |
 | --- | --- | --- | --- |
@@ -305,7 +319,7 @@ This section covers only what differs for `manual`.
 
 ###### Setup
 
-1. Run `saasaloy add payment-manual`. It adds `packages/payment/src/providers/manual.ts`, appends `manual()` to the `providers` array in `packages/payment/src/index.ts`, and adds `@repo/validators` to `packages/payment/package.json`. It brings in `payment` and `validators` if they are missing.
+1. Run `saasaloy add payment-manual`. It adds `packages/payment/src/providers/manual.ts`, adds `manual()` to the `payment.providers` table in `packages/payment/src/providers.generated.ts`, which `packages/payment/src/index.ts` spreads, and adds `@repo/validators` to `packages/payment/package.json`. It brings in `payment` and `validators` if they are missing.
 2. Run `pnpm install`.
 3. Put your accounts in the registration call (see the next section). `manual()` with no options offers no method, so every `create` answers `method_unavailable`.
 4. Add `manual` to `PAYMENT_PROVIDER` in `packages/env/.env`, for example `PAYMENT_PROVIDER=manual` or `PAYMENT_PROVIDER=manual,sslcommerz`. Run `pnpm env:setup`.
@@ -383,7 +397,7 @@ Open **Payments** in the admin app. The **Submitted** chip is the default, oldes
 3. Click **Confirm** when all four match. The payment moves to `successful`, `settled_amount` takes the claimed amount, and `settled_at` records the time.
 4. Click **Reject** when they do not match. Pick a reason (`amount_mismatch`, `not_found`, `duplicate`, `other`) and add a note for the shopper. The payment moves to `failed`.
 
-The **Payments** row in the sidebar shows how many payments wait in **Submitted**. The module adds `{ to: "/payments", path: "/admin/payment/review-count" }` to the admin app's `NAV_COUNTS` with a `const-array` patch, and the shell refetches it on window focus and every 60 s. No count shows when nothing waits. The `saasaloy-admin` skill describes live counts.
+The **Payments** row in the sidebar shows how many payments wait in **Submitted**. The module adds `{ to: "/payments", path: "/admin/payment/review-count" }` to the admin app's `NAV_COUNTS` with an `admin.navCounts` row, and the shell refetches it on window focus and every 60 s. No count shows when nothing waits. The `saasaloy-admin` skill describes live counts.
 
 Two staff who click Confirm at once get one success and one 409. The page shows the loser a toast that someone else reviewed the payment first.
 
@@ -415,7 +429,7 @@ No gateway calls back. A request to `/payment/callback/manual/*` answers 204 and
 
 #### Write a provider
 
-A provider is one file, `packages/payment/src/providers/<name>.ts`, exporting a factory that returns a `PaymentProvider` (see `src/provider.ts`), plus a `plugin-array` patch into `providers`. See `.agents/skills/create-provider/` in the saasaloy repo.
+A provider is one file, `packages/payment/src/providers/<name>.ts`, exporting a factory that returns a `PaymentProvider` (see `src/provider.ts`), plus a `payment.providers` row. See `.agents/skills/create-provider/` in the saasaloy repo.
 
 - Every method takes `env` whole. Read your secrets off it, never `process.env`.
 - `methods(env)` lists what you know, with `available: false` for a method you cannot take here. The core skips an unavailable method when it picks a provider.

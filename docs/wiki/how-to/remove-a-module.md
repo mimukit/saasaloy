@@ -1,6 +1,6 @@
 # Remove a module
 
-`saasaloy remove` renders the project again without the module and applies the difference. Every edit the module made goes with it, its patches into other files included, because a render without the module never wrote them. Nothing needs to be reversed.
+`saasaloy remove` renders the project again without the module and applies the difference. Every edit the module made goes with it, its patches into other files and its rows in generated tables included, because a render without the module never wrote them. Nothing needs to be reversed.
 
 The render reads the payload of the lock's release from the user cache (`~/.cache/saasaloy/payload/`), and fetches it from the registry when the cache does not hold it. With a cold cache and no network, a run that must merge a file refuses with exit 2.
 

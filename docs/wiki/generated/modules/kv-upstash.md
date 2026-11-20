@@ -13,7 +13,7 @@ A kv provider on Upstash Redis over HTTPS; needs an Upstash account and two REST
 | Tier | provider |
 | Stage | scale |
 | Needs | `vendor-account` |
-| Needs CLI | `>=0.8.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`kv`](kv.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -38,8 +38,17 @@ Files:
 | File | Kind |
 |---|---|
 | `packages/kv/package.json` | `package-json-dependency` |
-| `packages/kv/src/index.ts` | `plugin-array` |
-| `packages/kv/src/env-preset.ts` | `plugin-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `kv.providers` | 1 |
+| `kv.envPresets` | 1 |
 
 ## See the rest
 

@@ -50,8 +50,8 @@ export interface SubscriptionRegistry {
 }
 
 /**
- * Build the registry. `providers` is the patch point every `subscription-<provider>` module
- * appends to. See `src/index.ts`.
+ * Build the registry. `providers` holds the generated table every `subscription-<provider>`
+ * module adds a row to. See `src/index.ts`.
  */
 export function defineSubscription(
   config: SubscriptionConfig

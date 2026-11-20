@@ -2,8 +2,8 @@ import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
 
 // The environment keys the SSLCOMMERZ provider reads. `saasaloy add payment-sslcommerz`
-// appends this preset to `packages/payment/src/env-preset.ts`, so installing the provider
-// is what makes its keys required.
+// adds this preset as a row of `packages/payment/src/env-preset.generated.ts`, so
+// installing the provider is what makes its keys required.
 
 export const sslcommerzEnvPreset = definePreset({
   module: "payment-sslcommerz",

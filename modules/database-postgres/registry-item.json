@@ -5,7 +5,7 @@
   "description": "The Postgres database driver over postgres.js, with a Hyperdrive-aware getDb and a withDb helper.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["database"],
   "conflictsWith": ["database-d1"],
   "dependencies": [],
@@ -179,12 +179,11 @@
       "section": "devDependencies",
       "name": "@types/node",
       "range": "26.6.3"
-    },
+    }
+  ],
+  "entries": [
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "table": "api.envPresets",
       "call": "databaseEnv",
       "import": {
         "name": "databaseEnv",

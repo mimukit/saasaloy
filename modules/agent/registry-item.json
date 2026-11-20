@@ -6,7 +6,7 @@
   "stage": "mvp",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.9"
+    "saasaloy": ">=0.10.0"
   },
   "dependsOn": ["api", "validators", "auth", "app", "api-keys"],
   "dependencies": [],
@@ -16,17 +16,6 @@
     "Agents that saved the /mcp address or the OpenAPI document get 404 from now on. The api-keys tables and every issued key stay; remove the api-keys owner module to drop them."
   ],
   "patches": [
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "base",
-      "path": "/",
-      "call": "agent",
-      "import": {
-        "name": "agent",
-        "from": "./routes/agent"
-      }
-    },
     {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
@@ -40,12 +29,27 @@
       "section": "dependencies",
       "name": "@modelcontextprotocol/hono",
       "range": "2.0.2"
+    }
+  ],
+  "tables": [
+    {
+      "id": "agent.routeGuards",
+      "file": "@api/agent/guards.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.baseRoutes",
+      "path": "/",
+      "call": "agent",
+      "import": {
+        "name": "agent",
+        "from": "./routes/agent"
+      }
     },
     {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
+      "table": "config.sections",
       "call": "agentConfig",
       "import": {
         "name": "agentConfig",
@@ -53,10 +57,7 @@
       }
     },
     {
-      "file": "apps/api/src/agent/guards.ts",
-      "kind": "plugin-array",
-      "exportName": "agentGuards",
-      "arrayProp": "guards",
+      "table": "agent.routeGuards",
       "call": "mcpRateLimit",
       "import": {
         "name": "mcpRateLimit",
@@ -67,10 +68,7 @@
       }
     },
     {
-      "file": "apps/web/src/lib/agent-entries.ts",
-      "kind": "plugin-array",
-      "exportName": "agentEntries",
-      "arrayProp": "entries",
+      "table": "web.agentEntries",
       "call": "agentApiEntry",
       "import": {
         "name": "agentApiEntry",
@@ -78,9 +76,7 @@
       }
     },
     {
-      "file": "apps/app/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
+      "table": "app.nav",
       "area": "/",
       "group": "Workspace",
       "entry": {
@@ -88,11 +84,13 @@
         "label": "Agents",
         "shortcut": "G A"
       },
-      "icon": {
+      "import": {
         "name": "BotIcon",
         "from": "lucide-react"
       },
-      "when": { "installed": ["api-keys-user"] }
+      "when": {
+        "installed": ["api-keys-user"]
+      }
     }
   ],
   "files": [

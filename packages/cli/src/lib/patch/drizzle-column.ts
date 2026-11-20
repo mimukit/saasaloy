@@ -3,9 +3,9 @@ import type { ASTNode } from "magicast";
 import { describeBinding, foreignBinding, keepTerminator } from "./ts-ast.js";
 import type { ModuleImports } from "./ts-ast.js";
 
-// The third magicast codemod: add one column to a Drizzle table another module already
-// wrote. `plugin-array` extends an array, `chained-route` extends a call chain, and this
-// extends the columns object of `export const <name> = <table>("<sql name>", { … })`.
+// The magicast codemod that adds one column to a Drizzle table another module already
+// wrote: it extends the columns object of
+// `export const <name> = <table>("<sql name>", { … })`.
 //
 // It exists because a table is not extensible by the file-drop route every other schema
 // change takes. `packages/db` merges every `src/schema/*.ts` into one object and
@@ -104,8 +104,7 @@ export function insertDrizzleColumn(
 
   // Asked before the splice, not after. `addImport` returns early when the local name is
   // already bound to something else, but by then the column is written and it reads a
-  // builder this file never imported. `chained-route.ts` asks the same question at the same
-  // point, for the same reason.
+  // builder this file never imported.
   if (patch.import && foreignBinding(mod.imports, patch.import)) {
     return source;
   }
@@ -304,8 +303,7 @@ function insertBindingConflict(
   return `${describeBinding(patch.import.name, held)}, so ${JSON.stringify(patch.column)} would read the wrong builder`;
 }
 
-// Same two recast corrections ts-module.ts makes: `{foo}` for a new named import, and a
-// dropped final newline. The generated project runs `prettier --check` in its own lint.
+// Two recast corrections: `{foo}` for a new named import, and a dropped final newline. The generated project runs `prettier --check` in its own lint.
 function print(source: string, mod: ReturnType<typeof parseModule>): string {
   return keepTerminator(
     source,

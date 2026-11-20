@@ -59,10 +59,10 @@ describe("the gate in ./user-caller.ts", () => {
     "utf-8"
   );
 
-  it("ships an empty resolver table in the shape the plugin-array patch reads", () => {
+  it("ships a resolver table that holds only the generated rows", () => {
     assert.match(
       source,
-      /export const userResolvers = defineUserResolvers\(\{ resolvers: \[\] \}\);/
+      /export const userResolvers = defineUserResolvers\(\{\s*resolvers: \[\.\.\.userCallerResolvers\],\s*\}\);/
     );
   });
 

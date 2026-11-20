@@ -6,7 +6,7 @@
   "stage": "money",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.9.0"
+    "saasaloy": ">=0.10.0"
   },
   "dependsOn": [
     "api",
@@ -27,17 +27,6 @@
   ],
   "patches": [
     {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "ecommerceConfig",
-      "import": {
-        "name": "ecommerceConfig",
-        "from": "./sections/ecommerce"
-      }
-    },
-    {
       "file": "packages/db/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -52,140 +41,11 @@
       "range": "workspace:*"
     },
     {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/shop",
-      "call": "ecommerce",
-      "import": {
-        "name": "ecommerce",
-        "from": "./routes/ecommerce"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/admin/shop",
-      "call": "adminEcommerce",
-      "import": {
-        "name": "adminEcommerce",
-        "from": "./routes/admin-ecommerce"
-      }
-    },
-    {
-      "file": "apps/api/src/lib/audit-actions.ts",
-      "kind": "plugin-array",
-      "exportName": "AUDIT_ACTIONS",
-      "arrayProp": "actions",
-      "call": "ecommerceAuditActions",
-      "import": {
-        "name": "ecommerceAuditActions",
-        "from": "../audit/ecommerce"
-      }
-    },
-    {
       "file": "packages/payment/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "@repo/ecommerce",
       "range": "workspace:*"
-    },
-    {
-      "file": "packages/payment/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "payment",
-      "arrayProp": "listeners",
-      "call": "orderPaymentListener",
-      "import": {
-        "name": "orderPaymentListener",
-        "from": "@repo/ecommerce"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav-counts.ts",
-      "kind": "const-array",
-      "constName": "NAV_COUNTS",
-      "key": "to",
-      "entry": {
-        "to": "/shop/orders",
-        "path": "/admin/shop/orders/awaiting-call-count"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Shop",
-      "entry": {
-        "to": "/shop/products",
-        "label": "Products"
-      },
-      "icon": {
-        "name": "PackageIcon",
-        "from": "lucide-react"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Shop",
-      "entry": {
-        "to": "/shop/orders",
-        "label": "Orders"
-      },
-      "icon": {
-        "name": "ShoppingCartIcon",
-        "from": "lucide-react"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Shop",
-      "entry": {
-        "to": "/shop/customers",
-        "label": "Customers"
-      },
-      "icon": {
-        "name": "ContactIcon",
-        "from": "lucide-react"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Shop",
-      "entry": {
-        "to": "/shop/shipping-zones",
-        "label": "Shipping zones"
-      },
-      "icon": {
-        "name": "TruckIcon",
-        "from": "lucide-react"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Shop",
-      "entry": {
-        "to": "/shop/reports",
-        "label": "Reports"
-      },
-      "icon": {
-        "name": "ChartColumnIcon",
-        "from": "lucide-react"
-      }
     },
     {
       "file": "apps/admin/package.json",
@@ -226,12 +86,125 @@
       "kind": "wrangler-binding",
       "bindingType": "assets.run_worker_first",
       "entry": "/shop/*"
+    }
+  ],
+  "entries": [
+    {
+      "table": "config.sections",
+      "call": "ecommerceConfig",
+      "import": {
+        "name": "ecommerceConfig",
+        "from": "./sections/ecommerce"
+      }
     },
     {
-      "file": "packages/ui/src/blocks/navbar.tsx",
-      "kind": "const-array",
-      "constName": "pageLinks",
-      "key": "href",
+      "table": "api.routes",
+      "path": "/shop",
+      "call": "ecommerce",
+      "import": {
+        "name": "ecommerce",
+        "from": "./routes/ecommerce"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/admin/shop",
+      "call": "adminEcommerce",
+      "import": {
+        "name": "adminEcommerce",
+        "from": "./routes/admin-ecommerce"
+      }
+    },
+    {
+      "table": "audit.actions",
+      "call": "ecommerceAuditActions",
+      "import": {
+        "name": "ecommerceAuditActions",
+        "from": "../audit/ecommerce"
+      }
+    },
+    {
+      "table": "payment.listeners",
+      "call": "orderPaymentListener",
+      "import": {
+        "name": "orderPaymentListener",
+        "from": "@repo/ecommerce"
+      }
+    },
+    {
+      "table": "admin.navCounts",
+      "entry": {
+        "to": "/shop/orders",
+        "path": "/admin/shop/orders/awaiting-call-count"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/products",
+        "label": "Products"
+      },
+      "import": {
+        "name": "PackageIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/orders",
+        "label": "Orders"
+      },
+      "import": {
+        "name": "ShoppingCartIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/customers",
+        "label": "Customers"
+      },
+      "import": {
+        "name": "ContactIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/shipping-zones",
+        "label": "Shipping zones"
+      },
+      "import": {
+        "name": "TruckIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/reports",
+        "label": "Reports"
+      },
+      "import": {
+        "name": "ChartColumnIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "ui.pageLinks",
       "entry": {
         "label": "Shop",
         "href": "/shop"

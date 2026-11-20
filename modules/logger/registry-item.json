@@ -5,7 +5,7 @@
   "description": "A packages/logger workspace with the provider interface, a level threshold and field redaction.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": [],
   "dependencies": [],
   "envVars": {
@@ -16,12 +16,17 @@
     "default": ["api"]
   },
   "envOptional": ["LOGGER_PROVIDER", "LOG_LEVEL"],
-  "patches": [
+  "files": [],
+  "tables": [
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "id": "logger.providers",
+      "file": "@logger/providers.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.envPresets",
       "call": "loggerEnv",
       "import": {
         "name": "loggerEnv",
@@ -29,7 +34,6 @@
       }
     }
   ],
-  "files": [],
   "scaffolds": [
     {
       "workspace": "packages/logger",

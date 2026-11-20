@@ -1,15 +1,17 @@
 import app from "./index";
+import { workerHandlers } from "./worker.generated";
 
 // The Worker entry. `wrangler.jsonc`'s `main` points here, not at `src/index.ts`, so a
 // capability that needs a non-`fetch` export (a queue consumer, a cron tick) has one
 // place to register it. `src/index.ts` stays the Hono app and nothing else: it keeps
 // `export default app` and `AppType`, which is what `@repo/api/client` and the
-// `chained-route` patch kind both read. See ADR 0033.
+// generated `./routes.generated.ts` both build on. See ADR 0033.
 
 /**
  * One module's non-`fetch` exports. A binding provider ships a function returning this
- * shape and appends the call to the `handlers` array below with a `plugin-array` patch,
- * the same way a provider registers itself with its capability.
+ * shape and adds the call as a row of the `worker.handlers` table, which the CLI writes
+ * into `./worker.generated.ts`, the same way a provider registers itself with its
+ * capability.
  *
  * The type is declared here rather than imported from a capability on purpose: `api`
  * depends on no capability, and every queue module depends on `api`.
@@ -32,7 +34,7 @@ export interface HandlerSet {
 export interface WorkerConfig {
   /** The Hono app's request handler. */
   fetch: ExportedHandlerFetchHandler<never>;
-  /** Every installed module's handler set, in installation order. */
+  /** Every installed module's handler set, in table order. */
   handlers: HandlerSet[];
 }
 
@@ -69,12 +71,12 @@ export function defineWorker(config: WorkerConfig): ExportedHandler<never> {
   return worker;
 }
 
-// The registration table. A module appends its handler set to this literal array; a
-// `remove` takes the same line back out. The array is written out even when empty for
-// that reason — a patch needs a literal to append to.
+// The registration table. A module adds its handler set as a `worker.handlers` row, the
+// CLI writes it into `./worker.generated.ts`, and a `remove` takes the row back out. A
+// handler set of your own goes after the spread.
 export const worker: ExportedHandler<never> = defineWorker({
   fetch: app.fetch,
-  handlers: [],
+  handlers: [...workerHandlers],
 });
 
 export default worker;

@@ -13,7 +13,7 @@ A packages/sms workspace with the provider interface and segment counting; add o
 | Tier | capability |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -55,9 +55,23 @@ Files:
 | File | Kind |
 |---|---|
 | `apps/api/package.json` | `package-json-dependency` |
-| `apps/api/src/env.ts` | `plugin-array` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
+
+## Tables it owns
+
+The CLI writes each table in full on every run, from the rows of the installed modules.
+
+| Table | Generated file | Shape |
+|---|---|---|
+| `sms.providers` | `@sms/providers.generated.ts` | `calls` |
+| `sms.envPresets` | `@sms/env-preset.generated.ts` | `calls` |
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.envPresets` | 1 |
+| `api.routes` | 1 |
+| `admin.nav` | 1 |
 
 ## See the rest
 
@@ -251,9 +265,7 @@ numbers that legitimately disagree is worse than one estimate whose name says it
 | `sms-console` | `console` | nothing | nothing — logs the message and its segment count |
 | `sms-khudebarta` | `khudebarta` | a Khudebarta account, an API key and secret, a registered sender id | `KHUDEBARTA_API_KEY`, `KHUDEBARTA_SECRET_KEY`, optional `KHUDEBARTA_API_URL`; sends to Bangladeshi (`+880`) numbers only |
 
-Installing another provider is the same command again (`saasaloy add sms-<provider>`); the codemod
-appends to the `providers` array idempotently, so several can be registered at once and
-`SMS_PROVIDER` picks between them per environment.
+Installing another provider is the same command again (`saasaloy add sms-<provider>`). Each provider adds its own row to the `sms.providers` table, so several can be registered at once and `SMS_PROVIDER` picks between them per environment.
 
 There is no Cloudflare-native provider and there won't be one: Cloudflare has no SMS product, and
 its own Workers documentation points at Twilio over `fetch`. `sms` is the first capability where
@@ -443,8 +455,8 @@ Then register it by hand in `src/index.ts`:
 // Add the import; `defineSms` is already imported at the top of this file.
 import { twilio } from "./providers/twilio";
 
-// Then add the call to the existing array literal — don't replace the line's shape.
-export const sms = defineSms({ providers: [twilio()] });
+// Then add the call after the spread of the generated rows.
+export const sms = defineSms({ providers: [...smsProviders, twilio()] });
 ```
 
 Contract notes:
@@ -503,15 +515,15 @@ Inside `withAuthScope` (an `authGuards` middleware, or a route that opened the s
 
 ##### The admin SMS screen
 
-With `admin` and `database` installed, `sms` adds an **SMS** row to the admin nav (group Manage) and the screen `apps/admin/src/routes/sms.tsx`. It lists the log newest first, 50 rows a page, with All, Sent and Failed chips and a detail panel. It is read only. The api half is `GET /admin/sms` in `apps/api/src/routes/admin-sms.ts`, mounted by a `chained-route` patch. It takes `?page=` (from 1) and `?status=sent|failed`, answers 401 or 403 without an admin session, and passes every `error` through `maskCodes()`. A row shows `user_id` as text: the screen does not join `users`.
+With `admin` and `database` installed, `sms` adds an **SMS** row to the admin nav (group Manage) and the screen `apps/admin/src/routes/sms.tsx`. It lists the log newest first, 50 rows a page, with All, Sent and Failed chips and a detail panel. It is read only. The api half is `GET /admin/sms` in `apps/api/src/routes/admin-sms.ts`, mounted by an `api.routes` row. It takes `?page=` (from 1) and `?status=sent|failed`, answers 401 or 403 without an admin session, and passes every `error` through `maskCodes()`. A row shows `user_id` as text: the screen does not join `users`.
 
 #### Removal
 
 Remove the providers first. `sms-console` and `sms-khudebarta` depend on `sms`, so `remove sms` refuses while either is installed. `--force` overrides the refusal, and it leaves the provider broken.
 
-`saasaloy remove sms-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array.
+`saasaloy remove sms-<provider>` deletes the provider file, and the render without the module drops its row from `providers.generated.ts`.
 
-`saasaloy remove sms` then deletes the `packages/sms` workspace (`index.ts`, `define.ts`, `provider.ts`, `segments.ts`, `mask-codes.ts`, `templates/verification-code.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the sms preset to `apps/api/src/env.ts`. The same run takes the `@repo/sms` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `SMS_PROVIDER`, `SMS_FROM` and any provider secret such as `KHUDEBARTA_API_KEY` lines by hand.
+`saasaloy remove sms` then deletes the `packages/sms` workspace (`index.ts`, `define.ts`, `provider.ts`, `segments.ts`, `mask-codes.ts`, `templates/verification-code.ts`, `env-preset.ts`) and drops the `api.envPresets` row that adds the sms preset to `apps/api/src/env.generated.ts`. The same run takes the `@repo/sms` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `SMS_PROVIDER`, `SMS_FROM` and any provider secret such as `KHUDEBARTA_API_KEY` lines by hand.
 
 The `sms_messages` table, its repository and seed slice, and the admin screen leave with `sms`. The deployed table survives: run `pnpm --filter @repo/db db:generate` and review the drop migration before you apply it.
 
@@ -530,9 +542,7 @@ Every route or job that imports `@repo/sms` stops compiling. Search for the impo
 
 #### Boundaries to honor
 
-- **`export const sms = defineSms({ providers: [] })` stays in exactly that shape** — a real array
-  literal, never omitted. It is the patch point every provider module appends to; without it a
-  provider install fails silently.
+- **`export const sms = defineSms({ providers: [...smsProviders] })` keeps its spread.** `smsProviders` comes from `./providers.generated.ts`, which the CLI writes from every `sms.providers` row on every run. A provider of your own goes after the spread, never in the generated file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
 - **Only `packages/sms` talks to a provider's SDK or endpoint.** Everything else imports
   `@repo/sms` (ADR 0020).
 - **`SMS_PROVIDER` never gets a default**, in code or in an example.

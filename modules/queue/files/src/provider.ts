@@ -80,7 +80,7 @@ export interface JobConfig<Payload> {
 /**
  * A registered job, with its payload type erased. `defineJob` closes over the typed
  * handler and returns this, so `defineQueue`'s `jobs` table can hold jobs with
- * unrelated payloads and still be a plain array a `plugin-array` patch appends to.
+ * unrelated payloads and still be a plain array the generated `queue.jobs` table fills.
  */
 export interface Job {
   readonly name: string;

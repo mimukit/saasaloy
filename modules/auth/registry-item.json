@@ -5,7 +5,7 @@
   "description": "Sign-in and sessions with Better Auth in a packages/auth workspace, on api and database.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "database"],
   "dependencies": [],
   "envVars": {
@@ -23,44 +23,11 @@
   },
   "patches": [
     {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "base",
-      "path": "/auth",
-      "call": "authRoute",
-      "import": {
-        "name": "authRoute",
-        "from": "./routes/auth"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "base",
-      "path": "/admin/auth",
-      "call": "adminAuthRoute",
-      "import": {
-        "name": "adminAuthRoute",
-        "from": "./routes/auth"
-      }
-    },
-    {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "@repo/auth",
       "range": "workspace:*"
-    },
-    {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "authConfig",
-      "import": {
-        "name": "authConfig",
-        "from": "./sections/auth"
-      }
     },
     {
       "file": "apps/api/wrangler.jsonc",
@@ -69,10 +36,85 @@
       "entry": "nodejs_compat"
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/email",
+      "range": "workspace:*",
+      "when": { "installed": ["email"] }
+    }
+  ],
+  "tables": [
+    {
+      "id": "auth.routeGuards",
+      "file": "@api/routes/auth-guards.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "auth.plugins",
+      "file": "@auth/plugins.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "adminAuth.plugins",
+      "file": "@auth/plugins.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "client.plugins",
+      "file": "@auth/client-plugins.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "adminClient.plugins",
+      "file": "@auth/client-plugins.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "userCaller.resolvers",
+      "file": "@auth/user-caller.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "seed.accounts",
+      "file": "@db/seed/slices/accounts.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "seed.users",
+      "file": "@db/seed/slices/users.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.baseRoutes",
+      "path": "/auth",
+      "call": "authRoute",
+      "import": {
+        "name": "authRoute",
+        "from": "./routes/auth"
+      }
+    },
+    {
+      "table": "api.baseRoutes",
+      "path": "/admin/auth",
+      "call": "adminAuthRoute",
+      "import": {
+        "name": "adminAuthRoute",
+        "from": "./routes/auth"
+      }
+    },
+    {
+      "table": "config.sections",
+      "call": "authConfig",
+      "import": {
+        "name": "authConfig",
+        "from": "./sections/auth"
+      }
+    },
+    {
+      "table": "api.envPresets",
       "call": "authEnv",
       "import": {
         "name": "authEnv",
@@ -80,24 +122,15 @@
       }
     },
     {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "auth",
-      "arrayProp": "plugins",
+      "table": "auth.plugins",
       "call": "resetPasswordMail",
       "import": {
         "name": "resetPasswordMail",
         "from": "./plugins/reset-password-mail"
       },
-      "when": { "installed": ["email"] }
-    },
-    {
-      "file": "packages/auth/package.json",
-      "kind": "package-json-dependency",
-      "section": "dependencies",
-      "name": "@repo/email",
-      "range": "workspace:*",
-      "when": { "installed": ["email"] }
+      "when": {
+        "installed": ["email"]
+      }
     }
   ],
   "files": [

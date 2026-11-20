@@ -13,7 +13,7 @@ User-owned API keys with their own scopes and rules, for a project with no organ
 | Tier | driver |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api-keys`](api-keys.md), [`auth`](auth.md) |
 | Requires one of | none |
 | Conflicts with | [`api-keys-organization`](api-keys-organization.md) |
@@ -37,10 +37,18 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/auth/src/user-caller.ts` | `plugin-array` |
-| `packages/auth/src/auth.ts` | `plugin-array` |
+| `userCaller.resolvers` | 1 |
+| `adminAuth.plugins` | 1 |
 
 ## See the rest
 

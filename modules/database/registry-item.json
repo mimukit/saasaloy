@@ -5,7 +5,7 @@
   "description": "A packages/db workspace with Drizzle ORM and drizzle-kit; pick database-d1 or database-postgres as its driver.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api"],
   "requiresOneOf": ["database-d1", "database-postgres"],
   "dependencies": [],
@@ -24,11 +24,11 @@
       "section": "dependencies",
       "name": "drizzle-orm",
       "range": "0.45.3"
-    },
+    }
+  ],
+  "entries": [
     {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
+      "table": "api.routes",
       "path": "/health/db",
       "call": "healthDb",
       "import": {
@@ -37,10 +37,7 @@
       }
     },
     {
-      "file": "packages/tooling/src/targets.ts",
-      "kind": "const-array",
-      "constName": "SMOKE_CHECKS",
-      "key": "id",
+      "table": "tooling.smokeChecks",
       "entry": {
         "id": "api-health-db",
         "service": "api",

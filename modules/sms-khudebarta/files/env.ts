@@ -2,8 +2,8 @@ import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
 
 // The environment keys the Khudebarta provider reads. `saasaloy add sms-khudebarta`
-// appends this preset to `packages/sms/src/env-preset.ts`, so installing the provider is
-// what makes its keys required.
+// adds this preset as a row of `packages/sms/src/env-preset.generated.ts`, so installing
+// the provider is what makes its keys required.
 
 export const khudebartaEnvPreset = definePreset({
   module: "sms-khudebarta",

@@ -1,7 +1,7 @@
 import type { AuditActionMap } from "../lib/audit-actions";
 
 // The ecommerce module's audit actions, one per staff write under `/admin/shop` (plan 0106,
-// Q20). The descriptor's `plugin-array` patch appends `ecommerceAuditActions()` into
+// Q20). The descriptor's `audit.actions` row adds `ecommerceAuditActions()` to
 // `AUDIT_ACTIONS` in `../lib/audit-actions.ts`, so `saasaloy remove ecommerce` takes these
 // with it, and `../routes/audit-coverage.test.ts` fails on a shop write route not named here.
 //

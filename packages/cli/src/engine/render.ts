@@ -47,7 +47,7 @@ import {
   templateVars,
 } from "../lib/scaffold.js";
 import type { TemplateVars } from "../lib/scaffold.js";
-import type { RegistryPatch, When } from "../lib/schema.js";
+import type { RegistryEntry, RegistryPatch, When } from "../lib/schema.js";
 import { DEFAULT_TESTING_MODE } from "../lib/testing.js";
 import type { TestingMode } from "../lib/testing.js";
 import { whenHolds } from "../lib/when.js";
@@ -55,6 +55,7 @@ import type { WhenContext } from "../lib/when.js";
 import { classifier } from "./classes.js";
 import type { FileClass } from "./classes.js";
 import type { Payload, PayloadModule } from "./payload.js";
+import { renderTables } from "./tables.js";
 
 // The render (plan 0116, Phase 2): the whole project a set of modules makes, as a map
 // from path to content and class. It reads no disk and no network; the caller loads the
@@ -71,7 +72,9 @@ import type { Payload, PayloadModule } from "./payload.js";
 //      read as a `when.installed` gate;
 //   3. each descriptor patch as an in-memory transform, with the insert side of the
 //      codemods in `lib/patch/`;
-//   4. the files `add` derives from the set: the root `package.json` dependencies, the
+//   4. each registration table the set owns, as a generated file holding the rows the
+//      set adds to it (`engine/tables.ts`);
+//   5. the files `add` derives from the set: the root `package.json` dependencies, the
 //      key list `packages/env/.env.example`, and `saasaloy.json`.
 
 export interface RenderOptions {
@@ -479,9 +482,15 @@ export function render(args: RenderArgs): RenderResult {
       whenHolds(op.when, ctx)
     );
 
+  // Each table row a module ships in this set, `{{VAR}}` filled.
+  const rowsOf = (name: string): RegistryEntry[] =>
+    (loaded.get(name)?.item.entries ?? []).filter((entry) =>
+      whenHolds(entry.when, ctx)
+    );
+
   const keyClaims: SectionClaim[] = baseSectionClaims();
   for (const name of order) {
-    keyClaims.push(...sectionClaims(name, shipped(name)));
+    keyClaims.push(...sectionClaims(name, rowsOf(name)));
   }
   const sectionConflicts = detectSectionCollisions(keyClaims);
   if (sectionConflicts.length > 0) {
@@ -490,7 +499,7 @@ export function render(args: RenderArgs): RenderResult {
   const mismatches: SectionKeyMismatch[] = [];
   for (const name of order) {
     const mod = items(name);
-    for (const { key } of sectionClaims(name, shipped(name))) {
+    for (const { key } of sectionClaims(name, rowsOf(name))) {
       const file = sectionFileOf(mod.item.files, key);
       const declared =
         file === undefined
@@ -546,6 +555,36 @@ export function render(args: RenderArgs): RenderResult {
         );
       }
     }
+  }
+
+  // --- Generated tables -------------------------------------------------------------
+  const tables = renderTables({
+    owners: [
+      { module: BASE_MODULE, tables: declaration.tables ?? [] },
+      ...order.map((name) => ({
+        module: name,
+        tables: loaded.get(name)?.item.tables ?? [],
+      })),
+    ],
+    resolve: (file) =>
+      file.startsWith("@") ? resolveTarget(aliases, file) : file,
+    rows: order.map((name) => ({ entries: rowsOf(name), module: name })),
+  });
+  warnings.push(...tables.warnings);
+  for (const table of tables.files) {
+    const held = files.get(table.path);
+    if (held !== undefined) {
+      throw new RefusalError(
+        `${table.path} is a generated table of ${table.owner === BASE_MODULE ? "the base template" : `module "${table.owner}"`}, and ${held.module === BASE_MODULE ? "the base template" : `module "${held.module}"`} ships a file at that path.`
+      );
+    }
+    files.set(table.path, {
+      class: "generated",
+      content: table.content,
+      from: table.path,
+      module: table.owner,
+      path: table.path,
+    });
   }
 
   // --- Files `add` derives from the set ---------------------------------------------

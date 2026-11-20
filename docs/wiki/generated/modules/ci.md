@@ -38,6 +38,14 @@ Files:
 | `package.json` | `package-json-script` |
 | `packages/tooling/src/deploy.config.ts` | `const-property` |
 
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+This module adds no row to a table.
+
 ## See the rest
 
 Run `saasaloy add ci --dry-run` to print every file and patch the module writes, in install order, and write nothing.

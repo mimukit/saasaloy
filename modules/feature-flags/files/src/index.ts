@@ -39,13 +39,9 @@ export {
 export type { FlagDocument, FlagScope, FlagValue } from "./document";
 export type { FlagSource } from "./source";
 
-// The registry, and the patch point every later flag lands in. `saasaloy add feature-flags`
+// The registry, and the array every later flag lands in. `saasaloy add feature-flags`
 // seeds the four reserved keys below; a project adds its own by appending a factory call.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with a real array literal. The codemod behind the `plugin-array` patch kind
-// (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into otherwise, and an
-// install fails silently.
+// No module adds a row here, so this array is not a generated table.
 //
 // The literal is also what types `flag()`. Its key set is inferred from these entries, so a
 // call with a key nobody registered fails `pnpm typecheck` rather than resolving to a

@@ -13,9 +13,9 @@ import type { SubscriptionEventPayload } from "./event-handler";
 // network. The body lives in `./event-handler.ts`; this file is the shape the `jobs` table
 // registers.
 //
-// A factory returning a job, not a bare constant, because the table in
-// `packages/queue/src/index.ts` registers a *call* — `subscriptionEventJob()` — and that is the
-// shape the `plugin-array` patch appends and `saasaloy remove` takes back out.
+// A factory returning a job, not a bare constant, because the `queue.jobs` table that
+// `packages/queue/src/index.ts` spreads registers a *call* — `subscriptionEventJob()` —
+// and that is the shape a row names and `saasaloy remove` takes back out.
 
 /**
  * The slice of `@repo/queue`'s `Job` this file implements, declared here rather than

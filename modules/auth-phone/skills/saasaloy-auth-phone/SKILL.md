@@ -44,7 +44,7 @@ A customer signs up by phone with an SMS code, sets a password, signs in with ph
 
 It also adds `users.phone_number` and `users.phone_number_verified` to `packages/db/src/schema/auth.ts`. Run `pnpm --filter @repo/db db:generate` after `add`.
 
-With `app` installed, it adds the three phone paths to `AUTH_SCREENS` in `apps/app/src/lib/redirect.ts` with `const-array` patches, so the root guard lets an anonymous visitor open them and `resolveDestination()` never returns to one. `apps/app`'s `typecheck` script runs `tsr generate` first, so the committed `src/routeTree.gen.ts` picks up the new route files. `pnpm dev` and `pnpm build` rewrite it too.
+With `app` installed, it adds the three phone paths to `AUTH_SCREENS` in `apps/app/src/lib/redirect.ts` with `app.authScreens` rows, so the root guard lets an anonymous visitor open them and `resolveDestination()` never returns to one. `apps/app`'s `typecheck` script runs `tsr generate` first, so the committed `src/routeTree.gen.ts` picks up the new route files. `pnpm dev` and `pnpm build` rewrite it too.
 
 ## The flow
 
@@ -82,7 +82,7 @@ These hold on better-auth 1.7.7. Check them again after a Better Auth upgrade, b
 
 ## Admin login codes screen
 
-With `admin` installed, `auth-phone` mounts `GET /admin/login-codes` with a `chained-route` patch and adds a "Login codes" row under "SMS" in the admin nav with a `nav-entry` patch. The screen lists every `login_code` SMS of the last 30 minutes, newest first: the phone, the account it belongs to, the purpose, the state, the tries left, the send result, and the send error through `maskCodes()`.
+With `admin` installed, `auth-phone` mounts `GET /admin/login-codes` with an `api.routes` row and adds a "Login codes" row under "SMS" in the admin nav with an `admin.nav` row. The screen lists every `login_code` SMS of the last 30 minutes, newest first: the phone, the account it belongs to, the purpose, the state, the tries left, the send result, and the send error through `maskCodes()`.
 
 The state comes from Better Auth's `verifications` row for the code. A sign-up or sign-in code sits under the identifier `<phone>`, a reset code under `<phone>-request-password-reset`, and the value is `<code>:<wrong tries>`. A request is `live` when it is the newest for its identifier and its row has tries left before `expiresAt`. A gone code is `ended` inside `codeTtlSeconds` (used, out of tries, or replaced by a newer code) and `expired` after it.
 

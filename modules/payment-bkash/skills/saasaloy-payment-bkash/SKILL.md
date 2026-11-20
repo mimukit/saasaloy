@@ -5,7 +5,7 @@ description: Runbook for the payment-bkash provider, one-off payments on bKash T
 
 # payment-bkash: bKash Tokenized Checkout, with the token on a schedule
 
-`saasaloy add payment-bkash` puts `packages/payment/src/providers/bkash.ts` and `packages/payment/src/env/bkash.ts` into the project, appends `bkash()` to the `providers` array and `bkashEnv()` to the payment env preset, appends `bkashTokenJob()` and `bkashTokenSchedule()` to `packages/queue`'s tables, adds `@repo/kv` to `packages/payment/package.json`, and adds `@repo/payment` to `packages/queue/package.json`. List `bkash` in `PAYMENT_PROVIDER` and `createPayment(env).create({ method: "bkash", ... })` answers a redirect to bKash's hosted page. The admin Payments page, the refund route and the listeners work against it with no change.
+`saasaloy add payment-bkash` puts `packages/payment/src/providers/bkash.ts` and `packages/payment/src/env/bkash.ts` into the project, adds `bkash()` to the `payment.providers` table and `bkashEnv()` to the `payment.envPresets` table, adds `bkashTokenJob()` and `bkashTokenSchedule()` to the `queue.jobs` and `queue.schedules` tables, adds `@repo/kv` to `packages/payment/package.json`, and adds `@repo/payment` to `packages/queue/package.json`. List `bkash` in `PAYMENT_PROVIDER` and `createPayment(env).create({ method: "bkash", ... })` answers a redirect to bKash's hosted page. The admin Payments page, the refund route and the listeners work against it with no change.
 
 Read `modules/payment/skills/saasaloy-payment/` first. This file covers only what differs.
 

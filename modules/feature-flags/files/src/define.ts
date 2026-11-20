@@ -149,9 +149,9 @@ export function defineFlag<K extends string>(
 }
 
 /**
- * Build the registry. `flags` is a patch point: a project adds a key by appending its
- * factory call to the array in `src/index.ts`, the same `plugin-array` shape `packages/kv`
- * uses for providers and policies.
+ * Build the registry. A project adds a key by appending its factory call to the `flags`
+ * array in `src/index.ts`, the same call-in-an-array shape `packages/kv` uses for
+ * providers and policies.
  */
 export function defineFlags<F extends readonly FlagDefinition[]>(
   config: FlagsConfig<F>

@@ -1,3 +1,5 @@
+import { envServices } from "./services.generated.ts";
+
 // The service table: which file each service's values land in, which environment fills
 // it, and which keys never reach it.
 //
@@ -5,8 +7,9 @@
 // values a tool reads with no file at all. The name is the workspace directory, not the
 // module that installed it. The base seeds the `web` row because the base template ships
 // `apps/web`, the `deploy` row because `pnpm deploy:production` needs Cloudflare
-// credentials, and the `dev-ports` row for the values `pnpm dev:ports` reads. `saasaloy
-// add api` and `admin` each append their own row with a `const-array` patch.
+// credentials, and the `dev-ports` row for the values `pnpm dev:ports` reads. A module
+// adds its own row to `./services.generated.ts`, which the CLI writes on every run:
+// `saasaloy add api` adds `api`, and `admin` adds `admin`.
 
 export type Environment = "dev" | "prod";
 
@@ -50,9 +53,8 @@ export const LOCAL_VALUES = "packages/env/.env";
 export const LOCAL_PROD_VALUES = "packages/env/.env.prod";
 
 /**
- * Keep this line in exactly this shape: `export const SERVICES = [...]` with a real array
- * literal. The codemod behind the `const-array` patch kind has nothing to push into
- * otherwise, and `saasaloy add api` fails silently.
+ * Every service: the rows the base ships, then the rows of the installed modules, then
+ * your own. Add a row of your own after the spread.
  */
 export const SERVICES: Service[] = [
   {
@@ -64,6 +66,7 @@ export const SERVICES: Service[] = [
   },
   { name: "deploy", environment: "prod", omit: [] },
   { name: "dev-ports", environment: "dev", omit: [] },
+  ...envServices,
 ];
 
 export function serviceNames(): string[] {

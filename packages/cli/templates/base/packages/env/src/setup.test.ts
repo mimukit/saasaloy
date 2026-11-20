@@ -20,7 +20,7 @@ import type { EnvSource } from "./sources.ts";
 // Every write lands in a temp directory, and the value source is a fake. Nothing here
 // opens a connection or touches a file outside `roots`.
 
-/** Idempotent, because `saasaloy add api` appends the same row with a `const-array` patch. */
+/** Idempotent, because `saasaloy add api` adds the same row to the `env.services` table. */
 function addService(service: Service): Service {
   const existing = SERVICES.find((row) => row.name === service.name);
   if (existing) {

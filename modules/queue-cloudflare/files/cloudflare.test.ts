@@ -63,7 +63,7 @@ const realError = console.error;
 beforeEach(() => {
   warnings = [];
   errors = [];
-  // What `saasaloy add queue-cloudflare`'s `plugin-array` patch writes into the barrel.
+  // What `saasaloy add queue-cloudflare`'s `queue.providers` row puts into the barrel.
   // The repo copy of `packages/queue` ships the array empty, so a test registers it.
   queue.providers.push(cloudflare());
   console.warn = (...args: unknown[]) => {

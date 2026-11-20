@@ -13,7 +13,7 @@ A payment provider for bKash, Nagad, Rocket and bank transfers that staff confir
 | Tier | provider |
 | Stage | money |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`payment`](payment.md), [`validators`](validators.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -32,8 +32,17 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/payment/src/index.ts` | `plugin-array` |
 | `packages/payment/package.json` | `package-json-dependency` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `payment.providers` | 1 |
 
 ## See the rest
 

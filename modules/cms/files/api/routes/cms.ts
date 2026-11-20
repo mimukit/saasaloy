@@ -62,7 +62,7 @@ import type { FileUploadsEnv } from "../lib/file-uploads";
 //
 // Route module contract: export a Hono sub-app under a NAMED export matching the file,
 // built as ONE chained expression. Splitting the chain into statements empties the routes
-// out of `AppType`. This module's `chained-route` patch mounts it at `/cms`.
+// out of `AppType`. This module's `api.routes` row mounts it at `/cms`.
 //
 // Three rules run through the file:
 //

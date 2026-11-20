@@ -39,8 +39,8 @@ export interface SmsRegistry {
 const E164 = /^\+[1-9]\d{1,14}$/;
 
 /**
- * Build the provider registry. The `providers` array is the patch point every
- * `sms-<provider>` module appends to — see `src/index.ts`.
+ * Build the provider registry. The `providers` array holds the `sms.providers` table,
+ * one generated row for every `sms-<provider>` module. See `src/index.ts`.
  */
 export function defineSms(config: SmsConfig): SmsRegistry {
   const { providers } = config;

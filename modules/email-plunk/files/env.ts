@@ -1,8 +1,8 @@
 import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
 
-// The environment keys the Plunk provider reads. `saasaloy add email-plunk` appends this
-// preset to `packages/email/src/env-preset.ts`, beside the patch that appends the provider
+// The environment keys the Plunk provider reads. `saasaloy add email-plunk` adds this
+// preset as an `email.envPresets` row, beside the `email.providers` row for the provider
 // itself, so installing the provider is what makes its keys required.
 
 export const plunkEnvPreset = definePreset({

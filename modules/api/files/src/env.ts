@@ -1,5 +1,6 @@
 import { createEnv } from "@repo/env";
 import { z } from "@repo/env/zod";
+import { apiEnvPresets } from "./env.generated";
 
 // This Worker's typed environment, and the one gate in front of every capability.
 //
@@ -12,10 +13,10 @@ import { z } from "@repo/env/zod";
 
 export const apiEnv = createEnv({
   /**
-   * Keep this an array literal. `saasaloy add` appends a capability's preset here with a
-   * `plugin-array` patch, and it fails silently otherwise.
+   * Each capability's preset is a row of the `api.envPresets` table, which the CLI writes
+   * into `./env.generated.ts` on every run. A preset of your own goes after the spread.
    */
-  extends: [],
+  extends: [...apiEnvPresets],
   server: {
     CORS_ORIGINS: z
       .string()

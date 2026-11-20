@@ -29,8 +29,8 @@ export interface EmailRegistry {
 }
 
 /**
- * Build the provider registry. The `providers` array is the patch point every
- * `email-<provider>` module appends to — see `src/index.ts`.
+ * Build the provider registry. The `providers` array holds the `email.providers` table,
+ * one generated row for every `email-<provider>` module. See `src/index.ts`.
  */
 export function defineEmail(config: EmailConfig): EmailRegistry {
   const { providers } = config;

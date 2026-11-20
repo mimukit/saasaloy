@@ -6,7 +6,7 @@
   "stage": "scale",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.10.0"
   },
   "dependsOn": ["api"],
   "dependencies": [],
@@ -25,12 +25,23 @@
       "section": "dependencies",
       "name": "@repo/sms",
       "range": "workspace:*"
+    }
+  ],
+  "tables": [
+    {
+      "id": "sms.providers",
+      "file": "@sms/providers.generated.ts",
+      "shape": "calls"
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "id": "sms.envPresets",
+      "file": "@sms/env-preset.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.envPresets",
       "call": "smsEnv",
       "import": {
         "name": "smsEnv",
@@ -38,9 +49,7 @@
       }
     },
     {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
+      "table": "api.routes",
       "path": "/admin/sms",
       "call": "adminSms",
       "import": {
@@ -52,16 +61,14 @@
       }
     },
     {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
+      "table": "admin.nav",
       "area": "/",
       "group": "Manage",
       "entry": {
         "to": "/sms",
         "label": "SMS"
       },
-      "icon": {
+      "import": {
         "name": "MessageSquareTextIcon",
         "from": "lucide-react"
       },

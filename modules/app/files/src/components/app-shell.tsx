@@ -24,8 +24,8 @@ import { navCountQuery } from "@app/lib/nav-count";
 
 // The app's frame: the `shell` layout with this app's nav, its session and its sign-out.
 // The shell owns the markup and holds no auth logic; this file hands it the data. The live
-// counts some rows show come from ./nav-counts.ts, which a module extends with a
-// `const-array` patch.
+// counts some rows show come from ./nav-counts.ts, which a module extends with an
+// `app.navCounts` row.
 
 /**
  * The link the shell renders for every nav entry. TanStack Router sets aria-current on the

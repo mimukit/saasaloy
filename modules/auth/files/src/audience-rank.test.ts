@@ -411,11 +411,11 @@ describe("instance wiring", () => {
   it("gives each instance its audience plugin first, and its own guard", () => {
     assert.match(
       auth,
-      /plugins: \[audience\(CLIENT_AUDIENCE\), siteRoles\(\), clientAdminGuard\(\)\]/
+      /plugins: \[\s*audience\(CLIENT_AUDIENCE\),\s*siteRoles\(\),\s*clientAdminGuard\(\),\s*\.\.\.authPlugins,\s*\]/
     );
     assert.match(
       auth,
-      /plugins: \[\s*audience\(ADMIN_AUDIENCE, \{ roles: ADMIN_APP_ROLES \}\),\s*siteRoles\(\),\s*rankGuard\(\),\s*\]/
+      /plugins: \[\s*audience\(ADMIN_AUDIENCE, \{ roles: ADMIN_APP_ROLES \}\),\s*siteRoles\(\),\s*rankGuard\(\),\s*\.\.\.adminAuthPlugins,\s*\]/
     );
   });
 

@@ -25,7 +25,7 @@ import {
 import { areaCounts, decodeCursor, encodeCursor } from "../lib/audit-query";
 
 // The admin audit log's read side, mounted at `/admin/audit-events` by the admin module's
-// third `chained-route` patch, so the admin app calls it as `api.admin["audit-events"]`.
+// third `api.routes` row, so the admin app calls it as `api.admin["audit-events"]`.
 // Any admin reads it. `adminWrite` and `adminAuthWrite` write the rows, and nothing
 // changes one.
 //

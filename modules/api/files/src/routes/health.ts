@@ -6,9 +6,9 @@ import { declare } from "../contract";
 // types — break it into separate `health.get(...)` statements and the exported
 // type forgets every route, which empties out `AppType` for the client.
 //
-// The export is named, not default, because that is what the `chained-route` patch
-// a module registers itself with writes: `import { health } from "./routes/health"`.
-// The codemod refuses to wire a link whose binding is a default import.
+// The export is named, not default, because the generated `../routes.generated.ts`
+// imports each router by name: `import { health } from "./routes/health"`. A module
+// names that export in the `import` of its `api.routes` row.
 //
 // Paths are RELATIVE TO THE MOUNT — this file mounts at `/health`, so `get("/")`
 // serves `GET /health` (not `get("/health")`, which would be `/health/health`).

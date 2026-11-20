@@ -113,8 +113,8 @@ function fakeStore(seed: Subscription[] = []) {
 }
 
 /**
- * The queue a project gets, built here rather than imported: the barrel's own tables are the
- * patch point a real install writes into, and a test may not depend on what a previous
+ * The queue a project gets, built here rather than imported: the barrel's own tables spread
+ * the generated rows a real install writes, and a test may not depend on what a previous
  * `saasaloy add` left there.
  *
  * The store is registered as a **runner**, not as a standing resolver, which is what makes

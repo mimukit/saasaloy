@@ -5,7 +5,7 @@
   "description": "Typed feature flags with per-tenant overrides, percentage rollouts, kill switches and a flags admin screen.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "database", "validators", "auth", "admin", "kv"],
   "dependencies": [],
   "removeWarnings": [
@@ -13,28 +13,6 @@
     "The published flag documents survive it too. They have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the KV namespace until you delete them with `wrangler kv key delete`."
   ],
   "patches": [
-    {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "featureFlagsConfig",
-      "import": {
-        "name": "featureFlagsConfig",
-        "from": "./sections/feature-flags"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/admin/flags",
-      "call": "featureFlags",
-      "import": {
-        "name": "featureFlags",
-        "from": "./routes/feature-flags"
-      }
-    },
     {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
@@ -48,21 +26,41 @@
       "section": "dependencies",
       "name": "@repo/feature-flags",
       "range": "workspace:*"
+    }
+  ],
+  "entries": [
+    {
+      "table": "config.sections",
+      "call": "featureFlagsConfig",
+      "import": {
+        "name": "featureFlagsConfig",
+        "from": "./sections/feature-flags"
+      }
     },
     {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
+      "table": "api.routes",
+      "path": "/admin/flags",
+      "call": "featureFlags",
+      "import": {
+        "name": "featureFlags",
+        "from": "./routes/feature-flags"
+      }
+    },
+    {
+      "table": "admin.nav",
       "area": "/",
       "group": "Manage",
-      "entry": { "to": "/flags", "label": "Flags" },
-      "icon": { "name": "FlagIcon", "from": "lucide-react" }
+      "entry": {
+        "to": "/flags",
+        "label": "Flags"
+      },
+      "import": {
+        "name": "FlagIcon",
+        "from": "lucide-react"
+      }
     },
     {
-      "file": "apps/api/src/lib/audit-actions.ts",
-      "kind": "plugin-array",
-      "exportName": "AUDIT_ACTIONS",
-      "arrayProp": "actions",
+      "table": "audit.actions",
       "call": "featureFlagsAuditActions",
       "import": {
         "name": "featureFlagsAuditActions",

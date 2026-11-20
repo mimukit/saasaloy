@@ -1024,7 +1024,7 @@ describe(checkDeploy, () => {
       "apps/admin deploys and has no DEPLOY_TARGETS row"
     );
     expect(findings[0]?.message).toContain(
-      `Add { service: "admin", order: <number> } to ${DEPLOY_TARGETS_FILE}`
+      `Add { service: "admin", order: <number> } to DEPLOY_TARGETS in ${DEPLOY_TARGETS_FILE}`
     );
     expect(findings[1]?.message).toContain("apps/docs");
   });

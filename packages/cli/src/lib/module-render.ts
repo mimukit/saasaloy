@@ -20,7 +20,7 @@ export function renderModule(
   mod: LoadedModule,
   vars: TemplateVars
 ): LoadedModule {
-  const { patches } = mod.item;
+  const { entries, patches } = mod.item;
   return {
     ...mod,
     vars,
@@ -29,6 +29,9 @@ export function renderModule(
       ...(patches === undefined
         ? {}
         : { patches: patches.map((op) => renderValue(op, vars)) }),
+      ...(entries === undefined
+        ? {}
+        : { entries: entries.map((entry) => renderValue(entry, vars)) }),
     },
   };
 }

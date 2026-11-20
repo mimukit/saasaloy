@@ -57,7 +57,7 @@ import { paymentsSearchExtension } from "@admin/extend/payments";
 import { api } from "@admin/lib/api";
 
 // The Payments screen at `/payments`, shipped by `modules/payment`. The router plugin wires
-// it from the path, and the module's `nav-entry` patch adds the "Payments" row under Manage.
+// it from the path, and the module's `admin.nav` row adds the "Payments" row under Manage.
 //
 // It lists one-time payments from every installed provider, and it is the review queue for
 // the providers that cannot check a payment themselves. A `submitted` payment is a claim: a

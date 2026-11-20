@@ -1,13 +1,3 @@
-import {
-  chainedRouteInsertRefusal,
-  insertChainedRoute,
-} from "./chained-route.js";
-import type { ChainedRoute } from "./chained-route.js";
-import {
-  constArrayInsertRefusal,
-  insertIntoConstArray,
-} from "./const-array.js";
-import type { ConstArrayInsert } from "./const-array.js";
 import { constPropertyRefusal, setConstProperty } from "./const-property.js";
 import type { ConstProperty } from "./const-property.js";
 import { toDiff } from "./diff.js";
@@ -18,8 +8,6 @@ import {
 import type { DrizzleColumn } from "./drizzle-column.js";
 import { upsertWranglerBinding } from "./jsonc.js";
 import type { WranglerBinding } from "./jsonc.js";
-import { insertNavEntry, navEntryInsertRefusal } from "./nav-entry.js";
-import type { NavEntry } from "./nav-entry.js";
 import { upsertPackageJsonDependency } from "./pkg-json.js";
 import type { PackageJsonDependency } from "./pkg-json.js";
 import {
@@ -27,29 +15,16 @@ import {
   upsertPackageJsonScript,
 } from "./pkg-json-script.js";
 import type { PackageJsonScript } from "./pkg-json-script.js";
-import {
-  insertIntoPluginArray,
-  pluginArrayInsertRefusal,
-} from "./ts-module.js";
-import type { PluginArrayInsert } from "./ts-module.js";
 
-// The config-patch engine (build spec §3.4): the ~10% of module application that isn't
-// a pure file-drop. Small, well-tested AST codemods for structural edits — `jsonc-parser`
-// for `wrangler.jsonc` bindings/routes and package.json dependency merges, `magicast` for
-// TS/JS module edits (Better Auth plugin arrays). The render applies each one in memory as
-// a transform (plan 0116), so only the insert side exists: a remove is a render without
-// the module. `applyPatch` never writes, and re-running an applied patch is a no-op.
+// The config-patch engine (build spec §3.4): the small part of module application that
+// is neither a file drop nor a registration table. Small, well-tested AST codemods for
+// structural edits: `jsonc-parser` for `wrangler.jsonc` bindings and package.json merges,
+// `magicast` for a Drizzle column and one const property. A registration table is not a
+// patch: the render writes it as a generated file (`engine/tables.ts`, plan 0116 Phase 7).
+// The render applies each patch in memory as a transform, so only the insert side exists:
+// a remove is a render without the module. `applyPatch` never writes, and re-running an
+// applied patch is a no-op.
 
-export {
-  chainedRouteInsertRefusal,
-  insertChainedRoute,
-  type ChainedRoute,
-} from "./chained-route.js";
-export {
-  constArrayInsertRefusal,
-  insertIntoConstArray,
-  type ConstArrayInsert,
-} from "./const-array.js";
 export {
   type ConstProperty,
   constPropertyRefusal,
@@ -63,11 +38,6 @@ export {
 } from "./drizzle-column.js";
 export { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
 export {
-  insertNavEntry,
-  type NavEntry,
-  navEntryInsertRefusal,
-} from "./nav-entry.js";
-export {
   upsertPackageJsonDependency,
   type PackageJsonDependency,
 } from "./pkg-json.js";
@@ -76,23 +46,14 @@ export {
   upsertPackageJsonScript,
   type PackageJsonScript,
 } from "./pkg-json-script.js";
-export {
-  insertIntoPluginArray,
-  type PluginArrayInsert,
-  pluginArrayInsertRefusal,
-} from "./ts-module.js";
 
 /** A single structural patch, tagged by the codemod that applies it. */
 export type Patch =
-  | ({ kind: "const-array" } & ConstArrayInsert)
   | ({ kind: "const-property" } & ConstProperty)
-  | ({ kind: "nav-entry" } & NavEntry)
   | ({ kind: "drizzle-column" } & DrizzleColumn)
   | ({ kind: "wrangler-binding" } & WranglerBinding)
   | ({ kind: "package-json-dependency" } & PackageJsonDependency)
-  | ({ kind: "package-json-script" } & PackageJsonScript)
-  | ({ kind: "plugin-array" } & PluginArrayInsert)
-  | ({ kind: "chained-route" } & ChainedRoute);
+  | ({ kind: "package-json-script" } & PackageJsonScript);
 
 export type PatchKind = Patch["kind"];
 
@@ -101,14 +62,10 @@ export type PatchKind = Patch["kind"];
 // that names no kind is an excess property. `PATCH_KINDS` is what `schema.test.ts`
 // holds both JSON Schemas to, so the enums can't drift apart again (#98).
 const PATCH_KIND_KEYS: Record<PatchKind, true> = {
-  "chained-route": true,
-  "const-array": true,
   "const-property": true,
   "drizzle-column": true,
-  "nav-entry": true,
   "package-json-dependency": true,
   "package-json-script": true,
-  "plugin-array": true,
   "wrangler-binding": true,
 };
 
@@ -161,14 +118,8 @@ export function applyPatch(
 
 function applyCodemod(source: string, patch: Patch): string {
   switch (patch.kind) {
-    case "const-array": {
-      return insertIntoConstArray(source, patch);
-    }
     case "const-property": {
       return setConstProperty(source, patch);
-    }
-    case "nav-entry": {
-      return insertNavEntry(source, patch);
     }
     case "drizzle-column": {
       return insertDrizzleColumn(source, patch);
@@ -181,12 +132,6 @@ function applyCodemod(source: string, patch: Patch): string {
     }
     case "package-json-script": {
       return upsertPackageJsonScript(source, patch);
-    }
-    case "plugin-array": {
-      return insertIntoPluginArray(source, patch);
-    }
-    case "chained-route": {
-      return insertChainedRoute(source, patch);
     }
     default: {
       const exhaustive: never = patch;
@@ -207,13 +152,9 @@ type Refusal<K extends PatchKind> = (
 ) => string | undefined;
 
 const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
-  "chained-route": chainedRouteInsertRefusal,
-  "const-array": constArrayInsertRefusal,
   "const-property": constPropertyRefusal,
   "drizzle-column": drizzleColumnInsertRefusal,
-  "nav-entry": navEntryInsertRefusal,
   "package-json-script": packageJsonScriptRefusal,
-  "plugin-array": pluginArrayInsertRefusal,
 };
 
 function refusalReason(source: string, patch: Patch): string | undefined {

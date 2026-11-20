@@ -13,7 +13,7 @@ Background jobs and schedules in a packages/queue workspace, with a cron matcher
 | Tier | capability |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -45,7 +45,22 @@ QUEUE_PROVIDER=memory  uses queue-memory
 | File | Kind |
 |---|---|
 | `apps/api/package.json` | `package-json-dependency` |
-| `apps/api/src/env.ts` | `plugin-array` |
+
+## Tables it owns
+
+The CLI writes each table in full on every run, from the rows of the installed modules.
+
+| Table | Generated file | Shape |
+|---|---|---|
+| `queue.jobs` | `@queue/jobs.generated.ts` | `calls` |
+| `queue.providers` | `@queue/providers.generated.ts` | `calls` |
+| `queue.schedules` | `@queue/schedules.generated.ts` | `calls` |
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.envPresets` | 1 |
 
 ## See the rest
 
@@ -203,7 +218,7 @@ saasaloy add queue-memory
 
 The `queue` core arrives through `dependsOn` here too.
 
-The local provider. It runs the job **inline, in the same Worker, the moment it is enqueued**, so `pnpm dev` and `pnpm test` need no Cloudflare account, no paid plan and no network. It patches nothing but the `providers` array: no binding, no cron trigger, no handler set, no env var of its own. Set `QUEUE_PROVIDER=memory` in `packages/env/.env`, run `pnpm env:setup`, and background work runs.
+The local provider. It runs the job **inline, in the same Worker, the moment it is enqueued**, so `pnpm dev` and `pnpm test` need no Cloudflare account, no paid plan and no network. It adds nothing but its `queue.providers` row: no binding, no cron trigger, no handler set, no env var of its own. Set `QUEUE_PROVIDER=memory` in `packages/env/.env`, run `pnpm env:setup`, and background work runs.
 
 Install both providers side by side and let the variable choose. `QUEUE_PROVIDER=memory` locally, `cloudflare` in staging and production. The Cloudflare handlers stay installed and warn-and-return while `memory` is selected, so nothing runs twice. One caveat if you switch a **deployed** Worker from `cloudflare` to `memory`: the gated consumer returns without acking or retrying, so any message already in `<project>-jobs` burns its `max_retries` redeliveries and then lands in `<project>-jobs-dlq`. Drain the queue before you switch, or expect to replay the dead-letter queue afterwards.
 
@@ -246,15 +261,15 @@ It matches the schedule table against that UTC minute and **enqueues** each hit 
 
 One file in `src/providers/`, exporting a factory that returns a `QueueProvider`: a `name` and an `enqueue(env, job, payload, options)`. The core has already looked the job up and validated the payload by the time you are called, so serialize `{ job: job.name, payload }` and send it. Read the binding or secret off `env` inside that file and nowhere else, map every vendor failure onto `QueueError`, and set `retryable` honestly; a wrong `true` means the job runs twice. Honour `delaySeconds`, and refuse `job.durable` unless you can genuinely checkpoint.
 
-A provider whose service pushes work back into the Worker ships a second exported factory returning `{ queue?, scheduled? }` and appends it to the `handlers` array in `apps/api/src/worker.ts` with a second `plugin-array` patch. That handler must gate on `QUEUE_PROVIDER` and settle every message on every branch. `queue-cloudflare` is the worked binding example and `queue-memory` the local one; the authoring rules are in `.agents/skills/create-provider/`, mode `queue`.
+A provider whose service pushes work back into the Worker ships a second exported factory returning `{ queue?, scheduled? }` and adds it to the `handlers` array in `apps/api/src/worker.ts` with a `worker.handlers` row. That handler must gate on `QUEUE_PROVIDER` and settle every message on every branch. `queue-cloudflare` is the worked binding example and `queue-memory` the local one; the authoring rules are in `.agents/skills/create-provider/`, mode `queue`.
 
 #### Removal
 
 Remove the dependents first. `queue-cloudflare` and `queue-memory` depend on `queue`, and so does `subscription`. `remove queue` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
 
-`saasaloy remove queue-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. `queue-cloudflare` also reverses its `wrangler-binding` patches and its `handlers` entry in `apps/api/src/worker.ts`. Messages still in the Cloudflare queue survive. Drain them before you remove, or they are never consumed.
+`saasaloy remove queue-<provider>` deletes the provider file, and the render without the module drops its row from `providers.generated.ts`. `queue-cloudflare` also reverses its `wrangler-binding` patches, and its `handlers` row leaves `apps/api/src/worker.generated.ts`. Messages still in the Cloudflare queue survive. Drain them before you remove, or they are never consumed.
 
-`saasaloy remove queue` then deletes the `packages/queue` workspace (`index.ts`, `define.ts`, `provider.ts`, `cron.ts`, `jobs/example.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the queue preset to `apps/api/src/env.ts`. A job file you added under `src/jobs/` is untracked, so `remove` leaves it. The same run takes the `@repo/queue` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `QUEUE_PROVIDER` lines by hand.
+`saasaloy remove queue` then deletes the `packages/queue` workspace (`index.ts`, `define.ts`, `provider.ts`, `cron.ts`, `jobs/example.ts`, `env-preset.ts`) and drops the `api.envPresets` row that adds the queue preset to `apps/api/src/env.generated.ts`. A job file you added under `src/jobs/` is untracked, so `remove` leaves it. The same run takes the `@repo/queue` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `QUEUE_PROVIDER` lines by hand.
 
 Every route that imports `@repo/queue` to enqueue stops compiling.
 

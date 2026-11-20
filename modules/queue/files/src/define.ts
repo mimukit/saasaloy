@@ -53,7 +53,7 @@ export interface QueueRegistry {
 }
 
 /**
- * Build the registry. All three arrays are patch points: `providers` for every
+ * Build the registry. All three arrays hold a generated table: `providers` for every
  * `queue-<provider>` module, `jobs` and `schedules` for every feature that declares
  * background work. See `src/index.ts`.
  */

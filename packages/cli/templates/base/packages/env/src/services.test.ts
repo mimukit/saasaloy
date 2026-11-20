@@ -12,7 +12,7 @@ import type { Service } from "./services.ts";
  * Add a row the base does not seed, so the section and selection rules are exercised
  * against more than one service.
  *
- * Idempotent, because `saasaloy add api` appends the same row with a `const-array` patch.
+ * Idempotent, because `saasaloy add api` adds the same row to the `env.services` table.
  * In a project that installed it, this run finds the row already there.
  */
 function addService(service: Service): Service {
@@ -41,7 +41,7 @@ addService({
 // pin the whole table. They check the rows the base seeds and the two added above, and
 // derive anything else from the table itself.
 describe("the service table", () => {
-  it("seeds web and deploy, and takes the rows a const-array patch appends", () => {
+  it("seeds web and deploy, and takes the rows the env.services table adds", () => {
     const names = serviceNames();
     for (const name of ["web", "deploy", "api", "ops"]) {
       assert.ok(names.includes(name), `${name} is in the table`);

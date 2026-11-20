@@ -6,8 +6,8 @@ import type { AuditActionMap } from "../lib/audit-actions";
 // the fact that it was set does.
 //
 // This file is the model for every module's action file: one function, named after the
-// module, that returns its actions. The descriptor's `plugin-array` patch appends the call
-// into `AUDIT_ACTIONS` in `../lib/audit-actions.ts`. `as const` keeps each key a literal,
+// module, that returns its actions. The descriptor's `audit.actions` row adds the call
+// to `AUDIT_ACTIONS` in `../lib/audit-actions.ts`. `as const` keeps each key a literal,
 // so `audit({ action })` in a route only accepts an action some module registers.
 export function adminAuditActions() {
   return {

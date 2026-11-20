@@ -13,7 +13,7 @@ File uploads on storage: the storage_objects table, the /files routes, an upload
 | Tier | feature |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md), [`auth`](auth.md), [`admin`](admin.md), [`database`](database.md), [`storage`](storage.md), [`validators`](validators.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -50,12 +50,21 @@ Files:
 
 | File | Kind |
 |---|---|
-| `apps/api/src/env.ts` | `plugin-array` |
-| `apps/api/src/index.ts` | `chained-route` |
 | `apps/api/package.json` | `package-json-dependency` |
 | `packages/queue/package.json` | `package-json-dependency` |
-| `packages/queue/src/index.ts` | `plugin-array` |
-| `packages/queue/src/index.ts` | `plugin-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.envPresets` | 1 |
+| `api.routes` | 1 |
+| `queue.jobs` | 1 |
+| `queue.schedules` | 1 |
 
 ## See the rest
 
@@ -161,7 +170,7 @@ The sweep runs at 04:00 UTC daily and makes three bounded passes: finish `deleti
 
 **It runs only with the `queue` capability**, and `queue` is deliberately not in `dependsOn`: garbage collection is not a precondition for uploading a file, and `queue` brings a provider choice and a Cron Trigger with it. Without it everything still works — upload, list, download, delete — and what you lose is the tidying. Abandoned rows accumulate, soft-deleted rows are never dropped, and a row whose object delete died halfway stays in `deleting`. That is untidy, not broken.
 
-The three files always land; only the two `plugin-array` registrations need `queue`. In a project without it, `saasaloy add file-uploads` warns that three patch targets are missing — `packages/queue/package.json` once and `packages/queue/src/index.ts` twice, each printed both in the plan and again at apply time — and `packages/file-uploads/src/job.ts` is dead code. That is the expected output, not a failure — a patch carries no `onlyWith` condition the way a file does. Add `queue` later with `saasaloy add queue`: the run renders the whole set again, so the two registrations land in the same run.
+The three files always land; only the `queue.jobs` and `queue.schedules` rows need `queue`. In a project without it, `saasaloy add file-uploads` warns that each of the two rows is not written, because no module in the set owns its table, and it warns that the `packages/queue/package.json` patch target is missing. `packages/file-uploads/src/job.ts` is then dead code. That is the expected output, not a failure. Add `queue` later with `saasaloy add queue`: the run renders the whole set again, so the two registrations land in the same run.
 
 The sweep is split across three files for two reasons worth knowing before you move any of it. A file targeting `@queue/...` could not ship conditionally when this module was written, because the old engine resolved the alias before it applied `onlyWith`, so the job would have broken `add` in every project with no queue. And a job file inside `packages/queue` that imported `@repo/db` would pull the schema barrel's `import.meta.glob` into a workspace that does not compile with Vite's types. So `packages/file-uploads` holds the sweep and the registration with zero runtime dependencies, and `apps/api/src/lib/storage-sweep.ts` implements the port. It is `packages/subscription`'s arrangement, for the same reasons.
 
@@ -175,7 +184,7 @@ The admin screen needs no wiring: `apps/admin/src/routes/files.tsx` landed with 
 { to: "/files", label: "Files", icon: FolderIcon },
 ```
 
-No patch does it for you, because `NAV_AREAS` is a nested structure and the `const-array` codemod appends to a flat one.
+No module row does it for you, because `file-uploads` declares no `admin.nav` entry.
 
 The rest of this section is for putting the block on a *second* surface, such as a user-facing page in `apps/web`.
 

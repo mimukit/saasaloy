@@ -21,12 +21,12 @@ import {
 // Organization-owned API keys, in two plugins.
 //
 // `apiKeyPlugin()` is `@better-auth/api-key` with this project's options fixed in one
-// place, so the core's `plugin-array` patch only has to append a zero-argument call. The
+// place, so the core's `auth.plugins` row only has to name a zero-argument call. The
 // options both owners share come from `./api-key-options.ts`, which `api-keys` ships.
 // `apiKeyScopeGuard()` is the rule the plugin has no option for: a key may not be issued
 // with more permission than the member issuing it holds.
 //
-// Both go into `auth.plugins`, and the order in the array is the order they were patched
+// Both go into `auth.plugins`, and the order in the array is the order their rows sort
 // in. It does not matter here: the guard matches on a path, and the plugin owns that
 // path whichever way round they sit.
 

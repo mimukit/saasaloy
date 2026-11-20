@@ -13,7 +13,7 @@ An in-house shop on Postgres: products with variants, stock holds, carts, orders
 | Tier | feature |
 | Stage | money |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.9.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md), [`database-postgres`](database-postgres.md), [`validators`](validators.md), [`auth`](auth.md), [`auth-phone`](auth-phone.md), [`admin`](admin.md), [`file-uploads`](file-uploads.md), [`payment`](payment.md), [`cms`](cms.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -136,27 +136,31 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/config/src/sections.ts` | `plugin-array` |
 | `packages/db/package.json` | `package-json-dependency` |
 | `apps/api/package.json` | `package-json-dependency` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/api/src/lib/audit-actions.ts` | `plugin-array` |
 | `packages/payment/package.json` | `package-json-dependency` |
-| `packages/payment/src/index.ts` | `plugin-array` |
-| `apps/admin/src/components/nav-counts.ts` | `const-array` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
 | `apps/admin/package.json` | `package-json-dependency` |
 | `apps/web/package.json` | `package-json-dependency` |
 | `apps/web/package.json` | `package-json-dependency` |
 | `apps/web/package.json` | `package-json-dependency` |
 | `apps/web/wrangler.jsonc` | `wrangler-binding` |
 | `apps/web/wrangler.jsonc` | `wrangler-binding` |
-| `packages/ui/src/blocks/navbar.tsx` | `const-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `config.sections` | 1 |
+| `api.routes` | 2 |
+| `audit.actions` | 1 |
+| `payment.listeners` | 1 |
+| `admin.navCounts` | 1 |
+| `admin.nav` | 5 |
+| `ui.pageLinks` | 1 |
 
 ## See the rest
 

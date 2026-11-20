@@ -1,5 +1,6 @@
 import { defineStorage } from "./define";
 import type { StorageEnv } from "./provider";
+import { storageProviders } from "./providers.generated";
 
 export { defineStorage } from "./define";
 export {
@@ -46,15 +47,12 @@ export type { StorageTokenClaims } from "./token";
 export { ownsKey, readLimited, sniffType } from "./upload";
 export type { OwnsKeyOptions, Sniffed, SniffedType } from "./upload";
 
-// The provider registry, and the patch point every `storage-<provider>` module writes
-// into. `saasaloy add storage-cloudflare` adds its import and appends `cloudflare()`
-// here — idempotently, so re-running it changes nothing.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with a real array literal. The codemod behind the `plugin-array` patch kind
-// (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into otherwise, and a
-// provider install fails silently. Never omit `providers`, even while it's empty.
-export const storage = defineStorage({ providers: [] });
+// The provider registry. Every `storage-<provider>` module adds a row to the
+// `storage.providers` table, and the CLI writes `./providers.generated.ts` from those rows
+// on every run: `saasaloy add storage-cloudflare` adds `cloudflare()`, and
+// `saasaloy remove` takes it back out. A provider of your own goes after the spread, never in the generated
+// file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
+export const storage = defineStorage({ providers: [...storageProviders] });
 
 /**
  * Get a storage client for this request's environment. Mirrors `createEmail(c.env)`:

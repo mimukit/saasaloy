@@ -113,7 +113,7 @@ import { createPaymentStore, withPaymentStore } from "../payment-store";
 import "../lib/ecommerce/payment-listener";
 
 // The shop's staff api, mounted at `/admin/shop` by the ecommerce module's second
-// `chained-route` patch. The mount is not `/admin` because `admin` already routes `/admin`.
+// `api.routes` row. The mount is not `/admin` because `admin` already routes `/admin`.
 //
 //   products    list, read, create, edit, publish, delete; options and the generated
 //               variant grid; a variant's SKU, price and active flag; stock edits; images

@@ -1,7 +1,6 @@
-// The bits of AST and import handling both magicast codemods need. chained-route.ts and
-// ts-module.ts ask the same three questions in their inverse direction — "does the local
-// name still bind what we imported?", "is the name still used anywhere else?", "did recast
-// eat the file's terminator?" — so the answers live here once rather than twice.
+// The bits of AST and import handling the magicast codemods need: "does the local name
+// still bind what we imported?" and "did recast eat the file's terminator?".
+// drizzle-column.ts asks both.
 
 /** Structural view of magicast's import proxy: local name → what it binds. */
 export type ModuleImports = Record<

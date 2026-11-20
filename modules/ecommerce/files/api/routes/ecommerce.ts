@@ -85,8 +85,8 @@ import type { FileUploadsEnv } from "../lib/file-uploads";
 // Registers the payment listener's handler at module load.
 import "../lib/ecommerce/payment-listener";
 
-// The shop's public api, mounted at `/shop` by the ecommerce module's `chained-route`
-// patch. `apps/web` reads it over `PUBLIC_API_URL`.
+// The shop's public api, mounted at `/shop` by the ecommerce module's `api.routes`
+// row. `apps/web` reads it over `PUBLIC_API_URL`.
 //
 //   GET    /products, /products/:slug     the active catalog, store-currency prices only
 //   GET    /categories                    the catalog's category chips

@@ -57,8 +57,8 @@ export interface AuthRequestContext {
  */
 const INSTANCES = { admin: adminAuth, client: auth } as const;
 
-// Why a throw and not Hono middleware: the `chained-route` patch kind registers routes,
-// not `.use()` links (ADR 0028), so middleware would need a per-route wiring convention
+// Why a throw and not Hono middleware: the `api.routes` table registers routes, not
+// `.use()` links (ADR 0028), so middleware would need a per-route wiring convention
 // no module has. A throw reuses `modules/api`'s `onError`, which renders any
 // `HTTPException` as the one `{ error: { code, message } }` envelope the api publishes —
 // so every deny, from every module, answers with the same body.

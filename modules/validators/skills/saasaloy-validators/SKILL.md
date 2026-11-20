@@ -45,7 +45,7 @@ export const signup = new Hono().post(
 );
 ```
 
-One named export, one chained expression. Split the `.post()` into its own `signup.post(...)` statement and the exported type forgets the route, which empties it out of `AppType`. The name has to be an `export const`: the `chained-route` codemod writes `import { signup } from "./routes/signup"` and refuses a default import. Every route also carries one `declare({...})` link, its agent statement, and a callable route names its output schema there; keep that schema in this package next to the input one. See the `saasaloy-api` skill for the full route contract.
+One named export, one chained expression. Split the `.post()` into its own `signup.post(...)` statement and the exported type forgets the route, which empties it out of `AppType`. The name has to be an `export const`: the generated `apps/api/src/routes.generated.ts` imports it by name, as `import { signup } from "./routes/signup"`. Every route also carries one `declare({...})` link, its agent statement, and a callable route names its output schema there; keep that schema in this package next to the input one. See the `saasaloy-api` skill for the full route contract.
 
 `result.error.issues[0]` is possibly undefined under the template's tsconfig, so guard it rather than indexing straight into `.message`.
 

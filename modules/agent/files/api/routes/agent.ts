@@ -27,7 +27,7 @@ import type { Bindings } from "../index";
 // The agent surface of the api: the OpenAPI document, `llms.txt`, the MCP Server Card and
 // the MCP endpoint, all built from the route statements (plan 0110, ADR 0063).
 //
-// This module's `chained-route` patch mounts the chain on `base`, at `/`, not on the
+// This module's `api.baseRoutes` row mounts the chain on `base`, at `/`, not on the
 // typed chain: none of these routes belongs in `AppType`, and `hc` has nothing to say
 // about a JSON-RPC endpoint. Mounted on `base`, it still runs after api's CORS and request
 // logger, and api's `onError` and `notFound` answer for it.

@@ -75,7 +75,7 @@ The guard stays in the app's root `beforeLoad`. The shell renders whatever the a
 
 The nav data lives in the app, in `src/components/nav.ts`, as `NAV_AREAS` with `as const`. The shell reads it through the structural types in `containers/shell/shell-nav.tsx`, where `to` is a plain string, because `@repo/ui` imports no router.
 
-- **A row** is one `{ to, label, icon, count?, shortcut? }` in a group's `items`. A module adds it with a `nav-entry` patch on `apps/<app>/src/components/nav.ts`. When the area has no group with the patch's `group` label, the patch adds that group after the last one, and removing the group's last row removes the group too.
+- **A row** is one `{ to, label, icon, count?, shortcut? }` in a group's `items`. A module adds it with a row of the `<app>.nav` table (`area`, `group`, `entry` and the icon `import`), which the CLI writes into `apps/<app>/src/components/nav.generated.ts`. When the area has no group with the row's `group` label, `nav.ts` adds that group after the last one, and removing the group's last row removes the group too. A row of your own goes in `nav.ts`, never in the generated file.
 - **`shortcut`** is the row's key sequence, the same string as its "Go to …" command's `shortcut` (`"G U"`). The sidebar matches a hint to a row by that string, so a row whose `shortcut` differs from its command's gets no hint, and the command shows in the "Also" panel instead. See [Key hints in the sidebar](#key-hints-in-the-sidebar).
 - **A group** is one `{ label, items }` in an area's `groups`.
 - **An area** is one entry in `NAV_AREAS`. The header's page path starts with its label.
@@ -238,10 +238,10 @@ Before you bind a key, read the reserved key table in the `saasaloy-command` ski
 A module adds itself to every shell app through `defineShellExtensions` from `@repo/ui/lib/shell/extensions`, not by editing the shell. Each app holds its list in `src/components/shell-extensions.ts` and passes it to `ShellLayout` as `extensions`:
 
 ```ts
-export const shellExtensions = defineShellExtensions({ extensions: [] });
+export const shellExtensions = defineShellExtensions({ extensions: [...appShellExtensions] });
 ```
 
-An extension is `{ id, Provider, header? }`. `Provider` wraps the whole layout, the first entry outermost. `header` renders at the right of the header, after the page path. A module ships a factory such as `commandExtension()`, and the app's descriptor appends a bare call to it with a `plugin-array` patch, gated on the module being installed. Keep the `extensions` property even while the array is empty, or the patch has nothing to append into. Two entries with one `id` throw at load. With an empty list, `ShellLayout` renders exactly what it rendered before the prop existed.
+An extension is `{ id, Provider, header? }`. `Provider` wraps the whole layout, the first entry outermost. `header` renders at the right of the header, after the page path. A module ships a factory such as `commandExtension()`, and the app's descriptor adds a bare call to it as a row of the `<app>.shellExtensions` table, gated on the module being installed. The CLI writes the row into `shell-extensions.generated.ts`, and an extension of your own goes after the spread in `shell-extensions.ts`. Two entries with one `id` throw at load. With an empty list, `ShellLayout` renders exactly what it rendered before the prop existed.
 
 ## Tokens and motion
 

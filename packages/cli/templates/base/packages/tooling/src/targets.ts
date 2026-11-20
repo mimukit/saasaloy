@@ -1,20 +1,25 @@
+import {
+  toolingDeployTargets,
+  toolingSmokeChecks,
+} from "./targets.generated.ts";
 import type { DeployTarget, SmokeCheck } from "./types.ts";
 
 // What `pnpm deploy:production` uploads, in which order, and what it asks the live hosts
 // afterwards. This file is the project's: `saasaloy init` writes it once and `saasaloy
-// update` never touches it again. `saasaloy add api` and `saasaloy add admin` each append
-// their own rows with a `const-array` patch.
-//
-// Keep both lines in exactly this shape: `export const NAME: Type[] = [...]` with a real
-// array literal. The codemod behind the `const-array` patch kind has nothing to push into
-// otherwise, and `saasaloy add` cannot add the module's rows.
+// update` never touches it again. The rows of the installed modules come from
+// `./targets.generated.ts`, which the CLI writes on every run: `saasaloy add api` and
+// `saasaloy add admin` each add their own rows there. A row of your own goes after the
+// spread.
 
 /**
  * Every Worker the deploy uploads, lowest `order` first. Every workspace under `apps/`
  * with a `wrangler.jsonc` and a `deploy` script needs a row, or the deploy stops and
  * names it.
  */
-export const DEPLOY_TARGETS: DeployTarget[] = [{ service: "web", order: 30 }];
+export const DEPLOY_TARGETS: DeployTarget[] = [
+  { service: "web", order: 30 },
+  ...toolingDeployTargets,
+];
 
 /**
  * The requests the deploy sends once every Worker is live. The host is each
@@ -35,4 +40,5 @@ export const SMOKE_CHECKS: SmokeCheck[] = [
     path: "/wrangler.json",
     status: 404,
   },
+  ...toolingSmokeChecks,
 ];

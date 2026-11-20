@@ -1,4 +1,4 @@
-import type { RegistryFile, RegistryPatch } from "./schema.js";
+import type { RegistryEntry, RegistryFile } from "./schema.js";
 import type { LoadedModule } from "./registry.js";
 
 // Cross-module file collisions for `saasaloy add` — the deterministic core, kept beside
@@ -230,7 +230,8 @@ export function formatOwnedCollisions(
 // ---------------------------------------------------------------------------
 
 /** The registry `@repo/config` keeps its sections in — the file a section patch writes. */
-export const CONFIG_SECTIONS_FILE = "packages/config/src/sections.ts";
+/** The generated table every module's config section registers in (plan 0116, Phase 7). */
+export const CONFIG_SECTIONS_TABLE = "config.sections";
 
 /**
  * The section keys the base template registers itself, in
@@ -261,7 +262,7 @@ export interface SectionCollision {
 }
 
 /**
- * The section key a patch claims, or `undefined` when the patch is not a section
+ * The section key a table row claims, or `undefined` when the row is not a section
  * registration.
  *
  * The key is the basename of the import specifier, because the file the module ships and
@@ -269,11 +270,11 @@ export interface SectionCollision {
  * descriptor field says it twice, which is what keeps this readable off a published
  * descriptor with no code loaded.
  */
-export function sectionKeyOf(patch: RegistryPatch): string | undefined {
-  if (patch.kind !== "plugin-array" || patch.file !== CONFIG_SECTIONS_FILE) {
+export function sectionKeyOf(entry: RegistryEntry): string | undefined {
+  if (entry.table !== CONFIG_SECTIONS_TABLE || entry.import === undefined) {
     return undefined;
   }
-  const specifier = patch.import.from;
+  const specifier = entry.import.from;
   const base = specifier.slice(specifier.lastIndexOf("/") + 1);
   const key = base.replace(/\.[cm]?tsx?$/, "");
   return key === "" ? undefined : key;
@@ -282,11 +283,11 @@ export function sectionKeyOf(patch: RegistryPatch): string | undefined {
 /** Every section key a module's descriptor claims, in descriptor order. */
 export function sectionClaims(
   module: string,
-  patches: readonly RegistryPatch[] = []
+  entries: readonly RegistryEntry[] = []
 ): SectionClaim[] {
   const claims: SectionClaim[] = [];
-  for (const patch of patches) {
-    const key = sectionKeyOf(patch);
+  for (const entry of entries) {
+    const key = sectionKeyOf(entry);
     if (key !== undefined) {
       claims.push({ module, key });
     }

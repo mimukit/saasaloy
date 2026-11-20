@@ -13,7 +13,7 @@ A packages/db workspace with Drizzle ORM and drizzle-kit; pick database-d1 or da
 | Tier | capability |
 | Stage | validate |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md) |
 | Requires one of | [`database-d1`](database-d1.md), [`database-postgres`](database-postgres.md) |
 | Conflicts with | none |
@@ -38,8 +38,17 @@ Files:
 |---|---|
 | `apps/api/package.json` | `package-json-dependency` |
 | `apps/api/package.json` | `package-json-dependency` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `packages/tooling/src/targets.ts` | `const-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.routes` | 1 |
+| `tooling.smokeChecks` | 1 |
 
 ## See the rest
 
@@ -333,7 +342,7 @@ those three names. Read the driver skill your project has.
 
 #### The database health check: `GET /health/db`
 
-`saasaloy add database` mounts `apps/api/src/routes/health-db.ts` at `/health/db` with a `chained-route` patch. It runs one `select 1` through the request's database client, through `withDb`, so the same file serves both drivers.
+`saasaloy add database` mounts `apps/api/src/routes/health-db.ts` at `/health/db` with an `api.routes` row. It runs one `select 1` through the request's database client, through `withDb`, so the same file serves both drivers.
 
 - A reachable database answers `200 {"status":"ok"}`.
 - A failure answers `503 { "error": { "code": "database_unavailable", "message": "The api could not reach its database." } }`. The message is fixed. The driver's error can carry a host, a user name or a query, so it goes only to the request's logger (`c.get("log")`).

@@ -104,7 +104,7 @@ describe("subscription-console", () => {
 
   beforeEach(() => {
     store = fakeStore();
-    // Register the provider the way the `plugin-array` patch does at install time, so the
+    // Register the provider the way its `subscription.providers` row does at install, so the
     // selection under test is the real `SUBSCRIPTION_PROVIDER` lookup rather than a direct call.
     subscription.providers.length = 0;
     subscription.providers.push(consoleSubscription());

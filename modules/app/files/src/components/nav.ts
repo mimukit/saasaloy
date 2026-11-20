@@ -1,6 +1,7 @@
 import { HouseIcon, LayoutGridIcon } from "lucide-react";
 
 import { config } from "@repo/config";
+import { appNav } from "./nav.generated";
 
 // The shell's navigation data. app-shell.tsx hands it to the sidebar in @repo/ui, which
 // renders every area's groups. It is a .ts file because nothing here renders.
@@ -25,7 +26,7 @@ import { config } from "@repo/config";
 //
 // The area label is the product name, not "Admin": it is the first step of the header's
 // page path. The scaffold ships one row, Home. Your first feature adds the second.
-export const NAV_AREAS = [
+const SHIPPED_AREAS = [
   {
     label: config.app.name,
     to: "/",
@@ -38,6 +39,11 @@ export const NAV_AREAS = [
     ],
   },
 ] as const;
+
+// Every area: the rows above, then the rows of the installed modules from
+// `./nav.generated.ts`, which the CLI writes on every run. A row of your own goes in a
+// group above, or after the spread as \`{ area, group, to, label, icon }\`.
+export const NAV_AREAS = withRows(SHIPPED_AREAS, [...appNav]);
 
 export type NavAreas = typeof NAV_AREAS;
 export type NavArea = NavAreas[number];
@@ -63,4 +69,69 @@ export function areaFor(pathname: string): NavArea {
       (left, right) => right.to.length - left.to.length
     )[0] ?? NAV_AREAS[0]
   );
+}
+
+/** A row of `./nav.generated.ts`: a nav item, and the area and the group it goes into. */
+interface NavRow {
+  /** The `to` of the area. */
+  readonly area: string;
+  /** The label of the group. A group the area does not have yet goes after its last one. */
+  readonly group: string;
+  readonly to: string;
+  readonly label: string;
+}
+
+/** The shipped shape `withRows` reads: areas, each holding labelled groups of items. */
+interface ShippedArea {
+  readonly to: string;
+  readonly groups: readonly {
+    readonly label: string;
+    readonly items: readonly object[];
+  }[];
+}
+
+/** A row without its placement: the nav item it becomes. */
+type RowItem<R> = R extends unknown ? Omit<R, "area" | "group"> : never;
+
+/** The items of a group type, as a union. */
+type ItemOf<G> = G extends { readonly items: readonly (infer I)[] } ? I : never;
+
+/** The areas with every row's item added to the item type of each group. */
+type WithRows<A extends readonly ShippedArea[], R> = {
+  readonly [K in keyof A]: Omit<A[K], "groups"> & {
+    readonly groups: readonly {
+      readonly label: string;
+      readonly items: readonly (ItemOf<A[K]["groups"][number]> | RowItem<R>)[];
+    }[];
+  };
+};
+
+/**
+ * The shipped areas with each row added to the group its `area` and `group` name, in the
+ * order the rows come. A row whose area does not exist throws, so a typo fails the first
+ * test that loads the nav.
+ */
+function withRows<
+  const A extends readonly ShippedArea[],
+  const R extends readonly NavRow[],
+>(areas: A, rows: R): WithRows<A, R[number]> {
+  const merged = areas.map((area) => ({
+    ...area,
+    groups: area.groups.map((group) => ({ ...group, items: [...group.items] })),
+  }));
+  for (const { area: to, group: label, ...item } of rows) {
+    const area = merged.find((candidate) => candidate.to === to);
+    if (area === undefined) {
+      throw new Error(
+        `The nav row ${item.to} names the area ${to}, and NAV_AREAS has no area with that \`to\`.`
+      );
+    }
+    let group = area.groups.find((candidate) => candidate.label === label);
+    if (group === undefined) {
+      group = { items: [], label };
+      area.groups.push(group);
+    }
+    group.items.push(item);
+  }
+  return merged as unknown as WithRows<A, R[number]>;
 }

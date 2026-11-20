@@ -9,7 +9,7 @@ import { declare } from "../contract";
 //
 // Route module contract: export a Hono sub-app under a NAMED export matching the file,
 // built as ONE chained expression. Splitting the chain into statements empties the
-// routes out of `AppType`. `modules/storage`'s `chained-route` patch mounts this at
+// routes out of `AppType`. `modules/storage`'s `api.routes` row mounts this at
 // `/storage`, so `put("/objects")` serves `PUT /storage/objects`.
 //
 // Authorization is the signed token in `?token=`, not a session. The token names one
