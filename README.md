@@ -1,9 +1,7 @@
-![Saasaloy module map with API, auth, database, email, and payment modules on a dark technical grid.](assets/branding/readme-banners/06-module-map.png)
+<img width="2400" height="800" alt="saasaloy-banner" src="https://github.com/user-attachments/assets/8a95e16d-0703-4031-8c07-b2b351f9c24f" />
+
 
 # Saasaloy
-
-> [!TIP]
-> **Are you an AI agent?** Read [`llms.txt`](llms.txt) first. It gives the one path to build a product with Saasaloy: `init`, the interview, the build. To change Saasaloy itself, read [`AGENTS.md`](AGENTS.md).
 
 **Open source, composable SaaS starter kit for Cloudflare.** A CLI plus a module registry, not a boilerplate. You scaffold a small base, then copy in the API, database, auth, subscription and product features one command at a time, as source files you own. Think shadcn/ui for a full-stack SaaS.
 
@@ -12,8 +10,9 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
 [![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/mimukit/saasaloy?utm_source=oss&utm_medium=github&utm_campaign=mimukit%2Fsaasaloy&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
-> [!WARNING]
-> **Saasaloy is at a very early stage.** It is a working proof of concept, not a finished product. Use it at your own risk, and do not build a production project on it yet. The CLI, the module contracts, the generated code and the conventions can all change or break between releases until a stable `1.x.x` version ships. Pin the version you install, read the changelog before you update, and expect to do some manual merging along the way.
+> [!TIP]
+> **Are you an AI agent?** Read [`llms.txt`](llms.txt) first. It gives the one path to build a product with Saasaloy: `init`, the interview, the build. To change Saasaloy itself, read [`AGENTS.md`](AGENTS.md).
+
 
 ## Why Saasaloy exists
 
@@ -44,6 +43,9 @@ These are the reasons behind the born of Saasaloy.
 The full picture of how the CLI, the registry and a generated project fit together is in [Architecture](docs/wiki/architecture.md).
 
 ## Quick start
+
+> [!WARNING]
+> **Saasaloy is at a very early stage.** It is a working proof of concept, not a finished product. Use it at your own risk, and do not build a production project on it yet. The CLI, the module contracts, the generated code and the conventions can all change or break between releases until a stable `1.x.x` version ships. Pin the version you install, read the changelog before you update, and expect to do some manual merging along the way.
 
 Requires Node 24.15.0+ and pnpm 11+. No Cloudflare account is needed until you deploy.
 
