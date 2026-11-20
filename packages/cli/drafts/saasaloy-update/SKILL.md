@@ -7,7 +7,7 @@ description: Runbook for an AI agent that updates this project to a newer Saasal
 
 `saasaloy update` moves this project to the release of the CLI that runs. Every module of the default registry moves with it, in one run: there is no update of one module. A module from another registry moves to the tip of the ref its lock entry records.
 
-The run renders the project at the old release and at the new release, and compares each file with the disk. It writes a file nobody edited. It merges a file with local edits three ways, and it writes conflict markers where both sides changed the same lines. It does not merge a file the project rewrites, such as `saasaloy.json` or a seed page: such a file is **written once**. The run prints a **report** on stdout: the files with conflict markers, the files written once that upstream changed, the files left deleted, and the **update notes**, the work outside the files Saasaloy writes.
+The run renders the project at the old release and at the new release, and compares each file with the disk. It writes a file nobody edited. It merges a file with local edits three ways, and it writes conflict markers where both sides changed the same lines. It does not merge a file the project rewrites, such as `README.md` or a seed page: such a file is **written once**. The run prints a **report** on stdout: the files with conflict markers, the files written once that upstream changed, the files left deleted, and the **update notes**, the work outside the files Saasaloy writes.
 
 The update is done when `saasaloy update` exits `0`.
 

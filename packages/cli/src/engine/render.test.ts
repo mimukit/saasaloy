@@ -142,7 +142,7 @@ describe(render, () => {
       class: "once",
     });
     expect(pick("package.json")).toMatchObject({ class: "merged" });
-    expect(pick("saasaloy.json")).toMatchObject({ class: "once" });
+    expect(pick("saasaloy.json")).toMatchObject({ class: "merged" });
   });
 
   it("applies patches in the fixed order, whatever order the names arrive in", () => {

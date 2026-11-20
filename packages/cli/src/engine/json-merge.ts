@@ -16,6 +16,7 @@ import type { MergeInput, MergeOutput, TextMerger } from "./merge.js";
 /** The file names that merge by key. */
 export const JSON_MERGE_FILES: ReadonlySet<string> = new Set([
   "package.json",
+  "saasaloy.json",
   "tsconfig.json",
   "turbo.json",
   "wrangler.jsonc",

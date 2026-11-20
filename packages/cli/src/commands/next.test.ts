@@ -175,6 +175,9 @@ function registry(version: 1 | 2): Files {
     "beta/registry-item.json": descriptor({
       dependencies: ["zod@4.4.3"],
       dependsOn: ["alpha"],
+      devVars: { BETA_URL: "http://localhost:4000" },
+      envServices: { BETA_URL: ["api"] },
+      envVars: { BETA_URL: "Where beta posts to." },
       files: [{ path: "files/beta.ts", target: "@api/beta.ts" }],
       name: "beta",
     }),
@@ -275,7 +278,8 @@ describe("add and remove on the render engine (local registry)", () => {
       files: Record<string, { class: string }>;
     };
     expect(manifest.version).toBe(2);
-    expect(manifest.files["saasaloy.json"]?.class).toBe("once");
+    expect(manifest.files["saasaloy.json"]?.class).toBe("merged");
+    expect(manifest.files["README.md"]?.class).toBe("once");
     expect((await lockOf(project)).requested).toStrictEqual([]);
   });
 
@@ -381,6 +385,36 @@ describe("add and remove on the render engine (local registry)", () => {
     await expect(read(project, "apps/api/src/extra.ts")).resolves.toBe(
       "export const extra = 1;\n"
     );
+  });
+
+  it("merges saasaloy.json and the key list on add and on remove (re-grill Q2, Q3)", async () => {
+    // An owner's own alias and an owner's key value survive both runs.
+    const configPath = join(project, "saasaloy.json");
+    const config = JSON.parse(await readFile(configPath, "utf-8")) as {
+      aliases: Record<string, string>;
+    };
+    config.aliases["@mine"] = "packages/mine";
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+    commit(project, "owner alias");
+
+    await expect(runAdd(["beta", "--yes"])).resolves.toBe(EXIT_OK);
+    const added = await loadConfig(project);
+    expect(added.installed).toStrictEqual(["alpha", "beta"]);
+    expect(added.aliases["@api"]).toBe("apps/api/src");
+    expect(added.aliases["@mine"]).toBe("packages/mine");
+    await expect(read(project, "packages/env/.env.example")).resolves.toContain(
+      "BETA_URL"
+    );
+    commit(project, "add beta");
+
+    await expect(runRemove(["beta", "--yes"])).resolves.toBe(EXIT_OK);
+    const removed = await loadConfig(project);
+    expect(removed.installed).toStrictEqual([]);
+    expect(removed.aliases["@api"]).toBeUndefined();
+    expect(removed.aliases["@mine"]).toBe("packages/mine");
+    await expect(
+      read(project, "packages/env/.env.example")
+    ).resolves.not.toContain("BETA_URL");
   });
 
   it("remove refuses a module another one needs, and removes it once alone", async () => {

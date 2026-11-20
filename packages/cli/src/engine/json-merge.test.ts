@@ -18,6 +18,7 @@ describe(mergesByKey, () => {
     expect(mergesByKey("apps/api/wrangler.jsonc")).toBeTruthy();
     expect(mergesByKey("packages/db/tsconfig.json")).toBeTruthy();
     expect(mergesByKey("turbo.json")).toBeTruthy();
+    expect(mergesByKey("saasaloy.json")).toBeTruthy();
     expect(mergesByKey("apps/api/src/data.json")).toBeFalsy();
   });
 });

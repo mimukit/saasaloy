@@ -63,15 +63,35 @@ describe(classOf, () => {
     ).toBe("merged");
   });
 
-  it("keeps the seed saasaloy.json and the owned key list once", () => {
-    expect(
-      classOf({ declaration, module: "base", path: "saasaloy.json" })
-    ).toBe("once");
+  it("merges saasaloy.json, the key list and the owned table files (re-grill Q1 to Q3)", () => {
+    const owned = {
+      ownedFiles: [
+        "packages/env/.env.example",
+        "packages/env/src/services.ts",
+        "packages/env/src/sources.ts",
+        "packages/tooling/src/targets.ts",
+        "packages/ui/src/blocks/**",
+      ],
+      retiredSeedFiles: [],
+      seedFiles: ["saasaloy.json"],
+    };
+    for (const path of [
+      "saasaloy.json",
+      "packages/env/.env.example",
+      "packages/env/src/services.ts",
+      "packages/env/src/sources.ts",
+      "packages/tooling/src/targets.ts",
+      "packages/ui/src/blocks/navbar.tsx",
+    ]) {
+      expect(classOf({ declaration: owned, module: "base", path })).toBe(
+        "merged"
+      );
+    }
     expect(
       classOf({
-        declaration,
+        declaration: owned,
         module: "base",
-        path: "packages/env/.env.example",
+        path: "packages/ui/src/blocks/hero.tsx",
       })
     ).toBe("once");
   });

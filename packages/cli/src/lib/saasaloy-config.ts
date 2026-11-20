@@ -30,47 +30,8 @@ export async function loadConfig(root: string): Promise<LoadedConfig> {
       `${CONFIG_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
     );
   }
-  return withLockInstalled(root, migrateBase(parsed as LoadedConfig));
+  return migrateBase(parsed as LoadedConfig);
 }
-
-/**
- * On a project the render engine wrote, the lock holds the installed set (plan 0116,
- * "Formats"): `requested`, and every module of its resolved set in `modules`. The render
- * engine writes `saasaloy.json` one time, so its `installed` list stays as `init` wrote
- * it. Every reader of `installed` (`env`, `doctor`, `list`, `outdated`, `testing`) then
- * reads the lock's set through this. A lock with no `requested` list is the old engine's,
- * and `saasaloy.json` stays the source.
- */
-async function withLockInstalled(
-  root: string,
-  config: LoadedConfig
-): Promise<LoadedConfig> {
-  const file = join(root, LOCK_FILE_NAME);
-  if (!(await pathExists(file))) {
-    return config;
-  }
-  let lock: unknown;
-  try {
-    lock = JSON.parse(await readFile(file, "utf-8"));
-  } catch {
-    // An unreadable lock is the lock loader's refusal to make, not this one's.
-    return config;
-  }
-  if (
-    typeof lock !== "object" ||
-    lock === null ||
-    !Array.isArray((lock as { requested?: unknown }).requested)
-  ) {
-    return config;
-  }
-  const modules = (lock as { modules?: unknown }).modules;
-  const installed =
-    typeof modules === "object" && modules !== null ? Object.keys(modules) : [];
-  return { ...config, installed };
-}
-
-/** `lib/lock.ts`'s `LOCK_FILE`, repeated so this leaf imports no lock code. */
-const LOCK_FILE_NAME = "saasaloy-lock.json";
 
 /**
  * The base app moved out of `installed[]` and into its own `base` field (#98). A project
