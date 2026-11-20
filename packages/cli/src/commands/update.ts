@@ -104,6 +104,8 @@ import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
 import { previewBackfill, reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
+import { nextEngineSelected } from "../engine/flag.js";
+import { runUpdateNext } from "./next.js";
 import { renderBundledSkill } from "./skill.js";
 import {
   buildUpdatePlan,
@@ -744,6 +746,10 @@ function splitSlug(slug: string): [string, string] | undefined {
 }
 
 export async function runUpdate(argv: string[]): Promise<number> {
+  // Plan 0116 Phase 4: the render engine, behind the flag until Phase 6.
+  if (nextEngineSelected()) {
+    return runUpdateNext(argv);
+  }
   // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
   const opts = parseArgs(argv);
   if (opts.unknown.length === 0 && wantsHelp(argv)) {

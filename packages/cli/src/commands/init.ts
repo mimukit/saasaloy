@@ -35,6 +35,8 @@ import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
+import { nextEngineSelected } from "../engine/flag.js";
+import { scaffoldNext } from "./next.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
 // + @repo/tsconfig) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
@@ -455,65 +457,11 @@ async function initProject(opts: InitOptions): Promise<number> {
     return EXIT_FAILURE;
   }
 
-  const s = spinner();
-  s.start(`Scaffolding ${pc.cyan(projectName)}`);
-  const templateDir = await baseTemplateDir();
-  // The mode fills the root AGENTS.md testing block, so the recorded hash is of the
-  // filled bytes and `update` compares against what this project really holds (#242).
-  const written = await copyTemplate(
-    templateDir,
-    target,
-    templateVars(projectName),
-    { testingMode }
-  );
-  s.stop(
-    `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
-  );
-
-  // Record what was just rendered: every file at the hash of its rendered bytes, and the
-  // template's own hash beside the CLI version. These ledgers decide whether later
-  // updates may overwrite files, so init must not report success if either write fails.
-  // The project's own name, recorded once. `update` re-renders this template to compare
-  // against and needs the same `{{PROJECT_NAME}}` it was rendered with here; without this
-  // it fell back to the directory name, and a git worktree or a CI checkout path then
-  // rewrote `package.json` `name`, `wrangler.jsonc` `name` and `siteName` (#144). The
-  // template ships the file without a name so the file it ships stays schema-valid.
-  // `testing.mode` is written in the same pass, always, so a new project never reads the
-  // absent key that `update` treats as a project from before the switch (#242).
-  try {
-    const config = await loadConfig(target);
-    await saveConfig(target, {
-      ...config,
-      name: projectName,
-      testing: { mode: testingMode },
-    });
-    const entry = written.find((file) => file.target === CONFIG_FILE);
-    if (entry) {
-      entry.hash = hashContent(await readFile(entry.path, "utf-8"));
-    }
-  } catch (error) {
-    cancel(
-      `Couldn't record the project name and testing mode: ${errorMessage(error)}`
-    );
-    return EXIT_FAILURE;
-  }
-
-  try {
-    const manifest = await loadManifest(target);
-    const lock = await loadLock(target);
-    recordBaseFiles(manifest, written);
-    lock.base = baseRecord(
-      await readVersion(),
-      await templateHash(templateDir)
-    );
-    await saveManifest(target, manifest);
-    await saveLock(target, lock);
-  } catch (error) {
-    cancel(
-      `Couldn't record the base template: ${errorMessage(error)}\n` +
-        `The scaffold files remain, but init cannot safely complete without its project state.`
-    );
-    return EXIT_FAILURE;
+  const scaffolded = nextEngineSelected()
+    ? await scaffoldWithRenderEngine(target, projectName, testingMode)
+    : await scaffoldWithTemplateCopy(target, projectName, testingMode);
+  if (scaffolded !== undefined) {
+    return scaffolded;
   }
 
   // Before the install: husky's `prepare` script runs during `pnpm install` and needs a
@@ -673,4 +621,102 @@ async function initProject(opts: InitOptions): Promise<number> {
   note(steps, "Next steps");
   outro(pc.green(`🎉 Created ${projectName} successfully.`));
   return EXIT_OK;
+}
+
+/**
+ * The scaffold on the render engine (plan 0116 Phase 4, `SAASALOY_ENGINE=next`): one
+ * apply from nothing writes the template, manifest version 2 and the lock. Returns an
+ * exit code when it fails, `undefined` when it succeeds.
+ */
+async function scaffoldWithRenderEngine(
+  target: string,
+  projectName: string,
+  testingMode: TestingMode
+): Promise<number | undefined> {
+  const s = spinner();
+  s.start(`Scaffolding ${pc.cyan(projectName)}`);
+  try {
+    await scaffoldNext({ projectName, target, testingMode });
+  } catch (error) {
+    s.stop(pc.red(`Couldn't scaffold ${projectName}`));
+    cancel(errorMessage(error));
+    return exitCodeFor(error);
+  }
+  s.stop(
+    `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
+  );
+  return undefined;
+}
+
+/**
+ * The scaffold of the old engine: copy the template, then record the name, the testing
+ * mode, each file's hash and the base record. Returns an exit code when it fails,
+ * `undefined` when it succeeds.
+ */
+async function scaffoldWithTemplateCopy(
+  target: string,
+  projectName: string,
+  testingMode: TestingMode
+): Promise<number | undefined> {
+  const s = spinner();
+  s.start(`Scaffolding ${pc.cyan(projectName)}`);
+  const templateDir = await baseTemplateDir();
+  // The mode fills the root AGENTS.md testing block, so the recorded hash is of the
+  // filled bytes and `update` compares against what this project really holds (#242).
+  const written = await copyTemplate(
+    templateDir,
+    target,
+    templateVars(projectName),
+    { testingMode }
+  );
+  s.stop(
+    `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
+  );
+
+  // Record what was just rendered: every file at the hash of its rendered bytes, and the
+  // template's own hash beside the CLI version. These ledgers decide whether later
+  // updates may overwrite files, so init must not report success if either write fails.
+  // The project's own name, recorded once. `update` re-renders this template to compare
+  // against and needs the same `{{PROJECT_NAME}}` it was rendered with here; without this
+  // it fell back to the directory name, and a git worktree or a CI checkout path then
+  // rewrote `package.json` `name`, `wrangler.jsonc` `name` and `siteName` (#144). The
+  // template ships the file without a name so the file it ships stays schema-valid.
+  // `testing.mode` is written in the same pass, always, so a new project never reads the
+  // absent key that `update` treats as a project from before the switch (#242).
+  try {
+    const config = await loadConfig(target);
+    await saveConfig(target, {
+      ...config,
+      name: projectName,
+      testing: { mode: testingMode },
+    });
+    const entry = written.find((file) => file.target === CONFIG_FILE);
+    if (entry) {
+      entry.hash = hashContent(await readFile(entry.path, "utf-8"));
+    }
+  } catch (error) {
+    cancel(
+      `Couldn't record the project name and testing mode: ${errorMessage(error)}`
+    );
+    return EXIT_FAILURE;
+  }
+
+  try {
+    const manifest = await loadManifest(target);
+    const lock = await loadLock(target);
+    recordBaseFiles(manifest, written);
+    lock.base = baseRecord(
+      await readVersion(),
+      await templateHash(templateDir)
+    );
+    await saveManifest(target, manifest);
+    await saveLock(target, lock);
+  } catch (error) {
+    cancel(
+      `Couldn't record the base template: ${errorMessage(error)}\n` +
+        `The scaffold files remain, but init cannot safely complete without its project state.`
+    );
+    return EXIT_FAILURE;
+  }
+  return undefined;
 }

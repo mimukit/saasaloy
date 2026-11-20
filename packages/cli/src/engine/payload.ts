@@ -208,18 +208,15 @@ export async function ensureCachedSnapshot(args: {
 }
 
 /**
- * Read the template and the resolved set of `requested` out of a snapshot on disk. The
- * set is the `dependsOn` closure `lib/resolve.ts` walks; `render` orders it.
+ * Read every module of the `dependsOn` closure of `requested` out of a `modules/` folder.
+ * The set is the closure `lib/resolve.ts` walks; `render` orders it.
  */
-export async function readPayload(args: {
-  snapshot: PayloadSnapshot;
-  requested: readonly string[];
-  source: string;
-  ref: string;
-}): Promise<Payload> {
-  const { snapshot, requested, source, ref } = args;
+export async function readPayloadModules(
+  modulesDir: string,
+  requested: readonly string[]
+): Promise<Map<string, PayloadModule>> {
   const graph = await resolveGraphs(
-    new LocalRegistrySource(snapshot.modulesDir),
+    new LocalRegistrySource(modulesDir),
     requested
   );
   const modules = new Map<string, PayloadModule>();
@@ -237,17 +234,31 @@ export async function readPayload(args: {
     }
     modules.set(name, { files, item: loaded.item, name });
   }
+  return modules;
+}
 
-  const baseFiles = new Map<string, string>();
-  for (const file of await listTemplateFiles(snapshot.baseDir)) {
-    baseFiles.set(file.from, await readFile(file.abs, "utf-8"));
+/** Read a base template folder: every file and its `_saasaloy-base.json`. */
+export async function readPayloadBase(baseDir: string): Promise<PayloadBase> {
+  const files = new Map<string, string>();
+  for (const file of await listTemplateFiles(baseDir)) {
+    files.set(file.from, await readFile(file.abs, "utf-8"));
   }
+  return { declaration: await readBaseDeclaration(baseDir), files };
+}
+
+/**
+ * Read the template and the resolved set of `requested` out of a snapshot on disk.
+ */
+export async function readPayload(args: {
+  snapshot: PayloadSnapshot;
+  requested: readonly string[];
+  source: string;
+  ref: string;
+}): Promise<Payload> {
+  const { snapshot, requested, source, ref } = args;
   return {
-    base: {
-      declaration: await readBaseDeclaration(snapshot.baseDir),
-      files: baseFiles,
-    },
-    modules,
+    base: await readPayloadBase(snapshot.baseDir),
+    modules: await readPayloadModules(snapshot.modulesDir, requested),
     ref,
     source,
   };

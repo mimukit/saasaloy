@@ -30,6 +30,8 @@ import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { DESCRIPTIONS } from "./descriptions.js";
+import { nextEngineSelected } from "../engine/flag.js";
+import { runRemoveNext } from "./next.js";
 
 // `saasaloy remove <module>` — the local undo, mirroring `add`'s clack UX and flag
 // surface. Fully offline: the plan derives entirely from manifest.json,
@@ -222,6 +224,10 @@ function summarizeRemovePlan(
 }
 
 export async function runRemove(argv: string[]): Promise<number> {
+  // Plan 0116 Phase 4: the render engine, behind the flag until Phase 6.
+  if (nextEngineSelected()) {
+    return runRemoveNext(argv);
+  }
   // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
   const opts = parseArgs(argv);
   if (opts.unknown.length === 0 && wantsHelp(argv)) {

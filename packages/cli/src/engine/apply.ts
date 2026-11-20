@@ -181,8 +181,18 @@ export interface PlanArgs {
   restore?: readonly string[];
   /** `once` files to merge three ways (`update --merge`). */
   merge?: readonly string[];
+  /**
+   * The base of the `merge` paths when it differs from `base`: the render at the release
+   * that wrote a `once` file, whose record is older than the old lock.
+   */
+  mergeBase?: RenderResult;
   format?: SourceFormatter;
   merger?: TextMerger;
+  /**
+   * Reads a project file. The disk under `root` when absent; the registry round trip
+   * passes an in-memory tree.
+   */
+  read?: (path: string) => Promise<string | undefined>;
 }
 
 export interface Plan {
@@ -221,6 +231,9 @@ export async function planApply(args: PlanArgs): Promise<Plan> {
   const formatter: SourceFormatter =
     args.format ?? ((path, content) => formatSource(root, path, content));
   const merger = args.merger ?? createTextMerger();
+  const read =
+    args.read ??
+    ((path: string) => readIfPresent(resolveWithinRoot(root, path)));
 
   const formatted = new Map<string, string>();
   // A patched file reached the disk through the project's Prettier, so both sides of it
@@ -262,14 +275,18 @@ export async function planApply(args: PlanArgs): Promise<Plan> {
   for (const path of paths) {
     const next = theirs.files.get(path);
     const record = manifest.files[path];
-    const old = base?.files.get(path);
+    const old = (
+      mergeOnce.has(path) && args.mergeBase !== undefined
+        ? args.mergeBase
+        : base
+    )?.files.get(path);
     const baseFile =
       old !== undefined &&
       record !== undefined &&
       sha(old.content) === record.hash
         ? old
         : undefined;
-    const mine = await readIfPresent(resolveWithinRoot(root, path));
+    const mine = await read(path);
     const fileClass = next?.class ?? record?.class ?? "merged";
     const module = next?.module ?? record?.module ?? "";
     const push = (
@@ -499,6 +516,8 @@ export interface ApplyArgs {
   next: ApplySide;
   /** The old lock's side, the base of each merge. Absent on a first run. */
   previous?: ApplySide;
+  /** The base of the `merge` paths, when the release that wrote them is older. */
+  mergeBase?: ApplySide;
   /** The release that runs. */
   version: string;
   /** Lock provenance for each module. See `nextLock`. */
@@ -680,6 +699,9 @@ export async function apply(args: ApplyArgs): Promise<ApplyReport> {
     ...(args.force === undefined ? {} : { force: args.force }),
     ...(args.restore === undefined ? {} : { restore: args.restore }),
     ...(args.merge === undefined ? {} : { merge: args.merge }),
+    ...(args.mergeBase === undefined
+      ? {}
+      : { mergeBase: render(args.mergeBase) }),
     ...(args.format === undefined ? {} : { format: args.format }),
     ...(args.merger === undefined ? {} : { merger: args.merger }),
   });

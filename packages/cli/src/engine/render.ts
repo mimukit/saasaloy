@@ -134,7 +134,10 @@ export interface RenderResult {
 const ENABLED_MODE: TestingMode = "tests-after";
 
 /** The `dependsOn` closure of `requested` over the payload. Unknown names refuse. */
-function closure(payload: Payload, requested: readonly string[]): Set<string> {
+export function closure(
+  payload: Pick<Payload, "modules" | "source" | "ref">,
+  requested: readonly string[]
+): Set<string> {
   const seen = new Set<string>();
   const stack = [...requested].map((name) => ({ name, requiredBy: "" }));
   while (stack.length > 0) {
