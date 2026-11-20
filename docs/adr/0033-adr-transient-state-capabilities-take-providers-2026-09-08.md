@@ -63,3 +63,7 @@ A provider for a capability that needs a Workers binding registers through the g
 
 ## References
 Issue [#125](https://github.com/mimukit/saasaloy/issues/125), `docs/plans/0049-plan-queue-capability-module-2026-09-08.md`. Amends [ADR 0001](0001-adr-all-in-on-cloudflare-2026-07-22.md) (its 2026-08-04 amendment) and [ADR 0026](0026-adr-database-driver-split-2026-08-28.md). Related: [ADR 0020](0020-adr-capability-owns-its-vendor-packages-2026-07-24.md), [ADR 0021](0021-adr-pulumi-iac-engine-for-infra-2026-07-25.md), [ADR 0028](0028-adr-routes-register-by-chained-route-patch-2026-08-28.md). Glossary: `CONTEXT.md` → "Provider module", "Driver module", "Job", "Schedule", "Handler set".
+
+## Amendment — 2026-11-20
+
+[ADR 0065](0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md) leaves `database` with one driver, `database-postgres`; the `database` row stays on drivers, and the `api-keys` owners are now the example of two drivers ([ADR 0055](0055-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)).

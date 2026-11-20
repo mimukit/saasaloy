@@ -18,7 +18,7 @@ Stay in the session for the interview. An agent that runs with nobody to answer,
 
 ## 2. Answer the interview
 
-The agent runs the `saasaloy-setup` skill. It asks about fifteen questions, two or three at a time, and each one comes with three sample answers you can take, edit, or replace.
+The agent runs the `saasaloy-setup` skill. It asks about fourteen questions, two or three at a time, and each one comes with three sample answers you can take, edit, or replace.
 
 | # | What it asks | Where the answer goes |
 |---|--------------|-----------------------|
@@ -26,8 +26,7 @@ The agent runs the `saasaloy-setup` skill. It asks about fifteen questions, two 
 | 11 | the entities: the agent proposes one table for each thing your user makes, tracks or reads (its fields, who may see it, its actions), and you correct it | `docs/product-spec.md` |
 | 12 | the order to build the entities in | `docs/product-spec.md` |
 | 13 | the optional modules, such as `teams` or `subscription`, from `saasaloy list --json` | `docs/product-spec.md` |
-| 14 | the database driver, `database-d1` or `database-postgres`; the agent recommends one | `docs/product-spec.md` |
-| 15 | whether to deploy a preview when the build is done | the brief's frontmatter: `deploy: preview` or `deploy: none` |
+| 14 | whether to deploy a preview when the build is done | the brief's frontmatter: `deploy: preview` or `deploy: none` |
 
 The agent never invents a price, a proof, a customer name or a URL. "No proof yet" and "no pricing yet" are good answers. When an answer stays thin after two follow-ups, the agent records it and says what the copy will leave out.
 
@@ -38,7 +37,7 @@ A module that needs an account you do not have yet, such as Stripe, gets its loc
 The interview ends with one message that shows everything at once:
 
 - the brief, with each thin answer marked;
-- the module list and the database driver;
+- the module list;
 - each entity with its screens: the app list, the app detail, the create and update form, and the admin list;
 - the wishes this build leaves out;
 - the steps that stay with you.
@@ -83,7 +82,7 @@ The work sits on the `build/mvp` branch, one commit per stage and one per entity
 
 ## Start from a brief you already have
 
-A brief written earlier still works. Put it in the empty folder as `product-brief.md`, with `autonomy: afk` in its frontmatter, and a `product-spec.md` beside it if you have one. Then say "The product brief is in ./product-brief.md" in the prompt. The agent runs `init` and the build with no interview. With no spec it builds the MVP set on `database-d1` and one entity from the brief.
+A brief written earlier still works. Put it in the empty folder as `product-brief.md`, with `autonomy: afk` in its frontmatter, and a `product-spec.md` beside it if you have one. Then say "The product brief is in ./product-brief.md" in the prompt. The agent runs `init` and the build with no interview. With no spec it builds the MVP set on `database-postgres` and one entity from the brief.
 
 This is also the one case that runs headless, because no question is left to ask:
 
@@ -99,7 +98,7 @@ The build never does these, and it lists them under `## Left for a human`:
 
 - Push the branch.
 - Deploy with `pnpm deploy:production`. [Deploy to Cloudflare](deploy-to-cloudflare.md) covers it.
-- Deploy the preview, when you answered yes to question 15. The build records the choice and does not deploy yet.
+- Deploy the preview, when you answered yes to question 14. The build records the choice and does not deploy yet.
 - Create a vendor account: a paid Cloudflare plan, a domain, a mail or payment provider. The build installs the local provider and names the vendor step.
 - Edit a secret, or set a production value.
 - Delete data outside the local dev database.

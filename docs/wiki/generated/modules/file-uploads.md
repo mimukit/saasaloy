@@ -84,7 +84,7 @@ The capability can PUT an object and GET it back, and then knows nothing about i
 
 | File | What it owns |
 |---|---|
-| `packages/db/src/schema/file-uploads.ts` | The `storage_objects` table. One dialect variant landed; its twin is in the module. |
+| `packages/db/src/schema/file-uploads.ts` | The `storage_objects` table. |
 | `packages/db/src/repositories/objects.ts` | Every query against that table, and the access boundary. |
 | `packages/validators/src/file-uploads.ts` | The upload request and list query schemas. |
 | `apps/api/src/lib/file-uploads.ts` | `resolveTenant`, `resolveScope`, the two key scopes, `publicUrl`, `publicImageUrl`. |

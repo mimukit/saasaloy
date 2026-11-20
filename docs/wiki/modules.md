@@ -4,7 +4,7 @@ Every installable module in the default registry is listed in [the module catalo
 
 For the environment variables of all modules in one table, see [the environment reference](generated/env.md).
 
-Dependencies install automatically: `saasaloy add waitlist` installs each module it depends on first, prerequisites first. The one thing `add` will not choose for you is the database driver. `database` names both drivers in `requiresOneOf`, so on a project that has neither, an interactive run asks which one, `--with` names it on the command line, and a `--yes` run without `--with` stops and names the options:
+Dependencies install automatically: `saasaloy add waitlist` installs each module it depends on first, prerequisites first. The one thing `add` will not choose for you is the database driver. `database` names its one driver, `database-postgres`, in `requiresOneOf`, so on a project without it, an interactive run asks you to pick it, `--with` names it on the command line, and a `--yes` run without `--with` stops and names the options:
 
 ```
 Cannot add waitlist — unmet requirement:

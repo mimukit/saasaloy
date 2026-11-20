@@ -110,7 +110,7 @@ need.
 The page you are looking at still sells a placeholder product, under the shipped name `Saasaloy` (`app.name` in `packages/config/src/project.ts`). Three of the eleven skills in `.agents/skills/` exist to fix that,
 and the first two run in order:
 
-1. **`/saasaloy-setup`** interviews you once, in about fifteen questions, and writes `docs/product-brief.md` (the landing answers) and `docs/product-spec.md` (the modules, the database driver and one table for each entity). It ends with one read-back. When you confirm it, the skill starts `saasaloy-build` in the same session, which builds the MVP with no more questions. [Build with an agent](how-to/build-with-an-agent.md) covers that path.
+1. **`/saasaloy-setup`** interviews you once, in about fourteen questions, and writes `docs/product-brief.md` (the landing answers) and `docs/product-spec.md` (the modules and one table for each entity). It ends with one read-back. When you confirm it, the skill starts `saasaloy-build` in the same session, which builds the MVP with no more questions. [Build with an agent](how-to/build-with-an-agent.md) covers that path.
 2. **`/saasaloy-landing-copy`** turns that brief into the landing page's copy, through a
    draft you review first. The build runs it for you; run it yourself to rewrite only the page.
 3. **`/saasaloy-design theme`** swaps the default theme for a registry preset and keeps

@@ -70,7 +70,7 @@ Set each one under Settings → Secrets and variables → Actions → New reposi
 
 | Secret | Required | What it holds |
 | --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | always | An API token wrangler deploys with: Workers Scripts edit, plus D1, KV, R2 and Queues edit for the bindings the project uses. |
+| `CLOUDFLARE_API_TOKEN` | always | An API token wrangler deploys with: Workers Scripts edit, plus Hyperdrive, KV, R2 and Queues edit for the bindings the project uses. |
 | `CLOUDFLARE_ACCOUNT_ID` | always | The Cloudflare account the Workers live in. |
 | `ENV_SOURCE` | with `env-infisical` | `infisical` to read the production values from Infisical. Leave it unset to use the `local` source and `ENV_PROD`. |
 | `ENV_PROD` | when `ENV_SOURCE` is unset or `local` | The whole contents of `packages/env/.env.prod`. The workflow writes it to that file, which git ignores, before the deploy: `gh secret set ENV_PROD < packages/env/.env.prod`. |

@@ -90,7 +90,7 @@ A signed-in user gets a bell in the `apps/app` header with an unread badge and a
 | File | What it holds |
 |---|---|
 | `packages/config/src/sections/notification.ts` | the `notification` config section: the categories, the menu and page sizes, and the two retention periods |
-| `packages/db/src/schema/notifications.ts` | `notifications` and `notification_opt_outs`, in the dialect of the installed driver (`notifications.sqlite.ts` under `database-d1`, `notifications.pg.ts` under `database-postgres`) |
+| `packages/db/src/schema/notifications.ts` | `notifications` and `notification_opt_outs` |
 | `packages/db/src/repositories/notifications.ts` | every query the two tables take, `pruneNotifications` included |
 | `packages/db/src/seed/slices/notifications.ts`, `notification-opt-outs.ts` | seed rows for `pnpm db:seed` |
 | `packages/validators/src/notifications.ts` | the list query, the id param and the preferences body |

@@ -6,13 +6,14 @@ One command deploys the whole project:
 pnpm deploy:production
 ```
 
-It checks the branch, the tree, origin, CI and new migrations, then every production value. Then it builds and deploys each Worker with wrangler, one at a time in a fixed order, requests the live hosts, and tags the commit. Preview all of it with `pnpm deploy:production --dry-run`, which builds, uploads, migrates and tags nothing. The secrets go up with the code, and wrangler creates the D1, KV, R2 and queue resources the first time. There is no Pulumi stack, no extra module and no staging environment. Production is the only target.
+It checks the branch, the tree, origin, CI and new migrations, then every production value. Then it builds and deploys each Worker with wrangler, one at a time in a fixed order, requests the live hosts, and tags the commit. Preview all of it with `pnpm deploy:production --dry-run`, which builds, uploads, migrates and tags nothing. The secrets go up with the code, and wrangler creates the KV, R2 and queue resources the first time. The Postgres database is the one resource wrangler does not create: it lives at a Postgres host such as Neon. There is no Pulumi stack, no extra module and no staging environment. Production is the only target.
 
 ## Before you begin
 
 - **A Cloudflare account.** Nothing up to this point needed one: `saasaloy init` and `saasaloy add` touch no cloud service.
+- **A Postgres database**, once the project has `database-postgres`. [Neon's free tier](https://neon.com/pricing) needs no credit card. Put its connection string in the production `DATABASE_URL`.
 - **No global install.** `wrangler` is a devDependency of every deployable workspace, so `pnpm install` already put it there.
-- **Credentials.** Either set `CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID` when the token reaches more than one account), or log in once with `pnpm --filter @repo/web exec wrangler login`. The deploy stops before any build when it finds neither. The token needs Workers Scripts edit, plus D1, Workers KV Storage, Workers R2 Storage and Queues edit for whichever of those the project uses.
+- **Credentials.** Either set `CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID` when the token reaches more than one account), or log in once with `pnpm --filter @repo/web exec wrangler login`. The deploy stops before any build when it finds neither. The token needs Workers Scripts edit, plus Workers KV Storage, Workers R2 Storage and Queues edit for whichever of those the project uses.
 - **Production values.** With the default `local` value source, create `packages/env/.env.prod`. It is gitignored. Copy the keys from `packages/env/.env.example` and give each its production value, `PUBLIC_SITE_URL` and `PUBLIC_API_URL` included. With `env-infisical`, put them in Infisical's `prod` environment and run with `ENV_SOURCE=infisical`. The dev file, `packages/env/.env`, is never read by a deploy.
 
 ## What `pnpm deploy:production` does
@@ -30,7 +31,7 @@ The command runs `packages/tooling/src/deploy-production.ts`. It stops at the fi
 
    A failed gate stops the run before anything builds, and every message ends with the command that clears it.
 2. **Env check.** `node packages/env/src/deploy.ts --check` loads the production values of every service and exits non-zero, naming each blank key, when one is missing.
-3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`. With `database-postgres` it dumps the production database first. With `database-d1` it creates the D1 database when the account has none by that name, dumps an existing one with `wrangler d1 export --remote`, then applies the pending migrations. A failed or empty dump stops the migration with either driver. No deploy migrates without the flag.
+3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`. It dumps the production database first, then applies the pending migrations. A failed or empty dump stops the migration. No deploy migrates without the flag.
 4. **Workers**, one at a time, lowest `order` first from `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`: `api` (10), `admin` (20), `app` (25), `web` (30), for the workspaces the project has. The base ships only the `web` row. Each module adds its own row to `targets.generated.ts`, which the CLI writes on every run and `DEPLOY_TARGETS` spreads. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the run. Each Worker runs `pnpm --filter <package> run deploy`, which is `env-deploy <service>`:
    - load that service's production values and the Cloudflare credentials into memory,
    - run `pnpm run build` with them in the environment, so the bundle inlines the production `PUBLIC_*` values while `apps/*/.env` keeps its dev values,
@@ -77,7 +78,7 @@ The generated project ships the `saasaloy-deploy` skill for an agent: it runs th
 
 Wrangler creates a missing resource on deploy and reuses it on the next one. Each name starts with the project name `saasaloy add` read from `saasaloy.json`, shown here as `<project>`, so two projects share one Cloudflare account without touching each other's Workers or data. A project that installed a module before the prefix existed keeps the names already in its files.
 
-- **`database-d1`**: the D1 database named in `database_name` (`<project>-db`). `db:prod:migrate` creates it on the first `pnpm deploy:production --migrate`, and the deploy connects the binding to it by name.
+- **`database-postgres`**: no Cloudflare resource. The database lives at the Postgres host, and the `DATABASE_URL` secret names it. Create it at the host before the first `pnpm deploy:production --migrate`. A `HYPERDRIVE` binding is an opt-in; the `saasaloy-database-postgres` skill covers it.
 - **`kv-cloudflare`**: a namespace titled `<worker name>-kv`. A later deploy reuses the namespace the deployed Worker already holds.
 - **`storage-cloudflare`**: the R2 bucket named in `bucket_name` (`<project>-storage`).
 - **`queue-cloudflare`**: both queues, `<project>-jobs` and `<project>-jobs-dlq`. Queues need a Workers paid plan.
@@ -115,7 +116,7 @@ Two kinds of setup stay manual:
 
 `BETTER_AUTH_SECRET` is marked blank on purpose, because local dev on a loopback `BETTER_AUTH_URL` runs without one, so the check lets it through. In production it is required: `auth` throws while the Worker initializes when it is unset, and `wrangler deploy` reports that startup failure. Set it in the production values.
 
-No sign-up becomes the first superadmin. Make one before the api origin is public: `pnpm db:prod:superadmin --email <you>` on `database-postgres`, or a sign-up and one SQL statement from the `saasaloy-auth` skill on `database-d1`.
+No sign-up becomes the first superadmin. Make one before the api origin is public: `pnpm db:prod:superadmin --email <you>`.
 
 ## When a deploy fails partway
 
@@ -150,7 +151,6 @@ There is no command that destroys a project. Each piece goes with its own wrangl
 pnpm --filter @repo/api exec wrangler queues consumer remove <project>-jobs <project>-api   # queue-cloudflare only
 pnpm --filter @repo/api exec wrangler delete                          # the api Worker
 pnpm --filter @repo/web exec wrangler delete                          # the web Worker
-pnpm --filter @repo/api exec wrangler d1 delete <project>-db                # the D1 database and its data
 pnpm --filter @repo/api exec wrangler kv namespace list               # find the KV namespace id
 pnpm --filter @repo/api exec wrangler kv namespace delete --namespace-id <id>
 pnpm --filter @repo/api exec wrangler r2 bucket delete <project>-storage    # the bucket must be empty
@@ -158,7 +158,7 @@ pnpm --filter @repo/api exec wrangler queues delete <project>-jobs
 pnpm --filter @repo/api exec wrangler queues delete <project>-jobs-dlq
 ```
 
-Every one of these deletes data that no backup in this repo holds.
+Delete the Postgres database at its host, such as the project in the Neon console. Every one of these deletes data that no backup in this repo holds.
 
 ## Coming from the `infra` module
 
@@ -170,6 +170,6 @@ A project scaffolded before this flow may still have an `infra/` workspace and a
 - [Add a module](add-a-module.md): installing `api` and `database` in the first place.
 - [Architecture](../architecture.md): why the CLI stops at copying files in.
 
-_The gated flow was checked against branch `issue-234-gate-order-and-tag-the-production-deploy` on 2026-10-23 with `pnpm deploy:production --dry-run` in a generated project; no live deploy ran. Checked against branch `issue-198` on 2026-10-21 with live deploys to a disposable Cloudflare account: the landing page, and a project with `api`, `database-d1`, `auth`, `kv-cloudflare` and `queue-cloudflare`. The teardown above ran in this order. R2 and the `infra` runbook were not run live._
+_The gated flow was checked against branch `issue-234-gate-order-and-tag-the-production-deploy` on 2026-10-23 with `pnpm deploy:production --dry-run` in a generated project; no live deploy ran. Checked against branch `issue-198` on 2026-10-21 with live deploys to a disposable Cloudflare account: the landing page, and a project with `api`, the database driver of that time (since removed, see [Why Postgres, not D1](../why-postgres.md)), `auth`, `kv-cloudflare` and `queue-cloudflare`. The teardown above ran in this order. R2 and the `infra` runbook were not run live._
 
 _Verified against `main`@`b86486c3` on 2026-11-21._

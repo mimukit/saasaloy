@@ -154,18 +154,18 @@ export const landing = {
   // is aria-hidden, so the names stay readable and searchable. Each name is a runtime
   // service, framework, library or tool from the README stack table (5b), shown as is.
   // The `frameworks` and `libraries` groups are the drawing's two rings, so keep those
-  // ids; `runtime` shows as chips only. The free tier claim repeats README line 27.
+  // ids; `runtime` shows as chips only. The free tier claim repeats the README.
   builtOn: {
     title: "Built on Cloudflare and tools you already know.",
     description:
-      "Every project runs on Cloudflare, where Workers, D1, KV and R2 keep most modules on the free tier. Astro, TanStack Router and Hono build the apps, with Drizzle and Better Auth for data and sign-in.",
+      "Every project runs on Cloudflare, where Workers, Hyperdrive, KV and R2 have free plans, with Postgres on Neon's free tier. Astro, TanStack Router and Hono build the apps, with Drizzle and Better Auth for data and sign-in.",
     groups: [
       {
         id: "runtime",
         label: "Runtime",
         items: [
           { id: "workers", label: "Workers" },
-          { id: "d1", label: "D1" },
+          { id: "hyperdrive", label: "Hyperdrive" },
           { id: "kv", label: "KV" },
           { id: "r2", label: "R2" },
           { id: "queues", label: "Queues" },
@@ -284,7 +284,7 @@ export const landing = {
     addCommand: "npx saasaloy add {name}",
     summaries: {
       api: "A Hono API on Cloudflare Workers for every route the product needs.",
-      database: "A Drizzle database on D1 or Postgres, with migrations.",
+      database: "A Drizzle database on Postgres, with migrations.",
       logger: "Structured logs with levels and field redaction.",
       validators:
         "Shared Zod schemas, so the API and the browser check the same input.",
@@ -416,17 +416,18 @@ export const landing = {
           "Not until you deploy. Every capability ships a console or in-memory provider, so the whole project runs on your machine with no cloud account.",
       },
       {
-        // The free-tier limits are Cloudflare's Workers and D1 pricing pages, read 2026-11-02.
+        // The free-tier limits are https://neon.com/pricing and
+        // https://developers.cloudflare.com/hyperdrive/platform/pricing/, read 2026-11-20.
         id: "cost",
         question: "What does it cost to host?",
         answer:
-          "Close to nothing while you test the idea. The base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the Cloudflare free tier, which allows 100,000 Worker requests a day and, for D1, 5 million rows read, 100,000 rows written and 5 GB of storage. `email-cloudflare` and `queue-cloudflare` need a paid Workers plan, and a vendor provider such as `email-plunk` needs that vendor's account.",
+          "Close to nothing while you test the idea. The base, `api`, `database-postgres`, `auth`, `admin`, `waitlist` and `teams` run on free tiers. Cloudflare's free plan allows 100,000 Worker requests a day, and Hyperdrive Free fails queries past 100,000 a day. Neon's free Postgres tier gives each project 1 GB and 100 compute hours a month with no credit card. `email-cloudflare` and `queue-cloudflare` need a paid Workers plan, and a vendor provider such as `email-plunk` needs that vendor's account.",
       },
       {
         id: "providers",
         question: "Can I change providers?",
         answer:
-          "Yes. Every vendor sits behind a swappable provider. Pick the vendor with a `*_PROVIDER` env var, and the database takes a Postgres driver in place of D1.",
+          "Yes. Every vendor sits behind a swappable provider. Pick the vendor with a `*_PROVIDER` env var. The database is plain Postgres, so any Postgres host works.",
       },
       {
         id: "updates",

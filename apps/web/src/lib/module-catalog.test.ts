@@ -15,7 +15,7 @@ function descriptor(fields: Partial<RegistryDescriptor>): RegistryDescriptor {
 describe("moduleTier", () => {
   it("reads a module with conflictsWith as a driver", () => {
     assert.equal(
-      moduleTier(descriptor({ conflictsWith: ["database-postgres"] })),
+      moduleTier(descriptor({ conflictsWith: ["api-keys-organization"] })),
       "driver"
     );
   });

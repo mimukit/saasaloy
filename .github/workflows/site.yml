@@ -34,6 +34,7 @@ on:
       - package.json
       - oxlint.config.mjs
       - docs/wiki/**
+      - docs/adr/0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md
       - pnpm-lock.yaml
       - pnpm-workspace.yaml
       - .github/workflows/site.yml

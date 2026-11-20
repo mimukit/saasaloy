@@ -54,3 +54,7 @@ A prompt would be worse on both counts. It stops an unattended run, and it train
 - `saasaloy remove <driver>` still leaves patched script keys behind, and now also the root `compose.yaml`. Both driver skills say so until the remover handles it.
 - The state block has a file of its own, `apps/api/.env.db`, and `DATABASE_URL` stays in `apps/api/.env`. `pnpm env:setup` rebuilds `apps/api/.env` from the key list ([ADR 0040](0040-adr-a-scaffolded-project-writes-env-never-dev-vars-2026-09-20.md)) and keeps `DATABASE_URL` as a checkout-owned key, but it drops every comment it did not write, so a block inside that file would vanish on the next run. Two files can disagree after a hand edit, so `db:setup` and `db:drop` refuse when `DATABASE_URL` names another database than the block records.
 - `db:prune` and `db:seed` are deferred. The scripts keep their own small env-file reader rather than importing `@repo/env`, because `packages/db` does not depend on it.
+
+## Amendment — 2026-11-20: one driver
+
+[ADR 0065](0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md) deletes `database-d1`. `db:setup`, `db:status` and `db:drop` now ship in `database-postgres` alone, and the D1 side of this record describes a driver that no longer exists. The backend term and its three backends stand; `docker` stays the default, so local development needs a Docker daemon.

@@ -1,11 +1,13 @@
 # 0026 — The `database` capability splits into a neutral core plus mutually exclusive drivers
 
+> Superseded on 2026-11-20 by [ADR 0065](0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md): Postgres is the only SQL dialect, and `database-d1` is deleted. The record below describes the two-driver registry as it was.
+
 > Renumbered from 0023 to 0026 on 2026-08-31 (issue [#98](https://github.com/mimukit/saasaloy/issues/98)). Five records shared 0023, so a bare "ADR 0023" citation named none of them. A document dated before that day cites this record as ADR 0023.
 
 `database` becomes three modules. `modules/database` is the driver-neutral core, a `saasaloy:capability` with `dependsOn: ["api"]` that scaffolds `packages/db` with `package.json`, `tsconfig.json`, `src/schema.ts`, `src/schema/` and `src/repositories/`, and keeps only the `db:generate` script plus the `drizzle-orm` and `drizzle-kit` pins. It ships no `client.ts`, no `drizzle.config.ts` and no wrangler binding. Those come from a **driver**: `modules/database-d1` or `modules/database-postgres`, both typed `saasaloy:feature` with `dependsOn: ["database"]`, each naming the other in the descriptor's `conflictsWith` field so a project can only ever hold one. Cloudflare D1 stays the default. Settled while building issue [#85](https://github.com/mimukit/saasaloy/issues/85).
 
 ## Status
-accepted, amended 2026-08-31 and 2026-09-08 (the new ADR that [ADR 0001](0001-adr-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment requires before its rule may reach a stateful capability). See "Why a stateful capability gets a second implementation" below, and the amendment that retracts one of the consequences.
+superseded by [ADR 0065](0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md) on 2026-11-20 where this record keeps D1 as the default and as a second driver. `database-d1` is deleted, Postgres is the only SQL dialect, and `onlyWith` is gone. The split into a neutral `database` core plus the `database-postgres` driver stands. Before that: accepted, amended 2026-08-31 and 2026-09-08 (the new ADR that [ADR 0001](0001-adr-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment requires before its rule may reach a stateful capability). See "Why a stateful capability gets a second implementation" below, and the amendment that retracts one of the consequences.
 
 ## Considered Options
 - **Keep `database` D1-only and ship `database-postgres` as its own capability**, scaffolding its own workspace. Rejected because it duplicates the schema barrel, the repository layer and the `@repo/db` package name, and every downstream module (`auth`, `waitlist`) would then have to know which of the two is installed before it could import anything.

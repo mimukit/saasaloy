@@ -309,7 +309,7 @@ rather than splitting the api. Reach for it on a measured number, not a hunch.
 
 #### Bindings: use `c.env`, never `process.env`
 
-Cloudflare bindings (D1, R2, KV, Queues, secrets) arrive on the Worker's `env` and are threaded
+Cloudflare bindings (Hyperdrive, R2, KV, Queues, secrets) arrive on the Worker's `env` and are threaded
 through Hono context as `c.env`. Never reach for `process.env` — it doesn't exist on Workers.
 
 ```ts

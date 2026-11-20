@@ -130,25 +130,16 @@ adds what you choose to the plan; `--yes` or a run with no terminal exits 2 and 
 options instead of choosing for you, with the flag that answers it: "Re-run as `saasaloy add waitlist --with database-d1`, or pick another from that list." `--with` picks on the command line. `database` declares it, so the core can never land on
 a project with no driver behind its `@repo/db/client` export.
 
-A file entry — in `files[]` or in a scaffold's `files[]` — may declare `onlyWith`, naming
-one module. The render writes that file only when the named module is in the resolved set: this run's graph plus the lock's `requested` list. Two entries may name the
-same `target` under disjoint conditions, which is how a module ships one file per database
-dialect and lets the installed driver pick. The render reads `onlyWith` as a `when.installed` gate, so every command sees the variant the project actually holds. When a target's entries are all conditional and none matches, `add` exits 2 and
-names the target and every candidate rather than leaving the file out.
-
-`database-d1` and `database-postgres` are the pair both fields point at today. They are
-**driver modules**, two implementations of the same capability's connection layer, and a
-project holds exactly one: `requiresOneOf` on the core stops it at zero, `conflictsWith` on
-each driver stops it at two. The `database` core carries the tables, the schema barrel and
-`db:generate`; the driver carries the client, the dialect and the migrate commands. Switch
-by removing one driver and adding the other, which moves no data
-([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)).
-
-`auth` and `waitlist` install under either driver. Each ships its table declarations twice,
-once against `sqlite-core` and once against `pg-core`, and the descriptor's `onlyWith`
-condition installs the variant matching the driver already in the project; `--dry-run`
-prints which source it chose. Switching driver later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
-and [ADR 0029](../adr/0029-adr-auth-holds-a-request-scoped-db-client-2026-08-31.md).
+`api-keys-user` and `api-keys-organization` use `requiresOneOf` on the `api-keys` core and
+`conflictsWith` on each other. They are **driver modules**, two implementations that write the
+same paths, and a project holds exactly one: `requiresOneOf` on the core stops it at zero,
+`conflictsWith` on each driver stops it at two
+([ADR 0055](../adr/0055-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)).
+`database` names one driver, `database-postgres`, in `requiresOneOf`. The `database` core
+carries the tables, the schema barrel and `db:generate`; the driver carries the client and the
+migrate commands ([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)). Postgres is
+the only SQL dialect, so every module ships one schema file
+([ADR 0065](../adr/0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md)).
 
 An entry in `files[]`, a scaffold's `files[]` or `patches` may also declare `when`, which decides whether it ships at all. `{ "testing": true }` ships it only while the project's testing mode is `tests-after` or `tdd`, and every test file a module ships carries it. `{ "installed": ["e2e"] }` ships it only while every named module is installed, which is how a feature module ships its Playwright journey spec beside `e2e`. Both keys together mean both. A target whose every entry `when` drops is skipped rather than refused. The render writes every entry whose `when` holds on each run, so an entry whose condition turns true later arrives with the next `add`, `update` or `testing` run. When a condition turns false, an unedited file is deleted and an edited one stays, untracked; `testing off` is the exception and deletes nothing.
 
@@ -485,6 +476,7 @@ interface. Pick one before you send anything.
 | `kv-cloudflare` | no API token and no secret. The `kv_namespaces` and `ratelimits` entries in `apps/api/wrangler.jsonc` are the credential, and it declares no `envVars`. Three platform limits apply and none is the module's to fix: KV is eventually consistent, with a write visible at once in its own location and up to 60 seconds later everywhere else; the TTL floor is 60 seconds, and a shorter one is refused rather than rounded up; the rate limiter counts per Cloudflare location, so a `limit` of 10 is 10 per colo. |
 | `storage-cloudflare` | the `BUCKET` binding alone for every read and write. Presigned URLs need more: an R2 API token with Object Read & Write, giving `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET_NAME`. All four are optional, and with any one missing the provider reports that it cannot sign and the core hands back its own proxy URL instead, so every byte streams through the Worker. `R2_BUCKET_NAME` must name the same bucket the binding points at. |
 | `subscription-stripe` | a Stripe account. `STRIPE_SECRET_KEY` (`sk_test_…` in development, `sk_live_…` in production) is required once `SUBSCRIPTION_PROVIDER=stripe`; the client is built on first use, so a project on `SUBSCRIPTION_PROVIDER=console` runs the whole capability with it unset. `STRIPE_WEBHOOK_SECRET` is the signing secret of the endpoint you register at `https://dashboard.stripe.com/webhooks` pointing at `https://<your-api>/auth/stripe/webhook`; every delivery is verified against it, so an unsigned POST is refused before any handler runs. |
+| `database-postgres` | a Postgres database for production. [Neon's free tier](https://neon.com/pricing) gives each project 1 GB and 100 compute hours a month with no credit card; any Postgres host works. Local development needs none: `db:setup` starts a Docker container. A `HYPERDRIVE` binding is an opt-in. Hyperdrive is on the Workers Free plan, and Hyperdrive Free fails queries past 100,000 a day ([Hyperdrive pricing](https://developers.cloudflare.com/hyperdrive/platform/pricing/), read 2026-11-20). |
 | `sms` | nothing for `sms-console`, which declares no `envVars`. `sms-khudebarta` needs a [Khudebarta](https://khudebarta.com/) account: `KHUDEBARTA_API_KEY` and `KHUDEBARTA_SECRET_KEY` are required, and `KHUDEBARTA_API_URL` optionally overrides the gateway URL. It sends to Bangladeshi (`+880`) numbers only and requires a sender, so `SMS_FROM` must name the sender id registered with Khudebarta. `SMS_FROM` on the core is otherwise optional: a provider routing through a pool or a messaging service assigns the sender itself, and a provider that requires one rejects a send with `invalid_message` when neither `SMS_FROM` nor the message carries a `from`. |
 
 ## Project files

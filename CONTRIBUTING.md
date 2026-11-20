@@ -150,7 +150,7 @@ plural: `featureFlagOverrides` on `feature_flag_overrides`. That covers Better A
 too. The adapter runs with `usePlural: true` and finds a table by its export key, so a singular key
 type-checks and then fails every auth call. A plugin with a custom `modelName: "X"` needs the export
 `Xs`. `pnpm test:scripts` runs `scripts/table-names.test.ts`, which checks every
-`modules/*/files/db/schema/*.{pg,sqlite}.ts` file. The rule and its reasons are in
+`modules/*/files/db/schema/*.ts` file. The rule and its reasons are in
 [ADR 0038](docs/adr/0038-adr-table-names-are-plural-snake-case-2026-09-12.md).
 
 ### Checking a descriptor you wrote
@@ -201,20 +201,19 @@ Every file under `packages/cli/templates/base/` is a tracked file in a scaffolde
 ### One-command bring-up
 
 ```sh
-pnpm play:up                               # the full preset on D1
-pnpm play:up --preset full --db postgres   # the same on Postgres in a Compose container
-pnpm play:up --preset minimal              # the base template only
-pnpm play:smoke                            # every installed module's smoke checks
-pnpm play:down                             # stop the dev servers play:up started
+pnpm play:up                    # the full preset on Postgres in a Compose container
+pnpm play:up --preset minimal   # the base template only
+pnpm play:smoke                 # every installed module's smoke checks
+pnpm play:down                  # stop the dev servers play:up started
 ```
 
-`play:up` stops the playground's own dev servers, deletes `.dev/playground`, and then builds the CLI, scaffolds, adds the preset's modules with the driver `--db` names, installs, writes `packages/env/.env` from the preset, runs `pnpm env:setup`, `db:generate`, `pnpm db:setup` and `pnpm db:seed`, commits a baseline, and starts every app's `pnpm dev` in the background. It ends when the web (3000), admin (3001), app (3002) and api (4000) ports answer. Logs and pid files go to `.dev/play/`. Every dev port is `strictPort`, so `play:up` refuses to start when a process from another checkout holds one, and it names that process. It never stops a process outside the playground.
+`play:up` stops the playground's own dev servers, deletes `.dev/playground`, and then builds the CLI, scaffolds, adds the preset's modules with `database-postgres`, installs, writes `packages/env/.env` from the preset, runs `pnpm env:setup`, `db:generate`, `pnpm db:setup` and `pnpm db:seed`, commits a baseline, and starts every app's `pnpm dev` in the background. It ends when the web (3000), admin (3001), app (3002) and api (4000) ports answer. Logs and pid files go to `.dev/play/`. Every dev port is `strictPort`, so `play:up` refuses to start when a process from another checkout holds one, and it names that process. It never stops a process outside the playground.
 
 The presets live in `scripts/play-presets.json`: a module list and an `env` map each. `full` is every module with a local provider, so it needs no vendor account and no network. `BETTER_AUTH_SECRET` stays unset, and Better Auth then uses its dev key on the loopback `BETTER_AUTH_URL`. Sign in as `superadmin@example.test`, `admin@example.test` or `member@example.test` with the password `saasaloy-dev-password`; `banned@example.test` is refused.
 
-With `--db postgres`, `play:up` gives this checkout its own Compose project (`playground-<hash>`), removes that project's container and named volume, and refuses when another Postgres answers on 5432. Remove the container when you are done with `docker compose --project-name playground-<hash> down --volumes`, using the name `docker ps` shows.
+`play:up` gives this checkout its own Compose project (`playground-<hash>`), removes that project's container and named volume, and refuses when another Postgres answers on 5432. Remove the container when you are done with `docker compose --project-name playground-<hash> down --volumes`, using the name `docker ps` shows.
 
-A module can ship `modules/<name>/smoke.ts`, beside its descriptor. It is never copied into a project. It drives the api over HTTP only, so one script runs on both drivers, and it uses the helper in `scripts/smoke.ts`, which signs a seeded user in on the client (`/auth`) or admin (`/admin/auth`) surface, keeps the cookie, and prints one `PASS` or `FAIL` line per check. `pnpm play:smoke` runs the script of every installed module in install order, prints the total, and exits 1 on any failure. Run it on a fresh seed.
+A module can ship `modules/<name>/smoke.ts`, beside its descriptor. It is never copied into a project. It drives the api over HTTP only, and it uses the helper in `scripts/smoke.ts`, which signs a seeded user in on the client (`/auth`) or admin (`/admin/auth`) surface, keeps the cookie, and prints one `PASS` or `FAIL` line per check. `pnpm play:smoke` runs the script of every installed module in install order, prints the total, and exits 1 on any failure. Run it on a fresh seed.
 
 ### Resetting
 
@@ -226,9 +225,9 @@ pnpm play:reset         # destroy + re-scaffold a clean playground
 pnpm play:destroy       # remove .dev/playground entirely
 ```
 
-The playground is a git repository, and `play:init` commits a baseline after the install. `play:restore` runs `git reset --hard` and `git clean -fd` against it, then `pnpm install`. Ignored files stay, so `node_modules`, `apps/api/.dev.vars` and the local D1 state survive a restore. Add the modules you test most, run `pnpm play:snap`, and every later restore returns to that state. `git diff` in the playground shows exactly what an `add` wrote.
+The playground is a git repository, and `play:init` commits a baseline after the install. `play:restore` runs `git reset --hard` and `git clean -fd` against it, then `pnpm install`. Ignored files stay, so `node_modules` and the env files survive a restore. The Postgres database lives in a Docker volume outside the playground, and only `--db` resets it. Add the modules you test most, run `pnpm play:snap`, and every later restore returns to that state. `git diff` in the playground shows exactly what an `add` wrote.
 
-`play:restore --db` stops whatever listens on the api port (4000) with its workerd children, and waits for them to exit, because deleting D1 state under a running workerd breaks every later query. It then runs `db:generate`, wipes and migrates the database, and prints the command that starts the api again. It does not start the api itself, so the api runs in your own terminal with its output in view. Under `database-d1` the wipe deletes `apps/api/.wrangler`. Under `database-postgres` it drops the `public` and `drizzle` schemas at `DATABASE_URL`, read from the environment, from `apps/api/.env`, or from `apps/api/.dev.vars`.
+`play:restore --db` stops whatever listens on the api port (4000) with its workerd children, and waits for them to exit, so no running api holds a connection to the database the reset drops. It then runs `db:generate`, wipes and migrates the database, and prints the command that starts the api again. It does not start the api itself, so the api runs in your own terminal with its output in view. The wipe drops the `public` and `drizzle` schemas at `DATABASE_URL`, read from the environment or from `apps/api/.env`.
 
 ### Global linking (`main` checkout only)
 
@@ -262,7 +261,7 @@ uncommitted-work QA, use the playground shim above; it's worktree-safe by constr
 | `pnpm play:watch` | re-run `add <module> --force` when an installed module's files or descriptor change |
 | `pnpm play:snap` | commit the current playground as the new baseline |
 | `pnpm play:restore` | reset the playground to its baseline and `pnpm install`; `--db` also resets the database |
-| `pnpm play:up` | a fresh playground from a preset, migrated, seeded, with every app's dev server running; `--preset minimal\|full`, `--db d1\|postgres` |
+| `pnpm play:up` | a fresh playground from a preset, migrated, seeded, with every app's dev server running; `--preset minimal\|full` |
 | `pnpm play:down` | stop the dev servers `play:up` started |
 | `pnpm play:smoke` | run every installed module's `modules/<name>/smoke.ts` against the running playground |
 | `pnpm play:reset` | `play:destroy` then `play:init` |
@@ -404,8 +403,8 @@ CI/pre-push hooks, not the interactive path.
 **Three dependency sites per descriptor.** A `registry-item.json` parks a version in three places,
 and all three are scanned: `dependencies[]`, `devDependencies[]`, and the `range` of every
 `package-json-dependency` entry in `patches[]`. That third site is how a module pins a dep into a
-`package.json` a *different* module scaffolded — `database-d1` putting `wrangler` into
-`packages/db`, `database-postgres` putting `postgres` there. A pin parked in a patch reaches a
+`package.json` a *different* module scaffolded — `database-postgres` putting `postgres` into
+`packages/db`. A pin parked in a patch reaches a
 downstream project exactly like a `dependencies[]` entry, so it goes through the same within-major
 gate. A patch missing `name`, `range`, or a `section` naming a real dependency map
 fails the run rather than slipping past the gate.
@@ -438,7 +437,7 @@ are informational: neither writes a change and neither affects the `deps:check` 
 - `--dry-run` — **print-only preview**: prints the report and the "would update" list a
   default apply would make, then stops. It never opens the picker and never writes.
 
-**`wrangler` and `@cloudflare/vite-plugin` move together.** Each plugin release refuses to start a dev server against a wrangler older than the one it was released with. `@astrojs/cloudflare` takes the plugin through a caret range, so the web template pins the plugin as a direct devDependency, which makes pnpm install that version for the adapter too (issue #186). Take both bumps in one `deps:update` run. `verify-pins` fails when the plugin pin differs between `apps/web` and `apps/api`, or when any Cloudflare workspace pins a different `wrangler`. The pin in `database-d1`'s patch range is not a `package.json`, so `verify-pins` does not read it; keep it on the same version by hand.
+**`wrangler` and `@cloudflare/vite-plugin` move together.** Each plugin release refuses to start a dev server against a wrangler older than the one it was released with. `@astrojs/cloudflare` takes the plugin through a caret range, so the web template pins the plugin as a direct devDependency, which makes pnpm install that version for the adapter too (issue #186). Take both bumps in one `deps:update` run. `verify-pins` fails when the plugin pin differs between `apps/web` and `apps/api`, or when any Cloudflare workspace pins a different `wrangler`.
 
 **The `deps:verify` playground has its own git repository.** `saasaloy init` runs `git init` in `.dev/playground` because this repo ignores `/.dev/`. Without a `.git` of its own, the playground would inherit this repo's `.gitignore`, so oxlint would find no files and the lint step would fail with "No files found to lint".
 
@@ -451,7 +450,7 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
 | `pnpm deps:verify` | `verify-pins` → `play:init` (which runs `git init` and installs) → build → lint → `verify-css` → typecheck the generated project (post-update gate) |
 | `pnpm verify:a11y` | axe, overflow, reduced-motion, skip-link, island and metadata checks over the built playground at four widths in both themes (by hand, and nightly in `smoke.yml`) |
-| `pnpm verify:e2e` | scaffolds a clean playground with the `e2e` module and runs its Playwright suite against the running apps, under `--driver=d1` or `--driver=postgres` (by hand, and in `e2e.yml` on a path filter) |
+| `pnpm verify:e2e` | scaffolds a clean playground with the `e2e` module and runs its Playwright suite against the running apps on Postgres (by hand, and in `e2e.yml` on a path filter) |
 
 `verify-css` (`scripts/verify-css.ts`) covers the one template break that `build` and
 `typecheck` are both blind to: Tailwind silently dropping every utility class written in
@@ -513,14 +512,14 @@ The `a11y` job in `.github/workflows/smoke.yml` runs the same steps every night.
 
 `verify-e2e` (`scripts/verify-e2e.ts`, run with `pnpm verify:e2e`) is the gate for the **`e2e` module**. It runs `play:reset`, adds the driver plus `auth`, `admin`, `waitlist` and `e2e` through the local-registry shim, places the waitlist form the way a project owner would, writes every service's `.env` from the example's local defaults, generates the migrations, downloads Chromium, lints and typechecks `packages/e2e` in the project, and runs `pnpm e2e`. The suite migrates and seeds the database, starts the apps, signs the seeded superadmin in, submits the waitlist form and checks that a guarded route refuses an anonymous caller.
 
-`--driver=d1` is the default and `--driver=postgres` is the other half. Run both when the module, the base template or Playwright moves: a suite verified under one driver proves the opposite of what the driver split claims. Locally the postgres run starts the driver's own `compose.yaml` container, which needs a Docker daemon. That container is named after the playground directory, so every worktree's playground on one machine shares it. To keep a run off it, point the run at a server of your own:
+The run uses Postgres, the only database. Run it when the module, the base template or Playwright moves. Locally the run starts the driver's own `compose.yaml` container, which needs a Docker daemon. That container is named after the playground directory, so every worktree's playground on one machine shares it. To keep a run off it, point the run at a server of your own:
 
 ```sh
-pnpm verify:e2e --driver=d1
-E2E_DATABASE_SERVER=postgres://postgres:postgres@127.0.0.1:55432/postgres E2E_DB_SETUP_ARGS=--server pnpm verify:e2e --driver=postgres
+pnpm verify:e2e
+E2E_DATABASE_SERVER=postgres://postgres:postgres@127.0.0.1:55432/postgres E2E_DB_SETUP_ARGS=--server pnpm verify:e2e
 ```
 
-It is **deliberately not part of `deps:verify`**: it downloads a browser and takes minutes. `.github/workflows/e2e.yml` runs it as a two-job matrix on a pull request that touches `modules/**`, the CLI or its templates, with Postgres from a service container.
+It is **deliberately not part of `deps:verify`**: it downloads a browser and takes minutes. `.github/workflows/e2e.yml` runs it as one job on a pull request that touches `modules/**`, the CLI or its templates, with Postgres from a service container.
 
 `scripts/e2e-tags.test.ts` is the cheap half of the same guard and runs in `pnpm test`. It asserts that every tag in the suite's `SPEC_TAGS` names a real directory under `modules/`, and that every tag a spec writes is declared. A tag naming no module is never in any project's `installed`, so its spec is uncollected everywhere and the suite still reports green, which is exactly what a module rename would cause.
 
