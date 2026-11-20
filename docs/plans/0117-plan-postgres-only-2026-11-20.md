@@ -4,6 +4,8 @@ Grilled: 2026-11-20
 
 Updated: 2026-11-20, after the grill. The owner kept the removal and added the why-Postgres wiki page and the `apps/web` landing site to Phase 4. The owner settled both rows in the session, so the stamp stands.
 
+Re-grilled: 2026-11-20, after the afkkit acceptance check of #366 found blocker B1: `update` validates a base descriptor read at an old ref against the new schema, so the 14 modules whose released descriptors carry `onlyWith` lost their merge base. The owner chose to remove retired keys on an old-ref read (rows "Old descriptors at an old ref" and "Release-smoke guard").
+
 Issue: [#366](https://github.com/mimukit/saasaloy/issues/366). Sources: [`docs/research/0010-research-restart-retrospective-2026-11-17.md`](../research/0010-research-restart-retrospective-2026-11-17.md) (change 3), [`docs/research/0013-research-three-way-merge-replay-2026-11-20.md`](../research/0013-research-three-way-merge-replay-2026-11-20.md), and the engine plan [`0116-plan-render-and-merge-engine-2026-11-20.md`](0116-plan-render-and-merge-engine-2026-11-20.md).
 
 ## Context
@@ -42,10 +44,13 @@ Target: 0 `onlyWith` entries (baseline 34), 0 twin files (baseline 17), and 0 fi
 | ADRs | One new ADR at the next free number records Postgres as the only dialect. ADR 0026 is marked superseded by it. ADR 0001 and ADR 0042 get a dated amendment. ADRs 0029, 0033 and 0037 get a one-line amendment where they name D1 as the default or `database` as the driver example of two drivers. History ADRs (0004, 0018, 0019, 0043, 0048, 0063) stay as written. |
 | Existing projects | No update note, runbook or `doctor` check, because no project runs D1. The CHANGELOG lists `saasaloy add database-d1` no longer resolving under BREAKING CHANGES. |
 | Merge gate and release | The work can start now. The PR merges only after 0.9.0 is released (#358), and the change ships in 0.10.0. The CHANGELOG entry goes under an `Unreleased` heading that the 0.10.0 release takes. |
-| Order against #365 | #366 merges before #365. #365 rebases onto it and never implements `onlyWith`; its Phase 7 conversion script runs again on that rebase. |
+| Order against #365 | #366 merges before #365. #365 rebases onto it and never implements `onlyWith`; its Phase 7 conversion script runs again on that rebase. #365's payload loader reads a descriptor at an old ref through `lib/retired-keys.ts`, the same as `update` (re-grill Q7, defaulted). Plan 0116 stays unchanged. |
+| Old descriptors at an old ref | Every released descriptor of the 14 modules with twin files carries `onlyWith`. A new file `packages/cli/src/lib/retired-keys.ts` holds the list of retired descriptor keys, with `onlyWith` as its only entry, and `stripRetiredKeys(raw)` removes them. The remote reader calls it before `validateRegistryItem` only when it reads a descriptor at a ref that is not the running registry. A current descriptor that carries `onlyWith` still fails validation. The applier already takes the last entry for a target, which is the Postgres file in every old descriptor. A test loads a fixture copy of `v0.8.0:modules/auth/registry-item.json` as a base, finds it valid, and finds the `.pg.ts` entry chosen for each target (re-grill Q1, asked; Q2, Q3, Q5, defaulted). The fix is a commit on the issue branch under Phase 2 (Q9, defaulted). |
+| Release-smoke guard | The skipped-release step of `release:smoke` (0.7.0 to the tree) fails when any module section prints `no merge base`, not only the base section (re-grill Q6, defaulted). |
+| Leftovers from the first run | The run removes the "Change one and change the other" wording from the renamed schema headers and restamps the wiki pages at its last commit. The `database` floor stays `>=0.9.0` until the rebase after 0.9.0 ships; that rebase bumps the CLI to 0.10.0 and the floor to `>=0.10.0` (re-grill Q8, defaulted). |
 | README vendor | Name Neon with its numbers, link https://neon.com/pricing, and put the Hyperdrive limit of 100,000 queries a day in `docs/wiki/reference.md`. |
 | Follow-up work | Two `needs-planning` issues, filed during the grill on 2026-11-20: #371 merges `database-postgres` into `database`, blocked by #365, and #372 simplifies the code that works around a D1 limit. |
-| Outward actions | Only the afkkit authorization: commits on the issue branch, one push, one PR. The runner does not merge, and it files no issue. |
+| Outward actions | Only the afkkit authorization: commits on the issue branch, one push, one PR. The runner does not merge, files no issue, and does not comment on #365 (re-grill Q10, asked). |
 | Docker on the box | `scaffold:check` and `release:smoke` start Postgres through the Docker backend of `db:setup`. The devaloy box has Docker. |
 | Why-Postgres wiki page | A new page `docs/wiki/why-postgres.md`, title "Why Postgres, not D1", section `Decisions`, mode `explanation`, with a `.wikimap.yaml` entry whose `documents` are `modules/database/**`, `modules/database-postgres/**` and the new ADR. It ships in the same PR as the removal, because until then the rest of the wiki names D1 as the default. Owner request, 2026-11-20. |
 | Landing site and docs content | `apps/web`, the Saasaloy site, changes with the template: `src/content/landing.ts` (the stack line, the `d1` tile, the `database` module line and the free-tier FAQ answers) and `src/lib/module-catalog.test.ts`. The FAQ uses the Neon and Hyperdrive numbers of this table. The `/docs` site renders `docs/wiki/`, so the wiki changes reach it with no extra step. Owner request, 2026-11-20. |
@@ -75,7 +80,9 @@ Done when: `ls modules/database-d1` fails; `grep -rn onlyWith modules` prints no
 - Delete or rewrite the `onlyWith` tests. A CLI test that uses `database-d1` only as a fixture name for a conflict pair may keep a fixture registry, but a test that reads the real `modules/` must not name it.
 - Replace the `--with database-d1` example in `add.ts` help text, and the `d1_databases` example in `patch/jsonc.ts` and `patch/index.ts` comments with a binding that still ships (`kv_namespaces`).
 
-Done when: `grep -rn onlyWith packages/cli/src packages/cli/schemas` prints nothing; `pnpm --filter saasaloy test` and `pnpm typecheck` pass.
+- Add `packages/cli/src/lib/retired-keys.ts` and its test, and call it from the remote reader for an old-ref read, per the row "Old descriptors at an old ref".
+
+Done when: `grep -rln onlyWith packages/cli/src packages/cli/schemas` prints only `packages/cli/src/lib/retired-keys.ts` and its test; a fixture copy of the v0.8.0 `auth` descriptor loads as a base; `pnpm --filter saasaloy test` and `pnpm typecheck` pass.
 
 ### Phase 3: move the tooling and CI to Postgres
 
@@ -83,7 +90,7 @@ Done when: `grep -rn onlyWith packages/cli/src packages/cli/schemas` prints noth
 - `.github/workflows/ci.yml`: the `scaffold` job gets the `postgres:18` service and sets `SCAFFOLD_DATABASE_SERVER`.
 - `scripts/playground.ts` and `scripts/play-presets.json`: Postgres is the only database; remove `--db d1`.
 - `scripts/verify-e2e.ts` and `.github/workflows/e2e.yml`: remove the `d1` driver and the matrix; the job runs the Postgres leg only.
-- `scripts/release-smoke.ts`: remove the `full-database-d1` project and its fixtures, and move the upgrade baseline to 0.7.0 with `database-postgres`.
+- `scripts/release-smoke.ts`: remove the `full-database-d1` project and its fixtures, and move the upgrade baseline to 0.7.0 with `database-postgres`. The skipped-release step also fails on `no merge base` in any module section.
 - `scripts/agent-bench/`, `scripts/qa-tenant-scoping*.sh`, `scripts/smoke.ts`, `scripts/update-deps.ts`: remove the D1 branches.
 
 Done when: `pnpm test`, `pnpm scaffold:check` and `pnpm release:smoke` pass on the devaloy box with Docker; `.github/workflows/` names no `d1`.
@@ -118,4 +125,4 @@ None. The grill on 2026-11-20 settled the merge gate, the order against #365, th
 - Any change to `kv-cloudflare`, `queue-cloudflare` or `storage-cloudflare`.
 - The merge of `database` and `database-postgres` into one module.
 - A simplification of code that works around a D1 limit.
-- Any change to the add, update and remove engines beyond removing `onlyWith` (that is #365).
+- Any change to the add, update and remove engines beyond removing `onlyWith` (that is #365). The one exception is the removal of retired keys from a descriptor read at an old ref.
