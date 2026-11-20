@@ -192,7 +192,7 @@ Show the proposal as the tables, then ask with three samples: take the tables as
 > c. Add or drop an entity, such as "add notes on a book".
 > Or write your own.
 
-An entity the owner wants that needs a module the MVP lacks, such as an entity of the organization, adds that module to question 13's recommendation (`teams` and `multitenant` for `the organization`).
+An entity the owner wants that needs a module the MVP lacks, such as an entity of the organization, adds that module to question 13's recommendation (`teams`, `multitenant` and `api-keys-organization` for `the organization`).
 
 ### The capabilities question
 
@@ -203,7 +203,7 @@ Build the choices in four steps:
 1. **Leave out the MVP set** the build always adds: `database`, `api`, `logger`, `validators`, `shell`, `auth`, `app`, `admin`, `email`, `agent`, `api-keys`, `api-keys-user`, and their drivers and providers.
 2. **Leave out the drivers and providers.** A driver or provider is a module that another module's `requiresOneOf` names, or a `<capability>-<vendor>` module that depends on its capability, such as `email-plunk` or `payment-console`. The build picks those.
 3. **Leave out the tooling modules** `ci`, `infra-ci-deploy` and `e2e`. They change how the project is built and checked, not what the product does.
-4. **Offer the rest**, each with its `description`, grouped by `stage`. Recommend the ones the earlier answers call for, and say which answer each comes from: paid tiers in question 9 call for `subscription` or `payment`; an audience that is a team calls for `teams`; an entity of the organization calls for `teams` and `multitenant`; a waitlist destination in question 10 calls for `waitlist`.
+4. **Offer the rest**, each with its `description`, grouped by `stage`. Recommend the ones the earlier answers call for, and say which answer each comes from: paid tiers in question 9 call for `subscription` or `payment`; an audience that is a team calls for `teams`; an entity of the organization calls for `teams`, `multitenant` and `api-keys-organization`, which the build installs in place of `api-keys-user` because a user's key acts for no organization and every organization route would refuse it; a waitlist destination in question 10 calls for `waitlist`.
 
 Ask with three samples: the recommended set, nothing beyond the MVP, and a different set the owner names.
 
