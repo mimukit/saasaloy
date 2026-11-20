@@ -151,6 +151,11 @@ const BLOCKED_TITLE = /^blocked\b/i;
 const HUMAN_TITLE = /\bhuman\b|\bmanual\b|left for|for you\b|next steps/i;
 const STOP_WORDS =
   /\b(blocked|stopped|failed|failing|incomplete|skipped|not done|could not)\b/i;
+// A line that opens with a stop word: "Stopped: pnpm check failed", "- Blocked on a key".
+const STOP_LINE = new RegExp(
+  `^\\s*(?:[-*+]\\s+)?(?:\\*\\*)?(?:status:\\s*)?${STOP_WORDS.source}`,
+  "i"
+);
 const SHA = /\b[0-9a-f]{7,40}\b/;
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/;
 
@@ -207,7 +212,9 @@ export function parseBuildLog(text: string): BuildLog {
       continue;
     }
     const commit = SHA.exec(`${section.title}\n${body}`)?.[0];
-    const stopped = STOP_WORDS.test(`${section.title}\n${body}`);
+    const stopped = commit
+      ? committedStageStopped(section.title, body)
+      : STOP_WORDS.test(`${section.title}\n${body}`);
     log.stages.push({
       title: section.title,
       commit,
@@ -215,6 +222,22 @@ export function parseBuildLog(text: string): BuildLog {
     });
   }
   return log;
+}
+
+/**
+ * True when a stage that names a commit still says it stopped. A finished stage often
+ * explains a choice in passing ("a required column could not be filled"), so a stop word
+ * in the middle of its notes is not a stop. It counts in the title, at the start of a
+ * line ("Stopped: ...", "- Failed ..."), or on the last line, where a build that stops
+ * after its commit writes why ("Commit abc1234, then pnpm check failed.").
+ */
+function committedStageStopped(title: string, body: string): boolean {
+  const lines = body.split("\n").filter((line) => line.trim() !== "");
+  return (
+    STOP_WORDS.test(title) ||
+    lines.some((line) => STOP_LINE.test(line)) ||
+    STOP_WORDS.test(lines.at(-1) ?? "")
+  );
 }
 
 /** Names where the agent stopped, from a parsed build log. */
@@ -563,6 +586,82 @@ export function deployOf(brief?: string): "preview" | "none" {
 const DEPLOY_COMMAND =
   /\bwrangler(?:@[\w.^~-]+)?\s+(?:deploy|publish|d1|pages|versions|secret|kv|r2|queues|rollback|delete|tail|triggers|deployments|hyperdrive)\b|\bdeploy:(?:preview|production)\b/;
 
+// A command that only searches or prints text. Its arguments are a pattern or a message,
+// so `grep 'wrangler secret put'` names a deploy call without making one.
+const TEXT_TOOLS = new Set([
+  "grep",
+  "egrep",
+  "rg",
+  "echo",
+  "printf",
+  "sed",
+  "awk",
+]);
+
+/**
+ * The simple commands of a shell line, split on `|`, `;`, `&` and newlines outside quotes.
+ * Each comes back as written, quotes and all.
+ */
+function simpleCommands(line: string): string[] {
+  const commands: string[] = [];
+  let current = "";
+  let quote = "";
+  for (const char of line) {
+    if (quote !== "") {
+      quote = char === quote ? "" : quote;
+      current += char;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      current += char;
+    } else if ("|;&\n".includes(char)) {
+      commands.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  commands.push(current);
+  return commands.map((command) => command.trim()).filter(Boolean);
+}
+
+/** The program a simple command runs, past `VAR=value` words and an `export`. */
+function programOf(command: string): string {
+  const words = command.split(/\s+/);
+  const index = words.findIndex(
+    (word) => !/^[A-Za-z_][A-Za-z0-9_]*=/.test(word) && word !== "export"
+  );
+  return (words[index] ?? "").split("/").at(-1) ?? "";
+}
+
+/**
+ * The command with each heredoc body removed, `<<EOF`, `<<-'EOF'` or `<<"EOF"` through the
+ * line that holds only its delimiter. The body is data for the command, such as a build
+ * log that names `pnpm deploy:production` as a step left for a person.
+ */
+function withoutHeredocs(command: string): string {
+  const kept: string[] = [];
+  let delimiter = "";
+  for (const line of command.split("\n")) {
+    if (delimiter !== "") {
+      if (line.replace(/^\t+/, "") === delimiter) {
+        delimiter = "";
+      }
+      continue;
+    }
+    kept.push(line);
+    delimiter = /<<-?\s*(['"]?)([A-Za-z_][\w-]*)\1/.exec(line)?.[2] ?? "";
+  }
+  return kept.join("\n");
+}
+
+/** True when a shell line holds a deploy call that is not just text for a text tool. */
+export function isDeployCall(line: string): boolean {
+  return simpleCommands(withoutHeredocs(line)).some(
+    (command) =>
+      !TEXT_TOOLS.has(programOf(command)) && DEPLOY_COMMAND.test(command)
+  );
+}
+
 interface ToolEvent {
   type?: string;
   message?: {
@@ -589,7 +688,7 @@ export function deployCalls(transcript: string): string[] {
       event = undefined;
     }
     if (!event || typeof event !== "object") {
-      if (DEPLOY_COMMAND.test(trimmed)) {
+      if (isDeployCall(trimmed)) {
         calls.push(trimmed);
       }
       continue;
@@ -602,7 +701,7 @@ export function deployCalls(transcript: string): string[] {
       if (
         block.type === "tool_use" &&
         typeof command === "string" &&
-        DEPLOY_COMMAND.test(command)
+        isDeployCall(command)
       ) {
         calls.push(command);
       }
@@ -886,7 +985,10 @@ export function checkEntity(project: string, expect: Expect): LineResult {
     ],
     [
       "seed slice",
-      existsSync(join(project, `packages/db/src/seed/slices/${table}.ts`)),
+      // The shipped slices are kebab case (`audit-events.ts`); a snake case name counts too.
+      [table, table.replaceAll("_", "-")].some((name) =>
+        existsSync(join(project, `packages/db/src/seed/slices/${name}.ts`))
+      ),
     ],
     [
       "validator",

@@ -141,6 +141,8 @@ interface Seen {
 const seen: Seen[] = [];
 let rows: { id: string }[] = [];
 let createStatus = 200;
+// True: keys are organization-owned, so a create with no `organizationId` answers 400.
+let organizationKeys = false;
 let server: Server;
 let api = "";
 
@@ -186,6 +188,21 @@ before(async () => {
     } else if (request.url === "/auth/sign-in/email") {
       response.setHeader("set-cookie", ["sid=abc; Path=/; HttpOnly"]);
       json(200, { user: { id: "u1" } });
+    } else if (request.url === "/auth/organization/create") {
+      json(200, {
+        id: "org_1",
+        slug: (JSON.parse(text) as { slug: string }).slug,
+      });
+    } else if (
+      request.url === "/auth/api-key/create" &&
+      organizationKeys &&
+      (JSON.parse(text) as { organizationId?: string }).organizationId !==
+        "org_1"
+    ) {
+      json(400, {
+        message: "Organization ID is required for organization-owned API keys.",
+        code: "ORGANIZATION_ID_REQUIRED",
+      });
     } else if (request.url === "/auth/api-key/create") {
       json(
         createStatus,
@@ -284,6 +301,38 @@ describe("seedAgentKey", () => {
     assert.deepEqual(JSON.parse(create?.body ?? "{}"), {
       name: "agent-bench second agent",
       metadata: { scope: { books: ["read", "write"] } },
+    });
+  });
+
+  it("creates an organization and sends its id when keys are organization-owned", async () => {
+    seen.length = 0;
+    organizationKeys = true;
+    const result = await seedAgentKey({
+      api,
+      appOrigin: "http://localhost:10002",
+      table: "books",
+      email: "Agent.Org@bench.test",
+      password: "bench-password-1234",
+    });
+    organizationKeys = false;
+    assert.deepEqual(result, {
+      key: "sk_fake_key",
+      scopes: ["books:read", "books:write"],
+    });
+    const organization = seen.find(
+      (s) => s.url === "/auth/organization/create"
+    );
+    assert.equal(organization?.headers.cookie, "sid=abc");
+    assert.deepEqual(JSON.parse(organization?.body ?? "{}"), {
+      name: "Bench Agent Team",
+      slug: "agent-org-bench-test",
+    });
+    const creates = seen.filter((s) => s.url === "/auth/api-key/create");
+    assert.equal(creates.length, 2);
+    assert.deepEqual(JSON.parse(creates[1]?.body ?? "{}"), {
+      name: "agent-bench second agent",
+      metadata: { scope: { books: ["read", "write"] } },
+      organizationId: "org_1",
     });
   });
 

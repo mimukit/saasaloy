@@ -14,7 +14,10 @@
 // `12) ...`, `Question 13:`, `Q14.`) that it has not answered yet, and answers each one by
 // number in one message.
 // A reply that asks something but names no new number is a follow-up: it gets the file's
-// `follow-up` answer. Three of those in a row stop the interview.
+// `follow-up` answer. Three of those in a row stop the interview. Before the first
+// numbered question, the agent has not started `saasaloy-setup` yet, and the file has no
+// answer to an unnumbered question such as "What is the product?". So that follow-up
+// points the agent at the interview instead, and tells it nothing about the product.
 //
 // How the read-back and the end are found. The read-back ends with "Build it?". The
 // harness answers it with the file's `read-back` answer (a) and then calls nothing more:
@@ -36,6 +39,10 @@ export interface Answers {
 
 const DEFAULT_FOLLOW_UP =
   "Take your first sample answer as written, and go on to the next question.";
+
+/** The follow-up before any numbered question: start the setup interview. */
+export const PRE_INTERVIEW_FOLLOW_UP =
+  "Scaffold the project first, then ask me the saasaloy-setup interview questions by their numbers. I will answer them there.";
 
 /**
  * Reads an answers file: YAML-like frontmatter with `read-back:` and an optional
@@ -135,16 +142,27 @@ export function isReadBack(reply: string): boolean {
 
 const SAMPLE_LINE = /^\s*(?:>\s*)*(?:[-*+]\s+)?(?:\*\*)?\(?[a-c][.)]\s+\S/i;
 
+// A line whose first sentence is a question, with more after it on the same line: "What's
+// the idea? Give me one sentence." or "Is D1 okay? Reply yes to start." A question mark
+// after an earlier sentence ("Is it perfect? No." after "The build is done.") does not
+// count, and neither does one inside a word, such as a URL's query. Closing bold, quote or
+// bracket marks may sit between the question mark and the space.
+const LEADING_QUESTION = /^[^.!?]*\?[*_"'`)\]]*(?=\s|$)/;
+
 /**
  * True when the reply asks the owner something: one of its last three lines ends with a
- * question mark, or it offers sample answers a, b and c.
+ * question mark or opens with a question, or it offers sample answers a, b and c.
  */
 export function looksLikeQuestion(reply: string): boolean {
   const lines = reply
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line !== "");
-  if (lines.slice(-3).some((line) => /\?\W*$/.test(line))) {
+  if (
+    lines
+      .slice(-3)
+      .some((line) => /\?\W*$/.test(line) || LEADING_QUESTION.test(line))
+  ) {
     return true;
   }
   return lines.filter((line) => SAMPLE_LINE.test(line)).length >= 2;
@@ -222,7 +240,12 @@ export function nextMessage(
     };
   }
   state.followUpsInARow += 1;
-  return { kind: "follow-up", message: answers.followUp, numbers: [] };
+  return {
+    kind: "follow-up",
+    message:
+      state.answered.size === 0 ? PRE_INTERVIEW_FOLLOW_UP : answers.followUp,
+    numbers: [],
+  };
 }
 
 /** What one agent call reported. A field the output does not hold stays absent. */

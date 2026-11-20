@@ -12,6 +12,7 @@ import {
   newInterview,
   nextMessage,
   parseAnswers,
+  PRE_INTERVIEW_FOLLOW_UP,
   questionNumbers,
   readTurnOutput,
 } from "./interview.ts";
@@ -134,6 +135,45 @@ describe("looksLikeQuestion", () => {
     assert.equal(looksLikeQuestion("I have a doubt.\n\nWhich currency?"), true);
   });
 
+  it("is true when a line opens with a question and goes on", () => {
+    assert.equal(
+      looksLikeQuestion(
+        "What's the SaaS idea? Give me one or two sentences.\n\nOnce I have that, I'll ask the rest one at a time."
+      ),
+      true
+    );
+    assert.equal(
+      looksLikeQuestion(
+        '## Read-back\n\n- Name: Shelfnote\n\nDo you confirm this read-back? Reply "yes" to start the build.'
+      ),
+      true
+    );
+  });
+
+  it("is true when the opening question is bold", () => {
+    assert.equal(
+      looksLikeQuestion(
+        "I've read the README.\n\nFirst question: **what is the product?** Give me one or two sentences."
+      ),
+      true
+    );
+    assert.equal(
+      looksLikeQuestion(
+        "`saasaloy init .` failed.\n\n**What should the project be called?** Give me a name such as `my-app`. I'll scaffold it there."
+      ),
+      true
+    );
+  });
+
+  it("is false for a question mark inside a URL", () => {
+    assert.equal(
+      looksLikeQuestion(
+        "Done. The preview is at https://x.dev/?ref=build now."
+      ),
+      false
+    );
+  });
+
   it("is true for sample answers a, b and c", () => {
     assert.equal(
       looksLikeQuestion("Pick one:\na. Monthly\nb. Annual\nc. Both"),
@@ -178,6 +218,16 @@ describe("nextMessage", () => {
     );
     assert.equal(step.kind, "follow-up");
     assert.equal(step.message, "Take your first sample answer as written.");
+  });
+
+  it("points the agent at the interview when it asks before any numbered question", () => {
+    const step = nextMessage(
+      newInterview(),
+      "I've read the README.\n\nFirst question: **what is the product?** Give me one sentence.",
+      answers
+    );
+    assert.equal(step.kind, "follow-up");
+    assert.equal(step.message, PRE_INTERVIEW_FOLLOW_UP);
   });
 
   it("answers the read-back with the read-back answer, and only once", () => {

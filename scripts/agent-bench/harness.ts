@@ -260,3 +260,52 @@ export function formatHeader(run: RunRecord): string {
     `End: ${run.end}`,
   ].join("\n");
 }
+
+/** A package runner the agent may call to start the CLI: `npx`, `pnpx` or `pnpm dlx`. */
+export type Runner = "npx" | "pnpx" | "pnpm";
+
+/**
+ * The shim that stands in for a package runner on the agent's PATH. `llms.txt` tells the
+ * agent to run `npx saasaloy@latest`, which would fetch the CLI from npm and measure the
+ * last release, not this worktree. So a call that names `saasaloy` or `saasaloy@<any
+ * version>` as its package runs `local`, the worktree's `saasaloy` shim, with the words
+ * after the package name. Flags before the name are dropped. Any other call runs `real`
+ * unchanged. For `pnpm`, only `pnpm dlx` is checked; every other pnpm command passes.
+ */
+export function runnerShim(
+  runner: Runner,
+  local: string,
+  real: string
+): string {
+  const lines = ["#!/usr/bin/env sh"];
+  if (runner === "pnpm") {
+    lines.push(`[ "$1" = dlx ] || exec "${real}" "$@"`, "skip=1");
+  } else {
+    lines.push("skip=0");
+  }
+  lines.push(
+    "n=0",
+    "for arg do",
+    "  n=$((n + 1))",
+    '  [ "$n" -le "$skip" ] && continue',
+    '  case "$arg" in',
+    "    -*) continue ;;",
+    `    saasaloy | saasaloy@*) shift "$n"; exec "${local}" "$@" ;;`,
+    "  esac",
+    "  break",
+    "done",
+    `exec "${real}" "$@"`,
+    ""
+  );
+  return lines.join("\n");
+}
+
+/**
+ * The run id, which also names the agent's folder: the start time as
+ * `2026-11-20t08-42-18-047z`. Lowercase, because `llms.txt` has the agent run
+ * `saasaloy init .` in that folder, and `init` takes the project name from the folder
+ * name, which must be lowercase letters, digits and hyphens.
+ */
+export function runIdOf(date: Date): string {
+  return date.toISOString().replaceAll(/[:.]/g, "-").toLowerCase();
+}

@@ -2,7 +2,11 @@
 // #347). Run with `pnpm test:scripts`, or `node --test scripts/agent-bench/harness.test.ts`.
 
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { spawnSync } from "node:child_process";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { after, describe, it } from "node:test";
 
 import {
   absolutePaths,
@@ -12,6 +16,8 @@ import {
   isInside,
   parseArgs,
   pickBlock,
+  runIdOf,
+  runnerShim,
   splitCommand,
   totals,
 } from "./harness.ts";
@@ -195,5 +201,68 @@ describe("formatHeader", () => {
     });
     assert.match(header, /^Turns: unknown/m);
     assert.match(header, /^Cost: unknown/m);
+  });
+});
+
+describe("runnerShim", () => {
+  const dir = mkdtempSync(join(tmpdir(), "runner-shim-"));
+  after(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+  const fake = (name: string): string => {
+    const path = join(dir, name);
+    writeFileSync(path, `#!/usr/bin/env sh\necho ${name} "$@"\n`);
+    chmodSync(path, 0o755);
+    return path;
+  };
+  const local = fake("local");
+  const real = fake("real");
+  const run = (runner: "npx" | "pnpx" | "pnpm", args: string[]): string => {
+    const path = join(dir, runner);
+    writeFileSync(path, runnerShim(runner, local, real));
+    chmodSync(path, 0o755);
+    return spawnSync(path, args, { encoding: "utf-8" }).stdout.trim();
+  };
+
+  it("sends `npx saasaloy@latest` to the local CLI with the words after it", () => {
+    assert.equal(
+      run("npx", ["saasaloy@latest", "init", ".", "--force", "--yes"]),
+      "local init . --force --yes"
+    );
+  });
+
+  it("skips npx flags before the package and takes a bare `saasaloy`", () => {
+    assert.equal(run("npx", ["-y", "saasaloy", "list"]), "local list");
+    assert.equal(
+      run("pnpx", ["saasaloy@0.9.0", "add", "auth"]),
+      "local add auth"
+    );
+  });
+
+  it("passes any other package to the real runner unchanged", () => {
+    assert.equal(
+      run("npx", ["-y", "wrangler", "whoami"]),
+      "real -y wrangler whoami"
+    );
+    assert.equal(run("npx", ["saasaloy-x"]), "real saasaloy-x");
+  });
+
+  it("checks only `pnpm dlx` and passes every other pnpm command", () => {
+    assert.equal(
+      run("pnpm", ["dlx", "saasaloy@latest", "init", "."]),
+      "local init ."
+    );
+    assert.equal(run("pnpm", ["install"]), "real install");
+    assert.equal(run("pnpm", ["dlx", "create-astro"]), "real dlx create-astro");
+    assert.equal(run("pnpm", ["exec", "saasaloy"]), "real exec saasaloy");
+  });
+});
+
+describe("runIdOf", () => {
+  it("is a name `saasaloy init .` accepts for the folder", () => {
+    const id = runIdOf(new Date("2026-11-20T08:42:18.047Z"));
+    assert.equal(id, "2026-11-20t08-42-18-047z");
+    // The project name rule in packages/cli/src/commands/init.ts.
+    assert.match(id, /^[a-z0-9][a-z0-9-]*$/);
   });
 });

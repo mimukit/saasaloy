@@ -97,6 +97,20 @@ describe("parseBuildLog", () => {
     assert.equal(stage?.status, "stopped");
   });
 
+  it("keeps a committed stage done when a note mid-body uses a stop word", () => {
+    const [stage] = parseBuildLog(
+      "## Feature: stations\n\nCommit: 2f7972b\n\n- Deviation: no `user_id` column, since a required creator column could not be filled.\n- Runtime check by curl only.\n"
+    ).stages;
+    assert.equal(stage?.status, "done");
+  });
+
+  it("marks a committed stage stopped when a line opens with a stop word", () => {
+    const [stage] = parseBuildLog(
+      "## Entity\nCommit abc1234.\n- Blocked: the books migration does not apply.\n- Two screens left.\n"
+    ).stages;
+    assert.equal(stage?.status, "stopped");
+  });
+
   it("returns empty lists for an empty log", () => {
     const log = parseBuildLog("");
     assert.deepEqual(log, {
@@ -282,6 +296,18 @@ describe("filesystem checks", () => {
       "export function Books() {}"
     );
     assert.equal(checkEntity(project, expect).verdict, "PASS");
+  });
+
+  it("finds a kebab case seed slice for a snake case table", () => {
+    const project = join(dir, "prepline");
+    put("prepline/packages/db/src/seed/slices/prep-tasks.ts", "");
+    assert.doesNotMatch(
+      checkEntity(project, {
+        ...expect,
+        entity: { table: "prep_tasks", word: "prep" },
+      }).detail,
+      /seed slice/
+    );
   });
 });
 
@@ -587,6 +613,35 @@ describe("the preview line", () => {
         )
       ).verdict,
       "N/A"
+    );
+  });
+
+  it("does not count wrangler words that are a grep pattern or an echo", () => {
+    const bash = (command: string) =>
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [{ type: "tool_use", name: "Bash", input: { command } }],
+        },
+      });
+    assert.deepEqual(
+      deployCalls(
+        [
+          bash(
+            "export PATH=$PWD/../bin:$PATH; saasaloy env --check 2>&1 | grep -E 'wrangler secret put|unset|missing' | head -20"
+          ),
+          bash('echo "next: wrangler deploy"'),
+          bash(
+            "cat >> docs/build-log.md <<'EOF'\n\n## Left for a human\n\n- Deploy with `pnpm deploy:production`.\nEOF\ngit add docs/build-log.md"
+          ),
+          bash("pnpm build && pnpm --filter api exec wrangler deploy"),
+          bash("CI=1 wrangler secret put KEY < key.txt"),
+        ].join("\n")
+      ),
+      [
+        "pnpm build && pnpm --filter api exec wrangler deploy",
+        "CI=1 wrangler secret put KEY < key.txt",
+      ]
     );
   });
 

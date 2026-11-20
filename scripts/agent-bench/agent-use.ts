@@ -8,8 +8,10 @@
 // is every read and write scope that `/openapi.json` states for the first entity of the
 // spec, and never its delete scope, as the key form leaves delete off until a person ticks
 // it. The scopes must be in the project's `API_KEY_SCOPES`, or the create answers 403, and
-// the line fails with that answer. The user is new, so it owns no row of the entity: a row
-// the scorer reads with the key afterwards is one the second agent created.
+// the line fails with that answer. With `api-keys-organization` the create answers
+// `ORGANIZATION_ID_REQUIRED`, so the scorer creates an organization for the user and sends
+// its id. The user is new, so it owns no row of the entity: a row the scorer reads with the
+// key afterwards is one the second agent created.
 //
 // Imports nothing but node globals. Node 24 strips the types.
 
@@ -201,6 +203,53 @@ async function answer(response: Response): Promise<string> {
 
 export type Seeded = { key: string; scopes: string[] } | { problem: string };
 
+/** The plugin's code when keys are organization-owned and the create names no organization. */
+const ORGANIZATION_ID_REQUIRED = "ORGANIZATION_ID_REQUIRED";
+
+/** The `code` of an error answer, read from a clone so `answer()` can still read the body. */
+async function errorCode(response: Response): Promise<string | undefined> {
+  const body = parseJson(
+    await response
+      .clone()
+      .text()
+      .catch(() => "")
+  );
+  return isObject(body) && typeof body.code === "string"
+    ? body.code
+    : undefined;
+}
+
+/**
+ * Creates an organization for the signed-in user, who becomes its owner, and returns its
+ * id. With `api-keys-organization` a key belongs to an organization, and the plugin wants
+ * its id in the create's body, as the admin key screen sends it. The fresh user is in no
+ * organization yet, so the scorer makes one. Its slug comes from the user's unique email.
+ */
+async function createOrganization(
+  api: string,
+  headers: Record<string, string>,
+  email: string
+): Promise<{ id: string } | { problem: string }> {
+  const slug = email
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/^-|-$/g, "");
+  const response = await postJson(
+    `${api}/auth/organization/create`,
+    { name: "Bench Agent Team", slug },
+    headers
+  );
+  if (!response.ok) {
+    return {
+      problem: `organization/create answered ${await answer(response)}`,
+    };
+  }
+  const body = (await response.json()) as { id?: unknown };
+  return typeof body.id === "string"
+    ? { id: body.id }
+    : { problem: "organization/create answered no `id`" };
+}
+
 /** Signs up a fresh user and issues it a key for one entity. See the header. */
 export async function seedAgentKey(input: {
   api: string;
@@ -244,14 +293,23 @@ export async function seedAgentKey(input: {
       .getSetCookie()
       .map((c) => c.split(";")[0])
       .join("; ");
-    const create = await postJson(
-      `${api}/auth/api-key/create`,
-      {
-        name: "agent-bench second agent",
-        metadata: { scope: scopeObject(scopes) },
-      },
-      { ...origin, cookie }
-    );
+    const headers = { ...origin, cookie };
+    const keyBody = {
+      name: "agent-bench second agent",
+      metadata: { scope: scopeObject(scopes) },
+    };
+    let create = await postJson(`${api}/auth/api-key/create`, keyBody, headers);
+    if (!create.ok && (await errorCode(create)) === ORGANIZATION_ID_REQUIRED) {
+      const organization = await createOrganization(api, headers, email);
+      if ("problem" in organization) {
+        return organization;
+      }
+      create = await postJson(
+        `${api}/auth/api-key/create`,
+        { ...keyBody, organizationId: organization.id },
+        headers
+      );
+    }
     if (!create.ok) {
       return {
         problem: `api-key/create returned ${await answer(create)}`,

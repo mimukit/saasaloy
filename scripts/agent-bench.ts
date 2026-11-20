@@ -82,6 +82,8 @@ import {
   isInside,
   parseArgs,
   pickBlock,
+  runIdOf,
+  runnerShim,
   totals,
 } from "./agent-bench/harness.ts";
 import type { Call, Mode, Options, RunRecord } from "./agent-bench/harness.ts";
@@ -199,7 +201,8 @@ function gitText(args: string[]): string {
 
 /**
  * The tools the agent sees, outside the repo: a deployed copy of the CLI with its own
- * `node_modules`, a copy of `modules/` as the registry, and a `saasaloy` shim on PATH.
+ * `node_modules`, a copy of `modules/` as the registry, and a `saasaloy` shim on PATH,
+ * with `npx`, `pnpx` and `pnpm` shims that send a `saasaloy@<version>` call to it.
  */
 function installTools(toolsDir: string): { bin: string; registry: string } {
   const cliDir = join(toolsDir, "cli");
@@ -226,6 +229,19 @@ function installTools(toolsDir: string): { bin: string; registry: string } {
     `#!/usr/bin/env sh\nexec env SAASALOY_REGISTRY_DIR="${registry}" node "${join(cliDir, "dist", "index.js")}" "$@"\n`
   );
   chmodSync(shim, 0o755);
+  // `llms.txt` says `npx saasaloy@latest init`, which would fetch the last release from
+  // npm. These shims send that call, and `pnpx`/`pnpm dlx`, to the shim above.
+  for (const runner of ["npx", "pnpx", "pnpm"] as const) {
+    const real = spawnSync("sh", ["-c", `command -v ${runner}`], {
+      encoding: "utf-8",
+    }).stdout.trim();
+    if (real === "") {
+      continue;
+    }
+    const path = join(bin, runner);
+    writeFileSync(path, runnerShim(runner, shim, real));
+    chmodSync(path, 0o755);
+  }
   return { bin, registry };
 }
 
@@ -411,7 +427,7 @@ async function runAgent(options: Options): Promise<number> {
     fatal("no packages/cli/dist/index.js; run without --no-build");
   }
 
-  const runId = new Date().toISOString().replaceAll(/[:.]/g, "-");
+  const runId = runIdOf(new Date());
   const runDir = join(options.runs, runId);
   const outDir = `${runDir}.out`;
   await mkdir(runDir, { recursive: true });
