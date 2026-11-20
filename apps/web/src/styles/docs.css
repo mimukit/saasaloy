@@ -485,7 +485,9 @@
 
 /* A fenced block is a command field: a bordered mono field with a solid Copy button flush
    against its top right corner (fix 4). The block scrolls sideways, and the field keeps its
-   own padding clear of the button. */
+   own padding clear of the button. A one-line block is exactly as tall as the button
+   (0.5rem + 1.5rem line + 0.5rem, plus the 1px borders the button overlaps), so the
+   button fills its right end. */
 .docs-code {
   position: relative;
   border: 1px solid var(--border);
@@ -493,7 +495,7 @@
 }
 
 .docs-code pre {
-  padding: 0.75rem 5.5rem 0.75rem 1rem;
+  padding: 0.5rem 5.5rem 0.5rem 1rem;
   margin: 0;
   font-family: var(--font-mono);
   font-size: 0.875rem;
@@ -511,7 +513,7 @@
   top: -1px;
   right: -1px;
   min-width: 4.5rem;
-  height: 2.5rem;
+  height: calc(2.5rem + 2px);
   border: 1px solid var(--primary);
   background-color: var(--primary);
   color: var(--primary-foreground);
