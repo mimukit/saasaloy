@@ -8,7 +8,7 @@ title: apps/app takes the devGzip and restartOnLockfile dev plugins
 
 This needs the base template's `@repo/tooling/vite` export, which the base note `0003-dev-stop-and-dev-plugins` adds.
 
-## What the merge plan gets
+## What update merges
 
 `apps/app/vite.config.ts` and `apps/app/package.json`, if you edited them. Keep your edits, add the import line, and add these two entries after `tailwindcss()` in `plugins`:
 

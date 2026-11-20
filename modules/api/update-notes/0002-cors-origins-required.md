@@ -10,7 +10,7 @@ The `DEV_ORIGINS` list in `apps/api/src/index.ts` is gone. The CORS spine allows
 
 `CORS_ORIGINS` is now required. `apps/api/src/env.ts` refuses an empty value, `packages/env/.env.example` no longer marks it blank on purpose, and `pnpm deploy:production` stops when the production value is empty. The dev default in `packages/env/.env.example` is `http://localhost:3000,http://localhost:3001,http://localhost:3002`, and `pnpm dev:ports` writes this checkout's real list (the localhost and `DEV_HOST` origin of web, admin and app) into `apps/api/.env.local`, which wins over `apps/api/.env`.
 
-## What the merge plan gets
+## What update merges
 
 `apps/api/src/index.ts`, if you edited it. Keep your edits, delete `DEV_ORIGINS`, and make the `origin` callback check the `CORS_ORIGINS` list alone. If you added an origin to `DEV_ORIGINS` by hand, put it in `CORS_ORIGINS` instead.
 

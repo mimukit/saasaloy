@@ -10,9 +10,9 @@ This note is one half of a pair. `payment-manual/0001-cod-method` adds the `cod`
 
 No row changes. The two reasons are new values in the free-text `payment_events.reason` column.
 
-## What the merge plan gets
+## What update merges
 
-`packages/payment/src/index.ts`, which every provider's registration patch changes, so it always reaches the merge plan. Add `takesNoSubmission` to the export list from `./define` and keep your providers. Also `packages/payment/src/define.ts`, `packages/payment/src/provider.ts`, `apps/api/src/payment-store.ts`, `apps/api/src/routes/admin-payment.ts` and `apps/admin/src/routes/payments.tsx`, if you edited them. Keep your edits and take the new `takesNoSubmission` check in `confirm` and `reject`, the two reasons, and the `reviewable` footer on the Payments page.
+`packages/payment/src/index.ts`, which every provider's registration patch changes, so it always merges three ways and can get conflict markers. Add `takesNoSubmission` to the export list from `./define` and keep your providers. Also `packages/payment/src/define.ts`, `packages/payment/src/provider.ts`, `apps/api/src/payment-store.ts`, `apps/api/src/routes/admin-payment.ts` and `apps/admin/src/routes/payments.tsx`, if you edited them. Keep your edits and take the new `takesNoSubmission` check in `confirm` and `reject`, the two reasons, and the `reviewable` footer on the Payments page.
 
 ## What you do
 

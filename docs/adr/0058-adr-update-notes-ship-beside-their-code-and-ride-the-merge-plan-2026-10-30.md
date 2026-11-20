@@ -3,7 +3,7 @@
 The merge plan covers managed files only, and the steps for every other change lived in the changelog, which is sorted by CLI version, written for people, and never reaches the agent in a project; v0.8.0 lost its steps entirely when release-it generated the section above a hand-written one. An update note is now a Markdown file that ships next to the code it describes: `packages/cli/update-notes/` for the base, selected by CLI version range, and `modules/<name>/update-notes/` for a module, selected by comparing that folder at the lock's SHA and the new SHA. `update` renders the notes whose `when` holds into the merge plan, records each as pending in the manifest until `update --done <id>`, and exits `3` while a merge or a note is pending. A breaking commit must add a note or say why it needs none.
 
 ## Status
-accepted
+accepted. **Amended by [ADR 0066](0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md) (2026-11-20):** the merge plan is gone, so the notes ride the update report on stdout, and a note's part `What the merge plan gets` is now `What update merges`. `--from` is gone with it ([ADR 0068](0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)). The rest stands.
 
 ## Considered Options
 - A root `MIGRATION.md`: the agent still finds and filters it by hand, it does not ship in the npm package, and nothing ties a section to the change it describes.

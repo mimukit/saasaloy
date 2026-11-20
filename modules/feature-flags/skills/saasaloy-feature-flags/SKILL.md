@@ -104,7 +104,7 @@ Every write route writes the row, then republishes. The republish is queued with
 
 The `chained-route` patch mounts `apps/api/src/routes/feature-flags.ts` at `/admin/flags`, so the admin app calls it as `api.admin.flags`. It sits under `/admin/` so the `admin` module's gate test and audit coverage test see every route.
 
-A project made before the move to `/admin/flags` keeps the old `.route("/flags", featureFlags)` link after `saasaloy update`, because update never reverses a patch the new revision dropped. The update note `feature-flags/0001-admin-flags-mount` tells you to delete that line. Until you do, both paths serve the same handlers, and the gate and coverage tests cannot see the `/flags` copy.
+A project that took the move to `/admin/flags` with a CLI before 0.10.0 may still hold the old `.route("/flags", featureFlags)` link, because the old engine never took out a patch the new revision dropped. The update note `feature-flags/0001-admin-flags-mount` tells you to delete that line. Until you do, both paths serve the same handlers, and the gate and coverage tests cannot see the `/flags` copy.
 
 | Route | Audit action | Label |
 | --- | --- | --- |
@@ -192,7 +192,7 @@ The kv settings apply too: `KV_PROVIDER` selects the store and `KV_KEY_PREFIX` p
 
 This module used to name its tables `feature_flag` and `feature_flag_override`. It now names them `feature_flags` and `feature_flag_overrides`. A project that installed the old names upgrades them with one migration:
 
-1. Run `saasaloy update feature-flags` to take the new schema file.
+1. Run `saasaloy update` to take the new schema file.
 2. Run `pnpm --filter @repo/db db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `feature_flag` → `feature_flags`, and `feature_flag_override` → `feature_flag_overrides`.
 4. Read the generated SQL before you apply it. It must rename the tables and the `feature_flag_override_key_tenant_idx` index (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.

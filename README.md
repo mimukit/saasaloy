@@ -39,7 +39,7 @@ These are the reasons behind the born of Saasaloy.
 - **Start small, add on demand.** `saasaloy init` gives you an Astro landing page and a UI package. Everything else arrives with `saasaloy add <module>`, with its dependencies resolved and installed first.
 - **Swappable providers.** `email`, `sms`, `queue`, `kv`, `storage`, `logger` and `subscription` each expose one interface. Pick the vendor with a `*_PROVIDER` env var, or drop in a `-console` or `-memory` provider for local work.
 - **Agent-native.** Every generated project ships `AGENTS.md`, `CLAUDE.md`, a `DESIGN.md` contract, and a skill per installed module for Claude Code and other coding agents.
-- **Reversible and updatable.** `saasaloy remove` undoes a module from its manifest. `saasaloy update` re-applies the base and modules at a newer version with a merge plan for the files you edited.
+- **Reversible and updatable.** `saasaloy remove` renders the project without a module and deletes the files you never edited. `saasaloy update` moves the base and every module to a newer release and merges the files you edited three ways, with conflict markers where both sides changed the same lines.
 
 The full picture of how the CLI, the registry and a generated project fit together is in [Architecture](docs/wiki/architecture.md).
 

@@ -538,7 +538,7 @@ The api deploys first. `saasaloy add api` appends `{ service: "api", order: 10 }
 #### Conventions to honor
 
 - **Register a route with a `chained-route` patch**, not a file drop. The entry is edited on
-  purpose, and `saasaloy remove` reverses the edit.
+  purpose, and `saasaloy remove` takes the edit out, because the render without the module has no such line.
 - **Build every sub-app as one unbroken chain.** A statement-per-route file typechecks and serves
   correctly while handing the client an empty type.
 - **Pass the status code to `c.json`** on every path, success included.

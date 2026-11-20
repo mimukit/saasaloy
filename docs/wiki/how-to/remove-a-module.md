@@ -1,12 +1,8 @@
 # Remove a module
 
-`saasaloy remove` deletes the files a module applied, using the record in
-`.saasaloy/manifest.json`. It never contacts the registry: the plan is built entirely from
-`.saasaloy/manifest.json`, `saasaloy.json` and `saasaloy-lock.json`, so it works offline
-and works even for a module whose registry entry has since changed.
+`saasaloy remove` renders the project again without the module and applies the difference. Every edit the module made goes with it, its patches into other files included, because a render without the module never wrote them. Nothing needs to be reversed.
 
-**`remove` is not the inverse of `add`.** Read [What stays behind](#what-stays-behind)
-before you rely on it to get back to a clean state.
+The render reads the payload of the lock's release from the user cache (`~/.cache/saasaloy/payload/`), and fetches it from the registry when the cache does not hold it. With a cold cache and no network, a run that must merge a file refuses with exit 2.
 
 ## Take one out
 
@@ -14,14 +10,7 @@ before you rely on it to get back to a clean state.
 saasaloy remove waitlist
 ```
 
-With no module name you get a picker over the modules listed in `saasaloy.json`. Naming a
-module that isn't installed prints `<name> isn't installed — nothing to remove.` and exits 2 without touching anything. With nothing installed at all, the run prints `Nothing installed.` and exits 0.
-
-The plan tags every file it tracks:
-
-- **`delete`** — on-disk content still matches the recorded hash, safe to remove.
-- **`drift → confirm`** — the file was hand-edited since it was applied.
-- **`missing → untrack`** — already gone, so there is nothing to delete.
+With no module name you get a picker over the modules you asked for (the lock's `requested` list). Naming a module that isn't installed prints `<name> isn't installed.` and exits 2 without touching anything. With nothing installed, the run prints `No module is installed.` and exits 0.
 
 Preview without writing:
 
@@ -30,15 +19,19 @@ saasaloy remove waitlist --dry-run
 saasaloy remove waitlist --diff
 ```
 
-`--diff` shows a deletion diff per file, and for a reversible patch the reversal it would
-apply to the patched file. Each patch is labelled by what will happen to it: `revert`
-when there is an edit to undo, `drift → left` when the line is yours now and the reason
-why, `already gone` when nothing is left to undo, and `untrack` for a patch kind `remove`
-cannot reverse.
+`--dry-run` lists each path the run would delete, write or merge, and the report lines it would print. `--diff` adds a diff for each path.
+
+`remove` refuses with exit 2 when:
+
+- the lock's release differs from the running CLI. Run `saasaloy update` first.
+- the project still has a version 1 manifest from a CLI before 0.10.0. Run `saasaloy update` first: only `update` converts.
+- a file the last run left with conflict markers still holds a marker line.
+- an earlier run did not finish (`.saasaloy/journal.json` exists). Run `saasaloy remove --abort`.
+- the run must delete or merge a file that has uncommitted changes. Commit first, or pass `--force`.
 
 ## Warnings the module declares
 
-A module descriptor may carry a `removeWarnings` array, and `add` copies it into `.saasaloy/manifest.json` at install time. `remove` prints each entry after the plan, so the warning is there even when the registry is not. `subscription` declares two, one of which reads:
+A module descriptor may carry a `removeWarnings` array. `remove` prints each entry before the plan. `subscription` declares two, one of which reads:
 
 ```text
 The deployed subscriptions and subscription_events tables survive this removal, and so does the users.subscription_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.
@@ -46,61 +39,40 @@ The deployed subscriptions and subscription_events tables survive this removal, 
 
 `subscription` declares one about routes still wrapped in `requireFeature()` or `requireWithinLimit()`. A warning never blocks the removal. Read it and act on it yourself.
 
-## Hand-edited files
+## Files you changed
 
-For each drifted file, `remove` asks whether to delete it anyway, defaulting to no. A file
-you decline is left on disk and dropped from the manifest, which makes it yours: a later
-`add` of the same module classifies it as a `conflict` and leaves it alone.
+The engine never deletes a file whose bytes differ from what it wrote ([ADR 0034](../../adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)). For each file the module wrote:
 
-Under `--yes` no prompts run at all, so **every drifted file survives, untracked**. The plan says so up front: with `--yes` each drifted file is tagged `drift → kept (untracked)` instead of `drift → confirm`. That
-is the designed outcome, not a failure, and the command exits 0. Whatever survives is listed again at the end under **Drift survivors**. If you want drifted files
-gone in a scripted run, delete them yourself afterwards.
+- **Unchanged:** deleted.
+- **Changed by you:** kept on disk, dropped from the manifest, and listed with one report line under "Kept, no longer tracked". It is yours now. Delete it by hand when nothing imports it.
+- **A file the module patched, such as `apps/api/src/index.ts` or `package.json`:** it stays, because another module or the base still renders it. The run merges the render without the module with your copy three ways, so the module's lines go and your own lines stay. Where both changed the same lines, the file gets conflict markers and the run exits 3.
 
-A seed file you changed is the one exception to the prompt. `remove` keeps it without asking, tags it `seed, changed → kept (untracked)`, and lists it after the run so you can delete it by hand when nothing imports it.
+No prompt asks about a changed file, so `--yes` gives the same result as an interactive run.
 
 ## Modules other modules depend on
 
-Installing `waitlist` pulled in `api` and `database`, so those two now have a dependent.
-Removing one of them directly is refused:
+Installing `waitlist` pulled in `api` and `database`, so those two now have a dependent. Removing one of them directly is refused with exit 2:
 
 ```text
-database is still depended on by waitlist — refusing (use --force to remove it anyway).
+database is still depended on by waitlist. Remove it first.
 ```
 
-Dependents are read from each installed module's `dependsOn` in `saasaloy-lock.json`.
-`--force` overrides the refusal and removes the module regardless, leaving its dependents
-installed and broken. An installed module with no lock entry is warned about by name,
-because it might depend on the target and there is no way to tell.
+A module that was installed only as a prerequisite cannot be removed on its own either. Remove the module that asked for it. `--force` does not override this refusal, because a module cannot render without its prerequisite.
+
+## Undo a removal
+
+```bash
+saasaloy remove --abort
+```
+
+`--abort` restores every file the last run changed, from the copy the run made before it wrote. Git cannot undo a `--force` run over uncommitted work, so commit before you use `--force`.
 
 ## What stays behind
 
-`remove` cleans up its own files, its skill symlinks, the now-empty directories it
-created, the `saasaloy.json` aliases whose target directory is gone, and every config
-patch the module applied to a source or config file: a `chained-route` link, a
-`wrangler-binding` entry, a `plugin-array` or `const-array` element, a `drizzle-column`
-column, a `nav-entry` row in the admin shell's navigation. Reversing one takes the edit out and the named import
-with it, but only when no other code still references the identifier, so a hand-written
-`app.use(waitlist.middleware)` is never left unbound. A binding array in
-`apps/api/wrangler.jsonc` goes too once the last entry in it is gone, because the base
-`api` module ships no binding arrays and every one of them was added by a patch. A
-`providers` array in a capability's `src/index.ts` stays, empty, because the capability
-ships it and the next provider install needs it there.
-
-Nothing is reverse-patched blindly. A route you repointed at your own handler, a binding
-whose value you edited, a plugin call you gave arguments: each is left where it is and
-reported with the reason, because it no longer matches what the manifest recorded. The
-record is still dropped, so the module stops being tracked either way. Four things
-`remove` does not touch:
-
-- **The two `package.json` patch kinds stay.** `remove` prints one warning per patched
-  file and drops the entry from the manifest. Dropping the entry is untracking, not
-  undoing. Removing `waitlist`, for instance, leaves `hono` and `@repo/api` in
-  `apps/web/package.json` exactly where they were. Revert those by hand. See
-  [Known limitations](../reference.md#known-limitations).
-- **npm dependencies stay in your root `package.json`.** `add` merges them in; `remove`
-  has no dependency handling at all.
-- **Environment variables you set for the module** are left alone, wherever you put them.
-- **The wire-up for a UI block you imported by hand stays.** `add` writes a block into the ui package but never edits a page, so nothing recorded which page you put it on. When `remove` deletes such a file it prints a **Wire-up left behind** note listing it, and the import and the tag are yours to take out. Leave them and the build fails.
+- **Files you changed**, as above.
+- **Environment values you set** in `packages/env/.env` stay. The key list `packages/env/.env.example` merges three ways, so the module's keys go unless you edited them.
+- **The wire-up for a UI block you imported by hand.** `add` writes a block into the ui package but never edits a page, so nothing recorded which page you put it on. Take the import and the tag out yourself, or the build fails.
+- **Data.** A deployed table survives. Run `db:generate` and review the drop migration before you apply it.
 
 ## Related
 

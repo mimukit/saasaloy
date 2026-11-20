@@ -16,7 +16,7 @@ version: 0.9.0
 
 `robots.txt` does not change.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/web/src/pages/privacy.astro` and `terms.astro`, if you wrote your own policy in them. Move your text into `src/legal/privacy.md` and `src/legal/terms.md` as Markdown, then take the new pages.
 - `apps/web/src/layouts/Layout.astro`, if you edited it. Keep your edits and take the `siteJsonLd` import, the `jsonLd` constant and the `<script type="application/ld+json">` line.

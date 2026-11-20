@@ -1,6 +1,6 @@
 # modules — the Saasaloy registry
 
-Each subdirectory is one module the `saasaloy add <name>` applier fetches from this repo
+Each subdirectory is one module that `saasaloy add <name>` fetches from this repo
 over the network — this repo *is* the default registry (ADR 0012). A local checkout of
 this dir can be pointed at with `SAASALOY_REGISTRY_DIR` for dev/offline work.
 

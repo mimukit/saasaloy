@@ -10,7 +10,7 @@ The module now adds an `email-react` row to `SERVICES` in `packages/env/src/serv
 
 This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0004-dev-ports` adds. Apply that note first, or the new row fails `pnpm typecheck`. The note `email-react/0001-preview-port` names the old `email dev --port 3003` script; this note replaces that script.
 
-## What the merge plan gets
+## What update merges
 
 `packages/email-react/package.json`, if you edited it. Keep your edits, set `"dev": "node scripts/dev.ts"`, and add the two devDependencies.
 

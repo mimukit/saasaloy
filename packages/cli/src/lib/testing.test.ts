@@ -2,8 +2,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { isRefusal } from "./exit.js";
-import { emptyManifest } from "./manifest.js";
-import type { Manifest } from "./manifest.js";
 import { baseTemplateDir } from "./scaffold.js";
 import { validateSaasaloyConfig } from "./schema.js";
 import type { SaasaloyConfig } from "./schema.js";
@@ -15,7 +13,6 @@ import {
   parseTestingMode,
   readTestingMode,
   rewriteTestingBlock,
-  suggestsTestingMode,
 } from "./testing.js";
 
 // #242 Phase 1: one testing mode per project, held in `saasaloy.json` and mirrored into a
@@ -165,41 +162,5 @@ describe(rewriteTestingBlock, () => {
     const rewritten = rewriteTestingBlock(template, "off");
 
     expect(rewritten).toStrictEqual({ found: true, content: template });
-  });
-});
-
-describe("suggestsTestingMode — the update hint (#242)", () => {
-  function manifestWith(entries: Manifest["managed"]): Manifest {
-    return { ...emptyManifest(), managed: entries };
-  }
-
-  const shipped = manifestWith({
-    "apps/api/src/routes/auth.test.ts": { hash: "a", module: "auth" },
-  });
-
-  it("suggests when the key is absent and a module owns a test file", () => {
-    expect(suggestsTestingMode(BASE_CONFIG, shipped)).toBeTruthy();
-  });
-
-  it("says nothing once the key is present, even at off", () => {
-    expect(
-      suggestsTestingMode({ ...BASE_CONFIG, testing: { mode: "off" } }, shipped)
-    ).toBeFalsy();
-  });
-
-  it("ignores the base's own tests", () => {
-    const base = manifestWith({
-      "packages/env/src/env.test.ts": { hash: "a", module: "base" },
-    });
-
-    expect(suggestsTestingMode(BASE_CONFIG, base)).toBeFalsy();
-  });
-
-  it("says nothing when no module ships a test", () => {
-    const plain = manifestWith({
-      "apps/api/src/routes/auth.ts": { hash: "a", module: "auth" },
-    });
-
-    expect(suggestsTestingMode(BASE_CONFIG, plain)).toBeFalsy();
   });
 });

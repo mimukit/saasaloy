@@ -15,10 +15,10 @@ It adds `sonner` 2.0.8 and `input-otp` 1.5.0 to `packages/ui/package.json`. It r
 
 `brand.css` gains `--warning` and `--warning-foreground` in `:root` and `.dark`, and `--color-warning` and `--color-warning-foreground` in `@theme inline`. The project owns `brand.css`, so the update does not write it.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/ui/src/styles/brand.css`, because the project owns it. Step 1 is the merge.
-- A file under `packages/ui/src/components/` or `packages/ui/src/content/` with one of the names above that you already made yourself, for example a `dialog.tsx` from `shadcn add dialog`. The update leaves yours in place and the plan lists it.
+- A file under `packages/ui/src/components/` or `packages/ui/src/content/` with one of the names above that you already made yourself, for example a `dialog.tsx` from `shadcn add dialog`. The update leaves yours in place and the report lists it.
 - `packages/ui/package.json`, `AGENTS.md`, `packages/ui/AGENTS.md` and `.gitignore`, if you edited them.
 
 ## What you do
@@ -44,7 +44,7 @@ It adds `sonner` 2.0.8 and `input-otp` 1.5.0 to `packages/ui/package.json`. It r
 
 2. Refresh the fingerprint in `apps/web/DESIGN.md` and add the four warning colours to its `colors`. Run the saasaloy-design skill's `update` flow.
 3. For each primitive you had already added with `shadcn add`, compare yours with the template's and keep one. The template's `select.tsx` makes `items` required, so a `Select` without it fails `typecheck`. Pass `items` with a `{ label, value }` list.
-4. Run `saasaloy update --resolved <path>` for each file the plan marks as a conflict, then install and run the checks:
+4. Resolve the conflict markers in each file the report lists, and delete every marker line. Then install and run the checks:
 
    ```sh
    pnpm install

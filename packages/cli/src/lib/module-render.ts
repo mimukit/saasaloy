@@ -34,15 +34,6 @@ export function renderModule(
 }
 
 /** Every module in `modules`, rendered, in a new map under the same keys. */
-export function renderModules(
-  modules: ReadonlyMap<string, LoadedModule>,
-  vars: TemplateVars
-): Map<string, LoadedModule> {
-  return new Map(
-    [...modules].map(([name, mod]) => [name, renderModule(mod, vars)])
-  );
-}
-
 /** One of `mod`'s files, as the project receives it. */
 export async function readModuleFile(
   mod: LoadedModule,

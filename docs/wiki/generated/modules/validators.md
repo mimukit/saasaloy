@@ -131,7 +131,7 @@ This schema and the `sms` capability check the same country at different layers,
 
 Remove the dependents first. `waitlist`, `feature-flags`, `file-uploads` and `payment-manual` depend on `validators`, so `remove validators` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
 
-`saasaloy remove validators` deletes the `packages/validators` workspace (`common.ts`, `phone.ts`). It has no reversible patch. The `@repo/validators` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. A schema file you added to the workspace is untracked, so `remove` leaves it.
+`saasaloy remove validators` deletes the `packages/validators` workspace (`common.ts`, `phone.ts`). It has no reversible patch. The same run takes the `@repo/validators` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. A schema file you added to the workspace is untracked, so `remove` leaves it.
 
 Every route that imports `@repo/validators` stops compiling. Move the schemas you still need next to their routes first.
 

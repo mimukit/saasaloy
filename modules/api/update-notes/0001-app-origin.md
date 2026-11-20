@@ -18,7 +18,7 @@ const DEV_ORIGINS = [
 
 The `CORS_ORIGINS` description now says that a set value replaces the localhost list rather than adding to it. Until this update lands, a request from `:3002` fails CORS in development.
 
-## What the merge plan gets
+## What update merges
 
 `apps/api/src/index.ts`, if you edited it. Keep your edits and add `"http://localhost:3002"` to `DEV_ORIGINS`.
 

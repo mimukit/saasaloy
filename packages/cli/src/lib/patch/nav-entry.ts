@@ -1,19 +1,13 @@
 import { parseModule } from "magicast";
-import {
-  ensureNamedImport,
-  importedElsewhere,
-  removeNamedImport,
-} from "./named-import.js";
+import { ensureNamedImport, importedElsewhere } from "./named-import.js";
 import type { NamedImport } from "./ts-ast.js";
 import {
   appendEntry,
   asArray,
-  entryValue,
   findConstArray,
   findElement,
   hasEntry,
   propertyValue,
-  removeEntry,
   renderKey,
   renderProperties,
 } from "./ts-array.js";
@@ -121,53 +115,6 @@ export function navEntryInsertRefusal(
 }
 
 /** Take the nav item back out, and its icon import with it when nothing else reads it. */
-export function removeNavEntry(source: string, patch: NavEntry): string {
-  const items = findItems(source, patch);
-  const wanted = patch.entry[IDENTITY];
-  if (!items || wanted === undefined) {
-    return source;
-  }
-  const index = items.elements.findIndex(
-    (element) => entryValue(element, IDENTITY) === wanted
-  );
-  if (index === -1) {
-    return source;
-  }
-
-  // The group's last row takes the group with it, so a group an insert created leaves
-  // no empty shell behind.
-  const groups = findGroups(source, patch);
-  const groupIndex =
-    items.elements.length === 1 && groups
-      ? groups.elements.findIndex(
-          (element) => entryValue(element, "label") === patch.group
-        )
-      : -1;
-  const withoutEntry =
-    groups && groupIndex !== -1
-      ? removeEntry(source, groups, groupIndex)
-      : removeEntry(source, items, index);
-  // After the row is gone, so the reference count this reads is the one that matters: a
-  // second row still using the same icon keeps the import.
-  return removeNamedImport(withoutEntry, patch.icon);
-}
-
-/**
- * Why `removeNavEntry` declined, or `undefined` when it had no objection. An item that is
- * already gone is not a refusal — it is a hand-reverted file, which the remover reports
- * on its own terms.
- */
-export function navEntryRemoveRefusal(
-  source: string,
-  patch: NavEntry
-): string | undefined {
-  const items = findItems(source, patch);
-  if (!items) {
-    return `nav-entry could not find the ${JSON.stringify(patch.group)} group of the ${JSON.stringify(patch.area)} area in ${patch.constName}`;
-  }
-  return undefined;
-}
-
 function findGroups(
   source: string,
   patch: NavEntry

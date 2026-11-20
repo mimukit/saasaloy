@@ -80,9 +80,10 @@ describe("e2e — add app on a project with no admin (#227)", () => {
   });
 
   it("scaffolds apps/app on port 3002 with the SPA fallback", async () => {
-    await expect(read("apps/app/vite.config.ts")).resolves.toContain(
-      "port: 3002, strictPort: true"
-    );
+    // The port reads DEV_PORT from the workspace's .env.local and falls back to 3002.
+    const vite = await read("apps/app/vite.config.ts");
+    expect(vite).toMatch(/devPort\([\s\S]*3002,/);
+    expect(vite).toContain("strictPort: true");
     await expect(read("apps/app/wrangler.jsonc")).resolves.toContain(
       '"not_found_handling": "single-page-application"'
     );
@@ -116,11 +117,10 @@ describe("e2e — add app on a project with no admin (#227)", () => {
   });
 
   it("lets the app origin through CORS and auth in dev", async () => {
-    await expect(read("apps/api/src/index.ts")).resolves.toContain(
-      "http://localhost:3002"
-    );
-    await expect(read("packages/auth/src/auth.ts")).resolves.toContain(
-      "http://localhost:3002"
+    // The api reads its allow-list from CORS_ORIGINS, and the key list gives the dev
+    // default that names the app's port.
+    await expect(read("packages/env/.env.example")).resolves.toMatch(
+      /^CORS_ORIGINS=.*http:\/\/localhost:3002/m
     );
   });
 });

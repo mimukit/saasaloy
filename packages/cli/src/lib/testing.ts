@@ -1,5 +1,4 @@
 import { RefusalError } from "./exit.js";
-import type { Manifest } from "./manifest.js";
 import type { SaasaloyConfig } from "./schema.js";
 
 // A project's testing mode (#242, ADR 0053). The value lives in `saasaloy.json` under
@@ -94,25 +93,4 @@ export function rewriteTestingBlock(
     found: true,
     content: `${content.slice(0, inner)}\n${TESTING_BLOCKS[mode]}\n${content.slice(end)}`,
   };
-}
-
-/**
- * Whether `update` prints the one-line hint to pick a mode (#242). A project made before
- * the key existed may already hold module tests (`auth.test.ts` shipped unconditionally),
- * and reading it as `off` would leave the owner unaware the switch exists. The base's own
- * tests do not count: they ship in every mode. A project with the key, at any value, has
- * already chosen.
- */
-export function suggestsTestingMode(
-  config: SaasaloyConfig,
-  manifest: Pick<Manifest, "managed">
-): boolean {
-  if (config.testing !== undefined) {
-    return false;
-  }
-  return Object.entries(manifest.managed).some(
-    // `BASE_MODULE`, spelled out: importing it from `base.ts` would close a cycle
-    // (`base.ts` → `scaffold.ts` → this file).
-    ([target, entry]) => entry.module !== "base" && target.endsWith(".test.ts")
-  );
 }

@@ -12,7 +12,7 @@ The link only calls `next()`. Every response, every status and `AppType` stay as
 
 `apps/api/src/routes/projects.ts` also gets `projectList`, the output schema of `GET /projects`, beside the route, and imports `z` from `zod`.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/routes/tenant.ts` and `apps/api/src/routes/projects.ts`, if you edited them. Keep your edits and take the `declare(...)` link on each route and the `../contract` import. A route you added yourself needs a link of its own.
 

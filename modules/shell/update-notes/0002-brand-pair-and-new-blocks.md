@@ -25,9 +25,9 @@ Each prop below is new and optional, so a caller that does not pass it renders a
 - `ShellLayout`: `attention`, a node rendered last in the header.
 - `PageBody`: `aside`, a sticky side column at `lg` and up.
 
-## What the merge plan gets
+## What update merges
 
-- `packages/ui/src/assets/shell/brand-mark.svg`, if you replaced it with your own mark. The update leaves it in place and the plan lists it. Nothing renders it any more, so until you do the steps below the sidebar and the sign-in card show the Saasaloy mark.
+- `packages/ui/src/assets/shell/brand-mark.svg`, if you replaced it with your own mark. The update leaves it in place and the report lists it. Nothing renders it any more, so until you do the steps below the sidebar and the sign-in card show the Saasaloy mark.
 - `packages/ui/src/blocks/shell/brand-mark.tsx`, if you edited it.
 - `apps/admin/vite.config.ts`, `apps/admin/index.html`, `apps/app/vite.config.ts` and `apps/app/index.html`, if you edited them.
 - Any other shell file above that you edited, such as `page-header.tsx` or `data-table.tsx`.
@@ -45,8 +45,8 @@ Each prop below is new and optional, so a caller that does not pass it renders a
    Then set the fill colours in each file. A mask file paints with `#000` and `#fff`, which shows as black and white once it is an `<img>`.
 
 2. If you edited `brand-mark.tsx`, take the new file and move your edit into it. Keep the two `<img>` and the `variant` prop: other blocks render `BrandMark` with no props and expect the `icon` variant.
-3. If you edited a `vite.config.ts` or an `index.html` that the plan lists, keep the `brandHtml()` plugin and the `<title>` element it replaces.
-4. Run `saasaloy update --resolved <path>` for each file the plan marks as a conflict, then run the checks:
+3. If you edited a `vite.config.ts` or an `index.html` that the report lists, keep the `brandHtml()` plugin and the `<title>` element it replaces.
+4. Resolve the conflict markers in each file the report lists, and delete every marker line. Then run the checks:
 
    ```sh
    pnpm install

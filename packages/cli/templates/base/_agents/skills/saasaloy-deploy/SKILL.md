@@ -384,14 +384,14 @@ When the run failed, report the step that failed, the error lines, what is live 
 
 ## A project made before the gated deploy
 
-`saasaloy update` adds `packages/tooling` and this skill. It lists the root `package.json`, `turbo.json` and `AGENTS.md` in the merge plan when you edited them. Finish by hand:
+`saasaloy update` adds `packages/tooling` and this skill. It merges the root `package.json`, `turbo.json` and `AGENTS.md` when you edited them, and its report lists each one that got conflict markers. Finish by hand:
 
 1. Merge the root `package.json` scripts: `deploy:production` is `node packages/tooling/src/deploy-production.ts`, `prepare` is `husky && node packages/tooling/src/link-skills.ts`, `skills:link` is `node packages/tooling/src/link-skills.ts`, and `lint:types` and `lint:fix` include `packages/tooling/src`.
 2. Merge `turbo.json`: remove `^db:migrate:prod` from the `deploy` task's `dependsOn`, and remove the `db:migrate:prod` task.
 3. With `database-d1`, check `packages/db/package.json`. It needs `db:prod:migrate` and `db:prod:dump`, and the old `db:migrate:prod` script goes: rename it to `db:prod:migrate` if the update did not add that one. A D1 deploy no longer migrates on its own. Run `pnpm deploy:production --migrate` when the migration gate asks for it.
 4. Run `saasaloy doctor`. Its Deploy warnings name a `turbo.json` that still has `db:migrate:prod`, and each deploying workspace with no `DEPLOY_TARGETS` row. Each warning prints its fix.
 5. Add a `custom_domain` route to each Worker that has a production host, so its smoke checks run.
-6. Copy `docs/runbook-deploy.md` from a new project if you want the runbook. `saasaloy update` does not create seed files.
+6. Read `docs/runbook-deploy.md`. `saasaloy update` writes it when the project has none, and it is then the project's to edit.
 
 ## A project made before the release step
 
@@ -401,4 +401,4 @@ When the run failed, report the step that failed, the error lines, what is live 
 2. Delete an older `.release-it.json`, and any `release-it` or `@release-it/conventional-changelog` in the root `package.json`. `release.ts` reads neither. Move a changelog choice into the `release` block of `deploy.config.ts`.
 3. Keep `CHANGELOG.md` and the `v*` tags. The next release reads the newest tag and adds its entry above the old ones.
 
-The root `package.json` `version` belongs to the project. `saasaloy update` compares the file as if it held the template's version and keeps yours when it writes, so a release alone never puts the file in a merge plan.
+The root `package.json` `version` belongs to the project. `saasaloy update` merges `package.json` by key and the template never changes `version`, so your value stays and a release alone never gives the file a conflict.

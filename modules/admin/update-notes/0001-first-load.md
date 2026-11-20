@@ -9,15 +9,15 @@ title: The admin starts its session check with the HTML and gets a neutral light
 - New file `apps/admin/public/_headers` caches `/assets/*` for a year as immutable. Vite puts a content hash in each of those names.
 - `packages/ui/src/styles/admin.css` changes the light `--background`, `--sidebar`, `--primary-foreground` and `--sidebar-primary-foreground` from cream, `oklch(0.96 0.008 73.74)`, to `oklch(0.97 0 0)`. `apps/admin/DESIGN.md` names the new value.
 
-`saasaloy update` writes each file you never edited, and puts each one you edited in the merge plan.
+`saasaloy update` writes each file you never edited, and merges each one you edited three ways.
 
-## What the merge plan gets
+## What update merges
 
 Each of the files above that you edited. Keep your edits and add the change described for that file. If you chose your own admin colours on purpose, keep them and skip the `admin.css` change.
 
 ## What you do
 
-Nothing beyond the merge plan.
+Nothing beyond the files the report lists with conflict markers.
 
 ## Verify
 

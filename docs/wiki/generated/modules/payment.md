@@ -259,7 +259,7 @@ A refund calls the provider inside the transaction. Under `database-postgres`, i
 
 ##### Add a search param to the Payments screen
 
-`apps/admin/src/routes/payments.tsx` is a managed file. Its search schema spreads `paymentsSearchExtension` from `apps/admin/src/extend/payments.ts`, a seed file this module writes once. `saasaloy update` never changes it and writes it again only when it is missing (ADR 0060). Add a key there, as a zod field:
+`apps/admin/src/routes/payments.tsx` is a module file that `saasaloy update` merges. Its search schema spreads `paymentsSearchExtension` from `apps/admin/src/extend/payments.ts`, a seed file this module writes once. `saasaloy update` never changes it, and `saasaloy update --restore <path>` writes it again if you delete it (ADR 0060, ADR 0067). Add a key there, as a zod field:
 
 ```ts
 import { z } from "zod";

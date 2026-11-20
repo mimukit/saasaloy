@@ -10,7 +10,7 @@ The `ecommerce` module's Phase 5 asked for a bulk COD confirm on the payments li
 
 No row changes, no api change.
 
-## What the merge plan gets
+## What update merges
 
 `apps/admin/src/routes/payments.tsx`, if you edited it. Keep your edits and take the `selectColumn` and `bulkConfirmable` helpers, the `bulk` mutation, the Method select and the selection bar.
 

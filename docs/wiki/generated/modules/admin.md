@@ -422,7 +422,7 @@ Under `database-d1` there is no interactive transaction. Each statement of the b
 
 #### Extension seams
 
-Some module files take a project's own code through a seed file under `src/extend/`. A seed file is written once and is then the project's: `saasaloy update` never changes it, and writes it again only when it is missing, because a managed file imports it. Put your change in the seed file and leave the managed file alone, and it keeps taking updates with no merge (ADR 0060).
+Some module files take a project's own code through a seed file under `src/extend/`. A seed file is written once and is then the project's: `saasaloy update` never changes it. A module file imports it, so keep it; if you delete it, `saasaloy update --restore <path>` writes it again. Put your change in the seed file and leave the module file alone, and it keeps taking updates with no merge (ADR 0060, ADR 0067).
 
 | Seed file | Shipped by | Read by | What goes in it |
 | --- | --- | --- | --- |
@@ -636,7 +636,7 @@ files.
   it that way: a deny that returns instead of throwing silently re-opens the loaders it was meant to
   stop. Do not turn `AccessDenied` into a redirect either.
 - **`adminGate` comes before every validator on an admin route.** A validator listed first answers a signed-out caller with a 400 that describes the input. `admin-gate.test.ts` fails on it.
-- **Project code goes in `src/extend/`, not in a managed file.** A wrapper goes in `rootWrappers`, a payments search key in `paymentsSearchExtension`. An edit in place sends the file to the merge plan on every update.
+- **Project code goes in `src/extend/`, not in a merged file.** A wrapper goes in `rootWrappers`, a payments search key in `paymentsSearchExtension`. An edit in place makes the file merge three ways on every update, and it can get conflict markers.
 - **Every admin endpoint calls `requireAdmin` or `requireAdminApp`**, whatever the guard in `__root.tsx` does. The screen inheriting `beforeLoad` is not authorization; it is the reason a missing server check looks fine in a browser.
 - **`forgetSession()` before `router.invalidate()`**, on every sign-in and sign-out path.
 - **Describe a request once with `queryOptions`**, prefetch in the loader, read with `useQuery`,

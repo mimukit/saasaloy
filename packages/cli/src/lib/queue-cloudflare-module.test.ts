@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { applyPatch, reversePatch } from "./patch/index.js";
 import type { Patch } from "./patch/index.js";
 import { validateRegistryItem } from "./schema.js";
 
@@ -140,71 +139,5 @@ describe("queue-cloudflare descriptor", () => {
     expect(
       [...new Set(patches.map((patch) => patch.file))].toSorted()
     ).toStrictEqual(Object.keys(PRISTINE).toSorted());
-  });
-});
-
-describe("queue-cloudflare add → remove is byte-identical", () => {
-  it.each(Object.entries(PRISTINE))(
-    "restores %s exactly",
-    async (target, source) => {
-      const { patches } = await readDescriptor();
-      const mine = patches.filter((patch) => patch.file === target);
-      expect(mine.length).toBeGreaterThan(0);
-
-      const before = await readFile(source, "utf-8");
-
-      // `add`: every patch for this file, in descriptor order.
-      let content = before;
-      for (const patch of mine) {
-        const result = applyPatch(content, patch, target);
-        expect(result.changed).toBeTruthy();
-        content = result.content;
-      }
-      expect(content).not.toBe(before);
-
-      // A second `add` changes nothing — the property `saasaloy update` relies on.
-      for (const patch of mine) {
-        expect(applyPatch(content, patch, target).changed).toBeFalsy();
-      }
-
-      // `remove`: the same patches, unwound last-in-first-out.
-      for (const patch of mine.toReversed()) {
-        const result = reversePatch(content, patch, target);
-        expect(result?.changed).toBeTruthy();
-        content = result?.content ?? content;
-      }
-
-      expect(content).toBe(before);
-    }
-  );
-
-  it("leaves another module's binding, and its parent object, behind", async () => {
-    const { patches } = await readDescriptor();
-    const target = "apps/api/wrangler.jsonc";
-    const mine = patches.filter((patch) => patch.file === target);
-
-    // A hypothetical second queue module sharing the `queues.producers` array. Removing
-    // ours must take our two entries and nothing else, and must *not* unwind `queues`.
-    const theirs: Patch = {
-      kind: "wrangler-binding",
-      bindingType: "queues.producers",
-      entry: { binding: "AUDIT", queue: "audit-log" },
-    };
-
-    let content = await readFile(PRISTINE[target] ?? "", "utf-8");
-    for (const patch of mine) {
-      content = applyPatch(content, patch, target).content;
-    }
-    const withTheirs = applyPatch(content, theirs, target).content;
-
-    let after = withTheirs;
-    for (const patch of mine.toReversed()) {
-      after = reversePatch(after, patch, target)?.content ?? after;
-    }
-
-    expect(after).toContain('"AUDIT"');
-    expect(after).not.toContain("JOBS");
-    expect(after).not.toContain('"triggers"');
-    expect(after).not.toContain('"consumers"');
   });
 });

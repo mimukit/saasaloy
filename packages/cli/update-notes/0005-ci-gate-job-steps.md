@@ -18,7 +18,7 @@ GitHub can show a CI run as queued or in progress for many minutes after its job
 
 A project that never changed these files gets them from `saasaloy update` as they are.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/tooling/src/deploy-production.ts`, if you added your own code to it. Keep your additions, and take the template's `CiStep`, `CiJob`, `jobState`, `runState`, `ciState`, `CHANGELOG_FILE`, `isReleaseOnly`, `readJobs`, `readCi`, `releaseParent`, `readCiFacts` and `waitForCi`, the `ciCommit` field on `Facts`, the `waitCi` option in `parseArgs` and `USAGE`, the three `CI_*_MS` constants, the parent detail in `ciGate`, and the `--wait-ci` block after `readFacts` in `deployProduction`.
 - `packages/tooling/src/release.ts`, if you edited it. Take the `CHANGELOG_FILE` import and `infile: CHANGELOG_FILE`.

@@ -1,7 +1,9 @@
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
-import { listModuleFiles } from "../../src/lib/applier.js";
+import { readPayloadModules } from "../../src/engine/payload.js";
+import type { PayloadModule } from "../../src/engine/payload.js";
+import { selectFiles } from "../../src/engine/render.js";
 import {
   detectCollisions,
   formatCollisions,
@@ -64,10 +66,12 @@ const source = cachingSource(MODULES_DIR);
 
 let names: string[];
 let baseAliases: Record<string, string>;
+let payload: Map<string, PayloadModule>;
 
 beforeAll(async () => {
   names = await source.listModules();
   baseAliases = (await loadConfig(await baseTemplateDir())).aliases;
+  payload = await readPayloadModules(MODULES_DIR, names);
 });
 
 /**
@@ -166,7 +170,7 @@ function dependencyClashes(graph: Graph): DepClash[] {
     }));
 }
 
-/** Every illegal same-run file overlap, using the applier's own rule. */
+/** Every illegal same-run file overlap, using the render's own rule. */
 async function fileCollisions(graph: Graph): Promise<string> {
   const aliases = { ...baseAliases };
   for (const name of graph.order) {
@@ -177,16 +181,13 @@ async function fileCollisions(graph: Graph): Promise<string> {
   const installed = new Set(graph.order);
   const planned = [];
   for (const name of graph.order) {
-    const mod = graph.modules.get(name);
+    const mod = payload.get(name);
     if (!mod) {
       continue;
     }
     // Testing on, so a gated test file is checked for collisions too (#242): `tdd` ships
     // the largest set a project can hold.
-    const files = await listModuleFiles(mod, aliases, installed, {
-      isTracked: () => false,
-      testingMode: "tdd",
-    });
+    const files = selectFiles(mod, aliases, { installed, testingMode: "tdd" });
     planned.push({ module: name, targets: [...files.keys()] });
   }
   const collisions = detectCollisions({ modules: graph.modules, planned });

@@ -2,17 +2,13 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { LoadedModule } from "./registry.js";
 import {
-  fromRefusal,
-  moduleNoteSources,
   selectBaseNotes,
   selectModuleNotes,
   selectUpdateNotes,
 } from "./update-note-select.js";
 import { BASE_NOTE_OWNER, baseUpdateNotesDir } from "./update-notes.js";
 import type { UpdateNote } from "./update-notes.js";
-import type { ModuleUpdateInput, UpdatePlan } from "./updater.js";
 
 // #298 Phase 3: which update notes a run hands to the agent. Base notes go by CLI version
 // range, module notes by comparing the `update-notes/` folder of the old and the new
@@ -22,7 +18,7 @@ const BODY = `## What update does
 
 It writes a file.
 
-## What the merge plan gets
+## What update merges
 
 Nothing.
 
@@ -102,34 +98,6 @@ describe(selectBaseNotes, () => {
     expect(picked).toStrictEqual({ notes: [], mayApply: [] });
   });
 
-  it("puts the notes an adoption cannot place under may apply", () => {
-    const picked = selectBaseNotes(all, {
-      recorded: "0.9.0",
-      running: "1.0.0",
-      adoptedAt: "0.9.0",
-    });
-    expect(ids(picked.notes)).toStrictEqual(["base/0004-note-4"]);
-    expect(ids(picked.mayApply)).toStrictEqual([
-      "base/0001-note-1",
-      "base/0003-note-3",
-      "base/0002-note-2",
-    ]);
-  });
-
-  it("takes `--from` as the lower bound and leaves nothing to may apply", () => {
-    const picked = selectBaseNotes(all, {
-      recorded: "0.9.0",
-      running: "1.0.0",
-      adoptedAt: "0.9.0",
-      from: "0.8.0",
-    });
-    expect(ids(picked.notes)).toStrictEqual([
-      "base/0002-note-2",
-      "base/0004-note-4",
-    ]);
-    expect(picked.mayApply).toStrictEqual([]);
-  });
-
   it("puts every note up to the running CLI under may apply when the recorded version is not semver", () => {
     const picked = selectBaseNotes(all, {
       recorded: "unknown",
@@ -171,77 +139,6 @@ describe(selectModuleNotes, () => {
     const picked = selectModuleNotes([moduleNote("email", 1)], undefined);
     expect(picked.notes).toStrictEqual([]);
     expect(ids(picked.mayApply)).toStrictEqual(["email/0001-note-1"]);
-  });
-});
-
-describe(fromRefusal, () => {
-  it("accepts no `--from`", () => {
-    expect(fromRefusal(undefined, false)).toBeUndefined();
-  });
-
-  it("accepts a valid version on the first update after adoption", () => {
-    expect(fromRefusal("0.7.0", true)).toBeUndefined();
-  });
-
-  it("refuses `--from` on any other run, saying the range is already exact", () => {
-    expect(fromRefusal("0.7.0", false)).toContain("already exact");
-  });
-
-  it("refuses a version that is not semver", () => {
-    expect(fromRefusal("seven", true)).toContain("seven");
-  });
-});
-
-describe(moduleNoteSources, () => {
-  function loaded(name: string, dir: string): LoadedModule {
-    return { dir, item: { name, type: "saasaloy:feature" } };
-  }
-
-  it("reads both revisions, marks a missing base, and adds new prerequisites with an empty old folder", () => {
-    const admin = loaded("admin", "/theirs/admin");
-    const shell = loaded("shell", "/theirs/shell");
-    const inputs = [
-      {
-        comparison: {} as ModuleUpdateInput["comparison"],
-        theirs: admin,
-        base: loaded("admin", "/base/admin"),
-        prereqs: {
-          order: ["shell"],
-          modules: new Map([["shell", shell]]),
-        },
-      },
-      {
-        comparison: {} as ModuleUpdateInput["comparison"],
-        theirs: loaded("email", "/theirs/email"),
-        noMergeBase: "local install",
-      },
-    ] satisfies ModuleUpdateInput[];
-    const plan = {
-      modules: [
-        { name: "admin", prereqNames: ["shell"] },
-        { name: "email", prereqNames: [] },
-      ],
-    } as unknown as UpdatePlan;
-
-    expect(moduleNoteSources(inputs, plan)).toStrictEqual([
-      { name: "shell", theirsDir: "/theirs/shell", fresh: true },
-      { name: "admin", theirsDir: "/theirs/admin", baseDir: "/base/admin" },
-      { name: "email", theirsDir: "/theirs/email" },
-    ]);
-  });
-
-  it("skips the base template, whose notes go by version", () => {
-    const inputs = [
-      {
-        comparison: {} as ModuleUpdateInput["comparison"],
-        theirs: loaded("base", "/tmp/render"),
-        baseRecord: { name: "web", cliVersion: "0.8.0", templateHash: "a" },
-      },
-    ] satisfies ModuleUpdateInput[];
-    const plan = {
-      modules: [{ name: "base", prereqNames: [] }],
-    } as unknown as UpdatePlan;
-    expect(moduleNoteSources(inputs, plan)).toStrictEqual([]);
   });
 });
 

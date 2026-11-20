@@ -27,15 +27,20 @@
 //
 // The upgrade step needs the network too (issue #298). It installs the previous published
 // CLI, which scaffolds a project with modules fetched from GitHub at that release's tag,
-// and then runs the packed CLI's `update --dry-run` against the repo's `modules/`. The
-// merge plan must list the update notes that project is owed. `--upgrade-only` runs this
-// step alone after the pack.
+// and then runs the packed CLI's `update --dry-run`. That run converts the project's
+// version 1 state in memory (plan 0116) and must list the update notes the project is
+// owed. `--upgrade-only` runs this step alone after the pack.
 //
 // The skipped-release step needs the network as well (issue #312). It scaffolds a project
 // with CLI 0.5.0 from npm, deletes one demo block, and runs the packed CLI's `update`. The
-// run must add the aliases the project lacks, list the block as "deleted locally", keep it
-// deleted after `--resolved`, and merge the base three-way against the template at the
-// `v0.5.0` tag. `--skipped-only` runs this step alone after the pack.
+// run must convert the project, find the base of every file it did not delete, add the
+// aliases the project lacks, and leave the block deleted. `--skipped-only` runs this step
+// alone after the pack.
+//
+// Both steps read the payloads from a cache this script fills (`SAASALOY_CACHE_DIR`): each
+// release tag from this repo's git history, and the packed release from this checkout. A
+// local registry checkout would stand in for every release, so the base of a merge would
+// be the new release itself.
 //
 // npm does the install, not pnpm: pnpm would find pnpm-workspace.yaml above .dev/ and link
 // rather than install, which is the one thing this script exists to avoid.
@@ -44,7 +49,7 @@
 // `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -375,7 +380,7 @@ const UPGRADE_ADDS: readonly (readonly string[])[] = [
 
 /**
  * The testing mode the upgrade project takes. Off, so a note gated on `when.testing` is
- * expected to stay out of the merge plan.
+ * expected to stay out of the update report.
  */
 const UPGRADE_TESTING = "off";
 
@@ -385,7 +390,7 @@ const DRY_RUN_EXIT = 0;
 /** A note id: `base/NNNN-<slug>` or `<module>/NNNN-<slug>`, as `lib/update-notes.ts` derives it. */
 const NOTE_ID = "[a-z0-9][a-z0-9-]*/[0-9]{4}-[a-z0-9][a-z0-9-]*";
 
-/** A note heading in the merge plan: `### <id>: <title>`, or one level down under "may apply". */
+/** A note heading in the update report: `### <id>: <title>`. */
 const NOTE_HEADING = new RegExp(`^#{3,4} (${NOTE_ID}): `);
 
 const MAY_APPLY_HEADING = "### Notes that may apply";
@@ -521,18 +526,19 @@ export interface NoteOnDisk extends NoteFrontmatter {
 }
 
 /**
- * The note ids the upgrade's merge plan must list, in no particular group. A base note
- * counts when its `version` is newer than the previous CLI and no newer than the packed
- * one. A module note counts when its module is installed after the update: with
- * SAASALOY_REGISTRY_DIR no module has a merge base, so every note it ships prints. A note
- * whose `when` fails against that install set and the testing mode does not count.
- * Exported for its own test.
+ * The note ids the upgrade's report must list, in no particular group. A base note counts
+ * when its `version` is newer than the previous CLI and no newer than the packed one. A
+ * module note counts when its module is installed after the update and the note is new
+ * to the project: the previous release's folder lacks it, or the module was not installed
+ * before (`lib/update-note-select.ts`). A note whose `when` fails against that install set
+ * and the testing mode does not count. Exported for its own test.
  */
 export function expectedNoteIds(
   notes: readonly NoteOnDisk[],
   range: { previous: string; packed: string },
   installed: ReadonlySet<string>,
-  testing: string
+  testing: string,
+  before: { installed: ReadonlySet<string>; noteIds: ReadonlySet<string> }
 ): string[] {
   return notes
     .filter((note) => {
@@ -544,7 +550,10 @@ export function expectedNoteIds(
           compareSemver(note.version, range.packed) <= 0
         );
       }
-      return installed.has(owner);
+      return (
+        installed.has(owner) &&
+        (!before.installed.has(owner) || !before.noteIds.has(note.id))
+      );
     })
     .filter((note) => {
       if (note.when === undefined) {
@@ -584,17 +593,17 @@ export function installedAfterUpdate(
   return installed;
 }
 
-/** The note ids a merge plan lists, split by the group each sits in. */
+/** The note ids an update report lists, split by the group each sits in. */
 export interface PlanNotes {
   placed: string[];
   mayApply: string[];
 }
 
 /**
- * Every note id in the "Update notes" section of a merge plan on stdout. A note heading
- * before "### Notes that may apply" is placed, one after it may apply. A heading inside a
- * fenced block is a note's own text, and the section ends at the next level-2 heading.
- * Exported for its own test.
+ * Every note id in the "Update notes" section of an update report on stdout. A note
+ * heading before "### Notes that may apply" is placed, one after it may apply. A heading
+ * inside a fenced block is a note's own text, and the section ends at the next level-2
+ * heading. Exported for its own test.
  */
 export function parsePlanNotes(stdout: string): PlanNotes {
   const result: PlanNotes = { mayApply: [], placed: [] };
@@ -637,10 +646,9 @@ export function parsePlanNotes(stdout: string): PlanNotes {
 }
 
 /**
- * What is wrong with the notes a merge plan listed against the ids expected: each id it
+ * What is wrong with the notes a report listed against the ids expected: each id it
  * missed and each it listed that no rule expects. Empty when they match. Both groups
- * count, so a note the local registry pushes under "may apply" still matches. Exported for
- * its own test.
+ * count. Exported for its own test.
  */
 export function checkPlanNotes(
   expected: readonly string[],
@@ -661,7 +669,7 @@ export function checkPlanNotes(
 /**
  * The release the skipped-release project starts from. PrimeShopr's base was recorded at
  * 0.5.0 and skipped to 0.8.0 (issue #312), and 0.5.0 already writes the lock's `base`
- * record, so the update reads its snapshot version from the lock with no `--from`.
+ * record, so the conversion starts its base search at that release.
  */
 const SKIPPED_FROM = "0.5.0";
 
@@ -674,64 +682,47 @@ const SKIPPED_ADDS: readonly string[] = ["database-d1", "auth"];
 
 /**
  * The demo block the skipped-release step deletes. 0.5.0 ships it and the packed template
- * still does, so the update tracks it and must ask about it rather than drop it.
+ * still does, so the update tracks it and must leave it deleted rather than write it.
  */
 export const SKIPPED_BLOCK = "packages/ui/src/blocks/faq.tsx";
 
 /** What `update` exits with when a merge or a note waits on the owner. */
 const PENDING_EXIT = 3;
 
+/** What a run exits with when it refuses, such as a run while markers are pending. */
+const REFUSED_EXIT = 2;
+
 /**
- * The lines of a merge plan's base section that say its diffs are two-way: the header's
- * "no merge base" line and a file's "no base available" diff. Empty when the base merged
- * three-way, or when the plan has no base section. A line inside a fenced block is a
- * diff of the file, not the plan's own text. Exported for its own test.
+ * The counts of the line a conversion prints: `found the base of N of M tracked files`.
+ * Undefined when the output holds no such line. Exported for its own test.
  */
-export function baseTwoWayLines(plan: string): string[] {
-  const found: string[] = [];
-  let inBase = false;
-  let fence: string | undefined;
-  for (const line of plan.split(/\r?\n/)) {
-    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
-    if (marker !== undefined) {
-      if (fence === undefined) {
-        fence = marker;
-      } else if (marker.startsWith(fence)) {
-        fence = undefined;
-      }
-      continue;
-    }
-    if (fence !== undefined) {
-      continue;
-    }
-    if (line.startsWith("## ")) {
-      inBase = line === "## base";
-      continue;
-    }
-    if (
-      inBase &&
-      (line.startsWith("- **no merge base") ||
-        line.includes("no base available"))
-    ) {
-      found.push(line);
-    }
-  }
-  return found;
+export function conversionCounts(
+  output: string
+): { found: number; tracked: number } | undefined {
+  const match = /found the base of (\d+) of (\d+) tracked files/.exec(output);
+  return match === null
+    ? undefined
+    : { found: Number(match[1]), tracked: Number(match[2]) };
 }
 
 /**
- * Whether a merge plan lists `target` as a file deleted locally: its `#### \`target\``
- * heading, then the source line that ends "deleted locally." Exported for its own test.
+ * The paths an update report lists under `## <title>`, one `- \`path\`` bullet each. The
+ * section ends at the next level-2 heading. Exported for its own test.
  */
-export function listsDeletedLocally(plan: string, target: string): boolean {
-  const lines = plan.split(/\r?\n/);
-  const heading = lines.indexOf(`#### \`${target}\``);
-  if (heading === -1) {
-    return false;
+export function reportPaths(report: string, title: string): string[] {
+  const paths: string[] = [];
+  let inSection = false;
+  for (const line of report.split(/\r?\n/)) {
+    if (line.startsWith("## ")) {
+      inSection = line === `## ${title}`;
+      continue;
+    }
+    const path = inSection ? /^- `([^`]+)`/.exec(line)?.[1] : undefined;
+    if (path !== undefined) {
+      paths.push(path);
+    }
   }
-  return lines
-    .slice(heading + 1, heading + 4)
-    .some((line) => line.endsWith("— deleted locally."));
+  return paths;
 }
 
 /** Every output line that reports an alias the project does not declare. Exported for its own test. */
@@ -859,10 +850,10 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
 const POSTGRES_DRIVER = "database-postgres";
 
 /**
- * Runs one task at a time, in the order they arrive. The Postgres scaffolds' `db:setup`
- * goes through it: the first starts its compose project on port 5432, and the second finds
- * the server answering and creates its own database there. Two at once would race for the
- * port.
+ * Runs one task at a time, in the order they arrive. The full scaffolds' `pnpm test` runs
+ * through one queue. The Postgres scaffolds' `db:setup` runs through another: the first
+ * starts its compose project on port 5432, and the second finds the server answering and
+ * creates its own database there. Two at once would race for the port.
  */
 function serialQueue(): <T>(task: () => Promise<T>) => Promise<T> {
   let tail: Promise<unknown> = Promise.resolve();
@@ -953,7 +944,8 @@ async function checkFullScaffold(
   scaffold: FullScaffold,
   env: NodeJS.ProcessEnv,
   registry: readonly string[],
-  serialPostgres: <T>(task: () => Promise<T>) => Promise<T>
+  serialPostgres: <T>(task: () => Promise<T>) => Promise<T>,
+  serialTests: <T>(task: () => Promise<T>) => Promise<T>
 ): Promise<void> {
   const started = Date.now();
   const dir = join(workDir, scaffold.name);
@@ -1004,10 +996,15 @@ async function checkFullScaffold(
     : dbSetup());
   await setupEnv(bin, dir, scaffold.name, env, registry);
   for (const check of FULL_SCAFFOLD_CHECKS) {
-    step(`running \`pnpm ${check}\` in ${scaffold.name}`);
-    await runQuiet("pnpm", [check], `pnpm ${check} in ${scaffold.name}`, {
-      cwd: dir,
-    });
+    const runCheck = () => {
+      step(`running \`pnpm ${check}\` in ${scaffold.name}`);
+      return runQuiet("pnpm", [check], `pnpm ${check} in ${scaffold.name}`, {
+        cwd: dir,
+      });
+    };
+    // One project's suite already uses every core. Four at once pushed route tests with
+    // many requests past vitest's 5 s timeout, so the suites take turns.
+    await (check === "test" ? serialTests(runCheck) : runCheck());
   }
   step(
     `${scaffold.name} passes ${FULL_SCAFFOLD_CHECKS.map((check) => `\`pnpm ${check}\``).join(", ")} (${seconds(started)})`
@@ -1110,13 +1107,14 @@ async function readNotesOnDisk(registryDir: string): Promise<NoteOnDisk[]> {
 
 /**
  * Scaffold a project with the previous published CLI and its modules at the previous
- * release's tag, then run `update --dry-run` with the packed CLI against this checkout's
- * `modules/` (issue #298). The merge plan on stdout must list exactly the update notes
- * this project is owed, and the preview must exit as a preview does.
+ * release's tag, then run `update --dry-run` with the packed CLI (issue #298). The run
+ * converts the version 1 project in memory, and the report on stdout must list exactly
+ * the update notes this project is owed. The preview must exit as a preview does.
  *
  * It needs the network twice: npm for the previous CLI, and GitHub for the modules that
  * CLI fetches at its tag. The project is built the way a user's was, so the update meets
- * the files and the lock the previous release really wrote.
+ * the files and the lock the previous release really wrote. `env` points the packed CLI
+ * at the payload cache `fillPayloadCache` wrote.
  */
 async function checkUpgrade(
   bin: string,
@@ -1124,7 +1122,7 @@ async function checkUpgrade(
   env: NodeJS.ProcessEnv
 ): Promise<void> {
   const started = Date.now();
-  const registryDir = env.SAASALOY_REGISTRY_DIR!;
+  const registryDir = join(root, "modules");
   const view = await capture(
     "npm",
     ["view", "saasaloy", "versions", "--json"],
@@ -1191,7 +1189,11 @@ async function checkUpgrade(
     await readNotesOnDisk(registryDir),
     { packed: version, previous },
     installed,
-    UPGRADE_TESTING
+    UPGRADE_TESTING,
+    {
+      installed: new Set(locked),
+      noteIds: new Set(moduleNoteIdsAt(`v${previous}`)),
+    }
   );
   if (expected.length === 0) {
     throw new StepError(
@@ -1217,7 +1219,7 @@ async function checkUpgrade(
   const problems = checkPlanNotes(expected, found);
   if (problems.length > 0) {
     throw new StepError(
-      `the merge plan from ${previous} to ${version} lists the wrong update notes`,
+      `the update report from ${previous} to ${version} lists the wrong update notes`,
       [...problems, `expected: ${expected.join(", ")}`]
     );
   }
@@ -1230,6 +1232,102 @@ async function checkUpgrade(
   step(
     `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
   );
+}
+
+/** The ids of every module update note at `ref` in this repo's history. */
+function moduleNoteIdsAt(ref: string): string[] {
+  const listed = spawnSync(
+    "git",
+    ["ls-tree", "-r", "--name-only", ref, "--", "modules"],
+    { cwd: root, encoding: "utf-8" }
+  );
+  if (listed.status !== 0) {
+    throw new StepError(`git ls-tree ${ref} failed`, [listed.stderr.trim()]);
+  }
+  return listed.stdout
+    .split("\n")
+    .map((path) =>
+      /^modules\/([^/]+)\/update-notes\/(\d{4}-[^/]+)\.md$/.exec(path)
+    )
+    .filter((match) => match !== null)
+    .map((match) => `${match[1] ?? ""}/${match[2] ?? ""}`);
+}
+
+/**
+ * Fill a payload cache for the packed CLI (plan 0116): one entry for each `v*` tag in this
+ * repo, from `git archive`, and one for the packed release, from this checkout. The packed
+ * CLI reads the default registry at a release tag, and the base of each merge at the
+ * release that wrote the file, so the update steps run against the real old payloads with
+ * no GitHub fetch for them. A tag the repo lacks is fetched by the CLI as a user's is.
+ */
+async function fillPayloadCache(version: string): Promise<string> {
+  const cache = join(scratch, "payload-cache");
+  const entry = async (
+    ref: string,
+    fill: (modulesDir: string, baseDir: string) => Promise<void>
+  ): Promise<void> => {
+    const dir = join(cache, "mimukit", `saasaloy@${ref}`);
+    const modulesDir = join(dir, "modules");
+    const baseDir = join(dir, "base");
+    await mkdir(modulesDir, { recursive: true });
+    await mkdir(baseDir, { recursive: true });
+    await fill(modulesDir, baseDir);
+    await writeFile(join(dir, ".complete"), `mimukit/saasaloy@${ref}\n`);
+  };
+  const tags = spawnSync("git", ["tag", "--list", "v*"], {
+    cwd: root,
+    encoding: "utf-8",
+  });
+  if (tags.status !== 0) {
+    fail("git tag --list failed", tags.stderr.trim());
+  }
+  const packedTag = `v${version}`;
+  for (const tag of tags.stdout.split("\n").filter(Boolean)) {
+    if (tag === packedTag) {
+      continue;
+    }
+    await entry(tag, async (modulesDir, baseDir) => {
+      extract(tag, "modules", modulesDir);
+      extract(tag, "packages/cli/templates/base", baseDir);
+      await Promise.resolve();
+    });
+  }
+  await entry(packedTag, async (modulesDir, baseDir) => {
+    await cp(join(root, "modules"), modulesDir, { recursive: true });
+    await cp(join(cliDir, "templates/base"), baseDir, { recursive: true });
+  });
+  step(
+    `filled the payload cache for the update steps (${relative(root, cache)})`
+  );
+  return cache;
+}
+
+/** Extract `path` of this repo at `ref` into `dir`, with `path`'s own segments stripped. */
+function extract(ref: string, path: string, dir: string): void {
+  const result = spawnSync(
+    "sh",
+    [
+      "-c",
+      'git -C "$1" archive --format=tar "$2" -- "$3" | tar -x -C "$4" --strip-components="$5"',
+      "sh",
+      root,
+      ref,
+      path,
+      dir,
+      String(path.split("/").length),
+    ],
+    { encoding: "utf-8" }
+  );
+  if (result.status !== 0) {
+    fail(`git archive ${ref} -- ${path} failed`, result.stderr.trim());
+  }
+}
+
+/** The environment the packed CLI's update steps run in: the cache, no local registry. */
+function payloadCacheEnv(cache: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, SAASALOY_CACHE_DIR: cache };
+  delete env.SAASALOY_REGISTRY_DIR;
+  return env;
 }
 
 /**
@@ -1275,15 +1373,14 @@ function outputTail(result: Captured, count = 30): string[] {
 
 /**
  * Scaffold a project with CLI 0.5.0 and its modules at the `v0.5.0` tag, delete one demo
- * block, and drive the packed CLI's `update` against this checkout's `modules/` (issue
- * #312). Three things must hold. No run reports an unknown alias. The merge plan lists the
- * block as deleted locally, `--resolved` keeps it deleted, and a second update leaves it
- * absent. The base section merges three-way, from the template at `v0.5.0` that the lock's
- * `base.cliVersion` names, so it carries no "no merge base" line.
+ * block, and run the packed CLI's `update` (issue #312, plan 0116). Four things must hold.
+ * No run reports an unknown alias. The conversion finds the base of every tracked file but
+ * the deleted block. The block stays deleted, and a report that names it lists it under
+ * "Left deleted". A second run either has nothing to do and leaves the block absent, or
+ * refuses with exit 2 while the first run's conflict markers are still in place.
  *
- * It needs the network three times: npm for 0.5.0, GitHub for the modules 0.5.0 fetches,
- * and GitHub for the base snapshot the packed CLI fetches. `GITHUB_TOKEN` lifts the rate
- * limit on the last two.
+ * It needs the network twice: npm for 0.5.0, and GitHub for the modules 0.5.0 fetches.
+ * `env` points the packed CLI at the payload cache `fillPayloadCache` wrote.
  */
 async function checkSkippedRelease(
   bin: string,
@@ -1320,87 +1417,91 @@ async function checkSkippedRelease(
 
   // The project sits under this repo's gitignored `.dev/`, so the tree check would read
   // clean anyway; `--force` keeps the step from depending on that.
-  const update = async (
-    extra: readonly string[],
-    label: string
-  ): Promise<{ result: Captured; plan: string }> => {
-    const out = join(scratch, `${projectName}-${label}.md`);
+  const update = async (label: string): Promise<Captured> => {
     const result = await capture(
       bin,
-      ["update", ...extra, "--yes", "--force", "--out", out],
-      `saasaloy update ${extra.join(" ")} in ${projectName}`,
+      ["update", "--yes", "--force"],
+      `saasaloy update (${label}) in ${projectName}`,
       { cwd: dir, env }
     );
-    if (result.code !== 0 && result.code !== PENDING_EXIT) {
-      throw new StepError(
-        `saasaloy update ${extra.join(" ")} in ${projectName} exited ${String(result.code)}`,
-        outputTail(result)
-      );
-    }
     const unknown = findUnknownAliases(`${result.stdout}\n${result.stderr}`);
     if (unknown.length > 0) {
       throw new StepError(
-        `saasaloy update ${extra.join(" ")} in ${projectName} met an alias the project lacks`,
+        `saasaloy update (${label}) in ${projectName} met an alias the project lacks`,
         unknown
       );
     }
-    let plan = "";
-    try {
-      plan = await readFile(out, "utf-8");
-    } catch {
-      // A run with nothing left to merge writes no plan.
-    }
-    return { plan, result };
+    return result;
   };
 
   step(`running \`saasaloy update\` in ${projectName} from ${SKIPPED_FROM}`);
-  const first = await update([], "first");
-  if (first.result.code !== PENDING_EXIT) {
+  const first = await update("first");
+  if (first.code !== 0 && first.code !== PENDING_EXIT) {
     throw new StepError(
-      `the first update in ${projectName} exited ${String(first.result.code)}, not ${String(PENDING_EXIT)}`,
-      outputTail(first.result)
+      `the first update in ${projectName} exited ${String(first.code)}`,
+      outputTail(first)
     );
   }
   step(`no \`Unknown alias\` in the update from ${SKIPPED_FROM}`);
-  if (!listsDeletedLocally(first.plan, SKIPPED_BLOCK)) {
+  const counts = conversionCounts(`${first.stdout}\n${first.stderr}`);
+  if (counts === undefined) {
     throw new StepError(
-      `the merge plan does not list ${SKIPPED_BLOCK} as deleted locally`,
-      first.plan.split("\n").filter((line) => line.includes("deleted"))
+      `the update from ${SKIPPED_FROM} printed no conversion line`,
+      outputTail(first)
     );
   }
-  step(`the merge plan lists ${SKIPPED_BLOCK} as deleted locally`);
-  const twoWay = baseTwoWayLines(first.plan);
-  if (twoWay.length > 0) {
+  // Every file but the deleted block was written by 0.5.0 from the cached v0.5.0 payload,
+  // so its recorded hash has a render to match.
+  if (counts.found < counts.tracked - 1) {
     throw new StepError(
-      `the base section of the merge plan from ${SKIPPED_FROM} is two-way`,
-      twoWay.slice(0, 10)
+      `the conversion from ${SKIPPED_FROM} found the base of ${String(counts.found)} of ${String(counts.tracked)} tracked files`,
+      outputTail(first)
     );
   }
-  if (!first.plan.split("\n").includes("## base")) {
+  step(
+    `the conversion found the base of ${String(counts.found)} of ${String(counts.tracked)} tracked files`
+  );
+  if (await pathPresent(block)) {
+    throw new StepError(`the update wrote ${SKIPPED_BLOCK} again`, []);
+  }
+  const listed = [
+    "Files with conflict markers",
+    "Written once, changed upstream",
+    "Kept, no longer tracked",
+  ].filter((title) => reportPaths(first.stdout, title).includes(SKIPPED_BLOCK));
+  if (listed.length > 0) {
     throw new StepError(
-      `the merge plan from ${SKIPPED_FROM} has no base section, so the three-way check proves nothing`,
+      `the report lists the deleted ${SKIPPED_BLOCK} under ${listed.join(", ")}`,
       []
     );
   }
-  step("the base section merges three-way: no `no merge base` line");
+  step(`${SKIPPED_BLOCK} stays deleted after the update`);
 
-  step(`running \`saasaloy update --resolved ${SKIPPED_BLOCK}\``);
-  await update(["--resolved", SKIPPED_BLOCK], "resolved");
-  const second = await update([], "second");
-  if (await pathPresent(block)) {
+  const second = await update("second");
+  if (first.code === PENDING_EXIT && second.code === REFUSED_EXIT) {
+    step(
+      "the second update refuses while the first run's markers are in place"
+    );
+  } else if (second.code !== 0 && second.code !== PENDING_EXIT) {
     throw new StepError(
-      `${SKIPPED_BLOCK} came back after \`--resolved\` and a second update`,
-      outputTail(second.result)
+      `the second update in ${projectName} exited ${String(second.code)}`,
+      outputTail(second)
     );
   }
-  if (listsDeletedLocally(second.plan, SKIPPED_BLOCK)) {
+  if (await pathPresent(block)) {
     throw new StepError(
-      `the second update lists ${SKIPPED_BLOCK} as deleted locally again`,
+      `${SKIPPED_BLOCK} came back after a second update`,
+      outputTail(second)
+    );
+  }
+  if (reportPaths(second.stdout, "Left deleted").includes(SKIPPED_BLOCK)) {
+    throw new StepError(
+      `the second update lists ${SKIPPED_BLOCK} as left deleted again`,
       []
     );
   }
   step(
-    `${projectName} from ${SKIPPED_FROM} keeps ${SKIPPED_BLOCK} deleted, adds its aliases, and merges the base three-way (${seconds(started)})`
+    `${projectName} from ${SKIPPED_FROM} converts, keeps ${SKIPPED_BLOCK} deleted, and adds its aliases (${seconds(started)})`
   );
 }
 
@@ -1608,6 +1709,7 @@ async function main(): Promise<void> {
     ...process.env,
     SAASALOY_REGISTRY_DIR: join(root, "modules"),
   };
+  const cacheEnv = payloadCacheEnv(await fillPayloadCache(version));
 
   // `src/version.ts` resolves `../package.json` from `dist/index.js`. That depth only holds
   // while tsup emits one flat file and `files` ships package.json alongside dist/, and both
@@ -1633,8 +1735,8 @@ async function main(): Promise<void> {
   if (options.upgradeOnly || options.skippedOnly) {
     try {
       await (options.upgradeOnly
-        ? checkUpgrade(bin, version, offlineEnv)
-        : checkSkippedRelease(bin, offlineEnv));
+        ? checkUpgrade(bin, version, cacheEnv)
+        : checkSkippedRelease(bin, cacheEnv));
     } catch (error) {
       if (error instanceof StepError) {
         fail(error.message, ...error.detail);
@@ -1647,13 +1749,13 @@ async function main(): Promise<void> {
     console.log(
       options.upgradeOnly
         ? `release-smoke: saasaloy@${version} packs, installs, and lists every update note a project from the previous release is owed.`
-        : `release-smoke: saasaloy@${version} packs, installs, and updates a ${SKIPPED_FROM} project with no alias error, a deleted block kept deleted, and a three-way base.`
+        : `release-smoke: saasaloy@${version} packs, installs, and updates a ${SKIPPED_FROM} project with no alias error, a base found for each file, and a deleted block kept deleted.`
     );
     return;
   }
-  const upgrade = checkUpgrade(bin, version, offlineEnv);
+  const upgrade = checkUpgrade(bin, version, cacheEnv);
   // Issue #312. A 0.5.0 project takes one update. `--skipped-only` runs this step alone.
-  const skipped = checkSkippedRelease(bin, offlineEnv);
+  const skipped = checkSkippedRelease(bin, cacheEnv);
   // The full run reads the outcomes later, through `Promise.allSettled`. A handler now
   // keeps an early rejection from counting as unhandled, which would end the process.
   for (const check of [upgrade, skipped]) {
@@ -1727,6 +1829,7 @@ async function main(): Promise<void> {
   }
   const registryNames = registry.map((entry) => entry.name);
   const serialPostgres = serialQueue();
+  const serialTests = serialQueue();
   const results = await Promise.allSettled([
     upgrade,
     skipped,
@@ -1737,7 +1840,8 @@ async function main(): Promise<void> {
         scaffold,
         offlineEnv,
         registryNames,
-        serialPostgres
+        serialPostgres,
+        serialTests
       )
     ),
   ]);
@@ -1763,7 +1867,7 @@ async function main(): Promise<void> {
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\`, \`pnpm typecheck\`, \`pnpm test\` and \`pnpm build\` with every module and testing on in ${String(scaffolds.length)} project(s), lists every update note a project from the previous release is owed, and updates a ${SKIPPED_FROM} project with a deleted block kept deleted and a three-way base.${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\`, \`pnpm typecheck\`, \`pnpm test\` and \`pnpm build\` with every module and testing on in ${String(scaffolds.length)} project(s), lists every update note a project from the previous release is owed, and updates a ${SKIPPED_FROM} project with a base found for each file and a deleted block kept deleted.${kept}`
   );
 }
 

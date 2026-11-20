@@ -1,8 +1,8 @@
 import type { ComponentType, ReactNode } from "react";
 
 // Your project owns this file. `saasaloy add admin` wrote it once, and `saasaloy update`
-// never changes it: it writes it again only when the file is missing, because
-// src/components/app-shell.tsx imports it.
+// never changes it. Keep it: src/components/app-shell.tsx imports it. If you delete it,
+// `saasaloy update --restore <path>` writes it again.
 //
 // Put the components that must wrap the whole signed-in admin app here: a context
 // provider your screens share, an analytics or feature provider, a project-wide modal

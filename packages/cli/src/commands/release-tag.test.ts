@@ -1,5 +1,4 @@
-import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,9 +19,8 @@ import { loadLock } from "../lib/lock.js";
 import { GITHUB_API_ENV, REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
 import { runAdd } from "./add.js";
+import { scaffoldProject } from "./init.js";
 import { runList } from "./list.js";
-import { runOutdated } from "./outdated.js";
-import { runUpdate } from "./update.js";
 
 // ADR 0062 end to end: a CLI reads the default registry at its own release tag. The
 // registry here is a real git repository with a commit, the annotated tag `v<version>` of
@@ -78,12 +76,11 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   project = await mkdtemp(join(tmpdir(), "saasaloy-release-tag-"));
-  await mkdir(join(project, "apps", "web"), { recursive: true });
-  await writeFile(
-    join(project, "saasaloy.json"),
-    JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
-    "utf-8"
-  );
+  await scaffoldProject({
+    projectName: "demo",
+    target: project,
+    testingMode: "off",
+  });
   process.chdir(project);
 });
 
@@ -131,7 +128,7 @@ function listedNames(doc: Record<string, unknown>): string[] {
 }
 
 async function webFile(name: string): Promise<string> {
-  return readFile(join(project, "apps", "web", `${name}.ts`), "utf-8");
+  return readFile(join(project, "apps", "web", "src", `${name}.ts`), "utf-8");
 }
 
 describe("a CLI reads the default registry at its release tag (ADR 0062)", () => {
@@ -151,7 +148,7 @@ describe("a CLI reads the default registry at its release tag (ADR 0062)", () =>
     expect(doc.registry).toBe("mimukit/saasaloy@main");
   });
 
-  it("fetches every module at the tag, and the lock records the tag's commit", async () => {
+  it("fetches every module at the tag, and the lock records the tag", async () => {
     const { code } = await run(runAdd, ["waitlist", "--yes"]);
 
     expect(code).toBe(0);
@@ -159,67 +156,30 @@ describe("a CLI reads the default registry at its release tag (ADR 0062)", () =>
     await expect(webFile("waitlist")).resolves.toBe(
       "export const waitlist = 1;\n"
     );
-    const commit = registry.revParse(TAG);
-    // An annotated tag is an object of its own; the lock holds the commit it names.
-    expect(commit).not.toBe(
-      execFileSync("git", ["rev-parse", TAG], {
-        cwd: registry.dir,
-        encoding: "utf-8",
-      }).trim()
-    );
+    // The default registry moves as one release, so the lock names the tag (plan 0116).
     const lock = await loadLock(project);
     for (const name of ["email", "waitlist"]) {
       expect(lock.modules[name]).toMatchObject({
         ref: TAG,
-        resolved: commit,
+        resolved: TAG,
         source: "mimukit/saasaloy",
       });
     }
   });
 
-  it("refuses a module merged after the tag, and applies it with @main", async () => {
+  it("refuses a module merged after the tag, and refuses @main for one module", async () => {
     const atTag = await run(runAdd, ["late", "--yes"]);
 
     expect(atTag.code).toBe(2);
-    expect(atTag.out).toContain('Unknown module "late"');
+    expect(atTag.out).toContain("late");
 
     const atMain = await run(runAdd, ["late@main", "--yes"]);
 
-    expect(atMain.code).toBe(0);
-    await expect(webFile("late")).resolves.toContain("late");
-    expect((await loadLock(project)).modules.late).toMatchObject({
-      ref: "main",
-      resolved: registry.revParse("main"),
-    });
-  });
-
-  it("keeps a lock that names a main commit valid, and update moves it to the tag", async () => {
-    // What every CLI before ADR 0062 wrote: `ref: "main"` at main's commit.
-    expect((await run(runAdd, ["waitlist@main", "--yes"])).code).toBe(0);
-    await expect(webFile("waitlist")).resolves.toBe(
-      "export const waitlist = 2;\n"
-    );
-    expect((await loadLock(project)).modules.waitlist).toMatchObject({
-      ref: "main",
-      resolved: registry.revParse("main"),
-    });
-
-    const outdated = await runJson(runOutdated, ["--json"]);
-    const row = (outdated.doc.modules as { name: string; ref: string }[]).find(
-      (m) => m.name === "waitlist"
-    );
-    expect(row).toMatchObject({ ref: TAG, status: "outdated" });
-
-    const updated = await run(runUpdate, ["waitlist", "--yes"]);
-
-    expect(updated.code).toBe(0);
-    expect((await loadLock(project)).modules.waitlist).toMatchObject({
-      ref: TAG,
-      resolved: registry.revParse(TAG),
-    });
-    await expect(webFile("waitlist")).resolves.toBe(
-      "export const waitlist = 1;\n"
-    );
+    expect(atMain.code).toBe(2);
+    expect(atMain.out).toContain("moves as one release");
+    await expect(
+      readFile(join(project, "apps", "web", "src", "late.ts"), "utf-8")
+    ).rejects.toThrow("ENOENT");
   });
 });
 

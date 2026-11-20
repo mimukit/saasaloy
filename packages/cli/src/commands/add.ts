@@ -1,93 +1,79 @@
+import { readdir } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
-import { posix } from "node:path";
 import pc from "picocolors";
-import { buildPlan, executePlan } from "../lib/applier.js";
-import type {
-  ApplyResult,
-  FileAction,
-  Plan,
-  PlannedFile,
-} from "../lib/applier.js";
+import { apply } from "../engine/apply.js";
+import type { ApplyReport } from "../engine/apply.js";
+import { ensureCachedSnapshot } from "../engine/payload.js";
+import {
+  assertReadyToRun,
+  isLocalRegistry,
+  loadSide,
+  readProjectState,
+} from "../engine/project.js";
+import type { LoadedSide, ProjectState } from "../engine/project.js";
+import { closure, fixedOrder } from "../engine/render.js";
 import {
   detectCliMismatches,
   formatCliMismatches,
 } from "../lib/cli-requires.js";
-import { describeStaleOwner } from "../lib/collisions.js";
-import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import {
   EXIT_FAILURE,
   EXIT_OK,
   EXIT_REFUSED,
-  formatFailure,
+  EXIT_WORK_PENDING,
   RefusalError,
 } from "../lib/exit.js";
-import { planWritesUi } from "../lib/design.js";
+import { pathExists, resolveWithinRoot } from "../lib/fs-utils.js";
 import { createOutput, printJson } from "../lib/json-output.js";
-import type { TuiOptions } from "../lib/json-output.js";
-import { ENV_EXAMPLE, writeEnvExample } from "../lib/env-example.js";
-import { formatPatchedFiles } from "../lib/format.js";
-import { lineDiff } from "../lib/diff.js";
-import type { DiffLine } from "../lib/diff.js";
-import { runBackfill } from "../lib/backfill.js";
-import { persistLedger } from "../lib/ledger.js";
-import { loadLock, LOCK_FILE, upsertLock } from "../lib/lock.js";
-import type { Lockfile } from "../lib/lock.js";
-import { loadManifest } from "../lib/manifest.js";
-import type { Manifest } from "../lib/manifest.js";
-import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
-import { confirm, multiselect, select } from "../lib/prompts.js";
+import type { Output } from "../lib/json-output.js";
+import { multiselect, select } from "../lib/prompts.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
-  createRegistrySource,
   DEFAULT_OWNER,
   DEFAULT_REPO,
+  DEFAULT_SOURCE,
+  parseCoordinate,
   REGISTRY_ENV,
+  releaseTag,
+  RemoteRegistrySource,
 } from "../lib/registry.js";
-import type { Coordinate, RegistrySource } from "../lib/registry.js";
-import {
-  detectMissingRequirements,
-  formatMissingRequirements,
-  formatUnansweredWith,
-} from "../lib/requires.js";
-import { listLabel, requestedArgv } from "../lib/requested.js";
-import type { Requested, RequestedInput } from "../lib/requested.js";
-import { mergeGraph, resolveGraph, resolveGraphs } from "../lib/resolve.js";
-import type { Graph } from "../lib/resolve.js";
-import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
-import type { LoadedConfig } from "../lib/saasaloy-config.js";
-import { readTestingMode } from "../lib/testing.js";
-import type { TestingMode } from "../lib/testing.js";
+import type { Coordinate } from "../lib/registry.js";
+import { listLabel } from "../lib/requested.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
-import { linkAgentSkills } from "../lib/skill-links.js";
 import { readVersion } from "../version.js";
-import { reportBackfill } from "./backfill-report.js";
-import { DESCRIPTIONS } from "./descriptions.js";
 import {
-  ADD_JSON_SCHEMA_VERSION,
-  parseArgs,
-  parseModuleRequest,
-} from "./add-args.js";
-import type { ModuleRequest } from "./add-args.js";
-import { nextEngineSelected } from "../engine/flag.js";
-import { runAddNext } from "./next.js";
-import { reportBlockOutcome, setTestingMode } from "./testing.js";
-import { resolveProjectName } from "../lib/project-name.js";
-import { templateVars } from "../lib/scaffold.js";
+  abortRun,
+  assertSameRelease,
+  confirmApply,
+  graphOf,
+  NO_TERMINAL_TO_CONFIRM,
+  printDiffs,
+  printReportLines,
+  printSteps,
+  shownResults,
+  sideSpec,
+  summarize,
+  unmetRequirements,
+} from "./apply-run.js";
+import type { Unmet } from "./apply-run.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 
-// `saasaloy add <module>...` — the local applier. Resolve the dependsOn graph, show the
-// plan behind a confirmation prompt, then drop files into their convention-based
-// targets, record them in .saasaloy/manifest.json with content hashes, and merge npm
-// deps (build spec §2.4/§2.7/§2.9). `--dry-run`/`--diff` preview without mutating.
-// `--dry-run --json` prints the plan as one document on stdout and nothing else (#223);
-// `--json` without `--dry-run` refuses, because an apply has no plan document to print.
-// Several names resolve into one graph, print one plan, ask once, and refuse before the
-// first write when any module in the set would refuse on its own (#233).
+// `saasaloy add <module>...`: one apply from the lock's `requested` list to that list plus
+// the named modules (plan 0116). The run renders both sets at the project's release,
+// shows the plan, asks once, and writes. `--dry-run` and `--diff` preview and write
+// nothing; `--dry-run --json` prints the plan as one document on stdout and nothing else
+// (#223). Several names resolve into one set and print one plan (#233).
+//
+// The clean-tree rule (plan 0116, "Commands and safety"): `add` refuses only when the run
+// must merge or delete a file with uncommitted changes. A write of a new file needs no
+// clean tree. `--force` overrides it.
 
 const USAGE =
-  "saasaloy add [<module>[@ref]...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]";
+  "saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force] | saasaloy add --abort";
 const HELP: CommandHelp = {
   name: "add",
   describe: DESCRIPTIONS.add,
@@ -96,539 +82,284 @@ const HELP: CommandHelp = {
     "--dry-run": "show the plan and write nothing",
     "--diff": "show a per-file diff and write nothing",
     "-y, --yes": "skip the confirmation prompt",
-    "--force": "re-apply the named modules that are already installed",
+    "--force":
+      "write even over uncommitted changes, overwrite edited generated files, and write the deleted files of a named module again",
     "--with <module>":
-      "answer a `requiresOneOf` choice, e.g. `--with database-d1` (repeatable)",
+      "answer a `requiresOneOf` choice, e.g. `--with database-postgres` (repeatable)",
     "--json": "with --dry-run, print the plan as one JSON document on stdout",
+    "--abort":
+      "put back the files the last add, remove, update or testing run changed",
   },
 };
 
-export type { AddOptions, ModuleRequest } from "./add-args.js";
-export { ADD_JSON_SCHEMA_VERSION, parseArgs } from "./add-args.js";
+/**
+ * The `schemaVersion` of every document `add --json` prints. 2 since `requested` became a
+ * list (#233), 3 since the render engine: `files[].action` is a result kind, each file
+ * names its class, and `patches` is gone (plan 0116).
+ */
+export const ADD_JSON_SCHEMA_VERSION = 3;
+
+export interface AddOptions {
+  /** Every positional, in argv order and unparsed: a module name or a coordinate. */
+  names: string[];
+  dryRun: boolean;
+  diff: boolean;
+  yes: boolean;
+  force: boolean;
+  abort: boolean;
+  /** `--json` with `--dry-run`: the plan as one JSON document on stdout. */
+  json: boolean;
+  /**
+   * `--with <module>`, repeatable: a module that answers a `requiresOneOf` choice, so a
+   * run with no terminal can pick a driver (#223). Command-line order.
+   */
+  with: string[];
+  /** Flags we don't know — reported, never silently ignored. */
+  unknown: string[];
+}
+
+const KNOWN_FLAGS = new Set([
+  "--dry-run",
+  "--diff",
+  "--yes",
+  "-y",
+  "--force",
+  "--json",
+  "--abort",
+  "--help",
+  "-h",
+]);
 
 /**
- * Parse every positional and check that the set reads from one registry (#233). See
- * `parseModuleRequest`; the refusal names this command's usage line.
+ * Split `add`'s argv into options. Exported for its own tests: the rejection rule here
+ * (an unknown flag) is the difference between `--forse` doing nothing and `--forse` being
+ * reported. Every positional is a name (#233); `parseModuleRequest` parses them.
  */
-export function requestedModules(inputs: readonly string[]): ModuleRequest {
-  return parseModuleRequest(inputs, USAGE);
-}
-
-/**
- * Pin a coordinate to the SHA the lock recorded for its modules, so a re-install
- * reproduces identical bytes (ADR 0012). Three conditions hold it back, and each one means
- * the user asked for something else: `SAASALOY_REGISTRY_DIR` points at a working copy, an
- * explicit `@ref` names the ref to move to, or the entry was installed from a local
- * checkout and carries no SHA to pin to. Returns `coord` unchanged when none applies.
- *
- * `modules` are the lock entries the run reads: the one named module, or under several
- * names the installed ones `--force` re-applies (#233). They share one source, so they
- * must share one SHA. When their pins differ the run refuses rather than pick one, since
- * either choice moves the other module off its pin, and only `@ref` and `update` do that.
- *
- * A separate function from `runAdd` because reaching this branch through the command
- * means resolving a remote source, and the rule is worth testing on its own.
- */
-export function pinToLock(
-  coord: Coordinate,
-  lock: Lockfile,
-  modules: readonly string[] = coord.module ? [coord.module] : []
-): Coordinate {
-  if (process.env[REGISTRY_ENV] || coord.ref) {
-    return coord;
-  }
-  const slug = `${coord.owner ?? DEFAULT_OWNER}/${coord.repo ?? DEFAULT_REPO}`;
-  const pins = modules.flatMap((name) => {
-    const pinned = lock.modules[name];
-    return pinned && pinned.source === slug && pinned.resolved !== "local"
-      ? [{ name, sha: pinned.resolved }]
-      : [];
-  });
-  if (new Set(pins.map((pin) => pin.sha)).size > 1) {
-    const named = pins.map((pin) => `${pin.name} (${pin.sha.slice(0, 7)})`);
-    throw new RefusalError(
-      `Cannot re-apply ${listLabel(named)} together, they are pinned to different commits. ` +
-        `Re-apply them in separate runs, or pass @<ref>.`
-    );
-  }
-  const [pin] = pins;
-  return pin ? { ...coord, ref: pin.sha } : coord;
-}
-
-const ACTION_LABEL: Record<FileAction, string> = {
-  conflict: pc.yellow("conflict → merge"),
-  create: pc.green("create"),
-  drift: pc.yellow("drift → merge"),
-  overwrite: pc.cyan("overwrite"),
-  unchanged: pc.dim("unchanged"),
-};
-
-// Cap a single file's diff so a big generated file can't flood the terminal.
-const MAX_DIFF_LINES = 60;
-
-// How many `requiresOneOf` prompts one `add` may open. Each pick settles one requirement,
-// so this is only reached by a chain of modules that each require the next.
-const MAX_REQUIREMENT_PROMPTS = 8;
-
-// Keyed by DiffLine["kind"], so adding a kind to lib/diff.ts is a type error here
-// rather than a silently unstyled line.
-const DIFF_LINE_STYLE: Record<DiffLine["kind"], (text: string) => string> = {
-  add: (text) => pc.green(`+ ${text}`),
-  context: (text) => pc.dim(`  ${text}`),
-  del: (text) => pc.red(`- ${text}`),
-};
-
-function renderDiff(file: PlannedFile): string {
-  const lines = lineDiff(file.oldContent ?? "", file.content);
-  const shown = lines
-    .slice(0, MAX_DIFF_LINES)
-    .map((line) => DIFF_LINE_STYLE[line.kind](line.text));
-  if (lines.length > MAX_DIFF_LINES) {
-    shown.push(pc.dim(`  … ${lines.length - MAX_DIFF_LINES} more lines`));
-  }
-  return shown.join("\n");
-}
-
-/**
- * How the plan names one file. A target alone identifies it, until `onlyWith` lets two
- * descriptor entries share one target (#99) — then the plan has to say which variant it
- * picked, because that is the whole decision the user would want to check. An
- * unconditional file's line is unchanged, so the common plan reads as it always did.
- */
-function fileLabel(file: PlannedFile): string {
-  return file.onlyWith === undefined
-    ? file.target
-    : `${file.target} ${pc.dim(`(${file.from})`)}`;
-}
-
-function summarizePlan(
-  plan: Plan,
-  requested: Requested,
-  prereqs: string[],
-  tui: TuiOptions = {}
-): void {
-  // One line per named root, listing the prerequisites that root pulled in (#233). With
-  // one name every prerequisite is its own, and the line reads as it always did.
-  const dependencyLines = requested.names.flatMap((root) => {
-    const own = prereqs.filter(
-      (p) => (requested.rootOf.get(p) ?? requested.names[0]) === root
-    );
-    return own.length === 0
-      ? []
-      : [`${pc.bold(root)} requires: ${own.map((p) => pc.cyan(p)).join(", ")}`];
-  });
-  if (dependencyLines.length > 0) {
-    note(wrapForNote(dependencyLines.join("\n")), "Dependencies", tui);
-  }
-  const willInstall = plan.install.map((m) => pc.cyan(m)).join(pc.dim(" → "));
-  const lines = [`will install: ${willInstall}`];
-  if (plan.alreadyInstalled.length > 0) {
-    lines.push(
-      pc.dim(`already installed (skipped): ${plan.alreadyInstalled.join(", ")}`)
-    );
-  }
-
-  const writable = plan.files.filter(
-    (f) => f.action !== "drift" && f.action !== "conflict"
-  );
-  const held = plan.files.filter(
-    (f) => f.action === "drift" || f.action === "conflict"
-  );
-  lines.push("");
-  for (const file of plan.files) {
-    lines.push(`  ${ACTION_LABEL[file.action]}  ${fileLabel(file)}`);
-  }
-  lines.push(
-    "",
-    pc.dim(`${writable.length} file(s) to apply, ${held.length} needing merge`)
-  );
-  if (plan.dependencies.length > 0) {
-    lines.push(pc.dim(`deps: ${plan.dependencies.join(", ")}`));
-  }
-  if (plan.devDependencies.length > 0) {
-    lines.push(pc.dim(`devDeps: ${plan.devDependencies.join(", ")}`));
-  }
-  note(wrapForNote(lines.join("\n")), "Plan", tui);
-
-  if (Object.keys(plan.envVars).length > 0) {
-    const envLines = Object.entries(plan.envVars).map(
-      ([k, v]) => `${pc.cyan(k)} ${pc.dim(`— ${v}`)}`
-    );
-    note(wrapForNote(envLines.join("\n")), "Env vars to set", tui);
-  }
-  if (Object.keys(plan.aliases).length > 0) {
-    const aliasLines = Object.entries(plan.aliases).map(
-      ([a, p]) => `${pc.cyan(a)} ${pc.dim(`→ ${p}`)}`
-    );
-    note(
-      wrapForNote(
-        `${aliasLines.join("\n")}\n\n${pc.dim("New workspace(s) — run `pnpm install` to link them.")}`
-      ),
-      "Aliases registered",
-      tui
-    );
-  }
-  for (const conflict of plan.aliasConflicts) {
-    log.warn(
-      `Alias redefinition: ${conflict} ${pc.dim("(scaffold overrides the existing alias)")}.`,
-      tui
-    );
-  }
-  // The sentence lives in collisions.ts beside the ownership refusal it mirrors, so the
-  // two ownership messages cannot drift apart; the path is accented here the way every
-  // other `add` warning accents one (#107).
-  for (const stale of plan.staleOwners) {
-    log.warn(
-      describeStaleOwner({ ...stale, target: pc.cyan(stale.target) }),
-      tui
-    );
-  }
-  const newLinks = plan.links.filter((l) => l.action !== "conflict");
-  if (newLinks.length > 0) {
-    const linkLines = newLinks.map(
-      (l) => `${pc.cyan(l.path)} ${pc.dim(`→ ${l.target}`)}`
-    );
-    note(
-      wrapForNote(
-        `${linkLines.join("\n")}\n\n${pc.dim("Symlinked for Claude Code — the skill files live in `.agents/skills/`.")}`
-      ),
-      "Skill links",
-      tui
-    );
-  }
-  for (const link of plan.links) {
-    if (link.action === "conflict") {
-      log.warn(
-        `Skill link ${pc.cyan(link.path)} already exists and isn't ours — ` +
-          `left untouched ${pc.dim("(remove it to let `add` link the skill)")}.`,
-        tui
-      );
+export function parseArgs(argv: string[]): AddOptions {
+  const positional: string[] = [];
+  const unknown: string[] = [];
+  const withModules: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    if (arg === "--with") {
+      // A value flag: the next argument is the module, never a positional. A missing or
+      // flag-shaped value is reported, so `--with --yes` cannot eat the `--yes`.
+      const value = argv[i + 1];
+      if (value === undefined || value === "" || value.startsWith("-")) {
+        unknown.push("--with (needs a module name)");
+      } else {
+        withModules.push(value);
+        i++;
+      }
+    } else if (arg.startsWith("--with=")) {
+      const value = arg.slice("--with=".length);
+      if (value === "") {
+        unknown.push("--with (needs a module name)");
+      } else {
+        withModules.push(value);
+      }
+    } else if (!arg.startsWith("-")) {
+      positional.push(arg);
+    } else if (!KNOWN_FLAGS.has(arg)) {
+      // A typo'd flag (`--forse`) silently running without force is worse than an error.
+      unknown.push(arg);
     }
   }
-  const applyPatches = plan.patches.filter((p) => p.action === "apply");
-  if (applyPatches.length > 0) {
-    const patchLines = applyPatches.map(
-      (p) => `${pc.cyan(p.file)} ${pc.dim(`— ${p.patch.kind}`)}`
-    );
-    note(wrapForNote(patchLines.join("\n")), "Config patches", tui);
-  }
-  for (const p of plan.patches) {
-    if (p.action === "missing") {
-      log.warn(
-        `Config patch target ${pc.cyan(p.file)} is missing — ${p.patch.kind} not applied ` +
-          `${pc.dim(`(is ${p.module}'s prerequisite installed?)`)}.`,
-        tui
-      );
-    }
-  }
-}
-
-/**
- * The plan as `add --dry-run --json` prints it (#223): every file and every patch the
- * human plan lists, with the action each one takes, plus the dependencies, env vars,
- * aliases and skill links. `plan` is undefined when everything is already installed,
- * which prints the same keys, empty. Pure and exported so the shape is pinned without a
- * registry.
- *
- * `requested` lists the named modules in argv order, also for one name. It was a string
- * until #233, so the document is `ADD_JSON_SCHEMA_VERSION`, 2.
- */
-export function planDocument(
-  requested: readonly string[],
-  prereqs: string[],
-  plan: Plan | undefined,
-  alreadyInstalled: string[] = plan?.alreadyInstalled ?? []
-): Record<string, unknown> {
   return {
-    requested: [...requested],
-    prerequisites: prereqs,
-    install: plan?.install ?? [],
-    alreadyInstalled,
-    files: (plan?.files ?? []).map((file) => ({
-      action: file.action,
-      from: file.from,
-      module: file.module,
-      onlyWith: file.onlyWith ?? null,
-      skill: file.isSkill,
-      target: file.target,
-    })),
-    patches: (plan?.patches ?? []).map((patch) => ({
-      action: patch.action,
-      file: patch.file,
-      kind: patch.patch.kind,
-      module: patch.module,
-    })),
-    dependencies: plan?.dependencies ?? [],
-    devDependencies: plan?.devDependencies ?? [],
-    envVars: plan?.envVars ?? {},
-    aliases: plan?.aliases ?? {},
-    aliasConflicts: plan?.aliasConflicts ?? [],
-    links: (plan?.links ?? []).map((link) => ({
-      action: link.action,
-      module: link.module,
-      path: link.path,
-      target: link.target,
-    })),
-    staleOwners: (plan?.staleOwners ?? []).map((stale) => ({
-      claimant: stale.claimant,
-      owner: stale.owner,
-      target: stale.target,
-    })),
-    writesUi: plan === undefined ? false : planWritesUi(plan),
+    abort: argv.includes("--abort"),
+    diff: argv.includes("--diff"),
+    dryRun: argv.includes("--dry-run"),
+    force: argv.includes("--force"),
+    json: argv.includes("--json"),
+    names: positional,
+    unknown,
+    with: withModules,
+    yes: argv.includes("--yes") || argv.includes("-y"),
   };
 }
 
-/**
- * A block the applier wrote into the ui package renders nothing until the owner imports
- * it, because `add` never edits a page — where a block belongs is the owner's decision,
- * not filename sort's (ADR 0030). One line per module: which file arrived, and the skill
- * command whose Wire-up section carries the import and the tag.
- *
- * The `@ui/blocks/` target is the whole signal, so a module that ships one without a
- * skill has nowhere to keep those steps. That is the module author's bug, and it warns
- * rather than refuses — the file itself is fine and the user asked for it.
- */
-function wireUpSteps(
-  result: ApplyResult,
-  aliases: Record<string, string>
-): string[] {
-  const blocks = uiBlockFiles(
-    [...result.written, ...result.refreshed],
-    aliases
-  );
-  if (blocks.length === 0) {
-    return [];
-  }
+// The registry a coordinate reads from, as a message names it: a bare name and
+// `mimukit/saasaloy/<name>` are the same source.
+function sourceLabel(coord: Coordinate): string {
+  const slug = `${coord.owner ?? DEFAULT_OWNER}/${coord.repo ?? DEFAULT_REPO}`;
+  return coord.ref ? `${slug}@${coord.ref}` : slug;
+}
 
-  const skillByModule = new Map(
-    result.links.map((link) => [link.module, posix.basename(link.path)])
-  );
-  const byModule = new Map<string, string[]>();
-  for (const block of blocks) {
-    byModule.set(block.module, [
-      ...(byModule.get(block.module) ?? []),
-      block.target,
-    ]);
-  }
-
-  const lines: string[] = [];
-  for (const module of [...byModule.keys()].toSorted()) {
-    const moduleTargets = (byModule.get(module) ?? []).toSorted();
-    const targets = moduleTargets.map((target) => pc.cyan(target)).join(", ");
-    const verb = moduleTargets.length === 1 ? "is" : "are";
-    const skill = skillByModule.get(module);
-    if (skill === undefined) {
-      log.warn(
-        `${pc.cyan(module)} wrote ${targets} but ships no skill — its wire-up steps are ` +
-          `missing. Import the block yourself ${pc.dim("(a module that ships a block should ship a skill with a Wire-up section)")}.`
-      );
-      continue;
-    }
-    lines.push(
-      `Manual wire-up needed — ${targets} ${verb} on disk but on no page yet. ` +
-        `In your AI coding tool, run ${pc.cyan(`/${skill}`)} and follow its Wire-up section.`
-    );
-  }
-  return lines;
+/** The positionals of one `add` run, parsed: one source, and the modules to add. */
+export interface ModuleRequest {
+  /** The registry every name resolves from, with the first name as `module`. */
+  source: Coordinate;
+  /** The named modules, in argv order, de-duplicated. Empty means "show a picker". */
+  names: string[];
 }
 
 /**
- * The environment half of the next-steps box.
- *
- * The variable names still print — they are what a reader scans for. Under them are the
- * two commands that fill them in: `saasaloy env` prompts into the gitignored
- * `packages/env/.env`, and `pnpm env:setup` distributes that one file into each service's
- * own `.env`. The example file stays what it is, the checked-in record of what each
- * variable means.
- *
- * Exported so the wording is pinned by a test — it is the one line telling a new user
- * the next command exists.
+ * Parse every positional and check that the set reads from one registry (#233). Each
+ * goes through `parseCoordinate`, so a malformed one refuses. Two coordinates naming
+ * different owners, repos or refs refuse and say which two, because one run resolves one
+ * set from one source. `owner/repo` with no module asks for the picker, which only makes
+ * sense alone. A repeated name is dropped without a message.
  */
-export function envSteps(
-  names: string[],
-  devVarsPath: string | undefined
-): string[] {
-  if (names.length === 0) {
-    return [];
+export function parseModuleRequest(inputs: readonly string[]): ModuleRequest {
+  const coords = inputs.map((input) => parseCoordinate(input));
+  const [first] = coords;
+  if (!first) {
+    return { names: [], source: {} };
   }
-  const keys = names.toSorted();
-  const where = devVarsPath
-    ? ` ${pc.dim(`${devVarsPath} keeps the checked-in description of each.`)}`
-    : "";
-  return [
-    `Set ${keys.map((key) => pc.cyan(key)).join(", ")}.`,
-    `Run ${pc.cyan("saasaloy env")} — it prompts for each unset one and writes it to ${pc.cyan("packages/env/.env")}.${where}`,
-    `Then run ${pc.cyan("pnpm env:setup")} to write each service's own ${pc.cyan(".env")} from it.`,
+  if (coords.length === 1) {
+    return { names: first.module ? [first.module] : [], source: first };
+  }
+  const bare = inputs.find((_, i) => !coords[i]?.module);
+  if (bare !== undefined) {
+    throw new RefusalError(
+      `"${bare}" names a registry and no module, and it cannot be mixed with other names — usage: \`${USAGE}\`.`
+    );
+  }
+  const firstLabel = sourceLabel(first);
+  const other = coords.findIndex((coord) => sourceLabel(coord) !== firstLabel);
+  const otherCoord = coords[other];
+  if (otherCoord) {
+    throw new RefusalError(
+      `Cannot add modules from two sources in one run — "${inputs[0]}" reads ${firstLabel} and ` +
+        `"${inputs[other]}" reads ${sourceLabel(otherCoord)}. Add them in separate runs.`
+    );
+  }
+  const names = [
+    ...new Set(coords.map((coord) => coord.module ?? "").filter(Boolean)),
   ];
+  // A coordinate that spells the source out keeps it, so the override warning still
+  // fires for `acme/kit/widget waitlist`.
+  const spelled = coords.find((coord) => coord.owner) ?? first;
+  return { names, source: { ...spelled, module: names[0] } };
 }
 
-/**
- * The line an incomplete apply ends on (#49). A module whose file was edited between the
- * plan and the write is not installed, and staying quiet about it is the bug: the state
- * files say one thing and the closing "Applied" would say another. Name the modules, and
- * name the command that finishes the job — a plain re-run, because they are absent from
- * `config.installed` and so get planned again, drift and all, for a fresh approval.
- *
- * `requested` is what the user typed, not each incomplete name: re-running it re-plans
- * the whole graph, including an incomplete dependency.
- */
-export function formatIncomplete(
-  incomplete: string[],
-  requested: RequestedInput
-): string {
-  const names = incomplete.map((name) => pc.cyan(name)).join(", ");
-  const verb = incomplete.length === 1 ? "is" : "are";
-  const object = incomplete.length === 1 ? "it" : "them";
-  return (
-    `${names} ${verb} not installed — files changed while the plan was open. ` +
-    `Re-run ${pc.cyan(`saasaloy add ${requestedArgv(requested)}`)} to complete ${object}.`
-  );
+/** The plan as `add --dry-run --json` prints it. */
+export function planDocument(args: {
+  requested: readonly string[];
+  prerequisites: readonly string[];
+  install: readonly string[];
+  alreadyInstalled: readonly string[];
+  report: ApplyReport | undefined;
+}): Record<string, unknown> {
+  const { report } = args;
+  return {
+    alreadyInstalled: [...args.alreadyInstalled],
+    files: (report === undefined ? [] : shownResults(report)).map((result) => ({
+      action: result.kind,
+      class: result.class,
+      module: result.module,
+      target: result.path,
+    })),
+    install: [...args.install],
+    onceChanged: report?.onceChanged ?? [],
+    pendingMerges: report?.pendingMerges ?? [],
+    prerequisites: [...args.prerequisites],
+    requested: [...args.requested],
+    warnings: report?.warnings ?? [],
+  };
 }
 
-/**
- * The line a thrown apply ends on (#49). `add` has no rollback by design: whatever
- * landed before the throw stays, and the manifest, config and lock are written to
- * describe it. That is only honest if the user is told, so state the model and name the
- * command that finishes the job — the same plain re-run an incomplete run asks for,
- * since the module never reached `config.installed`.
- */
-export function formatRecovery(requested: RequestedInput): string {
-  return (
-    "Partial apply — the manifest, config and lock describe what landed. " +
-    `Re-run ${pc.cyan(`saasaloy add ${requestedArgv(requested)}`)} to complete it.`
-  );
-}
-
-/** What `persistState` needs to write the three state files. */
-export interface PersistInput {
-  config: LoadedConfig;
-  /** The modules `executePlan` reported complete; `[]` when the apply threw. */
-  completed: string[];
-  graph: Graph;
-  lock: Lockfile;
-  manifest: Manifest;
-  root: string;
-  source: Pick<RegistrySource, "provenance">;
-}
-
-/**
- * Write the manifest, the config and the lock, and never throw (#49).
- *
- * This runs on the way out of an apply, successful or not, so one broken step here must
- * not take the others with it — nor replace the apply error that sent us this way. Each
- * step is attempted on its own, a failure is reported, and the failures are returned for
- * the caller to decide about.
- *
- * The lock is skipped when the source has no commit SHA to pin to. `provenance()` throws
- * in that case, and it used to throw first, before any save ran: an unresolvable remote
- * cost the user the manifest as well, and reported itself instead of the real error. A
- * lock entry is a pin, not a record of disk, so having none is the correct answer.
- *
- * A separate function from `runAdd` because these rules are what the bug was, and they
- * need injectable failures to test.
- */
-export async function persistState(input: PersistInput): Promise<unknown[]> {
-  const failures: unknown[] = [];
-
-  // Pin the source + ref + commit SHA per module (ADR 0012). Only the freshly installed
-  // ones: an already-installed dependency keeps the SHA it was fetched at, so the lock
-  // never misstates on-disk provenance. This is a claim about a fetch rather than a
-  // record of disk, so it stays here and never enters the ledger.
+export async function runAdd(argv: string[]): Promise<number> {
+  // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
+  const opts = parseArgs(argv);
+  if (opts.unknown.length === 0 && wantsHelp(argv)) {
+    printCommandHelp(HELP);
+    return EXIT_OK;
+  }
+  const out = createOutput(opts.json, ADD_JSON_SCHEMA_VERSION);
+  const { tui } = out;
+  intro(pc.bgCyan(pc.black(" saasaloy add ")), tui);
+  if (opts.unknown.length > 0) {
+    return out.refuse(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      EXIT_REFUSED
+    );
+  }
+  if (opts.json && (!opts.dryRun || opts.diff)) {
+    return out.refuse(
+      "`--json` prints the `--dry-run` plan — pass `--dry-run --json`, without `--diff`.",
+      EXIT_REFUSED
+    );
+  }
   try {
-    upsertLock(
-      input.lock,
-      input.source.provenance(),
-      input.completed,
-      input.graph
-    );
+    const root = await findProjectRoot();
+    if (opts.abort) {
+      return await abortRun(root, tui);
+    }
+    return await addModules(root, opts, out);
   } catch (error) {
-    failures.push(error);
-    log.warn(`Couldn't pin ${LOCK_FILE} — ${formatFailure(error)}.`);
+    return out.fail(error);
   }
-
-  // Record whatever actually landed even if a mid-plan write failed — a written file the
-  // manifest doesn't know about would classify as a conflict next run. `persistLedger`
-  // owns the rule; this command owns the wording (#150).
-  for (const failure of await persistLedger(input)) {
-    failures.push(failure.error);
-    log.warn(
-      `Couldn't write ${failure.file} — ${formatFailure(failure.error)}.`
-    );
-  }
-
-  return failures;
 }
 
-/** What `applyAndPersist` needs beyond the state files `persistState` writes. */
-export interface ApplyInput extends Omit<PersistInput, "completed"> {
-  /**
-   * Called once the apply itself is over, before any state file is written (#49). This
-   * is the edge of the window where a failure can leave files on disk, and the caller
-   * needs it to decide whether the run owes the user a recovery line.
-   */
-  onApplied?: () => void;
-  plan: Plan;
+async function listModuleDirs(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const names: string[] = [];
+  for (const entry of entries) {
+    if (
+      entry.isDirectory() &&
+      (await pathExists(join(dir, entry.name, "registry-item.json")))
+    ) {
+      names.push(entry.name);
+    }
+  }
+  return names.toSorted();
 }
 
-/**
- * Run the plan and record what it did, whichever way it goes (#98, #49).
- *
- * All three state files leave `add` through this one path, so no exit skips one of them.
- * They pin what the apply reported complete rather than what the plan intended, so a run
- * that threw pins nothing and `config.installed` and the lock never disagree, not even
- * under `--force`, where the module was already installed before the run.
- *
- * A failed apply propagates its own error; a failed save on an otherwise clean apply
- * propagates that instead, because a run whose state files didn't land is not a success.
- * The two are not the same failure, though, so `onApplied` marks the boundary between
- * them for the caller.
- */
-export async function applyAndPersist(input: ApplyInput): Promise<ApplyResult> {
-  let result: ApplyResult;
-  try {
-    result = await executePlan(
-      input.plan,
-      input.root,
-      input.config,
-      input.manifest
-    );
-  } catch (error) {
-    await persistState({ ...input, completed: [] });
-    throw error;
+/** The modules the picker offers: the default registry at the project's release. */
+async function listOffered(
+  cliVersion: string,
+  state: ProjectState
+): Promise<string[]> {
+  if (isLocalRegistry()) {
+    return listModuleDirs(resolve(process.env[REGISTRY_ENV] ?? ""));
   }
-  input.onApplied?.();
-
-  const failures = await persistState({
-    ...input,
-    completed: result.completed,
+  const { snapshot } = await ensureCachedSnapshot({
+    ref: releaseTag(state.version ?? cliVersion),
+    source: DEFAULT_SOURCE,
   });
-  if (failures.length > 0) {
-    throw failures[0];
-  }
-  return result;
+  return listModuleDirs(snapshot.modulesDir);
 }
 
 /**
- * The closing box: where the module's procedure is written down, and what the project
- * still needs from the operator. `add waitlist` used to end at "Applied" while the
- * project 500s until `db:generate` and `db:migrate:local` run, and the env vars it
- * printed at plan time had scrolled away behind the confirmation (#98).
- *
- * There is deliberately no `nextSteps` field on the descriptor. The skill is the single
- * source of a module's procedure; a second copy in the descriptor would drift from it,
- * and this box points at the skill rather than paraphrasing it.
+ * The box after a write: the skills the run added, the wire-up a ui block needs, and the
+ * environment keys the new modules declare. There is no `nextSteps` field on the
+ * descriptor: the skill is the one source of a module's procedure, and this box points at
+ * it rather than paraphrasing it.
  */
 function printNextSteps(
-  plan: Plan,
-  result: ApplyResult,
-  devVarsPath: string | undefined,
-  aliases: Record<string, string>
+  report: ApplyReport,
+  next: LoadedSide,
+  install: readonly string[],
+  aliases: Record<string, string>,
+  tui: Output["tui"]
 ): void {
-  const lines: string[] = [...wireUpSteps(result, aliases)];
-
-  const skills = result.links
-    .map((link) => posix.basename(link.path))
-    .toSorted();
+  const written = report.results.filter((result) => result.kind === "new");
+  const skillOf = new Map<string, string>();
+  for (const result of written) {
+    const match = /^\.agents\/skills\/([^/]+)\/SKILL\.md$/.exec(result.path);
+    if (match?.[1] !== undefined) {
+      skillOf.set(result.module, match[1]);
+    }
+  }
+  const lines: string[] = [];
+  const blocks = uiBlockFiles(
+    written.map((result) => ({ module: result.module, target: result.path })),
+    aliases
+  );
+  for (const module of new Set(blocks.map((block) => block.module))) {
+    const targets = blocks
+      .filter((block) => block.module === module)
+      .map((block) => pc.cyan(block.target))
+      .join(", ");
+    const skill = skillOf.get(module);
+    lines.push(
+      skill === undefined
+        ? `${targets} ${pc.dim(`(${module})`)} is on disk but on no page yet. Import the block where you want it.`
+        : `Manual wire-up needed — ${targets} is on disk but on no page yet. In your AI coding tool, run ${pc.cyan(`/${skill}`)} and follow its Wire-up section.`
+    );
+  }
+  const skills = [...new Set(skillOf.values())].toSorted();
   if (skills.length > 0) {
     lines.push(
       `Read the module's own procedure — in your AI coding tool, run ${skills
@@ -636,705 +367,293 @@ function printNextSteps(
         .join(" or ")}.`
     );
   }
-
-  lines.push(...envSteps(Object.keys(plan.envVars), devVarsPath));
-
-  if (lines.length === 0) {
-    return;
-  }
-  note(wrapForNote(lines.join("\n\n")), "Next steps");
-}
-
-/** The mode `add` of an `enablesTesting` module turns testing on to (#242, ADR 0054). */
-const ENABLED_MODE: TestingMode = "tests-after";
-
-/**
- * The first module this run applies that turns testing on, when the project's mode is
- * `off` (#242 Q15). `tests-after` and `tdd` are left alone: the owner already chose, and a
- * module has no business picking test-first for them.
- */
-export function testingEnabler(
-  config: LoadedConfig,
-  install: string[],
-  graph: Pick<Graph, "modules">
-): string | undefined {
-  if (readTestingMode(config) !== "off") {
-    return undefined;
-  }
-  return install.find(
-    (name) => graph.modules.get(name)?.item.enablesTesting === true
-  );
-}
-
-/**
- * Save the mode an `enablesTesting` module turned on, and rewrite the `AGENTS.md` block to
- * match. Runs only after the apply, and only for an enabler the apply reported complete
- * (#242 Q11): a refused or failed `add` leaves the mode where it was, and so does an
- * enabler whose files changed under the confirmation, which stays uninstalled. Returns
- * the module that turned testing on, or `undefined` when none did.
- */
-export async function saveEnabledMode(input: {
-  completed: string[];
-  config: LoadedConfig;
-  graph: Pick<Graph, "modules">;
-  manifest: Manifest;
-  root: string;
-}): Promise<string | undefined> {
-  const { completed, config, graph, manifest, root } = input;
-  const enabler = testingEnabler(config, completed, graph);
-  if (enabler === undefined) {
-    return undefined;
-  }
-  const saved = await setTestingMode({
-    config,
-    manifest,
-    mode: ENABLED_MODE,
-    root,
-  });
-  // The backfill below reads the mode off this same config object.
-  config.testing = saved.config.testing;
-  log.info(
-    `${pc.cyan(enabler)} turns testing on — ${CONFIG_FILE} now sets the testing mode to ${pc.cyan(ENABLED_MODE)}.`
-  );
-  reportBlockOutcome(saved.outcome);
-  return enabler;
-}
-
-export async function runAdd(argv: string[]): Promise<number> {
-  // Plan 0116 Phase 4: the render engine, behind the flag until Phase 6.
-  if (nextEngineSelected()) {
-    return runAddNext(argv);
-  }
-  // Parse before anything answers, so `--help --forse` reports the typo instead of
-  // printing help over it. Help is then answered before the intro rail opens, so it reads
-  // as plain output a person can pipe into a pager rather than as a clack box.
-  const opts = parseArgs(argv);
-  if (opts.unknown.length === 0 && wantsHelp(argv)) {
-    printCommandHelp(HELP);
-    return EXIT_OK;
-  }
-
-  const out = createOutput(opts.json, ADD_JSON_SCHEMA_VERSION);
-  const { tui } = out;
-  intro(pc.bgCyan(pc.black(" saasaloy add ")), tui);
-
-  if (opts.unknown.length > 0) {
-    return out.refuse(
-      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
-      EXIT_REFUSED
-    );
-  }
-  // Only the dry run has a document to print. An apply reports as it writes, and `--diff`
-  // is a per-file text diff, so both refuse `--json` rather than print half a contract.
-  if (opts.json && (!opts.dryRun || opts.diff)) {
-    return out.refuse(
-      "`--json` prints the `--dry-run` plan — pass `--dry-run --json`, without `--diff`.",
-      EXIT_REFUSED
-    );
-  }
-
-  let coord: Coordinate;
-  let names: string[];
-  try {
-    ({ names, source: coord } = requestedModules(opts.names));
-  } catch (error) {
-    return out.fail(error);
-  }
-
-  // The "Proceed?" confirm below reads stdin. With no terminal there it can never be
-  // answered, so `saasaloy add x </dev/null` printed the whole plan, took the closed
-  // stream as "no", and exited 0 having written nothing — a silent success. `update`
-  // already refuses in this situation; both commands now answer it the same way (#98).
-  // A preview writes nothing and needs no confirmation, so it is exempt. With no module
-  // named the picker's own non-interactive refusal below is the more specific message,
-  // so leave that case to it. The refusal itself waits until after the `requiresOneOf`
-  // check: an unmet requirement names the modules to pick from, and `--yes` would not
-  // have answered it anyway (#229).
-  const cannotConfirm =
-    names.length > 0 &&
-    !opts.yes &&
-    !opts.dryRun &&
-    !opts.diff &&
-    !process.stdin.isTTY;
-
-  let root: string;
-  let config: Awaited<ReturnType<typeof loadConfig>>;
-  try {
-    root = await findProjectRoot();
-    config = await loadConfig(root);
-  } catch (error) {
-    return out.fail(error);
-  }
-
-  let plan: Plan;
-  let prereqs: string[];
-  let source: RegistrySource | undefined;
-  // Set to the requested modules once the apply starts. It tells the catch below whether
-  // a failure could have left files on disk, so only those failures carry the re-run
-  // instruction — a bad coordinate or a missing descriptor writes nothing (#49).
-  let partial: Requested | undefined;
-  try {
-    // Load the lock up front so a named remote add can pin to the SHA it recorded — a
-    // re-install then reproduces identical bytes (ADR 0012). Explicit `@ref` or the
-    // `update` flow (#17) are the sanctioned ways to move off the lock. Under several
-    // names only the installed ones `--force` re-applies are read (#233): a skipped
-    // module is not re-fetched, so its pin does not count.
-    const lock = await loadLock(root);
-    coord = pinToLock(
-      coord,
-      lock,
-      names.length === 1
-        ? names
-        : names.filter((n) => opts.force && config.installed.includes(n))
-    );
-
-    source = createRegistrySource(coord);
-    if (process.env[REGISTRY_ENV] && (coord.owner || coord.repo)) {
-      log.warn(
-        `Ignoring source "${coord.owner}/${coord.repo}" — ${REGISTRY_ENV} override is set.`,
-        tui
-      );
-    }
-
-    // No module named (bare `add`, or `owner/repo` with no module) → pick from the source.
-    if (names.length === 0) {
-      // No terminal to pick in (CI, piped stdin, `saasaloy add | cat`) means the prompt
-      // below could never be answered — it would hang the pipeline. Say what was missing
-      // instead, before the registry is even fetched.
-      // `--json` never prompts, so it takes the same refusal on a terminal too.
-      if (!isInteractive() || opts.json) {
-        return out.refuse(
-          `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`,
-          EXIT_REFUSED
-        );
-      }
-      const offered = await source.listModules();
-      if (offered.length === 0) {
-        cancel(`No modules found in ${source.label}.`);
-        return EXIT_REFUSED;
-      }
-      // Picking something already installed took the user through a plan preview to
-      // "Nothing to do", which reads as a bug in the picker rather than an answer.
-      // `--force` re-applies one, and that path names the module explicitly (#98).
-      const installed = new Set(config.installed);
-      const available = offered.filter((n) => !installed.has(n));
-      if (available.length === 0) {
-        note(
-          `Every module in ${source.label} is already installed.`,
-          "Nothing to add"
-        );
-        outro(pc.dim("use `saasaloy add <module> --force` to re-apply one"));
-        return EXIT_OK;
-      }
-      const picked = await multiselect({
-        answeredBy: "one or more module names",
-        message: `Pick modules to add ${pc.dim(`(from ${source.label}, ${installed.size} already installed)`)}`,
-        options: available.map((n) => ({ label: n, value: n })),
-        required: true,
-      });
-      if (isCancel(picked)) {
-        cancel("add cancelled");
-        return EXIT_FAILURE;
-      }
-      names = picked;
-    }
-
-    // One walk over every named root (#233): prerequisites first, then argv order between
-    // independent roots, and every unknown name refused in one message.
-    const rooted = await resolveGraphs(source, names);
-    let graph: Graph = rooted;
-    const requested: Requested = { names, rootOf: rooted.rootOf };
-    // A driver picked below joins the graph on behalf of whichever root pulled in the
-    // module declaring the choice, so a later message attributes it to that root.
-    const registry = source;
-    const mergePicked = async (
-      name: string,
-      declaredBy: string
-    ): Promise<void> => {
-      const picked = await resolveGraph(registry, name);
-      const owner = rooted.rootOf.get(declaredBy) ?? names[0] ?? name;
-      for (const module of picked.order) {
-        if (!rooted.rootOf.has(module)) {
-          rooted.rootOf.set(module, owner);
-        }
-      }
-      graph = mergeGraph(graph, picked);
-    };
-
-    // `requires.saasaloy` — the descriptor's floor on the CLI reading it (#50). Checked
-    // before the driver prompt and before a single file is planned, because a CLI too old
-    // to understand the descriptor cannot be trusted to resolve the rest of it either.
-    // The graph holds every transitive prerequisite, so a range declared three levels down
-    // refuses here and the message names that module, not the one the user typed.
-    const cliVersion = await readVersion();
-    const cliCheckFails = (): boolean => {
-      const mismatches = detectCliMismatches({ cliVersion, graph });
-      if (mismatches.length === 0) {
-        return false;
-      }
-      out.refuse(
-        formatCliMismatches(mismatches, requested, cliVersion),
-        EXIT_REFUSED
-      );
-      return true;
-    };
-    if (cliCheckFails()) {
-      return EXIT_REFUSED;
-    }
-
-    // `requiresOneOf` — a capability naming its mutually exclusive drivers. Settle it
-    // before the conflict check below, so that check reads the graph a picked driver is
-    // already part of (#98).
-    let unmet = detectMissingRequirements({ config, graph });
-    // `--with` answers those choices up front, so a run with no terminal can pick a
-    // driver (#223). Each one joins the graph only when it is an option of a requirement
-    // still unmet, re-checked after each merge: a picked module may declare a requirement
-    // that a later `--with` answers. One that answers nothing is refused rather than
-    // installed on the side — the flag picks a driver, it is not a second `add`. The
-    // requirements are the whole set's, so one `--with` answers the choice for every
-    // named module that declares it (#233).
-    // Deleting the current entry while iterating a Set is safe, and it keeps argv order.
-    const pending = new Set(opts.with);
-    for (let progressed = true; pending.size > 0 && progressed;) {
-      progressed = false;
-      for (const name of pending) {
-        const answered = unmet.find((requirement) =>
-          requirement.options.includes(name)
-        );
-        if (!answered) {
-          continue;
-        }
-        await mergePicked(name, answered.declaredBy);
-        pending.delete(name);
-        unmet = detectMissingRequirements({ config, graph });
-        progressed = true;
-      }
-    }
-    if (pending.size > 0) {
-      return out.refuse(
-        formatUnansweredWith([...pending], requested),
-        EXIT_REFUSED
-      );
-    }
-    if (unmet.length > 0 && (!isInteractive() || opts.yes || opts.json)) {
-      // `--yes` means "don't ask me", not "choose a driver for my project", and a
-      // pipeline has no terminal to answer in. `--json` never prompts. All three refuse
-      // and name the options.
-      return out.refuse(
-        formatMissingRequirements(unmet, requested),
-        EXIT_REFUSED
-      );
-    }
-    // One prompt per unmet requirement, re-checked after each pick: a single driver can
-    // satisfy two capabilities, and a picked module may declare a requirement of its own.
-    // The round cap keeps a descriptor that requires its way in a circle from prompting
-    // forever; whatever is still unmet when it runs out is refused below.
-    for (
-      let round = 0;
-      unmet.length > 0 && round < MAX_REQUIREMENT_PROMPTS;
-      round++
-    ) {
-      const requirement = unmet[0];
-      if (!requirement) {
-        break;
-      }
-      const picked = await select({
-        answeredBy: `\`--with <${requirement.options.join(" | ")}>\``,
-        message: `${pc.cyan(requirement.declaredBy)} needs one of these — pick one`,
-        options: requirement.options.map((n) => ({ label: n, value: n })),
-      });
-      if (isCancel(picked)) {
-        cancel("add cancelled");
-        return EXIT_FAILURE;
-      }
-      await mergePicked(picked, requirement.declaredBy);
-      unmet = detectMissingRequirements({ config, graph });
-    }
-    if (unmet.length > 0) {
-      return out.refuse(
-        formatMissingRequirements(unmet, requested),
-        EXIT_REFUSED
-      );
-    }
-    if (cannotConfirm) {
-      return out.refuse(
-        "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview.",
-        EXIT_REFUSED
-      );
-    }
-
-    // A driver the user just picked is a descriptor this run never saw above, so its own
-    // `requires` is checked here too — still before anything is planned.
-    if (cliCheckFails()) {
-      return EXIT_REFUSED;
-    }
-
-    prereqs = graph.order.filter((n) => !names.includes(n));
-
-    // Mutually exclusive modules are refused before anything is written, and `--force`
-    // doesn't bypass it — force means "re-apply this module", not "install it anyway".
-    const manifest = await loadManifest(root);
-    const conflicts = detectConflicts({ graph, config, lock });
-    if (conflicts.missingLockEntries.length > 0) {
-      log.warn(
-        `No lock entry for ${conflicts.missingLockEntries.map((m) => pc.cyan(m)).join(", ")} — ` +
-          `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`,
-        tui
-      );
-    }
-    if (conflicts.conflicts.length > 0) {
-      return out.refuse(
-        formatConflicts(conflicts.conflicts, requested),
-        EXIT_REFUSED
-      );
-    }
-
-    const install = graph.order.filter(
-      (n) => !config.installed.includes(n) || (opts.force && names.includes(n))
-    );
-    // Installed and not being (re-)applied — a forced module belongs to `install`, not here.
-    const alreadyInstalled = graph.order.filter(
-      (n) => config.installed.includes(n) && !install.includes(n)
-    );
-
-    if (install.length === 0) {
-      if (opts.json) {
-        printJson(
-          planDocument(names, prereqs, undefined, alreadyInstalled),
-          ADD_JSON_SCHEMA_VERSION
-        );
-      }
-      note(
-        `${listLabel(names.map((n) => pc.cyan(n)))} and ${names.length === 1 ? "its" : "their"} dependencies are already installed.`,
-        "Nothing to do",
-        tui
-      );
-      outro(pc.dim("use --force to re-apply"), tui);
-      return EXIT_OK;
-    }
-
-    // A module that turns testing on is planned in the mode it will leave behind, so its
-    // own gated files and every other module's land in this same run. The mode itself is
-    // saved only once the apply succeeds, and a preview saves nothing (#242 Q11).
-    const enabler = testingEnabler(config, install, graph);
-    plan = await buildPlan({
-      alreadyInstalled,
-      config,
-      install,
-      manifest,
-      modules: graph.modules,
-      requested,
-      root,
-      // `{{PROJECT_NAME}}` in module files and patches, rendered as `init` renders the
-      // base (#197), so two projects in one account never share a Worker or a database.
-      vars: templateVars((await resolveProjectName(root, config)).name),
-      ...(enabler === undefined ? {} : { testingMode: ENABLED_MODE }),
-    });
-
-    // A named module that is installed is skipped, and the rest install (#233). With one
-    // name the plan's own "already installed (skipped)" line says it, as it always did.
-    if (names.length > 1) {
-      for (const name of names) {
-        if (config.installed.includes(name) && !install.includes(name)) {
-          log.info(
-            `${pc.cyan(name)} is already installed — skipped ${pc.dim("(pass --force to re-apply it)")}.`,
-            tui
-          );
-        }
-      }
-    }
-    summarizePlan(plan, requested, prereqs, tui);
-    if (enabler !== undefined && (opts.dryRun || opts.diff)) {
-      log.info(
-        `${pc.cyan(enabler)} turns testing on — applying this sets the testing mode to ${pc.cyan(ENABLED_MODE)}.`,
-        tui
-      );
-    }
-
-    if (planWritesUi(plan)) {
-      log.info(
-        `This module writes ${pc.cyan("packages/ui/")}. Run ${pc.cyan("/saasaloy-design update")} after it applies.`,
-        tui
-      );
-    }
-
-    if (opts.diff) {
-      for (const file of plan.files) {
-        if (file.action === "unchanged") {
-          continue;
-        }
-        note(
-          renderDiff(file),
-          `${ACTION_LABEL[file.action]}  ${fileLabel(file)}`
-        );
-      }
-      for (const p of plan.patches) {
-        if (p.action !== "apply") {
-          continue;
-        }
-        note(p.diff, `${pc.green("patch")}  ${p.file}`);
-      }
-    }
-
-    // --dry-run and --diff both preview only; nothing is written.
-    if (opts.dryRun || opts.diff) {
-      if (opts.json) {
-        printJson(planDocument(names, prereqs, plan), ADD_JSON_SCHEMA_VERSION);
-      }
-      outro(
-        pc.dim(
-          opts.diff
-            ? "diff only — nothing applied"
-            : "dry run — nothing applied"
-        ),
-        tui
-      );
-      return EXIT_OK;
-    }
-
-    if (!opts.yes) {
-      const proceed = await confirm({
-        answeredBy: "`--yes` to apply, or `--dry-run` to preview",
-        message: "Proceed?",
-      });
-      if (isCancel(proceed)) {
-        cancel("add cancelled");
-        return EXIT_FAILURE;
-      }
-      if (!proceed) {
-        outro(pc.dim("aborted — nothing applied"));
-        return EXIT_OK;
-      }
-    }
-
-    // For the length of the apply a failure can leave files on disk, so the catch below
-    // owes the user the re-run that completes them (#49). `onApplied` closes that window
-    // the moment the apply is over: a save that fails afterwards is its own story, and
-    // the re-run the recovery line advises would have nothing left to complete.
-    partial = requested;
-    const result = await applyAndPersist({
-      config,
-      graph,
-      lock,
-      manifest,
-      onApplied: () => {
-        partial = undefined;
-      },
-      plan,
-      root,
-      source,
-    });
-
-    // Merge npm deps into the project root package.json (best-effort — never blocks the
-    // apply). This trails `executePlan` on purpose (#98): a mid-plan failure throws past
-    // here, so a run that wrote no files leaves no package.json advertising packages
-    // nothing installed. Rolling back what `executePlan` itself wrote is #49.
-    const pkg = await readRootPackageJson(root);
-    let depsAdded: string[] = [];
-    const allDeps = [...plan.dependencies, ...plan.devDependencies];
-    if (allDeps.length > 0) {
-      if (pkg) {
-        const {
-          added,
-          devAdded,
-          conflicts: depConflicts,
-        } = planDeps(pkg, plan.dependencies, plan.devDependencies);
-        await writeDeps(root, pkg, added, devAdded);
-        depsAdded = [...added, ...devAdded].map((d) => d.name);
-        for (const conflict of depConflicts) {
-          log.warn(`Dependency version conflict — ${conflict}.`);
-        }
-      } else {
-        // Best-effort means "don't block", not "fail silently".
-        log.warn(
-          `No package.json at the project root — add ${allDeps.join(", ")} yourself.`
-        );
-      }
-    }
-
-    for (const file of result.written) {
-      log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
-    }
-    for (const file of result.refreshed) {
-      log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
-    }
-    for (const link of result.links) {
-      const label =
-        link.action === "create" ? pc.green("link") : pc.dim("link");
-      log.step(`${label}  ${link.path} ${pc.dim(`→ ${link.target}`)}`);
-    }
-    for (const link of result.linkConflicts) {
-      log.warn(
-        `Skill link ${pc.cyan(link.path)} left untouched — a non-saasaloy path already occupies it.`
-      );
-    }
-    // A module's own links are planned above and recorded for `remove`. Every other folder
-    // in `.agents/skills/` gets its link here too: a project's own skill, or a base skill
-    // that arrived after `init` (ADR 0015).
-    const moduleSkills = new Set(
-      [...result.links, ...result.linkConflicts].map((link) =>
-        posix.basename(link.path)
+  const keys = [
+    ...new Set(
+      install.flatMap((name) =>
+        Object.keys(next.side.payload.modules.get(name)?.item.envVars ?? {})
       )
+    ),
+  ].toSorted();
+  if (keys.length > 0) {
+    lines.push(
+      `Set ${keys.map((key) => pc.cyan(key)).join(", ")}.`,
+      `Run ${pc.cyan("saasaloy env")} — it prompts for each unset one and writes it to ${pc.cyan("packages/env/.env")}.`,
+      `Then run ${pc.cyan("pnpm env:setup")} to write each service's own ${pc.cyan(".env")} from it.`
     );
-    const projectSkills = await linkAgentSkills(root);
-    for (const name of projectSkills.created) {
-      log.step(
-        `${pc.green("link")}  .claude/skills/${name} ${pc.dim(`→ .agents/skills/${name}`)}`
-      );
-    }
-    for (const name of projectSkills.conflicts) {
-      if (!moduleSkills.has(name)) {
-        log.warn(
-          `Skill link ${pc.cyan(`.claude/skills/${name}`)} left untouched — a non-saasaloy path already occupies it.`
-        );
-      }
-    }
-    for (const failure of [
-      ...projectSkills.failures,
-      ...(projectSkills.unreadable === undefined
-        ? []
-        : [{ name: ".agents/skills", message: projectSkills.unreadable }]),
-    ]) {
-      log.warn(
-        `Couldn't link skill ${pc.cyan(failure.name)}: ${failure.message} ${pc.dim("(the skill files are still in `.agents/skills/`)")}.`
-      );
-    }
-    for (const p of result.patched) {
-      log.step(
-        `${pc.green("patch")}  ${p.file} ${pc.dim(`— ${p.patch.kind}`)}`
-      );
-    }
-    await formatPatchedFiles(
-      root,
-      result.patched.map((p) => p.file)
-    );
-    for (const p of result.patchConflicts) {
-      log.warn(
-        `Config patch target ${pc.cyan(p.file)} missing — ${p.patch.kind} skipped.`
-      );
-    }
-    // A refusal is not an idempotent no-op: the patch would have written something wrong,
-    // so nothing was written and nothing was tracked. Name the file and the reason.
-    for (const r of result.patchRefusals) {
-      log.warn(
-        `Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}. Wire it by hand.`
-      );
-    }
-    if (result.lateDrift.length > 0) {
-      const lines = result.lateDrift
-        .map((f) => `  ${pc.yellow("kept")}  ${f.target}`)
-        .join("\n");
-      note(
-        wrapForNote(
-          `${lines}\n\n${pc.dim("Changed while the plan was open — left alone rather than overwritten.")}`
-        ),
-        "Changed under us"
-      );
-    }
-    // Which of those kept files cost their module its install, stated plainly. The run
-    // still exits 0: nothing failed, the user's own edit simply outranked the plan.
-    const incomplete = plan.install.filter(
-      (name) => !result.completed.includes(name)
-    );
-    if (incomplete.length > 0) {
-      log.warn(formatIncomplete(incomplete, requested));
-    }
-    if (result.heldBack.length > 0) {
-      const merges = result.heldBack
-        .map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`)
-        .join("\n");
-      note(
-        wrapForNote(
-          `${merges}\n\n${pc.dim("These were left untouched. Hand them to an agent with `--diff` to merge.")}`
-        ),
-        "Needs merge"
-      );
-    }
-    if (depsAdded.length > 0) {
-      note(
-        wrapForNote(
-          `${depsAdded.map((d) => pc.cyan(d)).join(", ")}\n\n${pc.dim("Run `pnpm install` to fetch them.")}`
-        ),
-        "Dependencies added"
-      );
-    }
+  }
+  if (lines.length > 0) {
+    note(wrapForNote(lines.join("\n\n")), "Next steps", tui);
+  }
+}
 
-    // The env vars printed at plan time, several boxes and a confirmation ago. Write
-    // them where the project can keep them, and say where that is (#98).
-    // A descriptor with no `envServices` routed by the `PUBLIC_` prefix alone. Say which
-    // module, so a third-party descriptor gets fixed rather than quietly guessed at.
-    if (plan.envServicesGuessed.length > 0) {
+async function addModules(
+  root: string,
+  opts: AddOptions,
+  out: Output
+): Promise<number> {
+  const { tui } = out;
+  const cliVersion = await readVersion();
+  const request = parseModuleRequest(opts.names);
+  const coord = request.source;
+  let { names } = request;
+  await assertReadyToRun(root);
+  const state = await readProjectState(root);
+  assertSameRelease(state, cliVersion, "add");
+
+  // Where the named modules come from: the default registry at the project's release, a
+  // third-party registry at a commit, or a local checkout.
+  const coordinates = new Map(state.coordinates);
+  const thirdParty =
+    coord.owner !== undefined &&
+    `${coord.owner}/${coord.repo ?? ""}` !== DEFAULT_SOURCE;
+  if (isLocalRegistry()) {
+    if (coord.owner !== undefined || coord.repo !== undefined) {
       log.warn(
-        `${plan.envServicesGuessed.join(", ")} declare env vars without \`envServices\`, so the PUBLIC_ prefix decided which service reads each one. Check ${ENV_EXAMPLE}.`
+        `Ignoring source "${coord.owner ?? ""}/${coord.repo ?? ""}" — ${REGISTRY_ENV} override is set.`,
+        tui
       );
     }
-    let devVarsPath: string | undefined;
-    try {
-      devVarsPath = await writeEnvExample({
-        devVars: plan.devVars,
-        envVars: plan.envVars,
-        optional: plan.envOptional,
-        services: plan.envServices,
-        root,
-      });
-    } catch (error) {
-      // Best-effort, like the dependency merge: an unwritable example file must not
-      // undo an apply that already landed.
-      log.warn(`Couldn't write ${ENV_EXAMPLE} — ${formatFailure(error)}.`);
+  } else if (thirdParty) {
+    const remote = new RemoteRegistrySource(
+      coord.owner ?? "",
+      coord.repo ?? "",
+      coord.ref
+    );
+    await remote.resolveSha();
+    const provenance = remote.provenance();
+    for (const name of names) {
+      coordinates.set(name, provenance);
     }
+  } else if (coord.ref !== undefined) {
+    throw new RefusalError(
+      `The default registry moves as one release, so \`@${coord.ref}\` cannot pin one module. Run \`saasaloy update\` to move every module to this CLI's release.`
+    );
+  }
 
-    await saveEnabledMode({
-      completed: result.completed,
-      config,
-      graph,
-      manifest,
-      root,
+  const installed = new Set(state.installed);
+  if (names.length === 0) {
+    if (!isInteractive() || opts.json) {
+      return out.refuse(
+        `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`,
+        EXIT_REFUSED
+      );
+    }
+    const available = (await listOffered(cliVersion, state)).filter(
+      (name) => !installed.has(name)
+    );
+    if (available.length === 0) {
+      note("Every module is already installed.", "Nothing to add", tui);
+      outro(pc.dim("nothing to do"), tui);
+      return EXIT_OK;
+    }
+    const picked = await multiselect({
+      answeredBy: "one or more module names",
+      message: `Pick modules to add ${pc.dim(`(${installed.size} already installed)`)}`,
+      options: available.map((name) => ({ label: name, value: name })),
+      required: true,
     });
-    // Another installed module may ship an entry this add made true: a `when.installed`
-    // naming the module just added, or a test once the mode turned on (#242 Q8). The
-    // modules applied above were planned in the current mode already.
-    try {
-      await reportBackfill(
-        root,
-        await runBackfill({
-          config,
-          exclude: new Set(result.completed),
-          lock,
-          manifest,
-          root,
-        })
-      );
-    } catch (error) {
-      // The add itself landed. A backfill that stopped is finished by the next update.
-      log.warn(
-        `Backfill stopped — ${formatFailure(error)}. Run ${pc.cyan("saasaloy update")} to finish it.`
+    if (isCancel(picked)) {
+      cancel("add cancelled", tui);
+      return EXIT_FAILURE;
+    }
+    names = picked;
+  }
+
+  const forced = opts.force ? names.filter((name) => installed.has(name)) : [];
+  const fresh = names.filter((name) => !installed.has(name));
+  const withRefusal = (pending: readonly string[]): string =>
+    `Cannot add ${listLabel(names)} — ${pending.map((name) => `--with ${name}`).join(", ")} answers no unmet requirement. ` +
+    "`--with` picks one option of a `requiresOneOf` list; add any other module with its own `saasaloy add`.";
+  if (fresh.length === 0 && forced.length === 0) {
+    // Nothing to add leaves no requirement for `--with` to answer (#223).
+    if (opts.with.length > 0) {
+      return out.refuse(withRefusal(opts.with), EXIT_REFUSED);
+    }
+    if (opts.json) {
+      printJson(
+        planDocument({
+          alreadyInstalled: names,
+          install: [],
+          prerequisites: [],
+          report: undefined,
+          requested: names,
+        }),
+        ADD_JSON_SCHEMA_VERSION
       );
     }
-
-    printNextSteps(plan, result, devVarsPath, config.aliases);
-
-    // The closing line names what was installed, not what was planned (#49). When
-    // everything landed the two lists are the same and this reads as it always did.
+    note(
+      `${listLabel(names.map((name) => pc.cyan(name)))} ${names.length === 1 ? "is" : "are"} already installed.`,
+      "Nothing to do",
+      tui
+    );
     outro(
-      result.completed.length > 0
-        ? pc.green(
-            `Applied ${result.completed.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`
-          )
-        : pc.yellow(
-            `Nothing installed ${pc.dim(`(${result.written.length} files written)`)}`
-          )
+      pc.dim("use --force to write a named module's deleted files again"),
+      tui
     );
     return EXIT_OK;
-  } catch (error) {
-    // A failure after the apply started leaves part of the module on disk. Nothing is
-    // rolled back, so say what the state files now describe and how to finish the job
-    // (#49) before the error itself closes the run.
-    if (partial) {
-      log.warn(formatRecovery(partial));
-    }
-    return out.fail(error);
-  } finally {
-    // A remote source extracts each module to a temp dir; drop them once applied.
-    await source?.cleanup?.();
   }
+
+  const cannotConfirm =
+    !opts.yes && !opts.dryRun && !opts.diff && !process.stdin.isTTY;
+  const version = state.version ?? cliVersion;
+  const requested = [...new Set([...state.requested, ...fresh])];
+  const load = (list: readonly string[]): Promise<LoadedSide> =>
+    loadSide(sideSpec(state, list, version, coordinates), { cliVersion });
+
+  // `requiresOneOf`: `--with` answers a choice up front, a terminal gets one prompt per
+  // unmet choice, and anything else refuses and names the options.
+  let next = await load([...requested, ...opts.with]);
+  let unmet = unmetRequirements(next.side.payload, requested);
+  const pending = new Set(opts.with);
+  for (let progressed = true; pending.size > 0 && progressed;) {
+    progressed = false;
+    for (const name of pending) {
+      if (!unmet.some((requirement) => requirement.options.includes(name))) {
+        continue;
+      }
+      requested.push(name);
+      pending.delete(name);
+      unmet = unmetRequirements(next.side.payload, requested);
+      progressed = true;
+    }
+  }
+  if (pending.size > 0) {
+    return out.refuse(withRefusal([...pending]), EXIT_REFUSED);
+  }
+  const unmetMessage = (list: Unmet[]): string =>
+    [
+      `Cannot add ${listLabel(names)} — unmet requirement${list.length > 1 ? "s" : ""}:`,
+      ...list.map(
+        (requirement) =>
+          `  ${requirement.declaredBy} needs one of: ${requirement.options.join(", ")}, and none is installed. Re-run as \`saasaloy add ${names.join(" ")} --with ${requirement.options[0] ?? ""}\`, or pick another from that list.`
+      ),
+    ].join("\n");
+  if (unmet.length > 0 && (!isInteractive() || opts.yes || opts.json)) {
+    return out.refuse(unmetMessage(unmet), EXIT_REFUSED);
+  }
+  for (let round = 0; unmet.length > 0 && round < 8; round++) {
+    const requirement = unmet[0];
+    if (requirement === undefined) {
+      break;
+    }
+    const picked = await select({
+      answeredBy: `\`--with <${requirement.options.join(" | ")}>\``,
+      message: `${pc.cyan(requirement.declaredBy)} needs one of these — pick one`,
+      options: requirement.options.map((name) => ({
+        label: name,
+        value: name,
+      })),
+    });
+    if (isCancel(picked)) {
+      cancel("add cancelled", tui);
+      return EXIT_FAILURE;
+    }
+    requested.push(picked);
+    next = await load(requested);
+    unmet = unmetRequirements(next.side.payload, requested);
+  }
+  if (unmet.length > 0) {
+    return out.refuse(unmetMessage(unmet), EXIT_REFUSED);
+  }
+  if (cannotConfirm) {
+    return out.refuse(NO_TERMINAL_TO_CONFIRM, EXIT_REFUSED);
+  }
+  next = await load(requested);
+
+  const nextSet = closure(next.side.payload, requested);
+  const mismatches = detectCliMismatches({
+    cliVersion,
+    graph: graphOf(next.side.payload, nextSet),
+  });
+  if (mismatches.length > 0) {
+    return out.refuse(
+      formatCliMismatches(mismatches, names.join(" "), cliVersion),
+      EXIT_REFUSED
+    );
+  }
+  const install = fixedOrder(next.side.payload.modules, nextSet).filter(
+    (name) => !installed.has(name)
+  );
+  const prerequisites = install.filter((name) => !names.includes(name));
+  const alreadyInstalled = names.filter(
+    (name) => installed.has(name) && !forced.includes(name)
+  );
+
+  // `--force` on an installed module writes its tracked files the project deleted again.
+  const restore: string[] = [];
+  for (const [path, record] of Object.entries(state.manifest.files)) {
+    if (
+      forced.includes(record.module) &&
+      !(await pathExists(resolveWithinRoot(root, path)))
+    ) {
+      restore.push(path);
+    }
+  }
+  const previous = await load(state.requested);
+  const run = (dryRun: boolean): Promise<ApplyReport> =>
+    apply({
+      cleanTree: dryRun ? "none" : "touched",
+      dryRun,
+      force: opts.force,
+      next: next.side,
+      previous: previous.side,
+      provenance: next.provenance,
+      restore,
+      root,
+      version: cliVersion,
+    });
+
+  const preview = await run(true);
+  summarize(preview, "Plan", tui);
+  if (opts.diff) {
+    printDiffs(preview, tui);
+  }
+  if (opts.dryRun || opts.diff) {
+    printReportLines(preview, tui);
+    if (opts.json) {
+      printJson(
+        planDocument({
+          alreadyInstalled,
+          install,
+          prerequisites,
+          report: preview,
+          requested: names,
+        }),
+        ADD_JSON_SCHEMA_VERSION
+      );
+    }
+    outro(
+      pc.dim(
+        opts.diff ? "diff only — nothing applied" : "dry run — nothing applied"
+      ),
+      tui
+    );
+    return EXIT_OK;
+  }
+  const declined = await confirmApply(opts.yes, "add", tui);
+  if (declined !== undefined) {
+    return declined;
+  }
+  const report = await run(false);
+  printSteps(report, tui);
+  printReportLines(report, tui);
+  printNextSteps(report, next, install, state.config.aliases, tui);
+  if (report.changed.includes("package.json")) {
+    log.info(
+      `Run ${pc.cyan("pnpm install")} to fetch the new dependencies.`,
+      tui
+    );
+  }
+  const applied = install.length > 0 ? install : names;
+  outro(
+    report.exitCode === EXIT_WORK_PENDING
+      ? pc.yellow(
+          `Applied ${applied.join(", ")} with conflict markers — resolve them, then run \`pnpm check\`.`
+        )
+      : pc.green(
+          `Applied ${applied.map((name) => pc.bold(name)).join(", ")} ${pc.dim(`(${report.changed.length} files)`)}`
+        ),
+    tui
+  );
+  return report.exitCode;
 }

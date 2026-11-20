@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://saasaloy.dev/schemas/update-note.schema.json",
   "title": "update note frontmatter",
-  "description": "The YAML frontmatter of one update note: a Markdown file under `packages/cli/update-notes/` (the base) or `modules/<name>/update-notes/` (a module) that tells the agent in a project what an upgrade asks of it beyond the files `saasaloy update` merges (#298). The note's id comes from its path, `base/NNNN-<slug>` or `<module>/NNNN-<slug>`, so the frontmatter carries none. The body holds four sections: \"What update does\", \"What the merge plan gets\", \"What you do\" and \"Verify\".",
+  "description": "The YAML frontmatter of one update note: a Markdown file under `packages/cli/update-notes/` (the base) or `modules/<name>/update-notes/` (a module) that tells the agent in a project what an upgrade asks of it beyond the files `saasaloy update` merges (#298). The note's id comes from its path, `base/NNNN-<slug>` or `<module>/NNNN-<slug>`, so the frontmatter carries none. The body holds four sections: \"What update does\", \"What update merges\", \"What you do\" and \"Verify\".",
   "type": "object",
   "additionalProperties": false,
   "required": ["title"],
@@ -34,7 +34,7 @@
     "title": {
       "type": "string",
       "minLength": 1,
-      "description": "One line that names the change, shown as the note's heading in the merge plan."
+      "description": "One line that names the change, shown as the note's heading in the update report."
     },
     "version": {
       "type": "string",

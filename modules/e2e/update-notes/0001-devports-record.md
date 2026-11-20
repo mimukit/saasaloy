@@ -8,7 +8,7 @@ title: The e2e suite reads this checkout's ports from .devports.json
 
 This reads the record that the base note `base/0004-dev-ports` adds.
 
-## What the merge plan gets
+## What update merges
 
 `packages/e2e/lib/project.ts`, if you edited it. Keep your edits and take the new `PINNED_PORTS`, `portsFrom` and the `PORTS` and `URLS` built from the record.
 

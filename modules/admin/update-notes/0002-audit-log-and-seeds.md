@@ -8,9 +8,9 @@ title: Admin gains an audit log, a members screen and two seed files
 
 It also writes `apps/admin/src/extend/root.tsx`, a seed file. A seed file is written once and is then the project's: `update` never changes it, and writes it again only when it is missing. `apps/admin/src/components/app-shell.tsx` wraps the shell in the components that file lists. With `payment` installed, the `payment` module writes a second seed file, `apps/admin/src/extend/payments.ts`, whose zod shape `apps/admin/src/routes/payments.tsx` spreads into its search schema.
 
-## What the merge plan gets
+## What update merges
 
-- `apps/api/src/lib/audit-actions.ts` and `apps/admin/src/components/nav.ts`. Other modules patch both files, so either one may differ from the hash `update` recorded and arrive as drift, even if you never edited it. Merge each one the same way: take the new file's shape and keep every patched entry. In `audit-actions.ts`, keep each module's import and each call inside `defineAuditActions({ actions: [...] })`, such as `paymentAuditActions` and `featureFlagsAuditActions`, and add `adminAuditActions`. In `nav.ts`, keep every module's row and add Members (`G M`) and Activity (`G A`).
+- `apps/api/src/lib/audit-actions.ts` and `apps/admin/src/components/nav.ts`. Other modules patch both files, so either one may get conflict markers, even if you never edited it. Merge each one the same way: take the new file's shape and keep every patched entry. In `audit-actions.ts`, keep each module's import and each call inside `defineAuditActions({ actions: [...] })`, such as `paymentAuditActions` and `featureFlagsAuditActions`, and add `adminAuditActions`. In `nav.ts`, keep every module's row and add Members (`G M`) and Activity (`G A`).
 - `apps/admin/src/routes/__root.tsx`, `apps/admin/src/components/app-shell.tsx` and `apps/admin/src/routes/payments.tsx`, if you edited them.
 
 ## What you do
@@ -22,12 +22,7 @@ It also writes `apps/admin/src/extend/root.tsx`, a seed file. A seed file is wri
    saasaloy update
    ```
 
-3. If the plan lists `audit-actions.ts` or `nav.ts`, merge it as the section above says, then mark it resolved:
-
-   ```sh
-   saasaloy update --resolved apps/api/src/lib/audit-actions.ts
-   saasaloy update --resolved apps/admin/src/components/nav.ts
-   ```
+3. If the report lists `audit-actions.ts` or `nav.ts` under `## Files with conflict markers`, merge it as the section above says, and delete every marker line.
 
 4. Move each edit you made in place into a seed file, then take the managed file as `update` ships it:
    - A wrapper or provider you added around the shell in `__root.tsx` or `app-shell.tsx` goes into `rootWrappers` in `apps/admin/src/extend/root.tsx`.

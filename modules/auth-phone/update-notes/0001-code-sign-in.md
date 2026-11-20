@@ -8,7 +8,7 @@ title: A known number may sign in by code, behind codeSignIn
 
 It reaches no account a reset code does not already reach: both send a code to the number and act on the account that owns it.
 
-## What the merge plan gets
+## What update merges
 
 The files above, plus `packages/db/src/repositories/login-code-rules.ts` and `apps/admin/src/routes/login-codes.tsx`, if you edited them. Keep your edits and take the `signIn` exception in the 409 hook and the `sign_in` purpose.
 

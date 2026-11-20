@@ -1,56 +1,48 @@
 import { cancel, intro, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
-import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
-import { BASE_MODULE, missingBaseTargets, templateHash } from "../lib/base.js";
+import { readManifestState } from "../engine/manifest.js";
+import { loadSide, readProjectState } from "../engine/project.js";
+import { render } from "../engine/render.js";
+import { BASE_MODULE } from "../lib/base.js";
+import { EXIT_OK, EXIT_REFUSED, formatFailure } from "../lib/exit.js";
+import { hashContent, pathExists, resolveWithinRoot } from "../lib/fs-utils.js";
 import { createOutput, printJson } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
-import { loadManifest, pendingNotesOf } from "../lib/manifest.js";
+import { loadManifest } from "../lib/manifest.js";
+import type { PendingNote } from "../lib/manifest.js";
+import { compareBase, compareModules } from "../lib/outdated.js";
+import type { ModuleComparison, UpdateStatus } from "../lib/outdated.js";
 import {
   pendingLabel,
   pendingNoteJson,
   pendingNoteLines,
 } from "../lib/pending-notes.js";
 import { findProjectRoot } from "../lib/project.js";
-import {
-  REGISTRY_ENV,
-  releaseTag,
-  RemoteRegistrySource,
-} from "../lib/registry.js";
+import { REGISTRY_ENV, RemoteRegistrySource } from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
 import { loadConfig } from "../lib/saasaloy-config.js";
-import { baseTemplateDir } from "../lib/scaffold.js";
 import { wrapForNote } from "../lib/tui.js";
-import { compareBase, compareInstalled } from "../lib/updater.js";
-import type { ModuleComparison, UpdateStatus } from "../lib/updater.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
+import { sideSpec } from "./apply-run.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy outdated` — "has anything moved?", answered without touching a file (#50).
 //
-// The lock already records the exact SHA every installed module resolved to, so the
-// answer is one `compareInstalled` call away — the same call `update` opens with. Before
-// this command there was no way to ask, which made `update` a thing you ran speculatively
-// and then read a merge plan to find out it had nothing to do.
+// The default registry moves as one release (ADR 0062, plan 0116): the base template and
+// every default module stand at the lock's `base.cliVersion`, and `update` moves them to
+// the running CLI's release. A module from another registry moves on its own ref, so its
+// row resolves that ref and compares the commit with the lock's.
 //
-// It is a report, so a bare run exits 0 whatever it finds: "three modules moved" is news,
-// not a failure. `--check` is the CI form — it exits 2 when anything is outdated, so a
-// pipeline can gate on drift without parsing the table.
+// It is a report, so a bare run exits 0 whatever it finds. `--check` is the CI form: it
+// exits 2 when anything moved or an update note is pending. An unreachable source is a
+// row, never a throw, and it does not fail `--check`: a network blip is not drift.
 //
-// An unreachable source is a row, never a throw. One dead repo must not hide the state of
-// every other module, and it does not fail `--check` either: a network blip is not drift.
-//
-// The base template is the first row (#120): the lock's `templateHash` against the one
-// the running CLI ships, with the two CLI versions as labels. An `untracked` base — a
-// project scaffolded before the record existed — is news, not drift, and `update` is
-// what records it; this command never writes.
-//
-// `--json` prints the same rows as one document on stdout (#223): `base`, `modules`, and
-// `drift`, the count `--check` gates on. The exit code does not change.
-//
-// Pending update notes (#298) are work waiting too: the report lists them, `--json`
-// carries them as `pendingNotes`, and `--check` exits 2 while any is pending.
+// It also lists each file written once (a `once` file) whose upstream render differs from
+// the render that wrote it (plan 0116): `update --merge <path>` takes that change. The
+// list is news, not drift, so `--check` does not gate on it. `--json` prints the rows,
+// `drift`, `pendingNotes` and `onceChanged` as one document on stdout (#223).
 
 export interface Options {
   /** `--check`: exit non-zero when any module has moved or a note is pending, for CI. */
@@ -201,25 +193,38 @@ export function describeDrift(comparisons: ModuleComparison[]): string {
 }
 
 /**
- * Rewrite the rows a registry override produced so they read `local`.
- *
- * `compareInstalled` marks every override row `outdated`, because that is what the word
- * means to `update`: re-apply the module from the checkout. `outdated` asks a different
- * question, and a working copy has no commit to compare against, so the honest answer is
- * `local` — the same answer a locally installed module gets without the override. Left as
- * `outdated`, every row counted as drift and `--check` exited 2 with nothing moved.
- *
- * Rows the override never touched (a module with no lock entry stays `unresolvable`) are
- * returned as they came.
+ * The `once` files on disk whose record differs from the project's render at the running
+ * CLI's release: upstream changed what it would write there. Only a version 2 project
+ * has class records.
  */
-export function asLocalRows(
-  comparisons: ModuleComparison[]
-): ModuleComparison[] {
-  return comparisons.map((comparison) =>
-    comparison.status === "outdated"
-      ? { ...comparison, status: "local" as const }
-      : comparison
+async function onceChangedUpstream(
+  root: string,
+  running: string
+): Promise<string[]> {
+  const state = await readProjectState(root);
+  const once: [string, string][] = [];
+  for (const [path, record] of Object.entries(state.manifest.files)) {
+    if (
+      record.class === "once" &&
+      (await pathExists(resolveWithinRoot(root, path)))
+    ) {
+      once.push([path, record.hash]);
+    }
+  }
+  if (once.length === 0) {
+    return [];
+  }
+  const { side } = await loadSide(
+    { ...sideSpec(state, state.requested, running), partial: true },
+    { cliVersion: running }
   );
+  const rendered = render(side);
+  return once
+    .filter(([path, hash]) => {
+      const file = rendered.files.get(path);
+      return file !== undefined && hashContent(file.content) !== hash;
+    })
+    .map(([path]) => path);
 }
 
 function splitSlug(slug: string): [string, string] | undefined {
@@ -252,7 +257,13 @@ export async function runOutdated(argv: string[]): Promise<number> {
     const root = await findProjectRoot();
     const config = await loadConfig(root);
     const lock = await loadLock(root);
-    const manifest = await loadManifest(root);
+    const manifestState = await readManifestState(root);
+    const versionOne = manifestState.kind === "v1";
+    const pending: PendingNote[] = versionOne
+      ? ((await loadManifest(root)).pendingNotes ?? [])
+      : manifestState.kind === "v2"
+        ? manifestState.manifest.pendingNotes
+        : [];
     const registryOverride = !!process.env[REGISTRY_ENV];
     if (registryOverride && config.installed.length > 0) {
       log.warn(
@@ -261,17 +272,9 @@ export async function runOutdated(argv: string[]): Promise<number> {
       );
     }
 
-    // The base first: it ships with the CLI, so its comparison needs no network and no
-    // registry, and it is the one row every project has.
-    const templateDir = await baseTemplateDir();
+    // The base first: it is the one row every project has.
     const runningVersion = await readVersion();
-    const baseRow = compareBase({
-      lock,
-      manifest,
-      runningHash: await templateHash(templateDir),
-      runningVersion,
-      missingTargets: await missingBaseTargets(root, manifest, templateDir),
-    });
+    const baseRow = compareBase({ lock, running: runningVersion, versionOne });
 
     // One source per (repo, ref), the same cache `update` keeps, so a bare run resolves
     // each ref once however many modules share it.
@@ -296,16 +299,14 @@ export async function runOutdated(argv: string[]): Promise<number> {
 
     let moduleRows: ModuleComparison[] = [];
     if (config.installed.length > 0) {
-      const compared = await compareInstalled({
+      moduleRows = await compareModules({
         installed: config.installed,
         lock,
         registryOverride,
-        // The same target `update` moves to (ADR 0062): this CLI's release tag.
-        releaseRef: releaseTag(runningVersion),
         resolveRef: (_name, entry, ref) =>
           remote(entry.source, ref).resolveSha(),
+        running: runningVersion,
       });
-      moduleRows = registryOverride ? asLocalRows(compared) : compared;
     }
 
     note(wrapForNote(renderComparisons([baseRow]).join("\n")), "Base", out.tui);
@@ -315,9 +316,35 @@ export async function runOutdated(argv: string[]): Promise<number> {
       out.tui
     );
 
+    // Files written once that upstream changed: `update --merge <path>` takes the change.
+    let onceChanged: string[] = [];
+    if (manifestState.kind === "v2") {
+      try {
+        onceChanged = await onceChangedUpstream(root, runningVersion);
+      } catch (error) {
+        log.warn(
+          `Could not render saasaloy ${runningVersion} to compare the files written once: ${formatFailure(error)}`,
+          out.tui
+        );
+      }
+    }
+    if (onceChanged.length > 0) {
+      note(
+        wrapForNote(
+          onceChanged
+            .map(
+              (path) =>
+                `${path} ${pc.dim(`— \`saasaloy update --merge ${path}\` merges it`)}`
+            )
+            .join("\n")
+        ),
+        "Written once, changed upstream",
+        out.tui
+      );
+    }
+
     // Update notes an applied `update` showed and nobody cleared (#298): work waiting, read
     // offline from the manifest.
-    const pending = pendingNotesOf(manifest);
     if (pending.length > 0) {
       note(
         wrapForNote(pendingNoteLines(pending).join("\n")),
@@ -333,6 +360,7 @@ export async function runOutdated(argv: string[]): Promise<number> {
         base: baseRow,
         drift,
         modules: moduleRows,
+        onceChanged,
         pendingNotes: pending.map(pendingNoteJson),
       });
     }

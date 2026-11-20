@@ -17,8 +17,8 @@ saasaloy <command> [options]
 | `env` | fill in the environment variables the installed modules declare (--check gates a deploy) |
 | `testing` | print the project's testing mode, or set it to off, tests-after or tdd |
 | `outdated` | report the base template and each installed module, current vs latest (--check gates CI) |
-| `update` | re-apply the base template and modules at a newer version, with a merge plan for anything you edited |
-| `remove` | undo a module's applied files via the manifest (offline) |
+| `update` | move the base template and modules to this CLI's release, merging your edits three ways |
+| `remove` | take a module out of the project, keeping the files you edited (--abort undoes it) |
 | `list` | list the modules a registry offers, marking the ones installed here |
 | `new` | scaffold a new module in a registry repo (descriptor + files/ + skill stub) |
 | `doctor` | validate local module descriptors, or a project's saasaloy.json against its manifest |
@@ -51,7 +51,7 @@ saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<o
 ## `saasaloy add`
 
 ```text
-saasaloy add [<module>[@ref]...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
+saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force] | saasaloy add --abort
 ```
 
 | Flag | Effect |
@@ -59,9 +59,10 @@ saasaloy add [<module>[@ref]...|<owner/repo[@ref]/module>...|<owner/repo>] [--wi
 | `--dry-run` | show the plan and write nothing |
 | `--diff` | show a per-file diff and write nothing |
 | `-y, --yes` | skip the confirmation prompt |
-| `--force` | re-apply the named modules that are already installed |
-| `--with <module>` | answer a `requiresOneOf` choice, e.g. `--with database-d1` (repeatable) |
+| `--force` | write even over uncommitted changes, overwrite edited generated files, and write the deleted files of a named module again |
+| `--with <module>` | answer a `requiresOneOf` choice, e.g. `--with database-postgres` (repeatable) |
 | `--json` | with --dry-run, print the plan as one JSON document on stdout |
+| `--abort` | put back the files the last add, remove, update or testing run changed |
 | `-h, --help` | show this help |
 
 ## `saasaloy env`
@@ -81,11 +82,12 @@ saasaloy env [--check [--json]] [--from-file <path>]... [--set KEY=VALUE]...
 ## `saasaloy testing`
 
 ```text
-saasaloy testing [off|tests-after|tdd]
+saasaloy testing [off|tests-after|tdd] | saasaloy testing --abort
 ```
 
 | Flag | Effect |
 |---|---|
+| `--abort` | put back the files the last add, remove, update or testing run changed |
 | `-h, --help` | show this help |
 
 ## `saasaloy outdated`
@@ -103,36 +105,34 @@ saasaloy outdated [--check] [--json]
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--restore <path>]... [--done <id>]... [--from <version>] [--dry-run] [--diff] [--force] [--yes] | saasaloy update --abort
+saasaloy update [--restore <path>]... [--merge <path>]... [--done <id>]... [--dry-run] [--diff] [--force] [--yes] | saasaloy update --abort
 ```
 
 | Flag | Effect |
 |---|---|
-| `--ref <ref>` | update one module to this branch, tag, or SHA instead of this CLI's release tag (not the base) |
-| `--out <path>` | write the merge plan to a file instead of stdout |
-| `--resolved <path>` | record a file you merged as it stands now, or keep a file you deleted deleted, so the next update stops offering it (repeatable) |
-| `--restore <path>` | bring back a file kept deleted: write the current upstream file and stop keeping it deleted (repeatable) |
-| `--done <id>` | record an update note whose work is finished, so the merge plan stops listing it (repeatable) |
-| `--from <version>` | on the first update after adoption, the CLI version the project was made with, so its base update notes apply |
-| `--dry-run` | show the plan and write nothing |
+| `--abort` | put back the files the last add, remove, update or testing run changed |
 | `--diff` | show a per-file diff and write nothing |
-| `--force` | apply even with uncommitted changes in the working tree |
-| `--abort` | put back the files the last update replaced |
+| `--done <id>` | record an update note whose work is finished, so the report stops listing it (repeatable) |
+| `--dry-run` | show the report and write nothing |
+| `--force` | apply even with uncommitted changes in the working tree, and overwrite edited generated files |
+| `--merge <path>` | merge a file written once with its upstream change, three ways (repeatable) |
+| `--restore <path>` | write a tracked file the project deleted again, from the current upstream (repeatable) |
 | `-y, --yes` | skip the confirmation prompt |
 | `-h, --help` | show this help |
 
 ## `saasaloy remove`
 
 ```text
-saasaloy remove [<module>] [--dry-run] [--diff] [--yes] [--force]
+saasaloy remove [<module>] [--dry-run] [--diff] [--yes] [--force] | saasaloy remove --abort
 ```
 
 | Flag | Effect |
 |---|---|
 | `--dry-run` | show the plan and delete nothing |
 | `--diff` | show what each deletion removes, and delete nothing |
-| `-y, --yes` | skip the confirmation prompt (drifted files are kept) |
-| `--force` | remove even while another module depends on it |
+| `-y, --yes` | skip the confirmation prompt |
+| `--force` | delete and merge even over uncommitted changes, and overwrite edited generated files |
+| `--abort` | put back the files the last add, remove, update or testing run changed |
 | `-h, --help` | show this help |
 
 ## `saasaloy list`

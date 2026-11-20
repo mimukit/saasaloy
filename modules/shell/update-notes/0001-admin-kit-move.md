@@ -11,9 +11,9 @@ Before `shell`, the `admin` module wrote its ui kit under `@repo/ui/{components,
 
 `blocks/admin/feature-flags` stays where it is. It is the one admin-only block, and the update already points its imports at the right place.
 
-## What the merge plan gets
+## What update merges
 
-- Each shell file you edited under an old `admin` path. It stays at the old path, and the plan lists it.
+- Each shell file you edited under an old `admin` path. It stays at the old path, no longer tracked, and the report lists it under `## Kept, no longer tracked`.
 - `oxlint.config.mjs`, if you edited it, with the new twin-primitive rule.
 
 ## What you do
@@ -25,7 +25,7 @@ Before `shell`, the `admin` module wrote its ui kit under `@repo/ui/{components,
    saasaloy update
    ```
 
-3. Move each edit you made in an old admin file into the file at its new shell path, then delete the old file. Run `saasaloy update --resolved <path>` for a file the plan marks as a conflict. A replaced logo is the common case. If you replaced `packages/ui/src/assets/brand-mark.svg`, run:
+3. Move each edit you made in an old admin file into the file at its new shell path, then delete the old file. Resolve the conflict markers in each file the report lists, and delete every marker line. A replaced logo is the common case. If you replaced `packages/ui/src/assets/brand-mark.svg`, run:
 
    ```sh
    cp packages/ui/src/assets/brand-mark.svg packages/ui/src/assets/shell/brand-mark.svg

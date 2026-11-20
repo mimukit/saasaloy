@@ -333,11 +333,11 @@ Contract notes:
 
 #### Removal
 
-You cannot remove `logger` from a normal project. The `api` module declares `dependsOn: ["logger", "logger-console"]`, so `remove logger` and `remove logger-console` both refuse while `api` is installed. Only `--force` overrides the refusal, and then `apps/api` stops compiling.
+You cannot remove `logger` from a normal project. The `api` module declares `dependsOn: ["logger", "logger-console"]`, so `remove logger` and `remove logger-console` both refuse while `api` is installed. `--force` does not override the refusal, because a module cannot render without its prerequisite.
 
 A second provider is a different case. `saasaloy remove logger-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. Point `LOGGER_PROVIDER` at a provider that is still installed first, or unset it.
 
-If you do force `remove logger`, it deletes the `packages/logger` workspace (`index.ts`, `define.ts`, `provider.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the logger preset to `apps/api/src/env.ts`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `LOGGER_PROVIDER` and `LOG_LEVEL` lines by hand. Every file that imports `@repo/logger` stops compiling, and `apps/api` is one of them.
+In a project with no module that depends on it, `remove logger` deletes the `packages/logger` workspace (`index.ts`, `define.ts`, `provider.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the logger preset to `apps/api/src/env.ts`. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `LOGGER_PROVIDER` and `LOG_LEVEL` lines by hand. Every file of your own that imports `@repo/logger` stops compiling.
 
 #### Failure modes
 

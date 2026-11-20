@@ -2,7 +2,6 @@
   "seedFiles": [
     "apps/web/DESIGN.md",
     "README.md",
-    "saasaloy.json",
     "apps/web/src/pages/index.astro",
     "packages/ui/src/content/landing.ts",
     "docs/runbook-deploy.md",
@@ -12,7 +11,6 @@
   ],
   "retiredSeedFiles": ["DESIGN.md"],
   "ownedFiles": [
-    "packages/env/.env.example",
     "packages/env/src/services.ts",
     "packages/env/src/sources.ts",
     "apps/web/src/env.ts",

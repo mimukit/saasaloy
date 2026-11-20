@@ -371,7 +371,7 @@ update users set role = 'superadmin' where email = 'you@example.com';
 
 **How you run it is the driver's business**, so read the skill for the driver this project installed (`saasaloy-database-d1` or `saasaloy-database-postgres`) for the console it hands you. On Postgres in production, prefer `pnpm db:prod:superadmin --keep-password`, which promotes without SQL. Swap `update` for `select email, role from users where role = 'superadmin'` to check it landed. The plural table name needs no quotes: Postgres reserves `user`, not `users`.
 
-An older project's `auth.ts` may still promote the first sign-up to superadmin. `saasaloy update auth` shows the update note "The first sign-up no longer becomes the superadmin", with the steps to delete that `databaseHooks` block.
+An older project's `auth.ts` may still promote the first sign-up to superadmin. `saasaloy update` shows the update note "The first sign-up no longer becomes the superadmin", with the steps to delete that `databaseHooks` block.
 
 The change takes effect on the next `getSession` call, because sessions are DB-backed and the role is read off the user row, and `cookieCache` is off (see the last boundary below). An account that is already signed in on the admin session needs no re-login. An account promoted from `user` has no admin session yet: it signs in on the admin app, because `adminAuth` refused it before the promotion. Demoting an account works the other way: its admin session stays in the table, but every role gate and the admin app's guard refuse it from the next request, and the admin app shows the refusal page.
 
@@ -449,7 +449,7 @@ await client.signIn.email({ email, password });
 
 ## Wire-up: the sign-in and sign-up blocks
 
-`auth` ships two blocks into `@repo/ui`, with the frame they share. Each entry carries `when: { installed: ["shell"] }`, because the blocks render the `shell` primitives. A project with no signed-in app gets none of them. `saasaloy add admin` or `saasaloy add app` brings `shell`, and the same run writes the blocks (the backfill).
+`auth` ships two blocks into `@repo/ui`, with the frame they share. Each entry carries `when: { installed: ["shell"] }`, because the blocks render the `shell` primitives. A project with no signed-in app gets none of them. `saasaloy add admin` or `saasaloy add app` brings `shell`, and the same run writes the blocks, because the render writes every entry whose `when` holds.
 
 | File | Exports |
 |---|---|
@@ -522,7 +522,7 @@ The flag holds no name and no id, so a shared device shows nothing about the use
 
 ## Password rules
 
-Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/auth/src/auth.ts`). Better Auth applies it on sign-up, on a password reset and on a password change, and answers `400` with `code: "PASSWORD_TOO_SHORT"`. It never applies it on sign-in, so an account made before the rule, with a shorter password, still signs in. Keep the number and the sign-up form's hint in step. A project made before this rule gets it through `saasaloy update auth`.
+Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/auth/src/auth.ts`). Better Auth applies it on sign-up, on a password reset and on a password change, and answers `400` with `code: "PASSWORD_TOO_SHORT"`. It never applies it on sign-in, so an account made before the rule, with a shorter password, still signs in. Keep the number and the sign-up form's hint in step. A project made before this rule gets it through `saasaloy update`.
 
 ## Password reset mail
 
@@ -536,7 +536,7 @@ Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/a
 | `packages/email/src/templates/reset-password.ts` | The template, in the `email` module's convention. Edit it like `welcome.ts`. |
 | `apps/api/src/routes/reset-password.test.ts` | The route test, only when testing is on too. It replaces `createEmail` with a sender that keeps each message. |
 
-`saasaloy add email` in a project that already has `auth` writes all of them in the same run (the backfill). `saasaloy add auth` in a project with `email` writes them at once.
+`saasaloy add email` in a project that already has `auth` writes all of them in the same run, because the render writes every entry whose `when` holds. `saasaloy add auth` in a project with `email` writes them at once.
 
 **Use it.** The client calls Better Auth's endpoint, and the mail goes to the address if it has an account:
 
@@ -601,7 +601,7 @@ after the edit.
 
 A project that installed auth before the tables became plural has `user`, `session`, `account` and `verification` in its database. Move them to the new names like this:
 
-1. Run `saasaloy update auth`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. Update auth before `teams`, `api-keys` and `subscription`.
+1. Run `saasaloy update`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. The same run updates `teams`, `api-keys` and `subscription`.
 2. Run `pnpm db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `user` → `users`, `session` → `sessions`, `account` → `accounts`, `verification` → `verifications`.
 4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `session_user_id_idx` → `sessions_user_id_idx`, `account_user_id_idx` → `accounts_user_id_idx`, `verification_identifier_idx` → `verifications_identifier_idx`). It must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
@@ -612,12 +612,10 @@ A project that installed auth before the tables became plural has `user`, `sessi
 
 A project made before the split has one instance and one `better-auth.session_token` cookie. Move it to two instances in this order:
 
-1. Run `saasaloy update auth admin`.
-2. Resolve the merge plan for `packages/auth/src/auth.ts`, `packages/auth/src/client.ts`, `packages/auth/src/server.ts` and `@db/schema/auth.ts`. Take the new `adminAuth` export, `adminAuthClientPlugins`, `createAdminClient` and the `audience` column. Carry over any plugin or option you added by hand to both instances.
+1. Run `saasaloy update`.
+2. Resolve the conflict markers in `packages/auth/src/auth.ts`, `packages/auth/src/client.ts`, `packages/auth/src/server.ts` and `@db/schema/auth.ts`. Take the new `adminAuth` export, `adminAuthClientPlugins`, `createAdminClient` and the `audience` column. Carry over any plugin or option you added by hand to both instances.
 3. Run `pnpm db:generate`. It writes one migration that adds `sessions.audience` with default `'client'`. Read it, then apply it with `pnpm db:migrate:local`, or the production migrate command from the installed driver's skill.
-4. Run `saasaloy update` for each installed module that patches auth: `teams`, `api-keys` and `subscription-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
-
-Run step 4 after step 2. Before the merge, `auth.ts` has no `adminAuth` export, and the patch prints a warning that names the missing export. That warning means "merge `auth.ts` first", and the module's lock entry stays where it was, so running `saasaloy update <module>` again after the merge applies the patch.
+4. Check each installed module that patches auth: `teams`, `api-keys` and `subscription-stripe`. The same update run renders their patches into the new `auth.ts` and `client.ts`, so each plugin is in `adminAuth` and in `adminAuthClientPlugins` as well. Where a conflict hid one, add it by hand.
 
 Every existing session ends, because the cookie names change from `better-auth.session_token` to `client.session_token` and `admin.session_token`. Old session rows read as client rows through the column default, but no browser holds a cookie that names them. Tell your users they must sign in again. A route of your own that calls `auth.api.*` reads only the client session after the update; switch it to `authFor(c).api.*` if the admin app calls it. A middleware of your own on `/admin/*` must now skip `/admin/auth/*`.
 

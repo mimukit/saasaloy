@@ -50,32 +50,7 @@ export function constPropertyRefusal(
 }
 
 /** Put `undefined` back, but only while the property still holds the patch's value. */
-export function unsetConstProperty(
-  source: string,
-  patch: ConstProperty
-): string {
-  const node = findValue(source, patch);
-  if (!node || literalValue(node) !== patch.value) {
-    return source;
-  }
-  return splice(source, node, "undefined");
-}
-
 /** Why `unsetConstProperty` declined. An owner's other value is theirs, so it says so. */
-export function constPropertyRemoveRefusal(
-  source: string,
-  patch: ConstProperty
-): string | undefined {
-  const node = findValue(source, patch);
-  if (!node) {
-    return `const-property could not find a property ${patch.property} on a module-scope const object named ${patch.constName}`;
-  }
-  if (isUndefined(node) || literalValue(node) === patch.value) {
-    return undefined;
-  }
-  return `${patch.constName}.${patch.property} now holds ${source.slice(node.start, node.end)}, not the value this module wrote, so it was left as it is`;
-}
-
 function findValue(source: string, patch: ConstProperty): AstNode | undefined {
   const program = parseModule(source).$ast as unknown as Program;
   const init = findConstInit(program, patch.constName);

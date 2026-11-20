@@ -342,7 +342,7 @@ These are the main checkout's ports, each the `devPort` on its row in `packages/
 - **The build fails naming `PUBLIC_API_URL`.** `apps/app/.env` lacks it. Run `saasaloy env` and `pnpm env:setup`; for a deploy, set it for the `app` service.
 - **`pnpm dev` fails with "Port 3002 is already in use".** Another process holds it, often an older `email-react` preview from before it moved to 3003. Stop that process with `pnpm dev:stop` if it belongs to this checkout; do not change the port. To run a second checkout beside this one, use a linked worktree and `pnpm dev:ports`.
 - **The pages render with no styles.** `src/main.tsx` no longer imports `@repo/ui/styles/app.css`, or `app.css` lost its `shell.css` import. Restore both.
-- **The sign-in card renders unstyled.** The blocks are missing: `packages/ui/src/blocks/auth/` is empty because `shell` was installed before `auth`'s blocks existed. Run `saasaloy update auth`.
+- **The sign-in card renders unstyled.** The blocks are missing: `packages/ui/src/blocks/auth/` is empty because `shell` was installed before `auth`'s blocks existed. Run `saasaloy update`.
 
 #### Next
 

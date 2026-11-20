@@ -13,11 +13,11 @@ import type { FileClass } from "./classes.js";
 import type { Payload } from "./payload.js";
 import type { RenderResult } from "./render.js";
 
-// Manifest version 2 and the lock's `requested` list (plan 0116, "Formats"). The render
-// engine reads and writes these; the old engine keeps `lib/manifest.ts` (version 1) until
-// Phase 6 deletes it. Both live at `.saasaloy/manifest.json`. A version 1 file has no
-// `version` key, and each schema refuses the other's fields, so neither CLI misreads the
-// other's file.
+// Manifest version 2 and the lock's `requested` list (plan 0116, "Formats"). The engine
+// reads and writes these; `lib/manifest.ts` only reads a version 1 file for the
+// conversion. Both live at `.saasaloy/manifest.json`. A version 1 file has no `version`
+// key, and each schema refuses the other's fields, so neither CLI misreads the other's
+// file.
 
 export const MANIFEST_VERSION = 2;
 

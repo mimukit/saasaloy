@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { format } from "prettier";
-import {
-  insertNavEntry,
-  navEntryInsertRefusal,
-  navEntryRemoveRefusal,
-  removeNavEntry,
-} from "./nav-entry.js";
+import { insertNavEntry, navEntryInsertRefusal } from "./nav-entry.js";
 
 // The shape the admin module actually ships, trimmed of its comments.
 const NAV = `import { GaugeIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
@@ -149,21 +144,6 @@ describe("insertNavEntry into a group that does not exist yet", () => {
   it("does not count a missing group as a refusal", () => {
     expect(navEntryInsertRefusal(NAV, BLOG)).toBeUndefined();
   });
-
-  it("takes the group out again with its last row", () => {
-    expect(removeNavEntry(insertNavEntry(NAV, BLOG), BLOG)).toBe(NAV);
-  });
-
-  it("keeps the group while another row is still in it", () => {
-    const twice = insertNavEntry(insertNavEntry(NAV, BLOG), {
-      ...BLOG,
-      entry: { to: "/cms/pages", label: "Pages" },
-    });
-    const out = removeNavEntry(twice, BLOG);
-    expect(out).toContain('label: "Content"');
-    expect(out).toContain('to: "/cms/pages"');
-    expect(out).not.toContain('to: "/cms/blog"');
-  });
 });
 
 describe(navEntryInsertRefusal, () => {
@@ -176,33 +156,5 @@ describe(navEntryInsertRefusal, () => {
     [{ ...TEAMS, area: "/reports" }, 'area with to "/reports"'],
   ])("names what it could not find", (patch, expected) => {
     expect(navEntryInsertRefusal(NAV, patch)).toContain(expected);
-  });
-});
-
-describe(removeNavEntry, () => {
-  it("round trips back to the file it started from", () => {
-    expect(removeNavEntry(insertNavEntry(NAV, TEAMS), TEAMS)).toBe(NAV);
-  });
-
-  it("keeps the icon import when another row still uses it", () => {
-    const once = insertNavEntry(NAV, TEAMS);
-    const twice = insertNavEntry(once, {
-      ...TEAMS,
-      entry: { to: "/teams/invites", label: "Invites" },
-    });
-    const out = removeNavEntry(twice, TEAMS);
-    expect(out).toContain("UsersRoundIcon");
-    expect(out).not.toContain('to: "/teams"');
-  });
-
-  it("is a no-op on a row that is already gone", () => {
-    expect(removeNavEntry(NAV, TEAMS)).toBe(NAV);
-    expect(navEntryRemoveRefusal(NAV, TEAMS)).toBeUndefined();
-  });
-
-  it("reports a group that is no longer there", () => {
-    expect(
-      navEntryRemoveRefusal(NAV, { ...TEAMS, group: "Settings" })
-    ).toContain('"Settings"');
   });
 });

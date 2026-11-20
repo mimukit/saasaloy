@@ -151,9 +151,8 @@ those two lines out yourself, or the page stops building.
 
 #### What it patches
 
-Three patches; `saasaloy remove` reverses only the first — it does not uninstall npm dependencies,
-so the other two are dropped with a warning and uninstalling leaves them in
-`apps/web/package.json`:
+Three patches. `saasaloy remove` takes out all three, because the render without the module has
+none of them; run `pnpm install` afterwards:
 
 | Patch | Target | Why |
 |---|---|---|
@@ -190,7 +189,7 @@ one of them, because this module works with both.
 
 `created_at` used to be `integer("created_at", { mode: "timestamp" })`, which stores **whole
 seconds**. The SQLite variant now uses `mode: "timestamp_ms"`, which stores **milliseconds**. The
-integers already in the table do not change when `saasaloy update waitlist` rewrites the schema
+integers already in the table do not change when `saasaloy update` rewrites the schema
 file — only the way Drizzle reads them changes, so every pre-existing row comes back dated near
 1970.
 
@@ -213,7 +212,7 @@ This module used to name its table `waitlist`. It now names it `waitlist_entries
 export is `waitlistEntries`. The file stays `packages/db/src/schema/waitlist.ts`. A project that
 installed the old name upgrades it with one migration:
 
-1. Run `saasaloy update waitlist` to take the new schema file.
+1. Run `saasaloy update` to take the new schema file.
 2. Run `pnpm --filter @repo/db db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table.
    Pick the rename from the old name: `waitlist` → `waitlist_entries`.

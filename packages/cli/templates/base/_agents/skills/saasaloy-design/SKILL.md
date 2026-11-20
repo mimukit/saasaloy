@@ -74,7 +74,7 @@ Use only these component token keys: `backgroundColor`, `textColor`, `typography
 
 Keep the sections in this order: Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts, Motion, Dark Mode.
 
-The web contract is a one-time base seed. ADR 0022 means Saasaloy has no update path for it. The admin contract is an admin module file, so `saasaloy update` lists an edited copy in its merge plan. In both cases the fingerprint detects drift, and this skill repairs the contract.
+The web contract is a base file written once: `saasaloy update` never changes it, and `saasaloy update --merge apps/web/DESIGN.md` merges an upstream change on request. The admin contract is an admin module file, so `saasaloy update` merges an edited copy three ways and can leave conflict markers in it. In both cases the fingerprint detects drift, and this skill repairs the contract.
 
 ## Fingerprint
 

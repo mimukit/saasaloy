@@ -1,6 +1,6 @@
 # Finish the theme split
 
-Projects made before 0.6.0 kept the web tokens in `packages/ui/src/styles/globals.css` and the design document at the repository root. The base now splits the theme across three files: `globals.css` holds the shared Tailwind setup, `brand.css` holds the product's tokens, and `web.css` holds the landing page's utilities. `saasaloy update` creates `brand.css` and `web.css` and lists `globals.css` and `Layout.astro` in the merge plan, because the project owns both. It never moves your tokens for you.
+Projects made before 0.6.0 kept the web tokens in `packages/ui/src/styles/globals.css` and the design document at the repository root. The base now splits the theme across three files: `globals.css` holds the shared Tailwind setup, `brand.css` holds the product's tokens, and `web.css` holds the landing page's utilities. `saasaloy update` creates `brand.css` and `web.css`. It never changes `globals.css` or `Layout.astro`, because both are written once and then the project's. It lists each one in its report when upstream changed it, and it never moves your tokens for you.
 
 These steps used to live in the generated project's `AGENTS.md`. They moved here when that file was cut down, because only a project made before the split needs them.
 
@@ -31,6 +31,6 @@ The new admin app imports `@repo/ui/styles/admin.css`, so its build fails until 
 
 `logo-cloud`, `pain-points`, `how-it-works`, `showcase`, `audience` and `testimonials` came after the first landing page. A project made before them gets the files through `saasaloy update`, and adds each one to its own `apps/web/src/pages/index.astro` by hand, because the page is the owner's.
 
-The blocks need the landing utilities at the end of `web.css`. `web.css` is an owned file, so `update` lists it in the merge plan and never adds them for you. Copy the template's block, from the comment that opens "The landing page's layout" to the `stylelint-enable` line, to the end of your `web.css`. A project made before the theme split skips this copy: `update` creates its `web.css` from the template, block included.
+The blocks need the landing utilities at the end of `web.css`. `web.css` is written once, so `update` never adds them for you. `saasaloy update --merge packages/ui/src/styles/web.css` merges the template's change on request, or copy the block by hand. Copy the template's block, from the comment that opens "The landing page's layout" to the `stylelint-enable` line, to the end of your `web.css`. A project made before the theme split skips this copy: `update` creates its `web.css` from the template, block included.
 
 _Verified against `main`@`928b4f03` on 2026-11-19._

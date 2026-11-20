@@ -174,7 +174,7 @@ The merge has four cases, all in `resolveStatements` in `tenant-rules.ts` and al
 
 A project that installed `multitenant` before the tables became plural has a `project` table in its database. `projects` is this module's example table, not a Better Auth table, so the adapter never looks it up. A project that already deleted the example has nothing to do here. Otherwise, move it to the new name like this:
 
-1. Update `auth` first, because its schema rename and `usePlural: true` land together. Then run `saasaloy update multitenant` to take the new schema file.
+1. Run `saasaloy update`. It takes the new schema file, and the `auth` schema rename and `usePlural: true` land in the same run.
 2. Run `pnpm db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `project` → `projects`.
 4. Read the generated SQL before you apply it. It must rename the table and its index (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
@@ -183,14 +183,12 @@ A project that installed `multitenant` before the tables became plural has a `pr
 
 ## Upgrading from rbac
 
-Until 2026-09-20 a separate `rbac` module shipped the rule, the lock, the gate, the `/roles` screen and the gated `projects.ts`. That module is gone, and `teams` and `multitenant` own its files now. `saasaloy add multitenant` does not bring them back in a project that already has `multitenant`, because `add` skips an installed module. Run `update` per module instead:
+Until 2026-09-20 a separate `rbac` module shipped the rule, the lock, the gate, the `/roles` screen and the gated `projects.ts`. That module is gone, and `teams` and `multitenant` own its files now. `saasaloy add multitenant` does not bring them back in a project that already has `multitenant`, because `add` skips an installed module. Run `update` instead:
 
 1. Commit or stash first, so `git diff` shows what each step did.
 2. Run `saasaloy remove rbac`. It deletes `rbac.ts`, `rbac-rules.ts`, `plugins/role-lock.ts`, `/roles`, its two components, `admin/lib/tenant.ts` and `apps/api/src/routes/projects.ts`. If `api-keys` is installed, its lock entry still names `rbac` in `dependsOn`, so add `--force`.
-3. Run `saasaloy update teams`. It writes `permission-rules.ts` and `plugins/role-lock.ts`, and patches `roleLockGuard()` into both `auth` and `adminAuth`. Until this step runs, no base-role lock is active.
-4. Run `saasaloy update multitenant`. It writes `permissions.ts`, the `/roles` screen and its components, `admin/lib/tenant.ts` and the gated `projects.ts`, and adds the Roles sidebar entry.
-5. If `api-keys` is installed, run `saasaloy update api-keys`. Its files import `@repo/auth/permission-rules` now.
-6. In your own code, change `@repo/auth/rbac` to `@repo/auth/permissions`, `@repo/auth/rbac-rules` to `@repo/auth/permission-rules`, and `requireCan` to `requirePermission`. Then run `pnpm typecheck`.
+3. Run `saasaloy update`. For `teams` it writes `permission-rules.ts` and `plugins/role-lock.ts`, and patches `roleLockGuard()` into both `auth` and `adminAuth`. Until this step runs, no base-role lock is active. For `multitenant` it writes `permissions.ts`, the `/roles` screen and its components, `admin/lib/tenant.ts` and the gated `projects.ts`, and adds the Roles sidebar entry. If `api-keys` is installed, the same run updates its files, which import `@repo/auth/permission-rules` now.
+4. In your own code, change `@repo/auth/rbac` to `@repo/auth/permissions`, `@repo/auth/rbac-rules` to `@repo/auth/permission-rules`, and `requireCan` to `requirePermission`. Then run `pnpm typecheck`.
 
 No table changes. Stored custom roles in `organization_roles` keep working.
 

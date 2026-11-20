@@ -8,7 +8,7 @@ This note needs `auth/0005-user-caller` and `api/0006-agent-scope`. Apply both f
 
 The three callable reads in `apps/api/src/routes/notifications.ts`, `GET /notifications`, `GET /notifications/unread-count` and `GET /notifications/preferences`, open with `requireUser(c, { notifications: ["read"] })` in place of `requireSession(c)`, and their statements name `scope: "notifications:read"`. A signed-in person gets the same answers as before. With `api-keys-user` installed, a user's key that holds `notifications:read` reads that user's notifications; a key without it gets 403. The three writes stay on `requireSession`, so no key reaches them. With no key module installed nothing changes.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/routes/notifications.ts`, if you edited it. Keep your edits and take the `requireUser` import, the `READ` demand and the gate line in each of the three reads.
 

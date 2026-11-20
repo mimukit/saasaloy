@@ -6,7 +6,7 @@ title: A test compares R2_BUCKET_NAME with the BUCKET binding
 
 New file `apps/api/test/r2-bucket.test.ts`. It reads `bucket_name` of the `BUCKET` binding in `apps/api/wrangler.jsonc`, and fails when `R2_BUCKET_NAME` in `packages/env/.env` or `packages/env/.env.prod` is set to another name. When the two differ, uploads work through the binding and every presigned link answers `NoSuchBucket`.
 
-## What the merge plan gets
+## What update merges
 
 Nothing. The file is new.
 

@@ -19,6 +19,26 @@ const BROKEN = fileURLToPath(
   new URL("../../test/fixtures/registry-broken", import.meta.url)
 );
 
+function record(hash: string, fileClass = "merged"): Record<string, string> {
+  return {
+    class: fileClass,
+    from: "x",
+    hash,
+    module: "base",
+    version: "0.3.0",
+  };
+}
+
+function manifestV2(files: Record<string, unknown>): Record<string, unknown> {
+  return {
+    doneNotes: [],
+    files,
+    pendingMerges: [],
+    pendingNotes: [],
+    version: 2,
+  };
+}
+
 const temps: string[] = [];
 
 afterAll(async () => {
@@ -251,13 +271,13 @@ describe("runDoctor — what it reports and what it exits with", () => {
       await mkdir(join(project, ".saasaloy"));
       await writeFile(
         join(project, ".saasaloy", "manifest.json"),
-        JSON.stringify({
-          managed: {
-            "AGENTS.md": { module: "base", hash: hashContent("a\n") },
-            "CLAUDE.md": { module: "base", hash: hashContent("c\n") },
-            "README.md": { module: "base", hash: hashContent("seed\n") },
-          },
-        })
+        JSON.stringify(
+          manifestV2({
+            "AGENTS.md": record(hashContent("a\n")),
+            "CLAUDE.md": record(hashContent("c\n")),
+            "README.md": record(hashContent("seed\n"), "once"),
+          })
+        )
       );
       await writeFile(
         join(project, "saasaloy-lock.json"),
@@ -279,13 +299,13 @@ describe("runDoctor — what it reports and what it exits with", () => {
       expect(out).toContain("1 file match");
       expect(out).toContain("CLAUDE.md");
       expect(out).toContain("edited since");
-      expect(out).toContain("seed, not checked: README.md");
+      expect(out).toContain("written once, not checked: README.md");
       expect(out).toContain("No problems found");
     });
   });
 
-  // #312: a file kept deleted is an info line, never a problem.
-  it("lists a tombstoned base file as kept deleted, and exits 0", async () => {
+  // ADR 0059: a tracked file the project deleted is an info line, never a problem.
+  it("lists a deleted tracked file as left deleted, and exits 0", async () => {
     const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-kept-"));
     temps.push(project);
     await writeFile(
@@ -296,16 +316,12 @@ describe("runDoctor — what it reports and what it exits with", () => {
     await mkdir(join(project, ".saasaloy"));
     await writeFile(
       join(project, ".saasaloy", "manifest.json"),
-      JSON.stringify({
-        managed: {
-          "AGENTS.md": { module: "base", hash: hashContent("a\n") },
-          "packages/ui/src/blocks/showcase.tsx": {
-            module: "base",
-            hash: hashContent("s\n"),
-            deleted: true,
-          },
-        },
-      })
+      JSON.stringify(
+        manifestV2({
+          "AGENTS.md": record(hashContent("a\n")),
+          "packages/ui/src/blocks/showcase.tsx": record(hashContent("s\n")),
+        })
+      )
     );
     await writeFile(
       join(project, "saasaloy-lock.json"),
@@ -324,10 +340,57 @@ describe("runDoctor — what it reports and what it exits with", () => {
 
     expect(code).toBe(0);
     expect(out).toMatch(
-      /packages\/ui\/src\/blocks\/showcase\.tsx deleted, kept deleted/
+      /packages\/ui\/src\/blocks\/showcase\.tsx deleted, left deleted/
     );
-    expect(out).not.toContain("missing —");
     expect(out).toContain("No problems found");
+  });
+
+  // Plan 0116: a file a run left with conflict markers is listed until they are gone.
+  it("lists a pending merge that still holds markers, and exits 0", async () => {
+    const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-merge-"));
+    temps.push(project);
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "<<<<<<< mine\na\n=======\nb\n>>>>>>> saasaloy 0.3.0\n"
+    );
+    await writeFile(join(project, "CLAUDE.md"), "resolved\n");
+    await mkdir(join(project, ".saasaloy"));
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        ...manifestV2({}),
+        pendingMerges: ["AGENTS.md", "CLAUDE.md"],
+      })
+    );
+
+    const { code, doc } = await runJson(runDoctor, [project, "--json"]);
+
+    expect(code).toBe(0);
+    expect(doc.pendingMerges).toStrictEqual(["AGENTS.md"]);
+  });
+
+  it("names update as the fix for a version 1 project", async () => {
+    const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-v1-"));
+    temps.push(project);
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+    await mkdir(join(project, ".saasaloy"));
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({ managed: {} })
+    );
+
+    const { code, out } = await run([project]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("version 1");
+    expect(out).toMatch(/saasaloy[\s│]+update/);
   });
 
   // ADR 0048: the deploy rules warn and print the fix, and never fail the run.

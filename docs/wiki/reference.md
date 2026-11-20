@@ -26,14 +26,14 @@ current project has installed when it is run inside one, and works anywhere.
 
 ### Exit codes
 
-The codes are generated from `packages/cli/src/lib/exit.ts` and listed with their meaning on [the CLI commands page](generated/cli.md#exit-codes). `0` is success, `1` is a failure, `2` is a refusal by design, and `3` is `update` leaving work pending.
+The codes are generated from `packages/cli/src/lib/exit.ts` and listed with their meaning on [the CLI commands page](generated/cli.md#exit-codes). `0` is success, `1` is a failure, `2` is a refusal by design, and `3` means the run applied its work and left some pending: a file with conflict markers from `add`, `remove`, `update` or `testing`, or an update note not yet marked done.
 
 A wrapper script reads `2` as "the input is wrong, retrying will not help" and `1` as
 "transient, a retry may work".
 
 ### JSON output
 
-`list`, `doctor`, `outdated`, `env --check`, `add --dry-run` and `skill` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with a `schemaVersion`. A breaking change to a command's document shape bumps that command's number, and a new field does not. `list`, `doctor`, `outdated`, `env --check` and `skill` print `"schemaVersion": 1`. `add --dry-run` prints `"schemaVersion": 2`, because its `requested` field changed from a string to a list of names, and its error document carries 2 as well.
+`list`, `doctor`, `outdated`, `env --check`, `add --dry-run` and `skill` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with a `schemaVersion`. A breaking change to a command's document shape bumps that command's number, and a new field does not. `list`, `doctor`, `outdated`, `env --check` and `skill` print `"schemaVersion": 1`. `add --dry-run` prints `"schemaVersion": 3`: version 2 made `requested` a list of names, and version 3 came with the render engine, when each file's `action` became a result kind, each file gained its `class`, and `patches` went. Its error document carries 3 as well.
 
 `--json` never prompts. It changes no exit code: `doctor` with findings, `outdated --check` with drift or a pending update note and `env --check` with unset variables still exit 2, and they still print their report. A run that stops before its report, such as an unknown flag, no project, or a refusal, prints an error document instead, so stdout parses on every exit:
 
@@ -80,28 +80,31 @@ With no terminal, `init` refuses with exit 2 before it writes a file: with no `<
 ## `saasaloy add`
 
 ```text
-saasaloy add [<module>[@ref]...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
+saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
+saasaloy add --abort
 ```
 
-A bare module name reads the default registry at the tag `v<version>` of the CLI that runs, so the CLI and its modules come from one release ([ADR 0062](../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)). The lock records that tag as `ref` and its commit as `resolved`. `saasaloy add <module>@main` reads `main` instead, for a module merged after the release. A CLI whose tag the registry lacks, such as a development build or a version bumped ahead of its release, exits 2 and names `@main` and `SAASALOY_REGISTRY_DIR` as the ways out; it never falls back to `main` by itself.
+A bare module name reads the default registry at the tag `v<version>` of the CLI that runs, so the CLI and its modules come from one release ([ADR 0062](../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)). The lock records that tag as `ref` and its commit as `resolved`. The default registry moves as one release, so `saasaloy add <module>@main` refuses with exit 2 and names `saasaloy update`; a third-party `owner/repo@ref/module` keeps its own ref. `add` also refuses when the lock records another release than the running CLI: run `saasaloy update` first. A CLI whose tag the registry lacks, such as a development build or a version bumped ahead of its release, exits 2 and names `SAASALOY_REGISTRY_DIR` as the way out; it never falls back to `main` by itself.
+
+`add` puts the named modules in the lock's `requested` list, [renders](#how-a-run-writes) the project with them, and applies the difference in one run. A project an older CLI wrote (a version 1 manifest) is refused with exit 2: run `saasaloy update` first, which converts it.
 
 With no module named, `add` shows a multi-select over the source, listing only modules this project has not installed. With no terminal it exits 2 and prints the usage line. Unknown flags are rejected before any work happens, with exit 2.
 
-Name several modules to add them in one run: `saasaloy add admin teams --with database-d1 --yes`. `add` resolves every name into one graph, prints one plan, asks once, and runs every refusal (`requires.saasaloy`, `requiresOneOf`, `conflictsWith`, file collisions and owned files) on the whole set before it writes the first file. Prerequisites install first, and argv order decides between modules that do not depend on each other. A repeated name counts once. Every name reads from one registry: two coordinates that differ in owner, repo or ref exit 2 and name the two, and an `owner/repo` with no module cannot be mixed with names. When the registry has none of several names, one message lists them all. A named module that is already installed is skipped with a note, and the rest install. A message about a prerequisite says which named module pulled it in, `lefty (required by needs-lefty)`.
+Name several modules to add them in one run: `saasaloy add admin teams --with database-d1 --yes`. `add` resolves every name into one graph, prints one plan, asks once, and runs every refusal (`requires.saasaloy`, `requiresOneOf`, `conflictsWith` and file collisions) on the whole set before it writes the first file. Prerequisites install first, and argv order decides between modules that do not depend on each other. A repeated name counts once. Every name reads from one registry: two coordinates that differ in owner, repo or ref exit 2 and name the two, and an `owner/repo` with no module cannot be mixed with names. When the registry has none of several names, one message lists them all. A named module that is already installed is skipped with a note, and the rest install. A message about a prerequisite says which named module pulled it in, `lefty (required by needs-lefty)`.
 
 | Flag | Effect |
 |---|---|
 | `--dry-run` | print the plan and stop. Nothing is written. |
-| `--diff` | print the plan plus a per-file diff, capped at 60 lines each, and stop. Nothing is written. |
+| `--diff` | print the plan plus a per-file diff, and stop. Nothing is written. |
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
-| `--force` | re-apply the modules you named even though they are already installed. Already-installed dependencies are left alone. Several forced modules re-apply at the commit the lock recorded for them, and exit 2 when the lock pins them to different commits: re-apply them in separate runs, or pass `@<ref>`. |
+| `--force` | merge or delete a file even with uncommitted changes, overwrite an edited `generated` file, and write a named module's tracked files that the project deleted again. |
+| `--abort` | put back the files the last `add`, `remove`, `update` or `testing` run changed, and stop. |
 | `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add waitlist --with database-d1 --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
 | `--json` | with `--dry-run`, print the plan as one JSON document on stdout (see [JSON output](#json-output)). It never opens the picker or the driver prompt: name the module, and pass `--with` for an unmet `requiresOneOf`. |
 
-The `--dry-run --json` document carries `requested` (the named modules in argv order, a list also for one name), `prerequisites`, `install` (the install order), `alreadyInstalled`, `files` (each with `target`, `action`, `from`, `module`, `onlyWith` and `skill`), `patches` (each with `file`, `kind`, `action` and `module`), `dependencies`, `devDependencies`, `envVars` (name → description), `aliases`, `aliasConflicts`, `links` (the skill links, each with `path`, `target`, `action` and `module`), `staleOwners` and `writesUi`. Every file and every patch the text plan shows is in it. A module whose graph is already installed prints the same keys with empty lists.
+The `--dry-run --json` document carries `requested` (the named modules in argv order, a list also for one name), `prerequisites`, `install` (the install order), `alreadyInstalled`, `files` (each with `target`, `action`, `class` and `module`; `action` is the result kind, such as `new`, `updated`, `clean`, `conflict` or `deleted`), `onceChanged`, `pendingMerges` and `warnings`. Every file the text plan shows is in it. A module whose graph is already installed prints the same keys with empty lists.
 
-Without `--force`, a module whose graph is fully installed prints `Nothing to do` and
-exits 0.
+A module whose graph is fully installed prints `Nothing to do` and exits 0.
 
 A successful `add` ends with a next-steps box: the `/saasaloy-<module>` skill it linked,
 which holds the module's own procedure, and the environment variables it needs, re-printed
@@ -118,21 +121,7 @@ and `--force` does not bypass it. `add` never uninstalls anything to resolve a c
 module installed before its lock entry existed can't be checked this way; `add` says so and
 proceeds.
 
-Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that
-applied it, and one module may not overwrite another's file. A module may write over a
-file owned by a module it declares in `dependsOn` — that is how `database-d1` puts its own
-`packages/db/tsconfig.json` over the one `database` scaffolds — and over nothing else. Two
-modules in the same run that both write a path with no `dependsOn` edge either way are
-refused before anything is written, and so is a module claiming a path an installed,
-unrelated module owns. Either refusal exits 2 and names every contested path.
-
-`--force` does not cross module file ownership. It means "re-apply the module I named",
-so it re-applies that module's own files and refuses before applying anything when the
-module claims a file another module owns.
-The message names `saasaloy remove <other>` as the way through, because removing the
-owner deletes its files and its manifest entries together, which leaves ownership
-consistent for the next `add`. Swapping `database-d1` for `database-postgres` is
-`saasaloy remove database-d1` then `saasaloy add database-postgres`.
+Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that rendered it. A module may write over a file owned by a module it declares in `dependsOn`, which is how `database-d1` puts its own `packages/db/tsconfig.json` over the one `database` scaffolds, and over nothing else. Two modules in one set that both write a path with no `dependsOn` edge either way are refused before anything is written, with exit 2 and every contested path named. Swapping `database-d1` for `database-postgres` is `saasaloy remove database-d1` then `saasaloy add database-postgres`.
 
 A descriptor may also declare `requiresOneOf`, naming modules exactly one of which has to
 be present. `add` counts an option as present when it is already installed or arrives in
@@ -142,12 +131,9 @@ options instead of choosing for you, with the flag that answers it: "Re-run as `
 a project with no driver behind its `@repo/db/client` export.
 
 A file entry — in `files[]` or in a scaffold's `files[]` — may declare `onlyWith`, naming
-one module. `add` copies that file only when the named module is in the resolved install
-set: this run's graph plus what `saasaloy.json` already records. Two entries may name the
+one module. The render writes that file only when the named module is in the resolved set: this run's graph plus the lock's `requested` list. Two entries may name the
 same `target` under disjoint conditions, which is how a module ships one file per database
-dialect and lets the installed driver pick. The condition is applied where `add` and
-`update` share their file listing, so `update` diffs the variant the project actually
-holds. When a target's entries are all conditional and none matches, `add` exits 2 and
+dialect and lets the installed driver pick. The render reads `onlyWith` as a `when.installed` gate, so every command sees the variant the project actually holds. When a target's entries are all conditional and none matches, `add` exits 2 and
 names the target and every candidate rather than leaving the file out.
 
 `database-d1` and `database-postgres` are the pair both fields point at today. They are
@@ -161,15 +147,14 @@ by removing one driver and adding the other, which moves no data
 `auth` and `waitlist` install under either driver. Each ships its table declarations twice,
 once against `sqlite-core` and once against `pg-core`, and the descriptor's `onlyWith`
 condition installs the variant matching the driver already in the project; `--dry-run`
-prints which source it chose. Because that choice is made at install time, switching driver
-later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
+prints which source it chose. Switching driver later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
 and [ADR 0029](../adr/0029-adr-auth-holds-a-request-scoped-db-client-2026-08-31.md).
 
-An entry in `files[]`, a scaffold's `files[]` or `patches` may also declare `when`, which decides whether it ships at all. `{ "testing": true }` ships it only while the project's testing mode is `tests-after` or `tdd`, and every test file a module ships carries it. `{ "installed": ["e2e"] }` ships it only while every named module is installed, which is how a feature module ships its Playwright journey spec beside `e2e`. Both keys together mean both. `add` checks `when` before `onlyWith`, and a target whose every entry `when` drops is skipped rather than refused. `when` decides the first write only: once a gated file or patch is in the manifest it stays managed, and `update` keeps it current in every mode. The manifest records the `when` beside the entry.
+An entry in `files[]`, a scaffold's `files[]` or `patches` may also declare `when`, which decides whether it ships at all. `{ "testing": true }` ships it only while the project's testing mode is `tests-after` or `tdd`, and every test file a module ships carries it. `{ "installed": ["e2e"] }` ships it only while every named module is installed, which is how a feature module ships its Playwright journey spec beside `e2e`. Both keys together mean both. A target whose every entry `when` drops is skipped rather than refused. The render writes every entry whose `when` holds on each run, so an entry whose condition turns true later arrives with the next `add`, `update` or `testing` run. When a condition turns false, an unedited file is deleted and an edited one stays, untracked; `testing off` is the exception and deletes nothing.
 
-Two more descriptor fields belong to testing. `untested` on a file entry is a one-line reason the file ships with no test beside it, and the test guards print it instead of failing. `enablesTesting: true` marks a module whose whole point is tests: adding it to a project whose mode is `off` sets `tests-after` once the apply lands, prints one line saying so, and backfills. It leaves `tdd` alone, and `remove` never changes the mode ([ADR 0054](../adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
+Two more descriptor fields belong to testing. `untested` on a file entry is a one-line reason the file ships with no test beside it, and the test guards print it instead of failing. `enablesTesting: true` marks a module whose whole point is tests: adding it to a project whose mode is `off` sets `tests-after`, prints one line saying so, and the same run writes the gated test files. It leaves `tdd` alone, and `remove` never changes the mode ([ADR 0054](../adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
 
-A file entry in `files[]` or a scaffold's `files[]` may declare `"seed": true`. A seed file is the project's once written: `add` and backfill write it once, and the manifest records it with `seed: true`. `update` never overwrites or merges it, and writes it again only when it is missing from disk. `remove` deletes it while its hash still matches and keeps it, untracked and named in a warning, once the project changed it. A module uses one for an extension point a managed file imports, so a project changes the seed and the managed file stays clean ([ADR 0060](../adr/0060-adr-a-module-file-may-be-a-seed-written-once-2026-11-04.md)).
+A file entry in `files[]` or a scaffold's `files[]` may declare `"seed": true`, which makes it a [`once` file](#file-classes): written when the path is new, then the project's. `update` never overwrites or merges it unless `update --merge <path>` asks. A deleted one stays deleted until `update --restore <path>` or `add <module> --force`. `remove` deletes it while its hash still matches and keeps it, untracked, with one report line, once the project changed it. A module uses one for an extension point a merged file imports, so a project changes the seed and the merged file stays clean ([ADR 0060](../adr/0060-adr-a-module-file-may-be-a-seed-written-once-2026-11-04.md), [ADR 0067](../adr/0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md)).
 
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
@@ -212,13 +197,13 @@ saasaloy testing [off|tests-after|tdd]
 
 With no argument, prints the project's mode as a bare word on stdout (`off`), so a script can read it. A project whose `saasaloy.json` has no `testing` key reads as `off`.
 
-With a mode, saves it to `saasaloy.json` under `testing.mode` and rewrites the testing block in the root `AGENTS.md`, the text between `<!-- saasaloy:testing -->` and `<!-- /saasaloy:testing -->`. Nothing outside the markers changes. The new `AGENTS.md` hash is recorded only when the file was clean, so an edited file still reads as edited to `update`. When the markers are gone, the mode is still saved, and the command warns with the file name and exits 0.
+With a mode, it renders the project for that mode and applies the difference, like `add`: `saasaloy.json` records the mode under `testing.mode`, and the testing block in the root `AGENTS.md`, the text between `<!-- saasaloy:testing -->` and `<!-- /saasaloy:testing -->`, changes with it. `AGENTS.md` merges three ways, so your own text outside the markers stays.
 
-Turning a mode on (`tests-after` or `tdd`) **backfills**: it writes every entry of the installed modules whose `when` is now true and whose target is untracked, reading each module at the SHA in `saasaloy-lock.json`. The collision, ownership and merge rules of `add` apply unchanged, and running the same mode again recovers a partial backfill. `off` deletes nothing: a test file already written stays, and stays managed.
+Turning a mode on (`tests-after` or `tdd`) writes every entry of the installed modules whose `when` is now true. `off` deletes nothing: each gated test file stays on disk, and the manifest stops tracking it, so it is yours. A module with `enablesTesting` keeps the mode on, and `testing off` refuses while it is installed. The rules of `add` hold: the lock's release must be the running CLI's, and the run refuses when it must merge a file with uncommitted changes.
 
 The `saasaloy-testing` skill, which every project ships in `.agents/skills/`, tells an agent what each mode asks and which test each kind of change needs ([ADR 0053](../adr/0053-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md)).
 
-Exit codes: 0 when the mode was printed or saved, 2 for an unknown mode or an extra argument.
+Exit codes: 0 when the mode was printed or saved, 3 when a merge left conflict markers, 2 for an unknown mode, an extra argument, or a refusal.
 
 ## `saasaloy outdated`
 
@@ -226,126 +211,136 @@ Exit codes: 0 when the mode was printed or saved, 2 for an unknown mode or an ex
 saasaloy outdated [--check] [--json]
 ```
 
-Report whether anything has moved, without touching a file. The first row is the base template: the template hash `saasaloy-lock.json` recorded against the one the running CLI ships, with the recorded and running CLI versions beside it. One row per installed module follows, comparing the lock's commit SHA with what its ref resolves to now.
+Report whether anything has moved, without touching a file. The default registry moves as one release, so the base row and each default-registry module compare the release the lock records with the running CLI. A third-party module compares the lock's commit SHA with what its ref resolves to now.
 
-A base row reads `current`, `outdated`, or `untracked`. `untracked` means the project has no usable base record, which includes every project scaffolded before the record existed and a project whose lock has a `base` object but whose manifest has no tracked base entries. It is news, not drift: `outdated --check` does not fail on it, and `saasaloy update` adopts or re-adopts the base. A bare run exits 0 whatever it finds. `--check` exits 2 when the base or any module is `outdated`, so CI can gate on drift without parsing the table. An unreachable source is a row, not a throw, and it does not fail `--check` either. With `SAASALOY_REGISTRY_DIR` set, every module row reads `local` and the run warns that nothing was compared, so `--check` exits 0.
+A base row reads `current`, `outdated`, or `untracked`. `untracked` means the project has no usable base record. It is news, not drift: `outdated --check` does not fail on it, and `saasaloy update` records the base. A bare run exits 0 whatever it finds. `--check` exits 2 when the base or any module is `outdated`, so CI can gate on drift without parsing the table. An unreachable source is a row, not a throw, and it does not fail `--check` either. With `SAASALOY_REGISTRY_DIR` set, every module row reads `local` and the run warns that nothing was compared, so `--check` exits 0.
 
 A pending update note is work waiting too. `outdated` lists each one by id and title in a **Pending update notes** box, and `--check` exits 2 while any is pending, with or without drift. See [Recording an update note](#recording-an-update-note).
 
-`--json` prints the same rows as one document on stdout (see [JSON output](#json-output)): `base`, the base row, `modules`, one row per installed module, and `drift`, the count of moved rows, and `pendingNotes`, each pending note's `id` and `title` (an empty list when none is pending). `--check` exits 2 when `drift` is above 0 or `pendingNotes` is not empty. Each row carries `name`, `source`, `ref`, `current`, `latest` and `status`, plus `detail` when the table prints a note under it. The exit code is the one the same run without `--json` returns.
+`outdated` also lists each `once` file whose upstream render changed since the render that wrote it, under **Written once, changed upstream**, on every run. `saasaloy update --merge <path>` takes that change. The list is news, not drift, so `--check` does not fail on it.
+
+`--json` prints the same rows as one document on stdout (see [JSON output](#json-output)): `base`, the base row, `modules`, one row per installed module, `drift`, the count of moved rows, `pendingNotes`, each pending note's `id` and `title` (an empty list when none is pending), and `onceChanged`, the `once` files upstream changed. `--check` exits 2 when `drift` is above 0 or `pendingNotes` is not empty. Each row carries `name`, `source`, `ref`, `current`, `latest` and `status`, plus `detail` when the table prints a note under it. The exit code is the one the same run without `--json` returns.
 
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--restore <path>]... [--done <id>]... [--from <version>] [--dry-run] [--diff] [--force] [--yes]
+saasaloy update [--restore <path>]... [--merge <path>]... [--done <id>]... [--dry-run] [--diff] [--force] [--yes]
 saasaloy update --abort
 ```
 
-Re-apply the base template and installed modules at a newer version than `saasaloy-lock.json` records. With nothing named it considers the base and every installed module; `saasaloy update base` considers the base alone. A file you never touched is overwritten; a file you edited is left alone and routed into a **merge plan** — a document written to stdout describing what changed upstream, what you changed, and what the reconciliation has to preserve. `saasaloy update email | claude` is the designed pipeline.
+Move the project to the release of the CLI that runs. The base and every default-registry module move together, to the tag `v<version>` of the running CLI ([ADR 0062](../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)); a third-party module moves to the tip of the ref its lock entry records. `update` takes no module name, and `saasaloy update <module>` exits 2. A staged update runs an older CLI first: `pnpm dlx saasaloy@<version> update`. A CLI older than the lock's release refuses with exit 2 and names the version to install.
 
-The base ships inside the CLI package, so its update compares the project against the template the running CLI renders for it. The merge base is the template at the release the project recorded, fetched from the `v<version>` tag of `mimukit/saasaloy` (`SAASALOY_BASE_SNAPSHOT_DIR` points at a local folder of `<version>/` copies instead), so a drifted base file renders three-way. When no snapshot is available (a version that is not a release, a failed fetch, or a template that does not match the lock), it renders two-way, current file against the new render, and the base section's header gives the reason. Either way it carries the intent line "the base template changed; keep local edits, take the upstream change". Files the template declares as seed (`apps/web/DESIGN.md`, `README.md`, the landing copy, and `saasaloy.json`) are never updated, and neither is a root `DESIGN.md` from a project made before the design document moved. Files it declares as owned — `packages/ui/src/styles/globals.css`, `brand.css` and `web.css`, everything under `blocks/`, `components/`, `containers/` and `content/`, `packages/ui/src/index.ts`, `apps/web/src/layouts/Layout.astro` and `apps/web/public/favicon.*` — are created when absent and never written again. The template hands them over once, and the upstream change reaches you through the merge plan instead. A base file another module patched, such as `apps/web/package.json` after `waitlist`, has its recorded patches re-applied after the overwrite.
+The run renders the old lock and the new lock and applies the difference, file by file, by [class](#file-classes):
 
-Two cases stop before anything is applied. A project with no usable base record is **adopted**: each existing base file is recorded at its on-disk hash, and each missing template file is listed and left unrecorded. The run records the running CLI, reports the adoption, and exits 0. Each adopted entry is flagged `adopted`, because the hash came off your disk and says nothing about who wrote those bytes: the next update treats every one of those files as edited and offers a merge rather than a write. A later base update reads each unrecorded missing file as new and creates it. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
+- A file you never edited is written.
+- A `merged` file you edited merges three ways against the [base of the merge](#the-base-of-a-merge). Where both sides changed the same lines it gets conflict markers (`<<<<<<< mine`, `||||||| base`, `=======`, `>>>>>>> saasaloy <version>`), and the run exits 3.
+- A `once` file is never changed. When upstream changed it, the report lists it one time for each change, and `update --merge <path>` merges it on request.
+- A tracked file you deleted stays deleted. When upstream changed it, the report lists it under "Left deleted", and `update --restore <path>` writes it again.
+- A file upstream dropped is deleted when you never edited it. An edited one stays on disk, untracked, under "Kept, no longer tracked".
+- A `generated` file you edited refuses the run with exit 2 and names the file. `--force` overwrites it.
+
+A conflict does not stop the run. The lock and the manifest move to the new release, and the manifest lists each file with markers under `pendingMerges`. While one of those files still holds a marker line, `add`, `remove` and `update` refuse with exit 2. A file is resolved when no marker line remains in it; no flag records it.
+
+### The report
+
+`update` prints a Markdown report on stdout, and the TUI goes to stderr, so `saasaloy update --yes > .saasaloy/update-report.md` keeps the report in a file. Its sections, each left out when empty:
+
+- `## Files with conflict markers`, with the count of conflicts in each file and "no base: two-way markers" where the merge had no base.
+- `## Written once, changed upstream`, each with its `saasaloy update --merge <path>` command.
+- `## Left deleted`, each with its `saasaloy update --restore <path>` command.
+- `## Kept, no longer tracked`.
+- `## Warnings`.
+- `## Update notes`, then `### Notes that may apply` and `### When a note is done` with the `--done` command for every note shown.
+
+The report ends with a line that names `pnpm install` and `pnpm check`. The CLI runs no typecheck itself.
 
 | Flag | Effect |
 |---|---|
-| `--ref <ref>` | update one named module to this branch, tag or SHA instead of this CLI's release tag. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. Without it, every module from the default registry that is not pinned to a SHA moves to the tag `v<version>` of the running CLI, a lock entry an older CLI wrote at `main` included. A third-party module stays on the ref its lock names. |
-| `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
-| `--resolved <path>` | record a file you merged, or keep a file you deleted deleted, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge) and [Keeping a deleted file deleted](#keeping-a-deleted-file-deleted). |
-| `--restore <path>` | bring back a file kept deleted: write the current upstream file and stop keeping it deleted. A path that is not kept deleted exits 2. Repeatable. |
-| `--done <id>` | record an update note whose work is done, so the merge plan stops listing it. Repeatable. See [Recording an update note](#recording-an-update-note). |
-| `--from <version>` | on the first update after adoption, name the CLI version the project was made with, so the base update notes newer than it apply. Without it those notes print under "Notes that may apply". Any other run refuses it with exit 2, because the lock range is already exact. |
-| `--dry-run` | print the plan and stop. Nothing is written. |
-| `--diff` | print the plan plus a per-file diff and stop. Nothing is written. |
-| `--force` | apply even though the git working tree has uncommitted changes. Without it, a dirty tree is refused with exit 2, so `git diff` still shows what the update did. A project that is not a git repository is never blocked. |
-| `--abort` | put back the files the last update replaced, from the newest pre-update backup, and stop. Reads no registry and builds no plan. |
+| `--restore <path>` | write a tracked file the project deleted again, from the current upstream. A path that is not a tracked, deleted file exits 2. Repeatable. |
+| `--merge <path>` | merge a `once` file with its upstream change, three ways, against the release that wrote it. With no base found, two-way markers. Repeatable. |
+| `--done <id>` | record an update note whose work is done, so the report stops listing it. Repeatable. See [Recording an update note](#recording-an-update-note). |
+| `--dry-run` | print the plan and the report, and stop. Nothing is written. |
+| `--diff` | print the plan plus a per-file diff, and stop. Nothing is written. |
+| `--force` | apply even though the git working tree has uncommitted changes, and overwrite an edited `generated` file. Without it, a dirty tree is refused with exit 2, so `git diff` still shows what the update did. A project that is not a git repository is never blocked. |
+| `--abort` | put back the files the last `add`, `remove`, `update` or `testing` run changed, the manifest and the lock included, and stop. |
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
 
-The confirmation gates on **stdin**, not stdout: the merge plan goes to stdout, so a
-redirect there says nothing about whether anyone is watching. Without a terminal on stdin
-and without `--yes`, `update` refuses with exit 2 rather than applying unconfirmed. A
-preview (`--dry-run`, `--diff`) writes nothing and is exempt.
+The flags of the old engine, `--from`, `--out`, `--ref` and the flag that recorded a finished merge, are gone. Each exits 2 with the reason.
 
-`update` runs the same `conflictsWith` check `add` does, because a new version can
-introduce a `dependsOn` on a second driver, and it reports any environment variable the new
-version added that the lock has no record of.
+The confirmation gates on **stdin**, not stdout: the report goes to stdout, so a redirect there says nothing about whether anyone is watching. Without a terminal on stdin and without `--yes`, `update` refuses with exit 2 rather than applying unconfirmed. A preview (`--dry-run`, `--diff`) writes nothing and is exempt.
 
-Before it writes anything, `update` copies every file the plan will touch — plus
-`saasaloy.json`, `saasaloy-lock.json`, `package.json` and `.saasaloy/manifest.json` — into
-`.saasaloy/backups/<timestamp>/`, and prints the path. `saasaloy update --abort` puts that
-copy back, including deleting the files the run created. The directory is gitignored.
+`update` runs the same `conflictsWith` check `add` does, because a new version can introduce a `dependsOn` on a second driver.
 
-A module run also backfills: each installed module's entries whose `when` is now true and whose target is untracked are written at the locked SHA, after the dirty-tree and confirmation checks. `--dry-run` and `--diff` only list them, and `update base` reads no module, so it backfills nothing. A project with no `testing` key and a module-owned `*.test.ts` in its manifest gets one line suggesting `saasaloy testing tests-after`.
+Exit codes: 0 when there is nothing left to do, 3 when the run applied the update and left files with conflict markers or update notes not yet marked done, 2 for a refusal, 1 for a failure. A preview exits 0.
 
-Exit codes: 0 when there is nothing left to do, 3 when the run applied what it could and left files waiting on a merge or update notes not yet marked done, 2 for a refusal, 1 for a failure. A preview exits 0. The closing line names the merges and the pending notes apart.
+### How a run writes
 
-### Recording a merge
+`add`, `remove`, `update` and `testing <mode>` are one operation: render the old lock and the new lock, compare each path with the disk, and pick one action for it ([ADR 0066](../adr/0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md)). Before it writes, the run copies each file it will overwrite, merge or delete into `.saasaloy/backups/<timestamp>/`, and it writes `.saasaloy/journal.json`. It writes the project, then the manifest and the lock, and removes the journal last. A journal left behind marks a run that did not finish: every later `add`, `remove` and `update` refuses with exit 2 until `--abort` restores the files. The backup directory is gitignored.
 
-`update` cannot tell a finished merge from an unfinished one, so a plain re-run offers the same files again against the same base. `--resolved <path>` is how you say a merge is done. It is part of an update run, not a separate command, so with no terminal it still needs `--yes`, and a dirty working tree still needs `--force`. The merge plan ends with the exact command for its files:
+The clean-tree rule differs by command. `update` refuses any uncommitted change. `add`, `remove` and `testing` refuse only when the run must merge or delete a file that has uncommitted changes; a write of a new file needs no clean tree. `--force` overrides both.
 
-```sh
-saasaloy update --resolved apps/api/src/routes/waitlist.ts --yes
-```
+### File classes
 
-Each named file leaves the merge plan. `update` records the file's current hash as its new baseline in `.saasaloy/manifest.json`, without checking what the file holds, and writes nothing to it. A dropped file the module no longer ships is untracked and left on disk. Once nothing else of a module waits on a merge, its lock entry moves to the new SHA, and the next `update` skips the file and exits 0 when nothing else is left. A config patch under "Config patches that moved" is not a file: it still waits, and the module's lock stays where it is.
+Each rendered file has one class, recorded in the manifest ([ADR 0067](../adr/0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md)):
 
-The manifest entry also records the hash of the module version the merge took in (`mergedWith`). While the module still ships that version, `update` skips the file even with no merge base, as under `SAASALOY_REGISTRY_DIR`. Once the module moves again, the file goes to the merge plan rather than being overwritten, because it holds your edits.
+| Class | What a run does with it |
+|---|---|
+| `generated` | writes it in full every run. An owner edit refuses the run with exit 2; `--force` overwrites it. |
+| `merged` | three-way merge of the old render, the new render and the disk. `package.json`, `wrangler.jsonc`, `tsconfig.json`, `turbo.json` and `saasaloy.json` merge by key, with markers around a key both sides changed. |
+| `once` | written when the path is new, then left alone. `update --merge <path>` merges it on request. |
 
-A path may be relative to the working directory or to the project root, as the merge plan prints it. A path that this run does not send to a merge exits 2 before anything is written and names the path and the files that are waiting.
+The base's `seedFiles` and `ownedFiles` in `_saasaloy-base.json` and a module entry's `"seed": true` are `once`. `saasaloy.json` and `packages/env/.env.example` are `merged`. Every other file is `merged`.
 
-### Keeping a deleted file deleted
+### The base of a merge
 
-A file `update` tracks and that is missing from disk goes to the merge plan once, as "deleted locally", with the upstream file or its upstream diff, and the run exits 3. `update` never writes it back on its own. Choose one:
+The base is the render of the old lock, from the payload at the old ref, accepted only when its sha256 equals the hash the manifest recorded. The manifest hash is always the sha256 of the raw render, before Prettier, never the bytes on disk. When the old lock's render does not match, the run renders the release the record names in its `version`, a side rendered with another database driver included. With no match, the merge writes two-way markers ([ADR 0068](../adr/0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)).
 
-```sh
-saasaloy update --resolved packages/ui/src/blocks/showcase.tsx --yes
-```
+The payload of each ref lives in a cache for each user: `$XDG_CACHE_HOME/saasaloy/payload/<source>@<ref>/`, else `~/.cache/saasaloy/payload/<source>@<ref>/`. A fetch fills it, and a later run reads it. A run that needs a merge, with a cold cache and no network, refuses with exit 2. The base template at the running CLI's release is the one bundled in the CLI.
 
-keeps it deleted. The `managed` entry in `.saasaloy/manifest.json` gains `"deleted": true` and keeps its module, `from` and last hash. No later run writes the file or lists it in the merge plan. When the upstream file changes, the plan summary prints one line, `kept deleted  <path>  (upstream changed it)`. When upstream drops the file, the entry goes. `saasaloy remove <module>` drops that module's kept-deleted entries, `saasaloy outdated` reads the base as current when only kept-deleted files are missing, and `saasaloy doctor` lists each one as "deleted, kept deleted".
+### The first run on an older project
 
-```sh
-saasaloy update --restore packages/ui/src/blocks/showcase.tsx --yes
-```
+A project an older CLI (0.9.0 or earlier) wrote has a version 1 manifest. Only `update` converts it; `add` and `remove` refuse it with exit 2 and name `saasaloy update`. The conversion finds each file's base by its recorded hash across the lock's release, the old-engine releases 0.1.0 to 0.9.0 newest first, and the lock's module commits, and writes version 2 records. A file with no base becomes a file on both sides, with two-way markers in the update that follows. The conversion and the update are one run on a clean tree, so the result is one diff to review, and `--abort` restores the version 1 manifest and lock. Convert on a branch.
 
-brings a kept-deleted file back: it writes the current upstream file and drops the flag. It takes only a file kept deleted, so a file still waiting in the merge plan needs `--resolved` first. A module whose lock is current is planned at its recorded SHA for the restore, and its lock stays. A kept-deleted file you put back by hand counts as restored: the next `update` treats it as any tracked file and drops the flag.
+A version 1 manifest that records no `hash` or no `from` for a file refuses with exit 2 and names `pnpm dlx saasaloy@0.9.0 update`, which records both. Run it, then the update with the newest CLI.
 
 ### Recording an update note
 
-Every update note an applied run shows is recorded as pending in `.saasaloy/manifest.json` (`pendingNotes`), with its title and body. `--dry-run`, `--diff` and a declined prompt record nothing. A pending note prints again in every later merge plan, under its first group, until it is cleared, and `update` exits 3 while any note is pending, even when no file moved. `saasaloy outdated` and `saasaloy doctor` list the pending notes, and `saasaloy remove <module>` drops the notes that module owns.
+Every update note an applied run shows is recorded as pending in `.saasaloy/manifest.json` (`pendingNotes`), with its title and body. `--dry-run`, `--diff` and a declined prompt record nothing. A pending note prints again in every later report until it is cleared, and `update` exits 3 while any note is pending, even when no file moved. `saasaloy outdated` and `saasaloy doctor` list the pending notes.
 
-`--done <id>` clears one note. Like `--resolved`, it rides a normal update run, so with no terminal it needs `--yes` and a dirty working tree needs `--force`. The merge plan ends its "Update notes" section with the exact command for its notes:
+`--done <id>` clears one note. It rides a normal update run, so with no terminal it needs `--yes` and a dirty working tree needs `--force`. The report ends its "Update notes" section with the exact command for its notes:
 
 ```sh
 saasaloy update --done base/0001-brand-css --yes
 ```
 
-An id that is not pending exits 2 before anything is written and lists the pending ids. A cleared id moves from `pendingNotes` to `doneNotes` in the manifest, and every later run skips it, so a cleared note never returns. That holds even when a run selects the same note again, as it does on a base adopted at the running CLI or with `SAASALOY_REGISTRY_DIR` set. `saasaloy remove <module>` drops that module's done ids too, so a re-add starts clean.
-
-An applied run that reads the base also records the running CLI as the base's `cliVersion` in `saasaloy-lock.json`, whether the base was current, updated, or still waiting on a merge. The base notes up to that CLI are then out of the next run's range, so a cleared base note does not come back. A module note comes from the module's own update range, so it stops when the module's lock entry moves.
+An id that is not pending exits 2 before anything is written and lists the pending ids. A cleared id moves from `pendingNotes` to `doneNotes` in the manifest, and every later run skips it, so a cleared note never returns.
 
 ## `saasaloy remove`
 
 ```text
 saasaloy remove [<module>] [--dry-run] [--diff] [--yes] [--force]
+saasaloy remove --abort
 ```
 
-No `owner/repo` coordinate: `remove` is fully offline and reads only local state. With no
-module named it shows a picker over the installed modules. Unknown flags and extra
-positionals are rejected with exit 2.
+Render the project without the module and apply the difference. Every file and every patch the module wrote goes with it, because the render without the module never wrote them. With no module named it shows a picker over the modules you asked for. Unknown flags and extra positionals are rejected with exit 2.
 
 | Flag | Effect |
 |---|---|
 | `--dry-run` | print the plan and stop. Nothing is removed. |
-| `--diff` | print the plan plus a deletion diff per file and a reversal diff per reversible patch, and stop. Nothing is removed. |
-| `--yes`, `-y` | skip every prompt, including the per-file drift confirmation. Drifted files then survive on disk, untracked. |
-| `--force` | remove the module even though other installed modules depend on it. |
+| `--diff` | print the plan plus a diff for each path, and stop. Nothing is removed. |
+| `--yes`, `-y` | skip the confirmation prompt. |
+| `--force` | delete and merge even over uncommitted changes, and overwrite an edited `generated` file. |
+| `--abort` | put back the files the last `add`, `remove`, `update` or `testing` run changed, and stop. |
 
-`remove X` also takes every file and patch another module wrote under a `when.installed` that names X, such as a journey spec gated on `e2e`. The plan line names the owner, as in `delete  packages/e2e/specs/auth-sign-in.spec.ts (auth, ships only with e2e)`. The owner stays installed, and a drifted file is kept untracked, as with the module's own files.
+A file the module wrote and you never changed is deleted. A file you changed stays on disk, untracked, with one report line. A file another module or the base still renders, such as `package.json` or `apps/api/src/index.ts`, merges three ways, so the module's lines go and yours stay; a conflict leaves markers and exits 3. `remove X` also takes every entry another module ships under a `when.installed` that names X, such as a journey spec gated on `e2e`.
 
-With no terminal, a named module, and no `--yes`, `remove` refuses with exit 2 before it plans: "No terminal to confirm in — re-run with `--yes` to remove, or `--dry-run` to preview." `--dry-run` and `--diff` ask nothing, so they still run.
+`remove` refuses with exit 2 when other installed modules depend on the module, when the module was installed only as a prerequisite, when the lock's release differs from the running CLI, when the project has a version 1 manifest, and when a pending merge still holds a marker line. `--force` does not override the dependency refusal, because a module cannot render without its prerequisite.
 
-See [Remove a module](how-to/remove-a-module.md), and read
-[Known limitations](#known-limitations) before assuming `remove` undoes `add`.
+`remove` reads the payload of the lock's release from the [user cache](#the-base-of-a-merge), and fetches it when the cache does not hold it.
+
+With no terminal, a named module, and no `--yes`, `remove` refuses with exit 2 before it plans. `--dry-run` and `--diff` ask nothing, so they still run.
+
+See [Remove a module](how-to/remove-a-module.md).
 
 ## `saasaloy list`
 
@@ -415,7 +410,7 @@ Validate what is on disk. Nothing named checks the current directory. `doctor` p
 
 Registry mode checks one module folder (`saasaloy doctor modules/waitlist`) or a directory of them (`saasaloy doctor modules`); a module folder is one that carries a `registry-item.json`. Besides the schema, it checks what the schema cannot, among them declared files on disk, known aliases, sibling module names, exact-pinned dependencies, the skill folder, and a `description` on every descriptor. The schema keeps `description` optional so a project can still read an older descriptor, but a registry without one fails here. A `description` that still starts with `TODO`, as `new module` writes it, is a warning: it prints in a **Warnings** box and never fails the run. It prints one box per module with findings and a dim line counting how many were clean. A clean run ends with "No problems found." and exit 0. Findings exit 2, which is what makes `doctor` usable as a pre-publish gate in CI.
 
-Project mode opens with a **Base** box: the recorded template name, the CLI version and short template hash it was recorded at, a count of files that match the record, the files that drifted, the files that are missing, and the seed files it does not check. Base drift never fails the run. A **Pending update notes** box follows when an applied `saasaloy update` showed notes that nobody cleared yet, one line per note with the `saasaloy update --done <id>` command that clears it. Like base drift, a pending note never fails the run. An untracked base prints "untracked — no record of which template scaffolded this project." and points at `saasaloy update` to record it.
+Project mode opens with a **Base** box: the recorded template name, the CLI version and short template hash it was recorded at, a count of files that match the record, the files that changed, and the files left deleted, which `saasaloy update --restore <path>` writes again. It also lists each pending merge, a file the last run left with conflict markers. A project with a version 1 manifest gets one line that names `saasaloy update`, which converts it. Base drift never fails the run. A **Pending update notes** box follows when an applied `saasaloy update` showed notes that nobody cleared yet, one line per note with the `saasaloy update --done <id>` command that clears it. Like base drift, a pending note never fails the run. An untracked base points at `saasaloy update` to record it.
 
 Below the base box, project mode asks seven questions: a module in `installed` that owns no file in the manifest, a module that owns files but was never marked installed, a capability whose `requiresOneOf` no installed module meets, on a project running `kv-cloudflare` whether every registered rate limit policy has the `RL_<NAME>` binding its `consume` resolves to, whether a leftover `.dev.vars` file hides `.env` from wrangler, and whether a `config` value replaces an env var that a `.env` file still sets. The seventh is whether a retired Pulumi `infra/` workspace is still there, and its finding points at [the runbook](runbooks/move-off-the-infra-module.md). No findings exits 0 with "No problems found."; findings exit 2 with "N problems in saasaloy.json."
 
@@ -439,15 +434,14 @@ stdout carries only the skill text, the list or the JSON document. An unknown na
 
 ```text
 waitlist                → default registry (mimukit/saasaloy) at this CLI's tag v<version>
-waitlist@main           → default registry at a branch, tag or SHA
 owner/repo/waitlist     → third-party repo at its default branch, module `waitlist`
 owner/repo@ref/waitlist → pinned to a branch, tag or SHA
 owner/repo              → no module named ⇒ picker over that repo
-@main                   → picker over the default registry at a branch, tag or SHA
+@main                   → `list` only: the default registry at a branch, tag or SHA
 (nothing)               → picker over the default registry
 ```
 
-A ref containing `/`, such as `owner/repo@feature/x/waitlist`, is not supported and produces a `Malformed coordinate` error. Pin that branch's tip SHA instead.
+`add` refuses `waitlist@main` and any other `@ref` on the default registry, because the default registry moves as one release. A ref containing `/`, such as `owner/repo@feature/x/waitlist`, is not supported and produces a `Malformed coordinate` error. Pin that branch's tip SHA instead.
 
 Third-party module identity is expected to change with
 [#39](https://github.com/mimukit/saasaloy/issues/39).
@@ -456,10 +450,11 @@ Third-party module identity is expected to change with
 
 | Variable | Read by | Effect |
 |---|---|---|
-| `SAASALOY_REGISTRY_DIR` | `add`, `env`, `list`, `outdated`, `update` | resolve modules from a local `modules/` directory instead of GitHub. Takes precedence over any `owner/repo` in the coordinate, and `add` and `list` warn when you pass one anyway. A missing directory is an error. Under `outdated` every module row reads `local`. |
+| `SAASALOY_REGISTRY_DIR` | `add`, `env`, `list`, `outdated`, `remove`, `testing`, `update` | resolve modules from a local `modules/` directory instead of GitHub. Takes precedence over any `owner/repo` in the coordinate, and `add` and `list` warn when you pass one anyway. A missing directory is an error. Under `outdated` every module row reads `local`. |
 | `GITHUB_TOKEN` | `add`, `env`, `list`, `outdated`, `update` | authenticate GitHub API calls. Raises the rate limit from 60 to 5000 requests an hour and allows private registries. Hitting the anonymous limit produces `GitHub API rate limit hit … Set GITHUB_TOKEN to raise it.` |
 | `GIGET_AUTH` | `add`, `env`, `list`, `outdated`, `update` | fallback for the same purpose; `GITHUB_TOKEN` wins if both are set. |
 | `SAASALOY_GITHUB_API` | every command that reaches GitHub | override the GitHub API base URL. A trailing slash is stripped. It is not a GitHub Enterprise switch: nothing else in the CLI reads it, and a real GHES base would need `GIGET_GITHUB_URL` set to match. |
+| `SAASALOY_CACHE_DIR` | `add`, `remove`, `update`, `testing`, `outdated` | replace the `saasaloy/payload` part of the payload cache path, for tests. Without it the cache is `$XDG_CACHE_HOME/saasaloy/payload/`, else `~/.cache/saasaloy/payload/`. |
 | `SAASALOY_DEBUG` | every command | any non-empty value prints the full `cause` chain and stack under a failure's message, instead of the message alone. Set it before you paste an error into a bug report. |
 
 Every GitHub API call carries a 15-second timeout and no retry, so a connection that opens
@@ -497,10 +492,7 @@ A project uses three state files, and `init` writes all three. `saasaloy.json`
 carries the base app in its own `base` field (`"base": "web"`), and `installed[]` holds
 only the modules `saasaloy add` applied. A project scaffolded before that field existed
 lists `web` in `installed[]`; the CLI lifts it into `base` the next time it writes the
-file. `.saasaloy/manifest.json` records every base file under the reserved module name
-`base`, and `saasaloy-lock.json` carries a `base` object naming the CLI version and the
-hash of the template that rendered it. A project scaffolded before that record existed has
-neither; `saasaloy update` adopts it. Their keys are defined
+file. `.saasaloy/manifest.json` is version 2: for each file its `module`, `from`, `class`, `hash` (the sha256 of the raw render) and `version` (the release that wrote that render), plus `pendingMerges`, `pendingNotes` and `doneNotes`. Base files sit under the reserved module name `base`. `saasaloy-lock.json` carries `requested`, the modules you asked for, one entry per installed module, and a `base` object naming the CLI version and the hash of the template that rendered it. `.saasaloy/journal.json` exists only while a run is writing. Their keys are defined
 by JSON Schema rather than repeated here, so the schema is always the current answer:
 
 | File | Schema |
@@ -521,29 +513,10 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 
 ## Known limitations
 
-Two gaps are load-bearing enough to plan around.
+**`add` writes the root `package.json` but runs no install.** Run `pnpm install` after an `add` or an `update` that changed it.
 
-**`remove` leaves the two `package.json` patch kinds behind.**
-[#36](https://github.com/mimukit/saasaloy/issues/36). `remove` undoes the seven kinds that
-edit a source or config file — `chained-route`, `wrangler-binding`, `plugin-array`,
-`const-array`, `const-property`, `drizzle-column` and `nav-entry` — taking the
-named import out with the edit when no other code in the file still references the
-identifier. Removing `email-cloudflare` now takes the `send_email` binding out of
-`apps/api/wrangler.jsonc` and the provider registration out of
-`packages/email/src/index.ts`. It never reverse-patches blindly: if you edited what the
-patch wrote, `remove` prints the reason, skips the file, and drops only the record.
+**Two modules cannot write one path** unless one declares the other in `dependsOn`. The render refuses such a set with exit 2 before anything is written.
 
-`package-json-dependency` and `package-json-script` are the two it does not reverse. A
-dependency is not safe to uninstall offline, because the lockfile does not say who else
-imports it, and nothing asks for a script back. For both, `remove` drops the record from
-the manifest and prints a warning naming the file. Removing `waitlist` leaves `hono` and
-`@repo/api` in `apps/web/package.json`. Revert those by hand.
-
-**`add` is not transactional.**
-[#49](https://github.com/mimukit/saasaloy/issues/49). If `add` fails partway through, it
-persists the manifest and config so the record matches what actually landed, and
-re-running `add` is the intended recovery. The dependency merge and the lockfile write both
-run after the file writes succeed, so a failed `add` no longer leaves `package.json`
-advertising packages whose code never arrived. The run now says so too: a thrown apply ends on "Partial apply — the manifest, config and lock describe what landed. Re-run `saasaloy add <module>` to complete it.", and an apply left incomplete by a file that changed while the plan was open names each module and asks for the same re-run. What is still missing is the rollback of the files that did land.
+**A cold cache needs the network.** A run that must merge a file reads the payload of the old release. With no cache entry and no network it refuses with exit 2.
 
 _Verified against `main`@`928b4f03` on 2026-11-19._

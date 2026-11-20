@@ -1,10 +1,8 @@
 import { parseModule } from "magicast";
 import {
   appendEntry,
-  entryValue,
   findConstArray,
   hasEntry,
-  removeEntry,
   renderObject,
 } from "./ts-array.js";
 import type { Program } from "./ts-array.js";
@@ -50,22 +48,3 @@ export function constArrayInsertRefusal(
 }
 
 /** Remove the object whose identity property matches the recorded entry. */
-export function removeFromConstArray(
-  source: string,
-  patch: ConstArrayInsert
-): string {
-  const mod = parseModule(source);
-  const array = findConstArray(mod.$ast as unknown as Program, patch.constName);
-  const wanted = patch.entry[patch.key];
-  if (!array || wanted === undefined) {
-    return source;
-  }
-
-  const index = array.elements.findIndex(
-    (element) => entryValue(element, patch.key) === wanted
-  );
-  if (index === -1) {
-    return source;
-  }
-  return removeEntry(source, array, index);
-}

@@ -2,7 +2,7 @@ import { findNodeAtLocation, getNodeValue, parseTree } from "jsonc-parser";
 import { parseModule } from "magicast";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
-import { BASE_MODULE, baseEntries, isBaseTracked } from "./base.js";
+import { BASE_MODULE } from "./base.js";
 import { ENV_EXAMPLE } from "./env-example.js";
 import {
   hashContent,
@@ -13,7 +13,7 @@ import {
   resolveWithinRoot,
 } from "./fs-utils.js";
 import type { LockBase, Lockfile } from "./lock.js";
-import type { Manifest } from "./manifest.js";
+import type { ManifestV2 } from "../engine/manifest.js";
 import { entryValue, findConstArray } from "./patch/ts-array.js";
 import type { Program } from "./patch/ts-array.js";
 import type { ModuleImports } from "./patch/ts-ast.js";
@@ -512,7 +512,7 @@ async function missingModulePath(
 
 export interface ProjectCheckArgs {
   config: SaasaloyConfig;
-  manifest: Manifest;
+  manifest: Pick<ManifestV2, "files">;
 }
 
 /**
@@ -529,10 +529,8 @@ export interface ProjectCheckArgs {
 export function checkProject(args: ProjectCheckArgs): Finding[] {
   const { config, manifest } = args;
   const owners = new Set(
-    Object.values(manifest.managed).map((entry) => entry.module)
+    Object.values(manifest.files).map((record) => record.module)
   );
-  // `managed` is the file ledger, and the criterion is about files. A module owning a
-  // patch or a link but no file is still a module that owns no files.
   return config.installed
     .filter((name) => !owners.has(name))
     .map((name) =>
@@ -879,8 +877,8 @@ export async function resolveDoctorTarget(path: string): Promise<DoctorTarget> {
 }
 
 export interface ProjectState {
-  /** The project's `.saasaloy/manifest.json`, as `loadManifest` returns it. */
-  manifest: Manifest;
+  /** The project's `.saasaloy/manifest.json`, version 2. */
+  manifest: Pick<ManifestV2, "files">;
   /** `saasaloy.json`'s `installed` list. */
   installed: string[];
 }
@@ -889,22 +887,15 @@ export interface ProjectState {
  * The inverse of `checkProject`'s rule (#49): a module the manifest tracks work for,
  * absent from `installed`, is a partial install.
  *
- * `add` leaves that state on purpose. It never rolls back, so a run that failed mid-apply
- * — or one whose file drifted between the plan and the write — keeps the files it wrote
- * and withholds the install. The bookkeeping is honest and the project is unfinished, and
- * only a re-run finishes it, which is what this says out loud. Two files, or twenty, are
- * one finding: the module is the unit the user acts on.
+ * The engine writes the manifest and `saasaloy.json` from one render, so only a hand
+ * edit of `installed` reaches this state. Two files, or twenty, are one finding: the
+ * module is the unit the user acts on.
  */
 export function checkPartialInstalls(state: ProjectState): Finding[] {
   const installed = new Set(state.installed);
   const tracked = new Set<string>();
-  for (const entry of Object.values(state.manifest.managed)) {
-    tracked.add(entry.module);
-  }
-  // A patch counts as tracked work too. A module whose files all held as conflicts can
-  // still have landed a dependency in a package.json, and that is on disk either way.
-  for (const patch of state.manifest.patches) {
-    tracked.add(patch.module);
+  for (const record of Object.values(state.manifest.files)) {
+    tracked.add(record.module);
   }
   // The base records its files under a reserved name and is never in `installed` (#120).
   return [...tracked]
@@ -1234,9 +1225,7 @@ export async function checkTarget(
 export interface BaseCheckArgs {
   root: string;
   lock: Lockfile;
-  manifest: Manifest;
-  /** The seed paths the running template declares — listed, never hashed. */
-  seedFiles: string[];
+  manifest: Pick<ManifestV2, "files">;
   /**
    * The root `package.json` `version` the running template ships. A file that matches
    * its record once its version is set to this one is not drifted, because a release
@@ -1246,57 +1235,48 @@ export interface BaseCheckArgs {
 }
 
 export interface BaseReport {
-  /** `untracked` when the project carries no usable record; `update` writes one. */
+  /** `untracked` when the lock has no base record; `update` writes one. */
   status: "tracked" | "untracked";
   record?: LockBase;
-  /** Managed base files whose bytes no longer match their recorded hash. */
+  /** Base files whose bytes no longer match their recorded hash. */
   drifted: string[];
-  /** Managed base files the record names that are not on disk. */
-  missing: string[];
-  /** How many managed base files still match their recorded hash. */
+  /** How many base files still match their recorded hash. */
   matching: number;
-  /** Seed files — declared by the template, or recorded as such — reported but not checked. */
+  /** Base files written once: the project's, reported but not checked. */
   seed: string[];
 }
 
 /**
  * The base half of `doctor <project>` (#120): is there a record, which CLI wrote it, and
- * which managed base files moved since. A drifted file is information, not a problem —
- * the owner is meant to edit the base — so this never contributes a `Finding`, and it
- * never writes: an untracked base is reported and left for `update` to adopt.
+ * which base files moved since. A drifted file is information, not a problem — the owner
+ * is meant to edit the base — so this never contributes a `Finding`, and it never writes.
+ * A base file missing from disk is left deleted, and `checkKeptDeleted` lists it.
  */
 export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
   const { root, lock, manifest } = args;
-  const seedSet = new Set(args.seedFiles);
-  if (!isBaseTracked(lock, manifest) || !lock.base) {
-    return {
-      status: "untracked",
-      drifted: [],
-      missing: [],
-      matching: 0,
-      seed: args.seedFiles.toSorted(),
-    };
+  if (!lock.base) {
+    return { status: "untracked", drifted: [], matching: 0, seed: [] };
   }
   const drifted: string[] = [];
-  const missing: string[] = [];
   const seed: string[] = [];
   let matching = 0;
-  for (const [target, entry] of Object.entries(baseEntries(manifest))) {
-    if (seedSet.has(target)) {
+  for (const [target, record] of Object.entries(manifest.files)) {
+    if (record.module !== BASE_MODULE) {
+      continue;
+    }
+    if (record.class === "once") {
       seed.push(target);
       continue;
     }
     const mine = await readIfPresent(resolveWithinRoot(root, target));
-    if (mine === undefined && entry.deleted) {
-      // Kept deleted on purpose (#312): `checkKeptDeleted` lists it, never as missing.
+    if (mine === undefined) {
       continue;
-    } else if (mine === undefined) {
-      missing.push(target);
     } else if (
-      hashContent(mine) === entry.hash ||
+      hashContent(mine) === record.hash ||
       (target === ROOT_MANIFEST &&
         args.templateVersion !== undefined &&
-        hashContent(withRootVersion(mine, args.templateVersion)) === entry.hash)
+        hashContent(withRootVersion(mine, args.templateVersion)) ===
+          record.hash)
     ) {
       matching++;
     } else {
@@ -1307,35 +1287,30 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
     status: "tracked",
     record: lock.base,
     drifted: drifted.toSorted(),
-    missing: missing.toSorted(),
     matching,
     seed: seed.toSorted(),
   };
 }
 
-/** A tombstoned file (#312): tracked, kept deleted on purpose, and still absent. */
+/** A tracked file the project deleted, which the engine leaves deleted (ADR 0059). */
 export interface KeptDeletedFile {
   target: string;
   module: string;
 }
 
 /**
- * Every file the manifest keeps deleted and that is still absent (#312, ADR 0059). Like
- * base drift it is information, never a finding: the owner chose it with `update
- * --resolved`, and `update --restore <path>` undoes it. A tombstone found back on disk is
- * not listed; the next `update` reads it as restored by hand.
+ * Every tracked file that is absent from disk. Like base drift it is information, never a
+ * finding: the engine leaves a file the owner deleted deleted, and `update --restore
+ * <path>` writes it again.
  */
 export async function checkKeptDeleted(
   root: string,
-  manifest: Manifest
+  manifest: Pick<ManifestV2, "files">
 ): Promise<KeptDeletedFile[]> {
   const out: KeptDeletedFile[] = [];
-  for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (
-      entry.deleted &&
-      (await readIfPresent(resolveWithinRoot(root, target))) === undefined
-    ) {
-      out.push({ target, module: entry.module });
+  for (const [target, record] of Object.entries(manifest.files)) {
+    if ((await readIfPresent(resolveWithinRoot(root, target))) === undefined) {
+      out.push({ target, module: record.module });
     }
   }
   return out.toSorted((a, b) => (a.target < b.target ? -1 : 1));

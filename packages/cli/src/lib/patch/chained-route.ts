@@ -1,10 +1,5 @@
 import { builders, generateCode, parseModule } from "magicast";
-import {
-  describeBinding,
-  foreignBinding,
-  isReferenced,
-  keepTerminator,
-} from "./ts-ast.js";
+import { describeBinding, foreignBinding, keepTerminator } from "./ts-ast.js";
 import type { ModuleImports } from "./ts-ast.js";
 
 // `magicast` codemod for a chained-call router entry file — Hono's RPC shape, where
@@ -102,106 +97,6 @@ export function chainedRouteInsertRefusal(
   return insertBindingConflict(mod.imports, patch);
 }
 
-/**
- * The inverse: drop the `.route()` link matching `path` from the exported chain, and
- * drop the named import it needed.
- *
- * Located by `path`, since that is the key the forward direction is idempotent on, then
- * **verified against the recorded handler** before anything is deleted. A user who
- * repointed the route at their own handler owns that line, and drift is surfaced rather
- * than resolved here.
- *
- * - link already absent → return `source` **unchanged**, so a hand-reverted file is
- *   never force-edited (the remover warns and skips instead);
- * - the link routes `path` to anything but `call` → return `source` **unchanged**
- *   (`chainedRouteRemoveRefusal` reports why);
- * - the local name now binds a different import → return `source` **unchanged**, since
- *   repointing the import changes what the link means without touching the link;
- * - the link is the only one → the bare receiver is left behind (`const app = new
- *   Hono();`), which still parses and typechecks;
- * - the import statement holds other specifiers → only this one is removed;
- * - the identifier is still referenced elsewhere in the file → the import stays, so a
- *   hand-written second use (`app.use(waitlist.middleware)`) is not left unbound.
- */
-export function removeChainedRoute(
-  source: string,
-  patch: ChainedRoute
-): string {
-  const mod = parseModule(source);
-  const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
-  if (!slot) {
-    return source;
-  }
-
-  // Walk outermost-inward, remembering the link that holds the one we're looking for —
-  // splicing a link out means re-pointing its holder at the link's own receiver.
-  let holder: CallExpression | undefined;
-  let found: CallExpression | undefined;
-  for (const link of chainLinks(slot.node)) {
-    if (isRouteLink(link, patch.path)) {
-      found = link;
-      break;
-    }
-    holder = link;
-  }
-  if (!found) {
-    return source;
-  } // already gone — never force-edit
-  if (handlerDrift(found, patch)) {
-    return source;
-  } // user's handler — not ours to delete
-  // The link can read exactly as written while meaning something else: repointing the
-  // import changes what `waitlist` resolves to without touching the `.route()` line. That
-  // makes both the link and the import the user's, so neither is ours to delete.
-  if (removeBindingConflict(mod.imports, patch)) {
-    return source;
-  }
-
-  const receiver = (found.callee as MemberExpression).object;
-  if (holder) {
-    (holder.callee as MemberExpression).object = receiver;
-  } else {
-    slot.replace(receiver);
-  }
-
-  // Guarded twice: magicast's delete trap throws when the local name isn't imported, and
-  // a binding the file still references elsewhere must keep its import or the file stops
-  // compiling.
-  const program = mod.$ast as unknown as Program;
-  if (
-    patch.import.name in mod.imports &&
-    !isReferenced(program, patch.import.name)
-  ) {
-    delete mod.imports[patch.import.name];
-  }
-  return keepTerminator(source, generateCode(mod).code);
-}
-
-/**
- * Why `removeChainedRoute` declined to change `source`, or `undefined` when it had no
- * objection (it removed the link, or the link was already gone). The mirror of
- * `chainedRouteInsertRefusal`, and the same reason for existing: it tells the remover's
- * "nothing left to revert" apart from "that route is yours now".
- */
-export function chainedRouteRemoveRefusal(
-  source: string,
-  patch: ChainedRoute
-): string | undefined {
-  const mod = parseModule(source);
-  const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
-  if (!slot) {
-    return undefined;
-  }
-  for (const link of chainLinks(slot.node)) {
-    if (isRouteLink(link, patch.path)) {
-      return (
-        handlerDrift(link, patch) ?? removeBindingConflict(mod.imports, patch)
-      );
-    }
-  }
-  return undefined; // already gone, not a refusal
-}
-
 // --- Ownership -------------------------------------------------------------------
 // Both directions key on the route path, and a path is not proof of ownership. These two
 // answer "is this link, or this binding, still the one the manifest recorded?" — the check
@@ -220,54 +115,7 @@ function insertBindingConflict(
   return `${describeBinding(patch.import.name, held)}, so routing ${JSON.stringify(patch.path)} would bind the wrong handler`;
 }
 
-function removeBindingConflict(
-  imports: ModuleImports,
-  patch: ChainedRoute
-): string | undefined {
-  const held = foreignBinding(imports, patch.import);
-  if (!held) {
-    return undefined;
-  }
-  return `${describeBinding(patch.import.name, held)} now, not from ${JSON.stringify(patch.import.from)}, so the link and its import are not the ones that were applied`;
-}
-
-/**
- * Whether the link found at the recorded path routes it somewhere other than the recorded
- * handler. Anything that isn't the plain `call` identifier (or dotted path) counts, an
- * inline arrow included: the second argument is no longer what the manifest recorded.
- */
-function handlerDrift(
-  link: CallExpression,
-  patch: ChainedRoute
-): string | undefined {
-  const argument = link.arguments[1];
-  const handler = argument === undefined ? undefined : dottedName(argument);
-  if (handler === patch.call) {
-    return undefined;
-  }
-  const now =
-    handler === undefined ? "an inline expression" : JSON.stringify(handler);
-  return `${JSON.stringify(patch.path)} now routes to ${now}, not to ${JSON.stringify(patch.call)}`;
-}
-
 /** `waitlist` → "waitlist", `api.waitlist` → "api.waitlist", anything else → undefined. */
-function dottedName(node: AstNode): string | undefined {
-  if (node.type === "Identifier") {
-    return (node as Identifier).name;
-  }
-  if (node.type !== "MemberExpression") {
-    return undefined;
-  }
-  const member = node as MemberExpression;
-  if (member.property.type !== "Identifier") {
-    return undefined;
-  }
-  const object = dottedName(member.object);
-  return object === undefined
-    ? undefined
-    : `${object}.${(member.property as Identifier).name}`;
-}
-
 // --- AST shapes -------------------------------------------------------------------
 // magicast types its AST as a broad union; these are the narrow shapes this codemod
 // reads, so the casts below stay local and named.

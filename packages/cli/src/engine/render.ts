@@ -219,7 +219,7 @@ export function gateOf(
  * workspace files, then each `agent.skills` folder. An entry whose gate fails is
  * dropped; of two entries on one target the later one wins.
  */
-function selectFiles(
+export function selectFiles(
   mod: PayloadModule,
   aliases: Record<string, string>,
   ctx: WhenContext

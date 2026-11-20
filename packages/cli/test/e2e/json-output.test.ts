@@ -3,7 +3,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PATCH_KINDS } from "../../src/lib/patch/index.js";
 import { assertCliBuilt, repoModulesDir, runCli } from "../support/cli.js";
 import type { CliRun } from "../support/cli.js";
 
@@ -48,11 +47,11 @@ interface PlanFile {
   target: string;
 }
 
-interface PlanPatch {
-  action: string;
-  file: string;
-  kind: string;
-}
+// The label the human plan prints for each result kind a fresh add produces.
+const ACTION_LABEL: Record<string, string> = {
+  new: "create",
+  updated: "update",
+};
 
 beforeAll(async () => {
   await assertCliBuilt();
@@ -97,7 +96,7 @@ describe("e2e — --json (#223)", () => {
     expect(run.stderr).toContain("saasaloy list");
   });
 
-  it("puts every file and patch of the human plan into the --dry-run --json plan", async () => {
+  it("puts every file of the human plan into the --dry-run --json plan", async () => {
     const argv = ["add", "waitlist", "--with", "database-d1", "--dry-run"];
     const human = await cli(argv);
     const json = await cli([...argv, "--json"]);
@@ -105,32 +104,22 @@ describe("e2e — --json (#223)", () => {
     assertOk(human);
     assertOk(json);
     const doc = parsed(json);
-    expect(doc).toMatchObject({ requested: ["waitlist"], schemaVersion: 2 });
+    expect(doc).toMatchObject({ requested: ["waitlist"], schemaVersion: 3 });
     expect(doc.install).toContain("database-d1");
 
     const files = doc.files as PlanFile[];
-    const patches = doc.patches as PlanPatch[];
     const text = collapse(human.stdout);
+    expect(files.length).toBeGreaterThan(0);
 
-    // Every file line the human plan prints, by action and target, and the count it
-    // closes with: so nothing in the plan is missing from the document, either way.
-    const counts = /(\d+)file\(s\)toapply,(\d+)needingmerge/.exec(text);
-    expect(counts).not.toBeNull();
-    expect(files).toHaveLength(Number(counts?.[1]) + Number(counts?.[2]));
+    // Every file line the human plan prints, by label and target, so nothing in the
+    // plan is missing from the document. A fresh add only creates and updates files.
     const missingFiles = files.filter(
-      (file) => !text.includes(collapse(`${file.action}  ${file.target}`))
+      (file) =>
+        !text.includes(collapse(`${ACTION_LABEL[file.action]}  ${file.target}`))
     );
     expect(missingFiles).toStrictEqual([]);
-
-    // The human "Config patches" box lists each applied patch as `file — kind`.
-    const applied = patches.filter((patch) => patch.action === "apply");
-    expect(applied.length).toBeGreaterThan(0);
-    const missingPatches = applied.filter(
-      (patch) => !text.includes(collapse(`${patch.file} — ${patch.kind}`))
-    );
-    expect(missingPatches).toStrictEqual([]);
-    const kinds = new RegExp(`— (${PATCH_KINDS.join("|")})\\b`, "g");
-    expect(human.stdout.match(kinds) ?? []).toHaveLength(applied.length);
+    const lines = human.stdout.match(/│\s+(create|update)\s{2}\S/g) ?? [];
+    expect(lines).toHaveLength(files.length);
 
     // A dry run writes nothing, so the project still has no module installed.
     const listed = parsed(await cli(["list", "--installed", "--json"]));
@@ -165,8 +154,8 @@ describe("e2e — --json (#223)", () => {
     const doc = parsed(run);
     expect(doc.install).toContain("waitlist");
     // The installed driver answers `database`'s choice, so no `--with` is needed and
-    // the driver is not planned again.
-    expect(doc.alreadyInstalled).toContain("database");
+    // neither the capability nor the driver is planned again.
+    expect(doc.install).not.toContain("database");
     expect(doc.install).not.toContain("database-d1");
     expect((doc.files as PlanFile[]).length).toBeGreaterThan(0);
   });
@@ -180,7 +169,7 @@ describe("e2e — --json (#223)", () => {
         exitCode: 2,
         message: expect.stringContaining("--dry-run --json"),
       },
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
   });
 

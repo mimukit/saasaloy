@@ -49,7 +49,7 @@ export const adminSms = new Hono<{ Bindings: AuthDbBindings }>().get(
     }
 
     // `withDb`, not `authDb`: the route then needs no `auth` newer than the one a project
-    // already has, so `saasaloy update sms` alone still typechecks.
+    // already has, so the route typechecks against an older `auth`.
     const { rows, total } = await withDb(c, (db) =>
       listSmsMessages(db, { page, status })
     );

@@ -1,7 +1,8 @@
 import { cancel, intro, log, note, outro } from "@clack/prompts";
 import { join, relative } from "node:path";
 import pc from "picocolors";
-import { readBaseDeclaration } from "../lib/base.js";
+import { scanPendingMerges } from "../engine/apply.js";
+import { emptyManifestV2, readManifestState } from "../engine/manifest.js";
 import {
   checkBase,
   checkKeptDeleted,
@@ -27,7 +28,7 @@ import { pathExists, readIfPresent } from "../lib/fs-utils.js";
 import { createOutput, printJson } from "../lib/json-output.js";
 import type { Output } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
-import { loadManifest, pendingNotesOf } from "../lib/manifest.js";
+import { loadManifest } from "../lib/manifest.js";
 import { pendingNoteJson, pendingNoteLines } from "../lib/pending-notes.js";
 import { ROOT_MANIFEST, rootVersion } from "../lib/root-version.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
@@ -106,9 +107,7 @@ function renderBase(report: BaseReport): string {
   if (report.status === "untracked" || !report.record) {
     return [
       `${pc.yellow("untracked")} — no record of which template scaffolded this project.`,
-      pc.dim(
-        "Run `saasaloy update` to record the base at this CLI; nothing is applied on that run."
-      ),
+      pc.dim("Run `saasaloy update` to record the base at this CLI."),
     ].join("\n");
   }
   const lines = [
@@ -118,13 +117,9 @@ function renderBase(report: BaseReport): string {
       (target) =>
         `${pc.yellow("✎")} ${target} ${pc.dim("edited since it was recorded")}`
     ),
-    ...report.missing.map(
-      (target) =>
-        `${pc.red("✗")} ${target} ${pc.dim("missing — `saasaloy update` asks whether to keep it deleted")}`
-    ),
   ];
   if (report.seed.length > 0) {
-    lines.push(pc.dim(`seed, not checked: ${report.seed.join(", ")}`));
+    lines.push(pc.dim(`written once, not checked: ${report.seed.join(", ")}`));
   }
   return lines.join("\n");
 }
@@ -139,19 +134,50 @@ function findingJson(
 /** The project side of `doctor`: what `saasaloy.json` and the manifest say about each other. */
 async function reportProject(path: string, out: Output): Promise<number> {
   const config = await loadConfig(path);
-  const manifest = await loadManifest(path);
+  const state = await readManifestState(path);
+  const versionOne = state.kind === "v1";
+  const manifest = state.kind === "v2" ? state.manifest : emptyManifestV2();
+  const pending = versionOne
+    ? ((await loadManifest(path)).pendingNotes ?? [])
+    : manifest.pendingNotes;
   const lock = await loadLock(path);
   const templateDir = await baseTemplateDir();
   const base = await checkBase({
     root: path,
     lock,
     manifest,
-    seedFiles: (await readBaseDeclaration(templateDir)).seedFiles,
     templateVersion: rootVersion(
       await readIfPresent(join(templateDir, ROOT_MANIFEST))
     ),
   });
-  note(wrapForNote(renderBase(base)), "Base", out.tui);
+  if (versionOne) {
+    note(
+      wrapForNote(
+        `${pc.yellow("version 1")} — an older engine wrote ${pc.cyan(".saasaloy/manifest.json")}. Run ${pc.cyan("saasaloy update")}: it converts the project, and then this report reads its files.`
+      ),
+      "Base",
+      out.tui
+    );
+  } else {
+    note(wrapForNote(renderBase(base)), "Base", out.tui);
+  }
+  // Files a run left with conflict markers that still hold one. An info line each, like
+  // base drift; `add`, `remove` and `update` refuse until they are resolved.
+  const markers = await scanPendingMerges(path, manifest.pendingMerges);
+  if (markers.length > 0) {
+    note(
+      wrapForNote(
+        markers
+          .map(
+            (target) =>
+              `${pc.yellow("!")} ${target} ${pc.dim("holds conflict markers — resolve them before the next add, remove or update")}`
+          )
+          .join("\n")
+      ),
+      `${pc.yellow("Pending merges")} ${pc.dim(`(${markers.length})`)}`,
+      out.tui
+    );
+  }
   // Files kept deleted on purpose (#312). An info line each; the exit code does not move.
   const keptDeleted = await checkKeptDeleted(path, manifest);
   if (keptDeleted.length > 0) {
@@ -160,7 +186,7 @@ async function reportProject(path: string, out: Output): Promise<number> {
         keptDeleted
           .map(
             (file) =>
-              `${pc.dim("ℹ")} ${file.target} ${pc.dim(`deleted, kept deleted (${file.module}) — \`saasaloy update --restore <path>\` brings it back`)}`
+              `${pc.dim("ℹ")} ${file.target} ${pc.dim(`deleted, left deleted (${file.module}) — \`saasaloy update --restore <path>\` brings it back`)}`
           )
           .join("\n")
       ),
@@ -170,7 +196,6 @@ async function reportProject(path: string, out: Output): Promise<number> {
   }
   // Update notes an applied `update` showed and nobody cleared (#298). Like base drift,
   // they are work the project owes, never a finding: the exit code does not move.
-  const pending = pendingNotesOf(manifest);
   if (pending.length > 0) {
     note(
       wrapForNote(pendingNoteLines(pending).join("\n")),
@@ -204,8 +229,12 @@ async function reportProject(path: string, out: Output): Promise<number> {
   const policyState = await readPolicyState(path, config.installed);
   const envState = await readEnvState(path);
   const findings = [
-    ...checkProject({ config, manifest }),
-    ...checkPartialInstalls({ installed: config.installed, manifest }),
+    ...(versionOne
+      ? []
+      : [
+          ...checkProject({ config, manifest }),
+          ...checkPartialInstalls({ installed: config.installed, manifest }),
+        ]),
     ...checkUnmetRequirements({ installed: config.installed, lock }),
     ...(policyState ? checkPolicyBindings(policyState) : []),
     ...checkEnv(envState),
@@ -220,6 +249,7 @@ async function reportProject(path: string, out: Output): Promise<number> {
       keptDeleted,
       mode: "project",
       path,
+      pendingMerges: markers,
       pendingNotes: pending.map(pendingNoteJson),
       problems: findings.length,
       warnings: warnings.map(findingJson),

@@ -12,11 +12,10 @@ import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { BASE_MODULE, baseEntries, templateHash } from "../lib/base.js";
+import { readManifestState } from "../engine/manifest.js";
+import { BASE_MODULE } from "../lib/base.js";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { loadLock } from "../lib/lock.js";
-import { loadManifest } from "../lib/manifest.js";
-import { baseTemplateDir } from "../lib/scaffold.js";
 import { readVersion } from "../version.js";
 import { stripAnsi } from "../lib/tui.js";
 import { TESTING_BLOCKS } from "../lib/testing.js";
@@ -276,9 +275,10 @@ describe("runInit — the template copy", () => {
   });
 
   it("records every base file in the manifest under the reserved `base` module (#120)", async () => {
-    const manifest = await loadManifest(target);
-    const entries = baseEntries(manifest);
+    const state = await readManifestState(target);
+    const entries = state.kind === "v2" ? state.manifest.files : {};
 
+    expect(state.kind).toBe("v2");
     expect(Object.keys(entries).length).toBeGreaterThan(10);
     expect(entries["AGENTS.md"]).toMatchObject({
       module: BASE_MODULE,
@@ -294,12 +294,13 @@ describe("runInit — the template copy", () => {
   it("records the base in the lock at the running CLI and the shipped template's hash (#120)", async () => {
     const lock = await loadLock(target);
 
-    expect(lock.base).toStrictEqual({
+    expect(lock.base).toMatchObject({
       name: "web",
       cliVersion: await readVersion(),
-      templateHash: await templateHash(await baseTemplateDir()),
     });
+    expect(lock.base?.templateHash).toMatch(/^[0-9a-f]{64}$/);
     expect(lock.modules).toStrictEqual({});
+    expect(lock.requested).toStrictEqual([]);
   });
 
   it("never copies the base declaration into the project (#120)", async () => {
@@ -358,7 +359,8 @@ describe("runInit — the testing mode (#242)", () => {
       expect(result.mode).toBe("tdd");
       expect(result.agents).toContain(TESTING_BLOCKS.tdd);
       expect(result.agents).not.toContain(TESTING_BLOCKS.off);
-      const entries = baseEntries(await loadManifest(result.target));
+      const state = await readManifestState(result.target);
+      const entries = state.kind === "v2" ? state.manifest.files : {};
       for (const rel of ["saasaloy.json", "AGENTS.md"]) {
         const onDisk = await readFile(join(result.target, rel), "utf-8");
         expect(entries[rel]?.hash, `${rel} hash`).toBe(hashContent(onDisk));
@@ -441,7 +443,7 @@ describe("resolveInitTestingMode — the attended prompt (#242)", () => {
 });
 
 describe("runInit — base state persistence", () => {
-  it("fails when it cannot record the base manifest", async () => {
+  it("fails, and writes no project file, when it cannot write its state", async () => {
     const project = "unrecordable-base";
     const target = join(dir, project);
     await mkdir(target, { recursive: true });
@@ -456,13 +458,14 @@ describe("runInit — base state persistence", () => {
       ]);
 
       expect(result.code).toBe(1);
-      expect(result.out).toContain("Couldn't record the base template");
+      expect(result.out).toContain("Couldn't scaffold unrecordable-base");
       expect(result.out).not.toContain(
         "Created unrecordable-base successfully"
       );
+      // The engine writes its journal before any project file, so nothing landed.
       await expect(
         pathExists(join(target, "package.json"))
-      ).resolves.toBeTruthy();
+      ).resolves.toBeFalsy();
     } finally {
       await rm(target, { recursive: true, force: true });
     }

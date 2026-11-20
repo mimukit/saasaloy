@@ -12,7 +12,7 @@ title: A user route can accept a key caller through requireUser
 
 A credential module adds a caller kind by appending a resolver to `userResolvers` with a `plugin-array` patch. `api-keys-user` appends its key; `api-keys-organization` appends nothing, because an organization's key acts for no user.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/auth/package.json`, if you edited it. Keep your edits and take the `./user-caller` export.
 

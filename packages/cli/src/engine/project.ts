@@ -457,12 +457,15 @@ export async function loadBaseSides(
 
 /**
  * The two refusals every `add`, `remove` and `update` run makes first (plan 0116): a
- * journal left by an unfinished run, and a file that still holds conflict markers.
+ * journal left by an unfinished run, and a file that still holds conflict markers. It
+ * runs before `readProjectState`, because a pending merge may be `saasaloy.json` itself,
+ * and a file with markers does not parse. With no `manifest` it reads the project's.
  */
 export async function assertReadyToRun(
   root: string,
-  manifest: ManifestV2
+  manifest?: ManifestV2
 ): Promise<void> {
   await assertNoJournal(root);
-  assertNoPendingMerges(await scanPendingMerges(root, manifest.pendingMerges));
+  const { pendingMerges } = manifest ?? (await loadManifestV2(root));
+  assertNoPendingMerges(await scanPendingMerges(root, pendingMerges));
 }

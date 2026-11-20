@@ -2,10 +2,9 @@ import { readdirSync } from "node:fs";
 import { lstat, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { apply, planApply } from "../../src/engine/apply.js";
 import type { ApplySide } from "../../src/engine/apply.js";
-import { ENGINE_ENV } from "../../src/engine/flag.js";
 import {
   emptyManifestV2,
   serializeManifestV2,
@@ -29,7 +28,7 @@ import { repoModulesDir } from "../support/cli.js";
 //      `conflictsWith`, both add orders give the same tree.
 //
 // Both run the engine in process. Part 1 runs the real `apply` on a temp folder, the
-// path `saasaloy add` and `saasaloy remove` take under `SAASALOY_ENGINE=next`. Part 2 is
+// path `saasaloy add` and `saasaloy remove` take. Part 2 is
 // about 1,500 pairs and four applies each, so it runs `planApply`, the decision `apply`
 // makes, on in-memory trees: the same code decides every path, and only the disk writes
 // are left out.
@@ -47,7 +46,6 @@ let payload: Payload;
 let names: string[];
 
 beforeAll(async () => {
-  process.env[ENGINE_ENV] = "next";
   names = (await readdir(MODULES_DIR, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
@@ -59,10 +57,6 @@ beforeAll(async () => {
     source: "local",
   };
 }, 120_000);
-
-afterAll(() => {
-  delete process.env[ENGINE_ENV];
-});
 
 /**
  * `modules` plus an option of every `requiresOneOf` the set leaves unmet: one in

@@ -295,25 +295,17 @@ The core stays installed across the switch, so its `auth.ts` patches stay too. B
 
 Remove the owner first. The owner depends on the core, so `remove api-keys` refuses while an owner is installed.
 
-`saasaloy remove api-keys-organization` reverses the bearer resolver patch and the `/api-keys` nav entry, and deletes the owner's files. `saasaloy remove api-keys-user` reverses the `apiKeyAdminGuard()` patch on `adminAuth` and deletes its files, which include `caller.ts`, so every route that imports `@repo/auth/caller` stops compiling. For both owners, the `api_keys` table survives. Run `db:generate` and read the drop migration before you apply it. Tell the machine callers first, because every key stops working when the owner goes. Removing the last owner also warns that `api-keys` is left with none of its `requiresOneOf` installed and names the fix. It does not refuse, because switching owners is remove-then-add, and `doctor` reports the state until an owner is back.
+`saasaloy remove api-keys-organization` takes out the bearer resolver patch and the `/api-keys` nav entry, and deletes the owner's files. `saasaloy remove api-keys-user` takes out the `apiKeyAdminGuard()` patch on `adminAuth` and deletes its files, which include `caller.ts`, so every route that imports `@repo/auth/caller` stops compiling. For both owners, the `api_keys` table survives. Run `db:generate` and read the drop migration before you apply it. Tell the machine callers first, because every key stops working when the owner goes. Removing the last owner also warns that `api-keys` is left with none of its `requiresOneOf` installed and names the fix. It does not refuse, because switching owners is remove-then-add, and `doctor` reports the state until an owner is back.
 
-`saasaloy remove api-keys` then reverses the core's six patches, the two server plugins on each of `auth` and `adminAuth` and the client plugin in each of `authClientPlugins` and `adminAuthClientPlugins`, and deletes `api-key-options.ts` and `api-key-client.ts`. The `@better-auth/api-key` line in `packages/auth/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`.
+`saasaloy remove api-keys` then takes out the core's six patches, the two server plugins on each of `auth` and `adminAuth` and the client plugin in each of `authClientPlugins` and `adminAuthClientPlugins`, and deletes `api-key-options.ts` and `api-key-client.ts`. The same run takes the `@better-auth/api-key` line out of `packages/auth/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards.
 
 #### Moving an existing `api-keys` project to the split
 
-A project that installed `api-keys` before the split has organization-owned keys. Its new `api-keys` descriptor needs an owner, so `saasaloy update` refuses with exit 2 and changes nothing until one is installed:
+A project that installed `api-keys` before the split has organization-owned keys. Its new `api-keys` descriptor needs an owner, so add the owner before the project moves to the new release. The `add` of a CLI from 0.10.0 on refuses a project whose lock names an older release, so take this step with the last CLI before it:
 
-```
-Cannot update — unmet requirement:
-  api-keys now needs one of: api-keys-organization, api-keys-user, and none is installed. Run one of:
-    saasaloy add api-keys-organization
-    saasaloy add api-keys-user
-Then run `saasaloy update` again. Nothing was changed.
-```
-
-1. Upgrade the `saasaloy` CLI to 0.7.0 or later. `api-keys` and both owners declare `requires.saasaloy: ">=0.7.0"`, and an older CLI refuses them in `add` and `update` before it writes anything.
-2. Run `saasaloy add api-keys-organization`. The schema, the resolver, the screen and the plugin keep their bytes, so `add` adopts them, moves their ownership to the new module, and records the resolver patch again under it.
-3. Run `saasaloy update`. It writes the new `packages/auth/src/plugins/api-key-options.ts` under `api-keys`.
+1. Run `pnpm dlx saasaloy@0.9.0 add api-keys-organization`. `api-keys` and both owners declare `requires.saasaloy: ">=0.7.0"`, so 0.9.0 accepts them. The schema, the resolver, the screen and the plugin keep their bytes, so that `add` adopts them, moves their ownership to the new module, and records the resolver patch again under it.
+2. Commit the result.
+3. Run `saasaloy update` with the current CLI. It converts the project and writes the new `packages/auth/src/plugins/api-key-options.ts` under `api-keys`.
 4. Run `pnpm db:generate`. It reports no schema changes, because the table is the same.
 
 Do not pick `api-keys-user` for an existing project. Its keys are organization-owned, and no keys move between owners.

@@ -4,14 +4,15 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startGithubFixture } from "../../test/support/github-fixture.js";
 import type { GithubFixture } from "../../test/support/github-fixture.js";
-import { BASE_MODULE, templateHash } from "../lib/base.js";
+import { BASE_MODULE } from "../lib/base.js";
 import { pathExists } from "../lib/fs-utils.js";
 import { emptyLock } from "../lib/lock.js";
-import { baseTemplateDir } from "../lib/scaffold.js";
 import type { LockModule } from "../lib/lock.js";
+import type { ModuleComparison } from "../lib/outdated.js";
 import { GITHUB_API_ENV, REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
-import type { ModuleComparison } from "../lib/updater.js";
+import { readVersion } from "../version.js";
+import { scaffoldProject } from "./init.js";
 import {
   countDrift,
   describeDrift,
@@ -39,7 +40,7 @@ function comparison(
   };
 }
 
-/** Every status `compareInstalled` can return, one row each. */
+/** Every status `compareModules` can return, one row each. */
 const ALL_STATUSES: ModuleComparison[] = [
   comparison({ name: "api", status: "current" }),
   comparison({ name: "email", status: "outdated", latest: SHA_B }),
@@ -251,7 +252,8 @@ describe(runOutdated, () => {
 
   async function writeProject(
     installed: string[],
-    modules: Record<string, LockModule>
+    modules: Record<string, LockModule>,
+    base?: { cliVersion: string }
   ): Promise<void> {
     await writeFile(
       join(project, "saasaloy.json"),
@@ -260,22 +262,65 @@ describe(runOutdated, () => {
     );
     await writeFile(
       join(project, "saasaloy-lock.json"),
-      JSON.stringify({ ...emptyLock(), modules }),
+      JSON.stringify({
+        ...emptyLock(),
+        modules,
+        ...(base === undefined
+          ? {}
+          : {
+              base: {
+                cliVersion: base.cliVersion,
+                name: "web",
+                templateHash: "f".repeat(64),
+              },
+            }),
+      }),
+      "utf-8"
+    );
+  }
+
+  /** A version 2 manifest with one base file, and the notes given. */
+  async function writeManifest(pendingNotes: unknown[] = []): Promise<void> {
+    await writeFile(join(project, "AGENTS.md"), "# base\n", "utf-8");
+    await mkdir(join(project, ".saasaloy"), { recursive: true });
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        doneNotes: [],
+        files: {
+          "AGENTS.md": {
+            class: "merged",
+            from: "AGENTS.md",
+            hash: "a".repeat(64),
+            module: "base",
+            version: "0.0.0",
+          },
+        },
+        pendingMerges: [],
+        pendingNotes,
+        version: 2,
+      }),
       "utf-8"
     );
   }
 
   /**
-   * A project whose lock says `email` sits on `SHA_A` while `main` now points at `SHA_B`.
-   * The SHA comes from the local fixture server rather than the registry override, so the
-   * drift is a real comparison result — the override says nothing about drift (B1).
+   * A project whose lock says a third-party `widget` sits on `SHA_A` while its `main` now
+   * points at `SHA_B`. The SHA comes from the local fixture server rather than the registry
+   * override, so the drift is a real comparison result.
    */
   async function driftingProject(): Promise<void> {
-    fixture = await startGithubFixture({ sha: SHA_B });
-    process.env[GITHUB_API_ENV] = fixture.url;
-    await writeProject(["email"], {
-      email: { source: "mimukit/saasaloy", ref: "main", resolved: SHA_A },
+    fixture = await startGithubFixture({
+      owner: "acme",
+      repo: "kit",
+      sha: SHA_B,
     });
+    process.env[GITHUB_API_ENV] = fixture.url;
+    await writeProject(
+      ["widget"],
+      { widget: { source: "acme/kit", ref: "main", resolved: SHA_A } },
+      { cliVersion: await readVersion() }
+    );
   }
 
   beforeEach(async () => {
@@ -300,31 +345,9 @@ describe(runOutdated, () => {
     expect(out).toContain("No modules installed");
   });
 
-  // #120: the base row. An unrecorded project is the common case for now — every
-  // project scaffolded before the record existed — and it is news, not drift.
+  // #120: the base row, by release (ADR 0062): the lock's `base.cliVersion` against the
+  // running CLI's version. A project with no base record is news, not drift.
   describe("the base row", () => {
-    async function trackedBase(hash: string): Promise<void> {
-      await writeProject([], {});
-      // On disk, or the row reads `outdated` on the missing file rather than on the hash.
-      await writeFile(join(project, "AGENTS.md"), "# base\n", "utf-8");
-      await mkdir(join(project, ".saasaloy"), { recursive: true });
-      await writeFile(
-        join(project, ".saasaloy", "manifest.json"),
-        JSON.stringify({
-          managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
-        }),
-        "utf-8"
-      );
-      await writeFile(
-        join(project, "saasaloy-lock.json"),
-        JSON.stringify({
-          ...emptyLock(),
-          base: { name: "web", cliVersion: "0.0.0", templateHash: hash },
-        }),
-        "utf-8"
-      );
-    }
-
     it("reports an unrecorded base as untracked, exits 0, and writes nothing", async () => {
       await writeProject([], {});
       const { code, out } = await runCommand([]);
@@ -333,10 +356,6 @@ describe(runOutdated, () => {
       expect(out).toContain("untracked");
       expect(out).toContain("saasaloy update");
       await expect(pathExists(join(project, ".saasaloy"))).resolves.toBeFalsy();
-      const lock = JSON.parse(
-        await readFile(join(project, "saasaloy-lock.json"), "utf-8")
-      );
-      expect(lock.base).toBeUndefined();
     });
 
     it("does not fail --check on an untracked base", async () => {
@@ -347,8 +366,9 @@ describe(runOutdated, () => {
       );
     });
 
-    it("reports a base at the running template's hash as current", async () => {
-      await trackedBase(await templateHash(await baseTemplateDir()));
+    it("reports a base at the running CLI's release as current", async () => {
+      await writeProject([], {}, { cliVersion: await readVersion() });
+      await writeManifest();
       const { code, out } = await runCommand([]);
 
       expect(code).toBe(0);
@@ -356,25 +376,65 @@ describe(runOutdated, () => {
       expect(out).toContain("Everything is up to date");
     });
 
+    it("reports a base at another release as outdated, and gates --check on it", async () => {
+      await writeProject([], {}, { cliVersion: "0.0.1" });
+      await writeManifest();
+      const report = await runCommand([]);
+
+      expect(report.code).toBe(0);
+      expect(report.out).toContain("outdated");
+      expect(report.out).toContain("The base template moved");
+      await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(
+        2
+      );
+    });
+
+    it("reports a version 1 project as outdated, because update converts it", async () => {
+      await writeProject([], {}, { cliVersion: await readVersion() });
+      await mkdir(join(project, ".saasaloy"), { recursive: true });
+      await writeFile(
+        join(project, ".saasaloy", "manifest.json"),
+        JSON.stringify({ managed: {} }),
+        "utf-8"
+      );
+      const { code, out } = await runCommand([]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("version 1 project");
+      expect(out).toContain("The base template moved");
+    });
+
+    // A default-registry module moves with the release (ADR 0062), so its row follows the
+    // base record, not its own ref.
+    it("moves a default-registry module with the base release", async () => {
+      await writeProject(
+        ["email"],
+        {
+          email: {
+            source: "mimukit/saasaloy",
+            ref: "v0.0.1",
+            resolved: "v0.0.1",
+          },
+        },
+        { cliVersion: "0.0.1" }
+      );
+      const { out } = await runCommand([]);
+
+      expect(out).toContain("The base template and 1 module moved");
+    });
+
     // #298 Phase 4. A note an applied `update` showed and nobody cleared is work waiting,
     // so the report lists it and `--check` fails on it like drift.
     describe("pending update notes (#298)", () => {
       async function withPendingNote(): Promise<void> {
-        await trackedBase(await templateHash(await baseTemplateDir()));
-        await writeFile(
-          join(project, ".saasaloy", "manifest.json"),
-          JSON.stringify({
-            managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
-            pendingNotes: [
-              {
-                id: "base/0001-brand-css",
-                title: "Move the web tokens",
-                body: "## What you do\n",
-              },
-            ],
-          }),
-          "utf-8"
-        );
+        await writeProject([], {}, { cliVersion: await readVersion() });
+        await writeManifest([
+          {
+            id: "base/0001-brand-css",
+            title: "Move the web tokens",
+            body: "## What you do\n",
+          },
+        ]);
       }
 
       it("lists a pending note and exits 0 on a bare run", async () => {
@@ -411,29 +471,41 @@ describe(runOutdated, () => {
       });
 
       it("prints an empty list in --json when nothing is pending", async () => {
-        await trackedBase(await templateHash(await baseTemplateDir()));
+        await writeProject([], {}, { cliVersion: await readVersion() });
+        await writeManifest();
         const { doc } = await runJson(runOutdated, ["--json"]);
 
         expect(doc.pendingNotes).toStrictEqual([]);
       });
     });
+  });
 
-    it("reports a base at another hash as outdated, and gates --check on it", async () => {
-      await trackedBase("f".repeat(64));
-      const report = await runCommand([]);
-
-      expect(report.code).toBe(0);
-      expect(report.out).toContain("outdated");
-      expect(report.out).toContain("The base template moved");
-      await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(
-        2
-      );
+  // Plan 0116: `outdated` lists each file written once whose upstream render changed.
+  it("lists a file written once that upstream changed, and does not gate --check on it", async () => {
+    await scaffoldProject({
+      projectName: "demo",
+      target: project,
+      testingMode: "off",
     });
+    const file = join(project, ".saasaloy", "manifest.json");
+    const manifest = JSON.parse(await readFile(file, "utf-8")) as {
+      files: Record<string, { hash: string }>;
+    };
+    const readme = manifest.files["README.md"];
+    if (readme) {
+      readme.hash = "0".repeat(64);
+    }
+    await writeFile(file, JSON.stringify(manifest), "utf-8");
+
+    const { code, doc } = await runJson(runOutdated, ["--check", "--json"]);
+
+    expect(code).toBe(0);
+    expect(doc.onceChanged).toStrictEqual(["README.md"]);
   });
 
   it("exits 0 when every module is settled", async () => {
     await writeProject(["auth"], {
-      auth: { source: "mimukit/saasaloy", ref: SHA_A, resolved: SHA_A },
+      auth: { source: "acme/kit", ref: SHA_A, resolved: SHA_A },
     });
     const { code, out } = await runCommand([]);
 
@@ -446,7 +518,7 @@ describe(runOutdated, () => {
 
   it("exits 0 with --check when nothing moved", async () => {
     await writeProject(["auth"], {
-      auth: { source: "mimukit/saasaloy", ref: SHA_A, resolved: SHA_A },
+      auth: { source: "acme/kit", ref: SHA_A, resolved: SHA_A },
     });
 
     await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(0);
@@ -483,10 +555,8 @@ describe(runOutdated, () => {
     await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(2);
   });
 
-  // Regression, review B1: `compareInstalled` calls an override row `outdated`, which to
-  // `update` means "re-apply from the checkout". Read as drift, that made every module
-  // under SAASALOY_REGISTRY_DIR a moved module and `--check` exited 2 in a playground
-  // where nothing had moved at all.
+  // Regression, review B1: a working copy has no commit to compare against, so every
+  // module under SAASALOY_REGISTRY_DIR reads as local, never as drift.
   describe(`with ${REGISTRY_ENV} set`, () => {
     beforeEach(async () => {
       process.env[REGISTRY_ENV] = project;
@@ -533,7 +603,7 @@ describe(runOutdated, () => {
           {
             current: SHA_A,
             latest: SHA_B,
-            name: "email",
+            name: "widget",
             status: "outdated",
           },
         ],

@@ -495,7 +495,7 @@ Remove the providers first. `email-console`, `email-cloudflare`, `email-plunk` a
 
 `saasaloy remove email-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. A provider that wrote a secret reader (`email-plunk` ships `env.ts`) loses that file too.
 
-`saasaloy remove email` then deletes the `packages/email` workspace (`index.ts`, `define.ts`, `provider.ts`, `render.ts`, `templates/welcome.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the email preset to `apps/api/src/env.ts`. The `@repo/email` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `EMAIL_PROVIDER` and `EMAIL_FROM` lines by hand.
+`saasaloy remove email` then deletes the `packages/email` workspace (`index.ts`, `define.ts`, `provider.ts`, `render.ts`, `templates/welcome.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the email preset to `apps/api/src/env.ts`. The same run takes the `@repo/email` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `EMAIL_PROVIDER` and `EMAIL_FROM` lines by hand.
 
 Every route or job that imports `@repo/email` stops compiling. Search for the import before you remove, and delete or replace each call site.
 

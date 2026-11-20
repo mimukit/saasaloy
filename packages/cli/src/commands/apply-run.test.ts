@@ -20,7 +20,6 @@ import {
   it,
 } from "vitest";
 import { apply, JOURNAL_FILE } from "../engine/apply.js";
-import { ENGINE_ENV } from "../engine/flag.js";
 import { CACHE_COMPLETE, CACHE_DIR_ENV } from "../engine/payload.js";
 import { loadSide } from "../engine/project.js";
 import { EXIT_OK, EXIT_REFUSED, EXIT_WORK_PENDING } from "../lib/exit.js";
@@ -31,17 +30,18 @@ import { baseTemplateDir } from "../lib/scaffold.js";
 import { stripAnsi } from "../lib/tui.js";
 import { readVersion } from "../version.js";
 import { runAdd } from "./add.js";
-import { scaffoldNext } from "./next.js";
+import { scaffoldProject } from "./init.js";
 import { runRemove } from "./remove.js";
-import { runUpdate } from "./update.js";
+import { runTesting } from "./testing.js";
+import { demoteHeadings, runUpdate } from "./update.js";
 
-// `init`, `add`, `remove` and `update` on the render engine, behind `SAASALOY_ENGINE=next`
-// (plan 0116, Phase 4): the flags keep their meaning, the refusals exit 2, and
-// `update --merge <path>` merges one file written once.
+// `init`, `add`, `remove`, `update` and `testing` on the render engine (plan 0116): the
+// flags keep their meaning, the refusals exit 2, `update --merge <path>` merges one file
+// written once, and `testing off` deletes nothing.
 
 const ORIGINAL_CWD = process.cwd();
 const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
-const ENV_KEYS = [ENGINE_ENV, REGISTRY_ENV, CACHE_DIR_ENV] as const;
+const ENV_KEYS = [REGISTRY_ENV, CACHE_DIR_ENV] as const;
 const ORIGINAL_ENV = Object.fromEntries(
   ENV_KEYS.map((key) => [key, process.env[key]])
 );
@@ -50,7 +50,6 @@ let workspace: string;
 
 beforeEach(async () => {
   workspace = await mkdtemp(join(tmpdir(), "saasaloy-next-"));
-  process.env[ENGINE_ENV] = "next";
   delete process.env[REGISTRY_ENV];
   delete process.env[CACHE_DIR_ENV];
   process.stdin.isTTY = false;
@@ -156,7 +155,7 @@ function registry(version: 1 | 2): Files {
             "",
             "It changes the size.",
             "",
-            "## What the merge plan gets",
+            "## What update merges",
             "",
             "Nothing.",
             "",
@@ -180,6 +179,20 @@ function registry(version: 1 | 2): Files {
       envVars: { BETA_URL: "Where beta posts to." },
       files: [{ path: "files/beta.ts", target: "@api/beta.ts" }],
       name: "beta",
+    }),
+    "gamma/files/gamma.ts": "export const gamma = 1;\n",
+    "gamma/files/gamma.test.ts": "it('gamma', () => {});\n",
+    "gamma/registry-item.json": descriptor({
+      dependsOn: ["alpha"],
+      files: [
+        { path: "files/gamma.ts", target: "@api/gamma.ts" },
+        {
+          path: "files/gamma.test.ts",
+          target: "@api/gamma.test.ts",
+          when: { testing: true },
+        },
+      ],
+      name: "gamma",
     }),
     "drv-a/files/drv.ts": "export const driver = 'a';\n",
     "drv-a/registry-item.json": descriptor({
@@ -260,7 +273,7 @@ describe("add and remove on the render engine (local registry)", () => {
     await writeTree(modules, registry(1));
     process.env[REGISTRY_ENV] = modules;
     project = join(workspace, "demo");
-    await scaffoldNext({
+    await scaffoldProject({
       projectName: "demo",
       target: project,
       testingMode: "off",
@@ -306,7 +319,7 @@ describe("add and remove on the render engine (local registry)", () => {
       prerequisites: string[];
       files: { target: string; action: string; class: string }[];
     };
-    expect(doc.schemaVersion).toBe(2);
+    expect(doc.schemaVersion).toBe(3);
     expect(doc.requested).toStrictEqual(["beta"]);
     expect(doc.install).toStrictEqual(["alpha", "beta"]);
     expect(doc.prerequisites).toStrictEqual(["alpha"]);
@@ -465,6 +478,69 @@ describe("add and remove on the render engine (local registry)", () => {
     await expect(
       pathExists(join(project, "apps/api/src/beta.ts"))
     ).resolves.toBeFalsy();
+  });
+
+  it("refuses with exit 2, not a parse error, while saasaloy.json holds markers", async () => {
+    await expect(runAdd(["alpha", "--yes"])).resolves.toBe(EXIT_OK);
+    const manifestPath = join(project, ".saasaloy/manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as {
+      pendingMerges: string[];
+    };
+    manifest.pendingMerges = ["saasaloy.json"];
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    const config = await read(project, "saasaloy.json");
+    await writeFile(
+      join(project, "saasaloy.json"),
+      `<<<<<<< mine\n${config}=======\n${config}>>>>>>> saasaloy 0.9.0\n`
+    );
+    commit(project);
+    await expect(runAdd(["beta", "--yes"])).resolves.toBe(EXIT_REFUSED);
+    await expect(runRemove(["alpha", "--yes"])).resolves.toBe(EXIT_REFUSED);
+    await expect(runUpdate(["--yes"])).resolves.toBe(EXIT_REFUSED);
+    await expect(runTesting(["tdd"])).resolves.toBe(EXIT_REFUSED);
+  });
+
+  it("testing writes a gated test file, and off keeps it on disk, untracked (ADR 0053)", async () => {
+    await expect(runAdd(["gamma", "--yes"])).resolves.toBe(EXIT_OK);
+    commit(project);
+    const test = join(project, "apps/api/src/gamma.test.ts");
+    await expect(pathExists(test)).resolves.toBeFalsy();
+
+    await expect(runTesting(["tests-after"])).resolves.toBe(EXIT_OK);
+    await expect(read(project, "apps/api/src/gamma.test.ts")).resolves.toBe(
+      "it('gamma', () => {});\n"
+    );
+    expect((await loadConfig(project)).testing?.mode).toBe("tests-after");
+    await expect(read(project, "AGENTS.md")).resolves.toContain(
+      "saasaloy:testing"
+    );
+    const tracked = async (): Promise<string[]> =>
+      Object.keys(
+        (
+          JSON.parse(await read(project, ".saasaloy/manifest.json")) as {
+            files: Record<string, unknown>;
+          }
+        ).files
+      );
+    await expect(tracked()).resolves.toContain("apps/api/src/gamma.test.ts");
+    commit(project);
+
+    await expect(runTesting(["off"])).resolves.toBe(EXIT_OK);
+    await expect(pathExists(test)).resolves.toBeTruthy();
+    await expect(tracked()).resolves.not.toContain(
+      "apps/api/src/gamma.test.ts"
+    );
+    expect((await loadConfig(project)).testing?.mode).toBe("off");
+    commit(project);
+
+    // Back on: the file on disk equals the render, so it is tracked again.
+    await expect(runTesting(["tdd"])).resolves.toBe(EXIT_OK);
+    await expect(tracked()).resolves.toContain("apps/api/src/gamma.test.ts");
+  });
+
+  it("testing refuses an unknown mode and a mode beside --abort", async () => {
+    await expect(runTesting(["sometimes"])).resolves.toBe(EXIT_REFUSED);
+    await expect(runTesting(["off", "--abort"])).resolves.toBe(EXIT_REFUSED);
   });
 
   it("update takes no module name and refuses the old engine's flags", async () => {
@@ -751,4 +827,19 @@ describe("update on the render engine (two releases in the user cache)", () => {
 
 afterAll(() => {
   process.chdir(ORIGINAL_CWD);
+});
+
+describe(demoteHeadings, () => {
+  it("nests a note's headings under its own and leaves a fenced block alone", () => {
+    const body = "## What you do\n\n```md\n## not a heading\n```\n\n### Step\n";
+
+    expect(demoteHeadings(body, 4)).toBe(
+      "#### What you do\n\n```md\n## not a heading\n```\n\n##### Step\n"
+    );
+  });
+
+  it("caps a heading at level 6 and leaves a body with no heading as it is", () => {
+    expect(demoteHeadings("## A\n###### B\n", 5)).toBe("##### A\n###### B\n");
+    expect(demoteHeadings("plain text\n", 4)).toBe("plain text\n");
+  });
 });

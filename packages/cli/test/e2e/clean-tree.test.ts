@@ -6,14 +6,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assertCliBuilt, repoModulesDir, runCli } from "../support/cli.js";
 import type { CliRun } from "../support/cli.js";
 
-// The clean-tree rule of the render engine on the built binary (plan 0116, Phase 4,
-// `SAASALOY_ENGINE=next`): `add` writes over a tree with an uncommitted new file, because
+// The clean-tree rule of the render engine on the built binary (plan 0116): `add` writes over a tree with an uncommitted new file, because
 // a new file is not a file the run merges, and it refuses with exit 2 when the run must
 // merge a file that has uncommitted changes.
 
-const PROJECT = "next-app";
+const PROJECT = "clean-tree-app";
 const ENV = {
-  SAASALOY_ENGINE: "next",
   SAASALOY_REGISTRY_DIR: repoModulesDir(),
 };
 
@@ -48,7 +46,7 @@ function assertCode(run: CliRun, code: number): void {
 
 beforeAll(async () => {
   await assertCliBuilt();
-  workspace = await mkdtemp(join(tmpdir(), "saasaloy-e2e-next-"));
+  workspace = await mkdtemp(join(tmpdir(), "saasaloy-e2e-clean-tree-"));
   project = join(workspace, PROJECT);
   const init = await runCli(["init", PROJECT, "--no-install", "--no-git"], {
     cwd: workspace,

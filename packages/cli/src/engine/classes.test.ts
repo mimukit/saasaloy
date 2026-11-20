@@ -4,7 +4,7 @@ import { classOf } from "./classes.js";
 const declaration = {
   ownedFiles: ["packages/ui/src/blocks/**", "apps/web/public/favicon.*"],
   retiredSeedFiles: [],
-  seedFiles: ["README.md", "saasaloy.json", "packages/env/.env.example"],
+  seedFiles: ["README.md", "saasaloy.json"],
 };
 
 describe(classOf, () => {
@@ -63,21 +63,18 @@ describe(classOf, () => {
     ).toBe("merged");
   });
 
-  it("merges saasaloy.json, the key list and the owned table files (re-grill Q1 to Q3)", () => {
+  it("merges the owned table files until Phase 7 (re-grill Q1)", () => {
     const owned = {
       ownedFiles: [
-        "packages/env/.env.example",
         "packages/env/src/services.ts",
         "packages/env/src/sources.ts",
         "packages/tooling/src/targets.ts",
         "packages/ui/src/blocks/**",
       ],
       retiredSeedFiles: [],
-      seedFiles: ["saasaloy.json"],
+      seedFiles: [],
     };
     for (const path of [
-      "saasaloy.json",
-      "packages/env/.env.example",
       "packages/env/src/services.ts",
       "packages/env/src/sources.ts",
       "packages/tooling/src/targets.ts",
@@ -93,6 +90,24 @@ describe(classOf, () => {
         module: "base",
         path: "packages/ui/src/blocks/hero.tsx",
       })
+    ).toBe("once");
+  });
+
+  // Re-grill Q2 to Q4: the declaration lists neither, so both are `merged` by the rule for
+  // any other base file, and the interim rule names neither.
+  it("reads saasaloy.json and the key list as merged once the declaration leaves them out", () => {
+    const shipped = {
+      ownedFiles: ["packages/ui/src/blocks/**"],
+      retiredSeedFiles: [],
+      seedFiles: ["README.md"],
+    };
+    for (const path of ["saasaloy.json", "packages/env/.env.example"]) {
+      expect(classOf({ declaration: shipped, module: "base", path })).toBe(
+        "merged"
+      );
+    }
+    expect(
+      classOf({ declaration, module: "base", path: "saasaloy.json" })
     ).toBe("once");
   });
 });

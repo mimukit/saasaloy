@@ -25,10 +25,19 @@ export const UPDATE_NOTES_DIR = "update-notes";
 /** The four `##` sections every note body holds, in this order. */
 export const UPDATE_NOTE_SECTIONS = [
   "What update does",
-  "What the merge plan gets",
+  "What update merges",
   "What you do",
   "Verify",
 ] as const;
+
+/**
+ * Older names of a section, still read: a note an old-engine release shipped names its
+ * second section after the merge plan, and an update reads the notes of the old release
+ * as well as the new one.
+ */
+const SECTION_ALIASES: Readonly<Record<string, string>> = {
+  "What the merge plan gets": "What update merges",
+};
 
 /** One parsed and validated update note. */
 export interface UpdateNote {
@@ -426,7 +435,7 @@ function sectionHeadings(body: string): string[] {
     if (fence === undefined) {
       const heading = /^## +(.+?)\s*#*\s*$/.exec(line)?.[1];
       if (heading !== undefined) {
-        headings.push(heading);
+        headings.push(SECTION_ALIASES[heading] ?? heading);
       }
     }
   }

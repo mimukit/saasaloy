@@ -51,8 +51,8 @@ If the run happened before backups shipped and the work was never committed, git
 
 Upgrade the CLI. From 0.2.0, the release carrying ADR 0034:
 
-- an adopted file is never overwritten, only offered as a merge;
-- the files the template hands over stay yours;
+- a file you edited is merged three ways, never overwritten, and where both sides changed the same lines the file gets conflict markers (from 0.10.0, [ADR 0066](../../adr/0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md));
+- the files the template hands over are written once and stay yours ([ADR 0067](../../adr/0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md));
 - the project name comes from `saasaloy.json` first, then the root `package.json`, and only falls back to the directory name for a project scaffolded before either was written, with a warning (`packages/cli/src/lib/project-name.ts`);
 - every run writes `.saasaloy/backups/<timestamp>/` first, and `saasaloy update --abort` restores it;
 - a dirty git working tree is refused without `--force`.

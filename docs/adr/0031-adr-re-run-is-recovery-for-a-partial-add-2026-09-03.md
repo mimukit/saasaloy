@@ -8,7 +8,7 @@
 
 ## Status
 
-accepted — extends [ADR 0006](0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md) from managed files to module state. It supersedes nothing. The `remove` and `update` engines read the same three state files and are unaffected, because the change makes those files more accurate rather than differently shaped.
+accepted — extends [ADR 0006](0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md) from managed files to module state. It supersedes nothing. The `remove` and `update` engines read the same three state files and are unaffected, because the change makes those files more accurate rather than differently shaped. **Superseded by [ADR 0066](0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md) (2026-11-20):** a re-run is no longer the recovery. The engine copies each file before it writes, a journal marks an unfinished run, every later run refuses until `--abort` restores the files, and `add`, `remove` and `update` all take `--abort`.
 
 ## Considered Options
 

@@ -10,7 +10,7 @@ This note needs `auth/0005-user-caller`, which adds `packages/auth/src/user-call
 
 From then on a route that opens with `requireUser` accepts a bearer key its user owns, limited to the key's scope. The shipped `GET /notifications`, `GET /notifications/unread-count`, `GET /notifications/preferences` and `GET /files` open that way. `requireCaller` and `requireScope` are unchanged.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/auth/src/caller.ts`, if you edited it. Keep your edits and take the `apiKeyUser` export and its `UserResolver` type import.
 

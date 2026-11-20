@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { parseModule } from "magicast";
 import { describe, expect, it } from "vitest";
-import { applyPatch, reversePatch } from "./patch/index.js";
 import type { RegistryPatch } from "./schema.js";
 
 // The client/admin split (ADR 0050) gives `packages/auth` two Better Auth instances,
@@ -57,16 +56,6 @@ async function pluginPatches(module: string) {
   );
 }
 
-/**
- * The source with whitespace and trailing commas taken out. Recast prints an array it
- * touched on one line, so a round trip through `add` and `remove` changes the layout of a
- * multi-line array and nothing else. A real run formats every patched file with the
- * project's Prettier afterwards (`formatPatchedFiles`), which restores the layout.
- */
-function squash(source: string): string {
-  return source.replaceAll(/\s+/g, "").replaceAll(/,([\]}])/g, "$1");
-}
-
 /** The callee names in `<exportName>`'s `plugins` array, read back with magicast. */
 function callsIn(source: string, exportName: string): string[] {
   const array = parseModule(source).exports[exportName]?.$args?.[0]?.plugins as
@@ -97,45 +86,6 @@ describe("modules that add a Better Auth plugin", () => {
         expect([...Object.keys(TWINS), ...Object.values(TWINS)]).toContain(
           patch.exportName
         );
-      }
-    }
-  );
-
-  it.each(MODULES)(
-    "%s adds every call to both instances and removes it again",
-    async (module) => {
-      const patches = await pluginPatches(module);
-
-      for (const file of Object.keys(FILES) as AuthFile[]) {
-        const mine = patches.filter((p) => p.file === file);
-        if (mine.length === 0) {
-          continue;
-        }
-        const original = await shipped(file);
-
-        let content = original;
-        for (const patch of mine) {
-          const result = applyPatch(content, patch, file);
-          expect(
-            result.reason,
-            `${patch.exportName} ${patch.call}`
-          ).toBeUndefined();
-          expect(result.changed).toBeTruthy();
-          content = result.content;
-        }
-        for (const patch of mine) {
-          expect(callsIn(content, patch.exportName)).toContain(patch.call);
-        }
-
-        for (const patch of mine.toReversed()) {
-          const result = reversePatch(content, patch, file);
-          expect(
-            result?.changed,
-            `remove ${patch.exportName} ${patch.call}`
-          ).toBeTruthy();
-          content = result?.content ?? content;
-        }
-        expect(squash(content)).toBe(squash(original));
       }
     }
   );

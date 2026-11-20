@@ -6,7 +6,7 @@
 
 ## Status
 
-accepted — amends [ADR 0032](0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)'s "never a network fetch" and its two-way merge plan for drift, and replaces decision 6 of the update plan ("tracked but missing, put it back")
+accepted — amends [ADR 0032](0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)'s "never a network fetch" and its two-way merge plan for drift, and replaces decision 6 of the update plan ("tracked but missing, put it back"). **Snapshot rule superseded by [ADR 0068](0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md) (2026-11-20):** the base of a merge is now the render of the old lock or of the record's own release, accepted by its hash and read from a payload in the user cache. `fetchBaseSnapshot`, the `templateHash` check and `--from` are gone. The rule that a tracked file the owner deleted stays deleted holds, with no `deleted` flag and no `--resolved`; `update --restore <path>` writes it again.
 
 ## Considered Options
 

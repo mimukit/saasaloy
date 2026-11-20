@@ -217,7 +217,7 @@ import { pruneNotifications } from "@repo/db/repositories/notifications";
 await withDb(scope, (db) => pruneNotifications(db, new Date()));
 ```
 
-Add `queue` later and `saasaloy add queue` backfills the two prune files and the three queue patches. `saasaloy remove queue` takes them out again and leaves the rest of this module.
+Add `queue` later and `saasaloy add queue` writes the two prune files and the three queue patches in the same run. `saasaloy remove queue` takes them out again and leaves the rest of this module.
 
 #### Wire-up
 

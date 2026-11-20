@@ -91,7 +91,9 @@ export type ResultKind =
   /** A `once` path that already holds a file with no record: left, and now tracked. */
   | "once-kept"
   /** An owner-edited `generated` file overwritten under `force`. */
-  | "generated-overwritten";
+  | "generated-overwritten"
+  /** A file the new render drops that `keep` names: left on disk, its record dropped. */
+  | "untracked";
 
 const ACTION_OF: Record<ResultKind, ApplyAction> = {
   "already-equal": "leave",
@@ -108,6 +110,7 @@ const ACTION_OF: Record<ResultKind, ApplyAction> = {
   "once-left": "report",
   restored: "write",
   unchanged: "leave",
+  untracked: "leave",
   updated: "write",
   "upstream-deleted-owner-edited": "report",
 };
@@ -182,6 +185,11 @@ export interface PlanArgs {
   /** `once` files to merge three ways (`update --merge`). */
   merge?: readonly string[];
   /**
+   * Files the new render drops that stay on disk, untracked, whatever their bytes:
+   * `testing off` deletes nothing (ADR 0053).
+   */
+  keep?: readonly string[];
+  /**
    * The base of the `merge` paths when it differs from `base`: the render at the release
    * that wrote a `once` file, whose record is older than the old lock.
    */
@@ -227,6 +235,7 @@ export async function planApply(args: PlanArgs): Promise<Plan> {
   const { root, manifest, theirs, base, version } = args;
   const restore = new Set(args.restore);
   const mergeOnce = new Set(args.merge);
+  const keep = new Set(args.keep);
   for (const path of [...restore, ...mergeOnce]) {
     if (!theirs.files.has(path)) {
       throw new RefusalError(
@@ -448,6 +457,8 @@ export async function planApply(args: PlanArgs): Promise<Plan> {
       delete files[path];
       if (mine === undefined) {
         push("gone", undefined);
+      } else if (keep.has(path)) {
+        push("untracked", mine);
       } else if (await pristine()) {
         push("deleted", undefined);
       } else {
@@ -550,6 +561,8 @@ export interface ApplyArgs {
   dryRun?: boolean;
   restore?: readonly string[];
   merge?: readonly string[];
+  /** See `PlanArgs.keep`. */
+  keep?: readonly string[];
   /** Default `none`: the command decides (plan 0116, "The clean-tree rule"). */
   cleanTree?: CleanTreeRule;
   /** Replace the manifest's pending update notes. Kept as they are when absent. */
@@ -736,6 +749,7 @@ export async function apply(args: ApplyArgs): Promise<ApplyReport> {
     ...(args.force === undefined ? {} : { force: args.force }),
     ...(args.restore === undefined ? {} : { restore: args.restore }),
     ...(args.merge === undefined ? {} : { merge: args.merge }),
+    ...(args.keep === undefined ? {} : { keep: args.keep }),
     ...(args.mergeBase === undefined
       ? {}
       : { mergeBase: render(args.mergeBase) }),

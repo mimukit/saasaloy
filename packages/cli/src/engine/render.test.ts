@@ -39,7 +39,7 @@ function payloadOf(modules: PayloadModule[]): Payload {
       declaration: {
         ownedFiles: ["packages/ui/src/blocks/**"],
         retiredSeedFiles: [],
-        seedFiles: ["README.md", "saasaloy.json"],
+        seedFiles: ["README.md"],
       },
       files: new Map([
         ["AGENTS.md", AGENTS],

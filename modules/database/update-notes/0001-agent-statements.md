@@ -10,7 +10,7 @@ The one route in `apps/api/src/routes/health-db.ts` gets one `declare({...})` li
 
 The link only calls `next()`. Every response, every status and `AppType` stay as they were, and nothing reads the statements until the `agent` module is installed.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/routes/health-db.ts`, if you edited it. Keep your edits and take the `declare(...)` link on each route and the `../contract` import. A route you added yourself needs a link of its own.
 

@@ -10,7 +10,7 @@ This note needs `api/0005-route-contract` and `api/0006-agent-scope`. Apply both
 
 With testing on, the project also gets `apps/api/src/routes/projects.test.ts`, which proves a member whose custom role has no `project:read` still lists the projects.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/routes/projects.ts`, if you edited it. Keep your edits and take the `can` and `requireTenant` imports, the key check in `GET /`, and the comment above the recipe.
 

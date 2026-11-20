@@ -4,7 +4,6 @@ import { format } from "prettier";
 import {
   constArrayInsertRefusal,
   insertIntoConstArray,
-  removeFromConstArray,
 } from "./const-array.js";
 
 const NAV = `import { LayoutDashboardIcon } from "lucide-react";
@@ -71,7 +70,7 @@ describe("const-array on the web navbar's pageLinks", () => {
     entry: { label: "Blog", href: "/blog" },
   } as const;
 
-  it("appends to the empty array, and removes back to the original bytes", async () => {
+  it("appends to the empty array once", async () => {
     const navbar = await readFile(
       new URL(
         "../../../templates/base/packages/ui/src/blocks/navbar.tsx",
@@ -84,27 +83,6 @@ describe("const-array on the web navbar's pageLinks", () => {
       /const pageLinks: NavbarLink\[\] = \[\s*\{ label: "Blog", href: "\/blog" \},?\s*\];/
     );
     expect(insertIntoConstArray(out, BLOG)).toBe(out);
-    expect(removeFromConstArray(out, BLOG)).toBe(navbar);
-  });
-});
-
-describe(removeFromConstArray, () => {
-  it("removes the object with the recorded key and value", () => {
-    const applied = insertIntoConstArray(NAV, TEAMS);
-    const out = removeFromConstArray(applied, TEAMS);
-    expect(out).toBe(NAV);
-  });
-
-  it("removes an entry after a user edits a non-key property", () => {
-    const applied = insertIntoConstArray(NAV, TEAMS).replace(
-      'label: "Teams"',
-      'label: "My teams"'
-    );
-    expect(removeFromConstArray(applied, TEAMS)).toBe(NAV);
-  });
-
-  it("is a no-op when the keyed entry is already absent", () => {
-    expect(removeFromConstArray(NAV, TEAMS)).toBe(NAV);
   });
 });
 
@@ -144,8 +122,5 @@ describe("the base deploy targets file", () => {
     expect(
       insertIntoConstArray(insertIntoConstArray(once, API_TARGET), API_SMOKE)
     ).toBe(once);
-    expect(
-      removeFromConstArray(removeFromConstArray(once, API_SMOKE), API_TARGET)
-    ).toBe(source);
   });
 });

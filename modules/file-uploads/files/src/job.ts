@@ -3,9 +3,10 @@ import { sweep } from "./sweep";
 // The sweep, as the `queue` capability's `jobs` and `schedules` tables register it.
 //
 // The file lives in this package rather than in `packages/queue/src/jobs/`, and both
-// reasons matter. A file entry targeting `@queue/...` cannot be shipped conditionally: the
-// applier resolves the alias before it applies `onlyWith`, so a project with no `queue`
-// capability would fail `saasaloy add file-uploads` on an unknown alias. And a job file in
+// reasons matter. A file entry targeting `@queue/...` could not be shipped conditionally
+// when this was written: the old engine resolved the alias before it applied `onlyWith`,
+// so a project with no `queue` capability failed `saasaloy add file-uploads` on an
+// unknown alias. And a job file in
 // `packages/queue` that reached the database would pull the schema barrel's
 // `import.meta.glob` into a workspace that does not compile with Vite's types.
 //

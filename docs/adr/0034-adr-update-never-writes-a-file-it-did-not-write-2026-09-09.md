@@ -4,7 +4,7 @@
 
 ## Status
 
-accepted. Extends [ADR 0032](0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md), whose adoption step this ADR makes safe. Nothing in ADR 0032 is withdrawn.
+accepted. Extends [ADR 0032](0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md), whose adoption step this ADR makes safe. Nothing in ADR 0032 is withdrawn. **Kept by construction in [ADR 0066](0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md) (2026-11-20):** the render engine never deletes or overwrites a file whose bytes differ from what it wrote, except a `generated` file under `--force`. The `adopted` flag is gone, because the manifest hash now always means the raw render ([ADR 0068](0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)), and an owned file is a `once` file that no longer goes to a merge ([ADR 0067](0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md)).
 
 ## What went wrong
 

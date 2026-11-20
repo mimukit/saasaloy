@@ -276,7 +276,7 @@ With `e2e` installed, `remove` also deletes `lib/sms-log.ts`, `lib/sms.ts` and t
 
 With `admin` installed, `remove` also deletes the login codes screen, its route, its repositories and `apps/admin/src/lib/contact.ts`, and takes the nav row and the route mount back out. Until #294 lands, nothing else imports `contact.ts`.
 
-`remove` does not take the `@repo/sms` dependency back out of `packages/auth/package.json`, because no `remove` reverses a `package-json-dependency` patch. Delete the line by hand if nothing else in `packages/auth` imports `@repo/sms`.
+`remove` takes the `@repo/sms` dependency back out of `packages/auth/package.json`, because the render without the module has no such line. Put it back by hand if other code in `packages/auth` still imports `@repo/sms`.
 
 #### Next
 

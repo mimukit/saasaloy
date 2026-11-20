@@ -45,7 +45,7 @@ saasaloy remove infra
 
 - In `pnpm-workspace.yaml`, delete the `"infra"` entry under `packages:` and the `protobufjs: true` line under `allowBuilds:`.
 - In `packages/env/.env.example`, change `# @services infra` to `# @services deploy`, rename `CLOUDFLARE_DEFAULT_ACCOUNT_ID` to `CLOUDFLARE_ACCOUNT_ID`, and delete `PULUMI_CONFIG_PASSPHRASE`.
-- Check that `packages/env/src/services.ts` has a `{ name: "deploy", environment: "prod", omit: [] }` row and no `infra` row. `saasaloy update` lists that file in its merge plan, because the project owns it.
+- Check that `packages/env/src/services.ts` has a `{ name: "deploy", environment: "prod", omit: [] }` row and no `infra` row. `saasaloy update` merges that file three ways, so check it for conflict markers.
 - Run `pnpm install`.
 
 ## 5. Check before anything uploads

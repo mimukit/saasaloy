@@ -1,52 +1,44 @@
 import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
-import { lineDiff } from "../lib/diff.js";
+import { apply } from "../engine/apply.js";
+import type { ApplyReport } from "../engine/apply.js";
 import {
-  EXIT_FAILURE,
-  EXIT_OK,
-  EXIT_REFUSED,
-  exitCodeFor,
-  formatFailure,
-} from "../lib/exit.js";
-import { persistLedger } from "../lib/ledger.js";
-import type { LedgerFailure } from "../lib/ledger.js";
-import { loadLock } from "../lib/lock.js";
-import { formatPatchedFiles } from "../lib/format.js";
-import { loadManifest } from "../lib/manifest.js";
-import { isReversibleKind } from "../lib/patch/index.js";
-import { confirm, select } from "../lib/prompts.js";
+  assertReadyToRun,
+  loadSide,
+  readProjectState,
+} from "../engine/project.js";
+import { closure, fixedOrder } from "../engine/render.js";
+import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
+import { createOutput } from "../lib/json-output.js";
+import type { Output } from "../lib/json-output.js";
+import { select } from "../lib/prompts.js";
 import { findProjectRoot } from "../lib/project.js";
-import { buildRemovePlan, executeRemovePlan } from "../lib/remover.js";
-import type {
-  FileRemoveAction,
-  LinkRemoveAction,
-  PatchRemoveAction,
-  PlannedRemoveFile,
-  RemovePlan,
-} from "../lib/remover.js";
-import { loadConfig } from "../lib/saasaloy-config.js";
-import { isInteractive, wrapForNote } from "../lib/tui.js";
-import { uiBlockFiles } from "../lib/ui-blocks.js";
+import { listLabel } from "../lib/requested.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { readVersion } from "../version.js";
+import {
+  abortRun,
+  assertSameRelease,
+  confirmApply,
+  NO_TERMINAL_TO_CONFIRM,
+  printDiffs,
+  printReportLines,
+  printSteps,
+  sideSpec,
+  summarize,
+} from "./apply-run.js";
 import { DESCRIPTIONS } from "./descriptions.js";
-import { nextEngineSelected } from "../engine/flag.js";
-import { runRemoveNext } from "./next.js";
 
-// `saasaloy remove <module>` — the local undo, mirroring `add`'s clack UX and flag
-// surface. Fully offline: the plan derives entirely from manifest.json,
-// saasaloy.json and saasaloy-lock.json (issue #27). `--dry-run`/`--diff` preview
-// without mutating; a drifted managed file is never silently clobbered.
-
-interface Options {
-  name?: string;
-  dryRun: boolean;
-  diff: boolean;
-  yes: boolean;
-  force: boolean;
-  /** Flags we don't know and extra positionals — reported, never silently ignored. */
-  unknown: string[];
-}
+// `saasaloy remove <module>`: one apply from the lock's `requested` list to that list
+// without the module (plan 0116). A remove is a render without the module, so every edit
+// the module made goes with it, a patch included, and nothing needs an inverse.
+//
+// A file the module wrote and the project never changed is deleted. A file the project
+// changed stays, untracked, with one report line, because the CLI never deletes a file it
+// did not write (ADR 0034). A file both still render merges three ways. The clean-tree
+// rule: the run refuses only when it must merge or delete a file with uncommitted
+// changes; `--force` overrides it.
 
 const KNOWN_FLAGS = new Set([
   "--dry-run",
@@ -54,11 +46,13 @@ const KNOWN_FLAGS = new Set([
   "--yes",
   "-y",
   "--force",
+  "--abort",
   "--help",
   "-h",
 ]);
+
 const USAGE =
-  "saasaloy remove [<module>] [--dry-run] [--diff] [--yes] [--force]";
+  "saasaloy remove [<module>] [--dry-run] [--diff] [--yes] [--force] | saasaloy remove --abort";
 const HELP: CommandHelp = {
   name: "remove",
   describe: DESCRIPTIONS.remove,
@@ -66,458 +60,168 @@ const HELP: CommandHelp = {
   flags: {
     "--dry-run": "show the plan and delete nothing",
     "--diff": "show what each deletion removes, and delete nothing",
-    "-y, --yes": "skip the confirmation prompt (drifted files are kept)",
-    "--force": "remove even while another module depends on it",
+    "-y, --yes": "skip the confirmation prompt",
+    "--force":
+      "delete and merge even over uncommitted changes, and overwrite edited generated files",
+    "--abort":
+      "put back the files the last add, remove, update or testing run changed",
   },
 };
 
-function parseArgs(argv: string[]): Options {
-  const positional: string[] = [];
-  const unknown: string[] = [];
-  for (const arg of argv) {
-    if (!arg.startsWith("-")) {
-      positional.push(arg);
-    } else if (!KNOWN_FLAGS.has(arg)) {
-      unknown.push(arg);
-    }
-  }
-  unknown.push(...positional.slice(1));
-  return {
-    name: positional[0],
-    dryRun: argv.includes("--dry-run"),
-    diff: argv.includes("--diff"),
-    yes: argv.includes("--yes") || argv.includes("-y"),
-    force: argv.includes("--force"),
-    unknown,
-  };
-}
-
-const FILE_ACTION_LABEL: Record<FileRemoveAction, string> = {
-  delete: pc.red("delete"),
-  drift: pc.yellow("drift → confirm"),
-  missing: pc.dim("missing → untrack"),
-};
-
-// Under --yes the confirm loop never runs (see the `if (!opts.yes)` gate below), so a
-// drifted file always survives untracked rather than pausing for a prompt — label it
-// accordingly instead of implying a confirmation that won't happen.
-function fileActionLabel(file: PlannedRemoveFile, yes: boolean): string {
-  const { action } = file;
-  // A seed file the project changed is kept without asking (#310, ADR 0060).
-  if (action === "drift" && file.seed) {
-    return pc.yellow("seed, changed → kept (untracked)");
-  }
-  if (action === "drift" && yes) {
-    return pc.yellow("drift → kept (untracked)");
-  }
-  return FILE_ACTION_LABEL[action];
-}
-
-const LINK_ACTION_LABEL: Record<LinkRemoveAction, string> = {
-  remove: pc.red("unlink"),
-  missing: pc.dim("missing"),
-  conflict: pc.yellow("conflict → left"),
-};
-
-const PATCH_ACTION_LABEL: Record<PatchRemoveAction, string> = {
-  revert: pc.red("revert"),
-  refused: pc.yellow("drift → left"),
-  gone: pc.dim("already gone"),
-  drop: pc.dim("untrack"),
-};
-
-// Cap a single file's deletion diff so a big generated file can't flood the terminal
-// (same cap as `add`'s renderDiff).
-const MAX_DIFF_LINES = 60;
-
-function renderDeleteDiff(file: PlannedRemoveFile): string {
-  const lines = lineDiff(file.oldContent ?? "", "");
-  const shown = lines
-    .slice(0, MAX_DIFF_LINES)
-    .map((line) => pc.red(`- ${line.text}`));
-  if (lines.length > MAX_DIFF_LINES) {
-    shown.push(pc.dim(`  … ${lines.length - MAX_DIFF_LINES} more lines`));
-  }
-  return shown.join("\n");
-}
-
-/**
- * The plan line's suffix for another module's entry that only shipped because the module
- * being removed was installed (#242 Q4), so the user sees why `remove e2e` touches a file
- * `auth` owns.
- */
-function gatedNote(module: string, gatedOn: string | undefined): string {
-  return gatedOn === undefined
-    ? ""
-    : ` ${pc.dim(`(${module}, ships only with ${gatedOn})`)}`;
-}
-
-function summarizeRemovePlan(
-  plan: RemovePlan,
-  name: string,
-  yes: boolean
-): void {
-  const lines = [`will remove: ${pc.cyan(name)}`, ""];
-  for (const file of plan.files) {
-    lines.push(
-      `  ${fileActionLabel(file, yes)}  ${file.target}${gatedNote(file.module, file.gatedOn)}`
-    );
-  }
-  const toDelete = plan.files.filter((f) => f.action === "delete").length;
-  const drifted = plan.files.filter(
-    (f) => f.action === "drift" && !f.seed
-  ).length;
-  const seedKept = plan.files.filter(
-    (f) => f.action === "drift" && f.seed
-  ).length;
-  const missing = plan.files.filter((f) => f.action === "missing").length;
-  lines.push("");
-  const driftNote = yes ? "kept untracked" : "need confirmation";
-  lines.push(
-    pc.dim(
-      `${toDelete} file(s) to delete, ${drifted} drifted (${driftNote}), ${missing} already missing${seedKept > 0 ? `, ${seedKept} changed seed file(s) kept` : ""}`
-    )
-  );
-  note(wrapForNote(lines.join("\n")), "Plan");
-
-  const ownedLinks = plan.links.filter((l) => l.action !== "missing");
-  if (ownedLinks.length > 0) {
-    const linkLines = ownedLinks.map(
-      (l) => `${LINK_ACTION_LABEL[l.action]}  ${l.path}`
-    );
-    note(wrapForNote(linkLines.join("\n")), "Skill links");
-  }
-  // Conflicted skill links are warned about once, post-execute (see `result.linkConflicts`
-  // below) — that reflects what actually happened, so we don't also warn here from the plan.
-
-  // A dependents refusal (without --force) returns before this is ever called, so
-  // reaching here with dependents means --force is overriding it.
-  if (plan.dependents.length > 0) {
-    log.warn(
-      `${pc.cyan(name)} is still depended on by ${plan.dependents.join(", ")} — proceeding anyway (--force).`
-    );
-  }
-  for (const missingLock of plan.missingLockEntries) {
-    log.warn(
-      `Installed module ${pc.cyan(missingLock)} has no lock entry — dependent detection is incomplete for it.`
-    );
-  }
-
-  // A kind with an inverse is listed as work rather than warned about; what actually
-  // happened is reported post-execute (#83, #36).
-  const reversible = plan.patches.filter((p) => p.action !== "drop");
-  if (reversible.length > 0) {
-    const patchLines = reversible.map(
-      (p) =>
-        `  ${PATCH_ACTION_LABEL[p.action]}  ${p.entry.file} ${pc.dim(`(${p.entry.patch.kind})`)}${gatedNote(p.entry.module, p.gatedOn)}${p.reason === undefined ? "" : `\n    ${pc.dim(p.reason)}`}`
-    );
-    note(wrapForNote(patchLines.join("\n")), "Config patches");
-  }
-  for (const p of plan.patches) {
-    if (p.action !== "drop") {
-      continue;
-    }
-    log.warn(
-      `Config patch on ${pc.cyan(p.entry.file)} ${pc.dim(`(${p.entry.patch.kind})`)}${gatedNote(p.entry.module, p.gatedOn)} is not reversed by \`remove\` — hand-revert it if needed.`
-    );
-  }
+interface Options {
+  name: string | undefined;
+  dryRun: boolean;
+  diff: boolean;
+  yes: boolean;
+  force: boolean;
 }
 
 export async function runRemove(argv: string[]): Promise<number> {
-  // Plan 0116 Phase 4: the render engine, behind the flag until Phase 6.
-  if (nextEngineSelected()) {
-    return runRemoveNext(argv);
-  }
-  // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
-  const opts = parseArgs(argv);
-  if (opts.unknown.length === 0 && wantsHelp(argv)) {
+  const positional = argv.filter((arg) => !arg.startsWith("-"));
+  const unknown = [
+    ...argv.filter((arg) => arg.startsWith("-") && !KNOWN_FLAGS.has(arg)),
+    ...positional.slice(1),
+  ];
+  if (unknown.length === 0 && wantsHelp(argv)) {
     printCommandHelp(HELP);
     return EXIT_OK;
   }
-
-  intro(pc.bgCyan(pc.black(" saasaloy remove ")));
-
-  if (opts.unknown.length > 0) {
-    cancel(
-      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
+  const out = createOutput(false);
+  const { tui } = out;
+  intro(pc.bgCyan(pc.black(" saasaloy remove ")), tui);
+  if (unknown.length > 0) {
+    return out.refuse(
+      `Unknown argument(s): ${unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
   }
-
-  // The confirms below read stdin, and with no terminal nobody can answer them. Refuse
-  // before the plan is built and name the two ways forward, the way `add` and `update`
-  // do. A preview writes nothing and asks nothing, so it is exempt. With no module named
-  // the picker's own refusal below is the more specific message, so leave that case to it.
-  if (
-    opts.name &&
-    !opts.yes &&
-    !opts.dryRun &&
-    !opts.diff &&
-    !isInteractive()
-  ) {
-    cancel(
-      "No terminal to confirm in — re-run with `--yes` to remove, or `--dry-run` to preview."
-    );
-    return EXIT_REFUSED;
-  }
-
-  let root: string;
-  let config: Awaited<ReturnType<typeof loadConfig>>;
+  const has = (flag: string): boolean => argv.includes(flag);
   try {
-    root = await findProjectRoot();
-    config = await loadConfig(root);
+    const root = await findProjectRoot();
+    if (has("--abort")) {
+      return await abortRun(root, tui);
+    }
+    return await removeModule(root, out, {
+      diff: has("--diff"),
+      dryRun: has("--dry-run"),
+      force: has("--force"),
+      name: positional[0],
+      yes: has("--yes") || has("-y"),
+    });
   } catch (error) {
-    cancel(formatFailure(error));
-    return exitCodeFor(error);
+    return out.fail(error);
   }
+}
 
-  try {
-    let name = opts.name;
-    if (!name) {
-      if (config.installed.length === 0) {
-        note("Nothing installed.", "Nothing to do");
-        outro(pc.dim("0 modules"));
-        return EXIT_OK;
-      }
-      // Same hazard as `add`: without a terminal this prompt can never be answered, so
-      // it would hang rather than fail.
-      if (!isInteractive()) {
-        cancel(
-          `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`
-        );
-        return EXIT_REFUSED;
-      }
-      const picked = await select({
-        answeredBy: "a module name",
-        message: "Pick a module to remove",
-        options: config.installed.map((n) => ({ value: n, label: n })),
-      });
-      if (isCancel(picked)) {
-        cancel("remove cancelled");
-        return EXIT_FAILURE;
-      }
-      name = picked;
-    }
+async function removeModule(
+  root: string,
+  out: Output,
+  opts: Options
+): Promise<number> {
+  const { tui } = out;
+  const cliVersion = await readVersion();
+  const preview = opts.dryRun || opts.diff;
+  if (!opts.yes && !preview && !process.stdin.isTTY) {
+    return out.refuse(NO_TERMINAL_TO_CONFIRM, EXIT_REFUSED);
+  }
+  await assertReadyToRun(root);
+  const state = await readProjectState(root);
+  assertSameRelease(state, cliVersion, "remove");
 
-    if (!config.installed.includes(name)) {
-      cancel(`${pc.cyan(name)} isn't installed — nothing to remove.`);
-      return EXIT_REFUSED;
-    }
-
-    const manifest = await loadManifest(root);
-    const lock = await loadLock(root);
-    const plan = await buildRemovePlan({ root, name, config, manifest, lock });
-
-    if (plan.dependents.length > 0 && !opts.force) {
-      cancel(
-        `${pc.cyan(name)} is still depended on by ${plan.dependents.join(", ")} — refusing ` +
-          `${pc.dim("(use --force to remove it anyway)")}.`
-      );
-      return EXIT_REFUSED;
-    }
-
-    summarizeRemovePlan(plan, name, opts.yes);
-    for (const warning of plan.warnings) {
-      log.warn(warning);
-    }
-
-    if (opts.diff) {
-      for (const file of plan.files) {
-        if (file.action === "missing") {
-          continue;
-        }
-        note(
-          renderDeleteDiff(file),
-          `${fileActionLabel(file, opts.yes)}  ${file.target}`
-        );
-      }
-      // A reversal is a destructive edit to someone else's file, so it previews like one.
-      // The diff comes from the plan's pure `reversePatch` run; nothing has been written.
-      for (const p of plan.patches) {
-        if (p.action !== "revert") {
-          continue;
-        }
-        note(p.diff, `${pc.red("revert")}  ${p.entry.file}`);
-      }
-    }
-
-    // --dry-run and --diff both preview only; nothing is written.
-    if (opts.dryRun || opts.diff) {
-      outro(
-        pc.dim(
-          opts.diff
-            ? "diff only — nothing removed"
-            : "dry run — nothing removed"
-        )
-      );
+  let name = opts.name;
+  if (name === undefined) {
+    if (state.requested.length === 0) {
+      note("No module is installed.", "Nothing to remove", tui);
+      outro(pc.dim("nothing to do"), tui);
       return EXIT_OK;
     }
+    const picked = await select({
+      answeredBy: "`<module>`",
+      message: "Pick a module to remove",
+      options: state.requested.map((value) => ({ label: value, value })),
+    });
+    if (isCancel(picked)) {
+      cancel("remove cancelled", tui);
+      return EXIT_FAILURE;
+    }
+    name = picked;
+  }
+  if (!state.installed.includes(name)) {
+    return out.refuse(`${pc.cyan(name)} isn't installed.`, EXIT_REFUSED);
+  }
 
-    // Drift is sacred: confirm per file before deleting hand-edited content.
-    // Under --yes, no prompts run at all — drifted files always survive, untracked.
-    const deleteDrifted = new Set<string>();
-    if (!opts.yes) {
-      for (const file of plan.files) {
-        if (file.action !== "drift" || file.seed) {
-          continue;
-        }
-        const proceed = await confirm({
-          answeredBy: "`--yes`, which keeps every hand-edited file",
-          message: `${file.target} was hand-edited since it was applied — delete it anyway?`,
-          initialValue: false,
-        });
-        if (isCancel(proceed)) {
-          cancel("remove cancelled");
-          return EXIT_FAILURE;
-        }
-        if (proceed) {
-          deleteDrifted.add(file.target);
-        }
-      }
+  const version = state.version ?? cliVersion;
+  const previous = await loadSide(sideSpec(state, state.requested, version), {
+    cliVersion,
+  });
+  const remaining = state.requested.filter((entry) => entry !== name);
+  const coordinates = new Map(state.coordinates);
+  coordinates.delete(name);
+  // The modules that keep `name` in the set: a module cannot render without its
+  // prerequisite, so `--force` does not override this one.
+  const dependents = remaining.filter((other) =>
+    closure(previous.side.payload, [other]).has(name)
+  );
+  if (dependents.length > 0) {
+    return out.refuse(
+      state.requested.includes(name)
+        ? `${pc.cyan(name)} is still depended on by ${listLabel(dependents)}. Remove ${dependents.length === 1 ? "it" : "them"} first.`
+        : `${pc.cyan(name)} was installed as a prerequisite of ${listLabel(dependents)}. Remove ${dependents.length === 1 ? "it" : "them"} instead.`,
+      EXIT_REFUSED
+    );
+  }
+  const next = await loadSide(
+    sideSpec(state, remaining, version, coordinates),
+    { cliVersion }
+  );
+  const before = closure(previous.side.payload, state.requested);
+  const after = closure(next.side.payload, remaining);
+  const removed = fixedOrder(previous.side.payload.modules, before).filter(
+    (module) => !after.has(module)
+  );
+  for (const module of removed) {
+    for (const warning of previous.side.payload.modules.get(module)?.item
+      .removeWarnings ?? []) {
+      log.warn(`${pc.cyan(module)}: ${warning}`, tui);
     }
+  }
 
-    if (!opts.yes) {
-      const proceed = await confirm({
-        answeredBy: "`--yes` to remove, or `--dry-run` to preview",
-        message: "Proceed?",
-      });
-      if (isCancel(proceed)) {
-        cancel("remove cancelled");
-        return EXIT_FAILURE;
-      }
-      if (!proceed) {
-        outro(pc.dim("aborted — nothing removed"));
-        return EXIT_OK;
-      }
-    }
-
-    let result: Awaited<ReturnType<typeof executeRemovePlan>>;
-    let ledgerFailures: LedgerFailure[] = [];
-    try {
-      result = await executeRemovePlan(plan, {
-        root,
-        config,
-        manifest,
-        lock,
-        deleteDrifted,
-      });
-    } finally {
-      // Record whatever actually happened even if a mid-plan step failed — the ledger
-      // must reflect the real on-disk state (same rationale as `add`). These saves used
-      // to be three bare awaits, so the first one to throw skipped the other two and
-      // masked the remove error on its way out. `persistLedger` runs all three and
-      // returns the failures instead (#150).
-      ledgerFailures = await persistLedger({ config, lock, manifest, root });
-    }
-
-    // The remove error wins: a `finally` that throws replaces it, and the user needs to
-    // hear what actually stopped the run. Reaching here means the remove itself passed,
-    // so a failed save is now the only thing wrong.
-    const failedSave = ledgerFailures[0];
-    if (failedSave) {
-      throw failedSave.error;
-    }
-
-    for (const file of result.deleted) {
-      log.step(`${pc.red("delete")}  ${file.target}`);
-    }
-    for (const file of result.missingUntracked) {
-      log.step(
-        `${pc.dim("untrack")}  ${file.target} ${pc.dim("(already gone)")}`
-      );
-    }
-    for (const link of result.linksRemoved) {
-      log.step(`${pc.red("unlink")}  ${link.path}`);
-    }
-    for (const link of result.linkConflicts) {
-      log.warn(
-        `Skill link ${pc.cyan(link.path)} left untouched — not ours to remove.`
-      );
-    }
-    for (const p of result.patchesReversed) {
-      log.step(`${pc.red("revert")}  ${p.file} ${pc.dim(`(${p.patch.kind})`)}`);
-    }
-    await formatPatchedFiles(
+  const run = (dryRun: boolean): Promise<ApplyReport> =>
+    apply({
+      cleanTree: dryRun ? "none" : "touched",
+      dryRun,
+      force: opts.force,
+      next: next.side,
+      previous: previous.side,
+      provenance: next.provenance,
       root,
-      result.patchesReversed.map((p) => p.file)
-    );
-    // A reversible entry that landed in `patchesDropped` either had nothing left to undo —
-    // the link was hand-removed, or the file is gone — or the inverse refused it, which is
-    // a different thing to say. Never claim a revert; the non-reversible kinds were already
-    // warned about from the plan.
-    const refusals = new Map(
-      result.patchRefusals.map((r) => [r.patch, r.reason])
-    );
-    for (const p of result.patchesDropped) {
-      if (!isReversibleKind(p.patch.kind)) {
-        continue;
-      }
-      const reason = refusals.get(p);
-      log.warn(
-        reason === undefined
-          ? `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} was already gone — nothing to revert.`
-          : `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} left untouched — ${reason}.`
-      );
-    }
-    for (const dir of result.prunedDirs) {
-      log.step(`${pc.dim("prune")}  ${dir}`);
-    }
-    for (const id of result.droppedNotes) {
-      log.step(
-        `${pc.dim("drop")}  update note ${id} ${pc.dim("(its module is gone)")}`
-      );
-    }
-    for (const alias of result.droppedAliases) {
-      log.warn(
-        `Alias ${pc.cyan(alias)} dropped — its target directory is gone.`
-      );
-    }
-
-    // A block was placed by hand, so it is un-placed by hand. `add` wrote the file and
-    // printed a pointer to the module's skill; nothing recorded which page the owner
-    // imported it into, so the deletion here leaves a live import pointing at a file that
-    // no longer exists. Say it plainly rather than let the next build say it (#62).
-    const removedBlocks = uiBlockFiles(result.deleted, config.aliases);
-    if (removedBlocks.length > 0) {
-      const blockLines = removedBlocks
-        .map((f) => `  ${pc.red("deleted")}  ${f.target}`)
-        .join("\n");
-      note(
-        wrapForNote(
-          `${blockLines}\n\n${pc.dim("The wire-up you added by hand is not reversed — nothing recorded which page you put it on. Take the import and its tag out yourself, or the build fails.")}`
-        ),
-        "Wire-up left behind"
-      );
-    }
-
-    // A seed file is the project's once written, so a changed one stays (#310).
-    if (result.seedSurvivors.length > 0) {
-      log.warn(
-        `Kept ${result.seedSurvivors.length} seed file(s) the project changed, now untracked: ${result.seedSurvivors.map((f) => f.target).join(", ")}. Delete them by hand if nothing imports them.`
-      );
-    }
-
-    // Drift survivors are the designed outcome, not a failure — exit 0 either way.
-    if (result.driftSurvivors.length > 0) {
-      const survivorLines = result.driftSurvivors
-        .map((f) => `  ${pc.yellow("kept")}  ${f.target}`)
-        .join("\n");
-      note(
-        wrapForNote(
-          `${survivorLines}\n\n${pc.dim("Hand-edited since — left on disk, now untracked.")}`
-        ),
-        "Drift survivors"
-      );
-    }
-
+      version: cliVersion,
+    });
+  const plan = await run(true);
+  summarize(plan, `Remove ${removed.join(", ")}`, tui);
+  if (opts.diff) {
+    printDiffs(plan, tui);
+  }
+  if (preview) {
+    printReportLines(plan, tui);
     outro(
-      pc.green(
-        `Removed ${pc.bold(name)} ${pc.dim(`(${result.deleted.length} files)`)}`
-      )
+      pc.dim(
+        opts.diff ? "diff only — nothing removed" : "dry run — nothing removed"
+      ),
+      tui
     );
     return EXIT_OK;
-  } catch (error) {
-    cancel(formatFailure(error));
-    return exitCodeFor(error);
   }
+  const declined = await confirmApply(opts.yes, "remove", tui);
+  if (declined !== undefined) {
+    return declined;
+  }
+  const report = await run(false);
+  printSteps(report, tui);
+  printReportLines(report, tui);
+  outro(
+    pc.green(`Removed ${removed.map((module) => pc.bold(module)).join(", ")}`),
+    tui
+  );
+  return report.exitCode;
 }

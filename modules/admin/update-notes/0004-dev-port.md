@@ -10,7 +10,7 @@ The `admin` row in `packages/env/src/services.ts` gets `devPort: 3001`. That is 
 
 This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0004-dev-ports` adds. Apply that note first, or the row fails `pnpm typecheck`.
 
-## What the merge plan gets
+## What update merges
 
 `apps/admin/vite.config.ts`, if you edited it. Keep your edits, import `devPort` from `@repo/env/dev-port` and `loadEnv` from `vite`, make the config a function of `{ mode }`, and set:
 

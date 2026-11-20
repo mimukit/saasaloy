@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  constPropertyRefusal,
-  constPropertyRemoveRefusal,
-  setConstProperty,
-  unsetConstProperty,
-} from "./const-property.js";
-import { applyPatch, reversePatch } from "./index.js";
+import { constPropertyRefusal, setConstProperty } from "./const-property.js";
+import { applyPatch } from "./index.js";
 
 const CONFIG = `import type { DeployConfig } from "./types.ts";
 
@@ -51,30 +46,11 @@ describe(setConstProperty, () => {
   });
 });
 
-describe(unsetConstProperty, () => {
-  it("puts undefined back while the property holds the patch's value", () => {
-    expect(unsetConstProperty(setConstProperty(CONFIG, CI), CI)).toBe(CONFIG);
-  });
-
-  it("leaves an owner's later value alone and says why", () => {
-    const owned = CONFIG.replace("undefined", '"release.yml"');
-    expect(unsetConstProperty(owned, CI)).toBe(owned);
-    expect(constPropertyRemoveRefusal(owned, CI)).toContain("release.yml");
-  });
-
-  it("treats an already-reverted file as a plain no-op", () => {
-    expect(unsetConstProperty(CONFIG, CI)).toBe(CONFIG);
-    expect(constPropertyRemoveRefusal(CONFIG, CI)).toBeUndefined();
-  });
-});
-
 describe("const-property through the engine", () => {
-  it("applies and reverses with a diff", () => {
+  it("applies with a diff", () => {
     const patch = { kind: "const-property", ...CI } as const;
     const applied = applyPatch(CONFIG, patch, "deploy.config.ts");
     expect(applied.changed).toBeTruthy();
     expect(applied.diff).toContain('+  ciWorkflow: "ci.yml",');
-    const reversed = reversePatch(applied.content, patch, "deploy.config.ts");
-    expect(reversed?.content).toBe(CONFIG);
   });
 });

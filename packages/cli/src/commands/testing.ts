@@ -1,71 +1,68 @@
-import { writeFile } from "node:fs/promises";
 import { cancel, intro, log, outro } from "@clack/prompts";
 import pc from "picocolors";
-import { BASE_MODULE } from "../lib/base.js";
+import { apply } from "../engine/apply.js";
+import {
+  assertReadyToRun,
+  loadSide,
+  readProjectState,
+} from "../engine/project.js";
+import { closure, fixedOrder } from "../engine/render.js";
 import {
   EXIT_OK,
   EXIT_REFUSED,
   exitCodeFor,
   formatFailure,
+  RefusalError,
 } from "../lib/exit.js";
-import {
-  hashContent,
-  readIfPresent,
-  resolveWithinRoot,
-} from "../lib/fs-utils.js";
-import { runBackfill } from "../lib/backfill.js";
-import { loadLock } from "../lib/lock.js";
-import {
-  loadManifest,
-  recordManagedFile,
-  saveManifest,
-} from "../lib/manifest.js";
-import type { Manifest } from "../lib/manifest.js";
 import { findProjectRoot } from "../lib/project.js";
-import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
-import type { LoadedConfig } from "../lib/saasaloy-config.js";
+import { loadConfig } from "../lib/saasaloy-config.js";
 import {
   parseTestingMode,
   readTestingMode,
-  rewriteTestingBlock,
-  TESTING_BLOCK_END,
-  TESTING_BLOCK_FILE,
-  TESTING_BLOCK_START,
   TESTING_MODES,
 } from "../lib/testing.js";
-import type { TestingMode } from "../lib/testing.js";
 import { TUI_ON_STDERR } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
-import { reportBackfill } from "./backfill-report.js";
+import { readVersion } from "../version.js";
+import {
+  abortRun,
+  assertSameRelease,
+  printReportLines,
+  printSteps,
+  sideSpec,
+} from "./apply-run.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy testing [mode]` (#242, ADR 0053). With no argument it prints the project's
-// mode as a bare word, so a script can read it. With a mode it saves the mode to
-// `saasaloy.json` and rewrites the testing block in the root `AGENTS.md` to match: the
-// value and the text an agent reads change together, or the agent follows the old rules.
+// mode as a bare word, so a script can read it. With a mode it is one apply that renders
+// the project for that mode (plan 0116): `saasaloy.json` records the mode, the testing
+// block in the root `AGENTS.md` changes with it (a three-way merge keeps the owner's own
+// text), and each gated test file whose `when` now holds is written.
 //
-// Three rules hold the write:
-//   - only the text between the markers changes, so the owner's own rules survive;
-//   - the new `AGENTS.md` hash is recorded only when the file was clean, because an
-//     edited file must still read as edited to `update`, which then offers a merge;
-//   - `off` deletes nothing. A test file the project holds may be the owner's own work,
-//     and the CLI never deletes a file the owner may have edited (ADR 0034).
+// `off` deletes nothing (ADR 0053). A test file the project holds may be the owner's own
+// work, so each gated file stays on disk and the manifest stops tracking it. The rules of
+// `add` hold too: the project's release must be the running CLI's, and the run refuses
+// when it must merge a file with uncommitted changes.
 
 export interface Options {
   /** The mode to set, raw; absent means "print the mode". */
   mode?: string;
+  abort: boolean;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--help", "-h"]);
-const USAGE = `saasaloy testing [${TESTING_MODES.join("|")}]`;
+const KNOWN_FLAGS = new Set(["--abort", "--help", "-h"]);
+const USAGE = `saasaloy testing [${TESTING_MODES.join("|")}] | saasaloy testing --abort`;
 const HELP: CommandHelp = {
   name: "testing",
   describe: DESCRIPTIONS.testing,
   usage: USAGE,
-  flags: {},
+  flags: {
+    "--abort":
+      "put back the files the last add, remove, update or testing run changed",
+  },
 };
 
 export function parseArgs(argv: string[]): Options {
@@ -78,90 +75,14 @@ export function parseArgs(argv: string[]): Options {
       unknown.push(arg);
     }
   }
-  unknown.push(...positional.slice(1));
+  const abort = argv.includes("--abort");
+  // `--abort` takes no mode: a mode beside it is reported, not run.
+  unknown.push(...positional.slice(abort ? 0 : 1));
   return {
-    ...(positional[0] === undefined ? {} : { mode: positional[0] }),
+    abort,
+    ...(positional[0] === undefined || abort ? {} : { mode: positional[0] }),
     unknown,
   };
-}
-
-/** What happened to the `AGENTS.md` block when the mode was set. */
-export type BlockOutcome = "rewritten" | "rewritten-edited" | "no-markers";
-
-/**
- * Rewrite the block in `root`'s `AGENTS.md` for `mode`, and record the new hash on
- * `manifest` when the file on disk was the bytes the base last recorded. Returns what it
- * did; writes no state file.
- */
-export async function rewriteAgents(
-  root: string,
-  manifest: Manifest,
-  mode: TestingMode
-): Promise<BlockOutcome> {
-  const path = resolveWithinRoot(root, TESTING_BLOCK_FILE);
-  const content = await readIfPresent(path);
-  const rewrite =
-    content === undefined ? undefined : rewriteTestingBlock(content, mode);
-  if (content === undefined || !rewrite?.found) {
-    return "no-markers";
-  }
-  if (rewrite.content !== content) {
-    await writeFile(path, rewrite.content, "utf-8");
-  }
-  const recorded = manifest.managed[TESTING_BLOCK_FILE];
-  const clean =
-    recorded?.module === BASE_MODULE && recorded.hash === hashContent(content);
-  if (!clean) {
-    return "rewritten-edited";
-  }
-  // An adopted entry stays adopted: its bytes were found on disk, and the block is the
-  // only part of them this command can vouch for.
-  recordManagedFile(manifest, {
-    adopted: recorded.adopted,
-    from: recorded.from,
-    hash: hashContent(rewrite.content),
-    module: BASE_MODULE,
-    target: TESTING_BLOCK_FILE,
-  });
-  return "rewritten";
-}
-
-/**
- * Save `mode` for the project, then bring the `AGENTS.md` block and the manifest along.
- * Returns the saved config and what happened to the block.
- *
- * The order is the rule. `saasaloy.json` is the mode's record, so it is saved first: if
- * that save throws, nothing else was written and the block still describes the mode the
- * project has. The block is rewritten next, and the manifest saved last, so the hash it
- * records is the hash of bytes already on disk (#242). The lock does not change here.
- */
-export async function setTestingMode(input: {
-  config: LoadedConfig;
-  manifest: Manifest;
-  mode: TestingMode;
-  root: string;
-}): Promise<{ config: LoadedConfig; outcome: BlockOutcome }> {
-  const { manifest, mode, root } = input;
-  const config = { ...input.config, testing: { mode } };
-  await saveConfig(root, config);
-  const outcome = await rewriteAgents(root, manifest, mode);
-  await saveManifest(root, manifest);
-  return { config, outcome };
-}
-
-/** The line `testing` and `add` print for a block they could not keep current. */
-export function reportBlockOutcome(outcome: BlockOutcome): void {
-  if (outcome === "no-markers") {
-    log.warn(
-      `${pc.cyan(TESTING_BLOCK_FILE)} has no ${TESTING_BLOCK_START} … ${TESTING_BLOCK_END} block, ` +
-        `so only ${CONFIG_FILE} changed. Put the two markers back to let the CLI keep the block current.`
-    );
-  } else if (outcome === "rewritten-edited") {
-    log.info(
-      `Rewrote the testing block in ${pc.cyan(TESTING_BLOCK_FILE)}. The file has your own edits, ` +
-        `so its recorded hash is unchanged and ${pc.cyan("saasaloy update")} still treats it as edited.`
-    );
-  }
 }
 
 async function printMode(): Promise<number> {
@@ -183,7 +104,7 @@ export async function runTesting(argv: string[]): Promise<number> {
     printCommandHelp(HELP);
     return EXIT_OK;
   }
-  if (opts.unknown.length === 0 && opts.mode === undefined) {
+  if (opts.unknown.length === 0 && opts.mode === undefined && !opts.abort) {
     return printMode();
   }
 
@@ -197,37 +118,58 @@ export async function runTesting(argv: string[]): Promise<number> {
   }
 
   try {
-    const mode = parseTestingMode(opts.mode!);
     const root = await findProjectRoot();
-    const config = await loadConfig(root);
-    const manifest = await loadManifest(root);
-    const lock = await loadLock(root);
+    if (opts.abort) {
+      return await abortRun(root, {});
+    }
+    const mode = parseTestingMode(opts.mode ?? "");
+    const cliVersion = await readVersion();
+    await assertReadyToRun(root);
+    const state = await readProjectState(root);
+    assertSameRelease(state, cliVersion, `testing ${mode}`);
 
-    const { config: next, outcome } = await setTestingMode({
-      config,
-      manifest,
-      mode,
-      root,
+    const version = state.version ?? cliVersion;
+    const previous = await loadSide(sideSpec(state, state.requested, version), {
+      cliVersion,
     });
-    reportBlockOutcome(outcome);
-
-    // An on-mode writes each gated entry whose `when` is now true and whose target is
-    // untracked (#242 Q8). `testing <same-mode>` runs it again, which is how a partial
-    // backfill is finished. `off` never calls it, and never deletes a written test.
-    if (mode !== "off") {
-      await reportBackfill(
-        root,
-        await runBackfill({
-          config: next,
-          lock,
-          manifest,
-          root,
-        })
+    const payload = previous.side.payload;
+    // A module that turns testing on keeps it on (ADR 0054): the render cannot be off.
+    const enabler = fixedOrder(
+      payload.modules,
+      closure(payload, state.requested)
+    ).find((name) => payload.modules.get(name)?.item.enablesTesting === true);
+    if (mode === "off" && enabler !== undefined) {
+      throw new RefusalError(
+        `${enabler} turns testing on, so the mode cannot be off while it is installed. Nothing was written.`
       );
     }
-
+    const next = await loadSide(
+      sideSpec(state, state.requested, version, state.coordinates, {
+        ...state.options,
+        testingMode: mode,
+      }),
+      { cliVersion }
+    );
+    const report = await apply({
+      cleanTree: "touched",
+      // The set does not change, so the only tracked files the new render drops are the
+      // gated test files: `off` keeps each one on disk.
+      keep: Object.keys(state.manifest.files),
+      next: next.side,
+      previous: previous.side,
+      provenance: next.provenance,
+      root,
+      version: cliVersion,
+    });
+    printSteps(report, {});
+    printReportLines(report, {});
+    if (report.results.some((result) => result.kind === "untracked")) {
+      log.info(
+        "The test files stay on disk and are yours now: `off` deletes nothing."
+      );
+    }
     outro(pc.green(`Testing mode: ${mode}.`));
-    return EXIT_OK;
+    return report.exitCode;
   } catch (error) {
     cancel(formatFailure(error));
     return exitCodeFor(error);

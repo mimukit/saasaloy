@@ -1,8 +1,8 @@
 import type { z } from "zod";
 
 // Your project owns this file. `saasaloy add payment` wrote it once, and `saasaloy update`
-// never changes it: it writes it again only when the file is missing, because
-// src/routes/payments.tsx imports it.
+// never changes it. Keep it: src/routes/payments.tsx imports it. If you delete it,
+// `saasaloy update --restore <path>` writes it again.
 //
 // Put the search params your project adds to the Payments screen here, as a zod object
 // shape. payments.tsx spreads this shape into its own `validateSearch` schema, so a key

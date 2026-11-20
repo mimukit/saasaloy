@@ -1,12 +1,7 @@
 import { generateCode, parseModule } from "magicast";
 import type { ASTNode } from "magicast";
-import {
-  describeBinding,
-  foreignBinding,
-  isReferenced,
-  keepTerminator,
-} from "./ts-ast.js";
-import type { ModuleImports, ProgramLike } from "./ts-ast.js";
+import { describeBinding, foreignBinding, keepTerminator } from "./ts-ast.js";
+import type { ModuleImports } from "./ts-ast.js";
 
 // The third magicast codemod: add one column to a Drizzle table another module already
 // wrote. `plugin-array` extends an array, `chained-route` extends a call chain, and this
@@ -124,51 +119,6 @@ export function insertDrizzleColumn(
 }
 
 /**
- * The inverse: take the column back out, and the import with it when the patch brought one
- * and nothing else reads it.
- *
- * Verified against what the descriptor recorded before anything is deleted, the same rule
- * `removeFromPluginArray` follows. The forward direction writes exactly `patch.value`, so a
- * column reading anything else is the user's edit — a `.notNull()` added, a default filled
- * in — and dropping it would throw away a schema decision the manifest never recorded.
- *
- * - the column is already gone (or the table is) → return `source` **unchanged**;
- * - the column now holds a different expression → return `source` **unchanged**
- *   (`drizzleColumnRemoveRefusal` reports why);
- * - the local name now binds a different import → return `source` **unchanged**;
- * - the import statement holds other specifiers → only this one is removed;
- * - the identifier is still referenced elsewhere → the import stays.
- *
- * An emptied columns object is not a case to handle: a table this patch found always had
- * columns of its own, because the module that ships the file wrote them.
- */
-export function removeDrizzleColumn(
-  source: string,
-  patch: DrizzleColumn
-): string {
-  const mod = parseModule(source);
-
-  const columns = columnsObject(mod, patch);
-  const at = columns ? indexOfColumn(columns, patch.column) : -1;
-  if (!columns || at === -1) {
-    return source;
-  } // already gone — never force-edit
-  if (valueDrift(columns, at, patch)) {
-    return source;
-  } // the user's column now — not ours to delete
-  if (patch.import && removeBindingConflict(mod.imports, patch.import)) {
-    return source;
-  }
-
-  const withoutColumn = cutColumn(source, columns, at);
-  if (!withoutColumn) {
-    return source;
-  }
-
-  return dropImport(withoutColumn, patch);
-}
-
-/**
  * Add `column: <value>` to the columns object as text, or `undefined` when the object is
  * not the shape this splice can read.
  *
@@ -204,37 +154,6 @@ function spliceColumn(
   return comma
     ? `${source.slice(0, at)}\n${line},${source.slice(at)}`
     : `${source.slice(0, at)},\n${line}${source.slice(at)}`;
-}
-
-/**
- * Take the property's own line back out, the mirror of `spliceColumn`, or `undefined` when
- * it does not have a line to itself — a hand-compacted `{ a: x, b: y }` is not this cut's
- * to reformat, so the caller leaves the file alone.
- */
-function cutColumn(
-  source: string,
-  columns: ObjectNode,
-  at: number
-): string | undefined {
-  const property = columns.properties[at];
-  const start = offset(property, "start");
-  const end = offset(property, "end");
-  if (start === undefined || end === undefined) {
-    return undefined;
-  }
-
-  const from = source.lastIndexOf("\n", start) + 1;
-  const after = source.indexOf("\n", end);
-  const to = after === -1 ? source.length : after + 1;
-  const head = source.slice(from, start);
-  const tail = source.slice(end, to);
-
-  // Only whitespace before it on its line, and only a comma and the newline after it.
-  if (head.trim() !== "" || tail.replace(/^,/u, "").trim() !== "") {
-    return undefined;
-  }
-
-  return source.slice(0, from) + source.slice(to);
 }
 
 /** The leading whitespace of the line `at` sits on. */
@@ -273,30 +192,6 @@ function addImport(source: string, patch: DrizzleColumn): string {
 }
 
 /**
- * Drop the import the patch brought, when nothing else reads it.
- *
- * Guarded twice, as in ts-module.ts: magicast's delete trap throws when the local name is
- * not imported, and a binding the file still references elsewhere must keep its import or
- * the file stops compiling. Cutting the column is exactly what can drop the last reference,
- * so the question is asked against the source that no longer has it.
- */
-function dropImport(source: string, patch: DrizzleColumn): string {
-  if (!patch.import) {
-    return source;
-  }
-  const mod = parseModule(source);
-  const program = mod.$ast as unknown as ProgramLike;
-  if (
-    !(patch.import.name in mod.imports) ||
-    isReferenced(program, patch.import.name)
-  ) {
-    return source;
-  }
-  delete mod.imports[patch.import.name];
-  return print(source, mod);
-}
-
-/**
  * Why `insertDrizzleColumn` declined to change `source`, or `undefined` when it had no
  * objection. A table the patch cannot find is worth reporting rather than skipping in
  * silence: it means the file the descriptor names is not the file it was written against,
@@ -327,25 +222,6 @@ export function drizzleColumnInsertRefusal(
 }
 
 /** Why `removeDrizzleColumn` declined, or `undefined` when the column was already gone. */
-export function drizzleColumnRemoveRefusal(
-  source: string,
-  patch: DrizzleColumn
-): string | undefined {
-  const mod = parseModule(source);
-
-  const columns = columnsObject(mod, patch);
-  const at = columns ? indexOfColumn(columns, patch.column) : -1;
-  if (!columns || at === -1) {
-    return undefined;
-  } // already gone, not a refusal
-  return (
-    valueDrift(columns, at, patch) ??
-    (patch.import
-      ? removeBindingConflict(mod.imports, patch.import)
-      : undefined)
-  );
-}
-
 /**
  * The table's columns object node, or `undefined` when the file is not the shape we expect.
  *
@@ -426,17 +302,6 @@ function insertBindingConflict(
     return undefined;
   }
   return `${describeBinding(patch.import.name, held)}, so ${JSON.stringify(patch.column)} would read the wrong builder`;
-}
-
-function removeBindingConflict(
-  imports: ModuleImports,
-  want: { name: string; from: string }
-): string | undefined {
-  const held = foreignBinding(imports, want);
-  if (!held) {
-    return undefined;
-  }
-  return `${describeBinding(want.name, held)} now, not from ${JSON.stringify(want.from)}, so the column and its import are not the ones that were applied`;
 }
 
 // Same two recast corrections ts-module.ts makes: `{foo}` for a new named import, and a

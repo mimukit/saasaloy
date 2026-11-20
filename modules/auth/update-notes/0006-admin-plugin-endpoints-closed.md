@@ -10,7 +10,7 @@ Over HTTP, `set-role` or `ban-user` was a staff write with no audit row (issue #
 
 `packages/auth/src/server.ts` also exports `adminGate`, Hono middleware that answers 401 or 403 before anything else on an admin route runs. List it before the validator on an admin route, so a signed-out caller with a bad body gets 401, not 400.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/routes/auth.ts`, if you edited it. Keep your edits and take `ADMIN_PLUGIN_PATH`, `isAdminPluginPath()` and the 404 branch in `adminAuthRoute`.
 - `packages/auth/src/server.ts`, if you edited it. Keep your edits and take the `createMiddleware` import and the `adminGate` export.

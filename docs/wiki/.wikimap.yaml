@@ -67,7 +67,7 @@ pages:
     mode: how-to
     documents:
       - packages/cli/src/commands/add.ts
-      - packages/cli/src/lib/applier.ts
+      - packages/cli/src/engine/render.ts
       - packages/cli/src/lib/resolve.ts
       - modules/*/registry-item.json
   - path: how-to/remove-a-module.md
@@ -76,7 +76,7 @@ pages:
     mode: how-to
     documents:
       - packages/cli/src/commands/remove.ts
-      - packages/cli/src/lib/remover.ts
+      - packages/cli/src/engine/apply.ts
   - path: how-to/deploy-to-cloudflare.md
     title: Deploy to Cloudflare
     section: Guides

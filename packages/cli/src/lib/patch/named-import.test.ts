@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { format } from "prettier";
-import {
-  ensureNamedImport,
-  importedElsewhere,
-  removeNamedImport,
-} from "./named-import.js";
+import { ensureNamedImport, importedElsewhere } from "./named-import.js";
 
 const ICONS = { name: "UsersIcon", from: "lucide-react" } as const;
 
@@ -65,44 +61,6 @@ describe(ensureNamedImport, () => {
       `import {\n  AlarmClockIcon,\n  BadgeCheckIcon,\n  CircleUserIcon,\n  UsersIcon,\n} from "lucide-react";\n`
     );
     await expect(format(out, { parser: "typescript" })).resolves.toBe(out);
-  });
-});
-
-describe(removeNamedImport, () => {
-  it("drops the whole declaration when the specifier was the only one", () => {
-    const source =
-      'import { UsersIcon } from "lucide-react";\n\nexport const x = 1;\n';
-    expect(removeNamedImport(source, ICONS)).toBe("\nexport const x = 1;\n");
-  });
-
-  it("drops one specifier and leaves the rest", () => {
-    const source = 'import { GaugeIcon, UsersIcon } from "lucide-react";\n';
-    expect(removeNamedImport(source, ICONS)).toBe(
-      'import { GaugeIcon } from "lucide-react";\n'
-    );
-  });
-
-  it("unwraps back to one line once the rest fits", () => {
-    const wrapped = `import {\n  AlarmClockIcon,\n  BadgeCheckIcon,\n  CircleUserIcon,\n  UsersIcon,\n} from "lucide-react";\n`;
-    expect(removeNamedImport(wrapped, ICONS)).toBe(
-      'import { AlarmClockIcon, BadgeCheckIcon, CircleUserIcon } from "lucide-react";\n'
-    );
-  });
-
-  it("keeps the import when the file still references the name", () => {
-    const source =
-      'import { GaugeIcon, UsersIcon } from "lucide-react";\n\nexport const icon = UsersIcon;\n';
-    expect(removeNamedImport(source, ICONS)).toBe(source);
-  });
-
-  it("keeps an aliased binding, which is not the one that was added", () => {
-    const source = 'import { UsersIcon as People } from "lucide-react";\n';
-    expect(removeNamedImport(source, ICONS)).toBe(source);
-  });
-
-  it("is a no-op when the specifier is already gone", () => {
-    const source = 'import { GaugeIcon } from "lucide-react";\n';
-    expect(removeNamedImport(source, ICONS)).toBe(source);
   });
 });
 

@@ -107,7 +107,7 @@ export function formatReport(outcome: FormatOutcome): FormatReport | null {
 
 /**
  * Format `files` and print the outcome's line. What `add`, `remove` and `update` call.
- * `update` passes its stderr option, because its stdout may carry a merge plan.
+ * `update` passes its stderr option, because its stdout carries the update report.
  */
 export async function formatPatchedFiles(
   root: string,

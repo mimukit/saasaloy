@@ -1,5 +1,4 @@
 import { parseModule } from "magicast";
-import { isReferenced } from "./ts-ast.js";
 import type { NamedImport } from "./ts-ast.js";
 import type { AstNode, Identifier, Program } from "./ts-array.js";
 
@@ -43,46 +42,6 @@ export function ensureNamedImport(source: string, want: NamedImport): string {
   const next =
     at === -1 ? [...named, want.name] : named.toSpliced(at, 0, want.name);
   return replaceDeclaration(source, declaration, next, want.from);
-}
-
-/**
- * Take `<name>` back out of its named import, and answer the new source.
- *
- * Declines — returning `source` unchanged — in the cases where the import is no longer the
- * one that was added: the file still references the name somewhere else, the local name is
- * an alias, or nothing of that shape is there any more. The caller reports the skip; this
- * never force-edits.
- */
-export function removeNamedImport(source: string, want: NamedImport): string {
-  const program = parseModule(source).$ast as unknown as Program;
-  const declaration = findImport(program, want.from);
-  if (!declaration || isReferenced(program, want.name)) {
-    return source;
-  }
-
-  const specifiers = namedSpecifiers(declaration);
-  const texts = specifiers.map((specifier) =>
-    source.slice(specifier.start, specifier.end)
-  );
-  const at = texts.indexOf(want.name);
-  if (at === -1) {
-    return source;
-  }
-
-  // The last thing the declaration binds: the statement goes, and its line with it, or
-  // the file keeps a blank line nobody wrote.
-  if (declaration.specifiers.length === 1) {
-    const lineEnd = source.indexOf("\n", declaration.end);
-    return lineEnd === -1
-      ? source.slice(0, declaration.start)
-      : `${source.slice(0, declaration.start)}${source.slice(lineEnd + 1)}`;
-  }
-  return replaceDeclaration(
-    source,
-    declaration,
-    texts.toSpliced(at, 1),
-    want.from
-  );
 }
 
 /** Whether the file already binds `name` to something other than this named import. */

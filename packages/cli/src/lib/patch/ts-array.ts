@@ -126,33 +126,6 @@ export function appendEntry(
 }
 
 /** Splice the element at `index` back out, taking its line or its separator with it. */
-export function removeEntry(
-  source: string,
-  array: ArrayExpression,
-  index: number
-): string {
-  const element = array.elements[index];
-  if (!element) {
-    return source;
-  }
-  const lineStart = source.lastIndexOf("\n", element.start - 1) + 1;
-  const lineEnd = source.indexOf("\n", element.end);
-  const ownLine = source.slice(lineStart, element.start).trim() === "";
-  if (ownLine && lineEnd !== -1) {
-    return `${source.slice(0, lineStart)}${source.slice(lineEnd + 1)}`;
-  }
-
-  const next = array.elements[index + 1];
-  if (next) {
-    return `${source.slice(0, element.start)}${source.slice(next.start)}`;
-  }
-  const previous = array.elements[index - 1];
-  const start = previous
-    ? source.lastIndexOf(",", element.start - 1)
-    : element.start;
-  return `${source.slice(0, start)}${source.slice(element.end)}`;
-}
-
 /** Whether any element already carries `wanted` under its `key` property. */
 export function hasEntry(
   array: ArrayExpression,
