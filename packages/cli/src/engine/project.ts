@@ -14,6 +14,7 @@ import { loadConfig } from "../lib/saasaloy-config.js";
 import type { LoadedConfig } from "../lib/saasaloy-config.js";
 import { readTestingMode } from "../lib/testing.js";
 import { baseTemplateDir, templateVars } from "../lib/scaffold.js";
+import { variantSets } from "./render.js";
 import type { RenderOptions } from "./render.js";
 import { UNKNOWN_VERSION } from "../version.js";
 import {
@@ -344,11 +345,55 @@ export async function readProjectState(
 }
 
 /**
- * The base sides of an update: one render for each release a record names other than
- * `previous`, so a project whose files different releases wrote finds the base of each
- * file by its hash (research 0013, "The base of a file"). Each side keeps only the
- * modules its release can load. A release that cannot be loaded is left out, with a
- * warning: its files merge with two-way markers.
+ * The driver variant sides of `side`: for each record whose source the set gates off with
+ * `onlyWith` (`variantSets`), a side with that driver in. A driver whose own
+ * `conflictsWith` names a module of the set takes that module out, and a release that
+ * cannot load the driver gives no side.
+ */
+export async function variantSides(
+  side: ApplySide,
+  records: Iterable<{ module: string; from: string }>,
+  load: (requested: readonly string[]) => Promise<ApplySide | undefined>
+): Promise<{
+  sides: { driver: string; side: ApplySide }[];
+  warnings: string[];
+}> {
+  const sides: { driver: string; side: ApplySide }[] = [];
+  const warnings: string[] = [];
+  for (const [driver, names] of variantSets(
+    side.payload,
+    side.requested,
+    records
+  )) {
+    try {
+      let variant = await load(names);
+      const conflicts =
+        variant?.payload.modules.get(driver)?.item.conflictsWith ?? [];
+      if (
+        variant !== undefined &&
+        variant.requested.some((name) => conflicts.includes(name))
+      ) {
+        variant = await load(names.filter((name) => !conflicts.includes(name)));
+      }
+      if (variant?.requested.includes(driver) === true) {
+        sides.push({ driver, side: variant });
+      }
+    } catch (error) {
+      warnings.push(
+        `could not load the side with ${driver}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  return { sides, warnings };
+}
+
+/**
+ * The base sides of an update, by version: the render of the project's set at each
+ * release a record names other than `previous`, so a project whose files different
+ * releases wrote finds the base of each file by its hash (research 0013, "The base of a
+ * file"), and at every release a record names, the driver variant sides its records need
+ * (`variantSides`). Each side keeps only the modules its release can load. A release that
+ * cannot be loaded is left out, with a warning: its files merge with two-way markers.
  */
 export async function loadBaseSides(
   state: Pick<
@@ -357,29 +402,50 @@ export async function loadBaseSides(
   >,
   previous: string,
   context: LoadSideContext
-): Promise<{ sides: Map<string, ApplySide>; warnings: string[] }> {
-  const versions = [
-    ...new Set(
-      Object.values(state.manifest.files).map((record) => record.version)
-    ),
-  ]
-    .filter((version) => version !== previous)
-    .toSorted();
-  const sides = new Map<string, ApplySide>();
+): Promise<{ sides: Map<string, ApplySide[]>; warnings: string[] }> {
+  const byVersion = new Map<string, { module: string; from: string }[]>();
+  for (const record of Object.values(state.manifest.files)) {
+    byVersion.set(record.version, [
+      ...(byVersion.get(record.version) ?? []),
+      record,
+    ]);
+  }
+  const sides = new Map<string, ApplySide[]>();
   const warnings: string[] = [];
-  for (const version of versions) {
-    try {
-      const loaded = await loadSide(
+  const loadAt = async (
+    version: string,
+    requested: readonly string[]
+  ): Promise<ApplySide> =>
+    (
+      await loadSide(
         {
           coordinates: state.coordinates,
           options: state.options,
           partial: true,
-          requested: state.requested,
+          requested,
           version,
         },
         context
+      )
+    ).side;
+  for (const version of [...byVersion.keys()].toSorted()) {
+    try {
+      const side = await loadAt(version, state.requested);
+      const variants = await variantSides(
+        side,
+        byVersion.get(version) ?? [],
+        (names) => loadAt(version, names)
       );
-      sides.set(version, loaded.side);
+      warnings.push(
+        ...variants.warnings.map((warning) => `saasaloy ${version}: ${warning}`)
+      );
+      const list = [
+        ...(version === previous ? [] : [side]),
+        ...variants.sides.map((variant) => variant.side),
+      ];
+      if (list.length > 0) {
+        sides.set(version, list);
+      }
     } catch (error) {
       warnings.push(
         `Could not load saasaloy ${version}, the base of the files it wrote: ${error instanceof Error ? error.message : String(error)}`

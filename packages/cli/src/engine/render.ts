@@ -304,6 +304,51 @@ export function copiedContent(
   return raw === undefined ? undefined : applyVars(raw, vars);
 }
 
+/**
+ * The driver variants a set gates off. A module file entry with `onlyWith: X` renders only
+ * when X is in the set (plan 0116 reads it as a `when.installed` gate). For each record
+ * whose source such an entry names, with X outside the set, this gives X and the requested
+ * list that renders that source: X added, and each requested module that names X in its
+ * `conflictsWith` left out. A project that moved from one driver to another still records
+ * the old driver's source (`auth.sqlite.ts` after a move to Postgres), and only a render
+ * with the old driver produces the bytes its hash proves.
+ */
+export function variantSets(
+  payload: Pick<Payload, "modules" | "source" | "ref">,
+  requested: readonly string[],
+  records: Iterable<{ module: string; from: string }>
+): Map<string, string[]> {
+  const set = closure(payload, requested);
+  const out = new Map<string, string[]>();
+  for (const record of records) {
+    const mod = payload.modules.get(record.module);
+    if (mod === undefined || !set.has(record.module)) {
+      continue;
+    }
+    const from = posix.normalize(record.from);
+    const entries = [
+      ...(mod.item.files ?? []),
+      ...(mod.item.scaffolds ?? []).flatMap((scaffold) => scaffold.files),
+    ];
+    const driver = entries.find(
+      (entry) => posix.normalize(entry.path) === from
+    )?.onlyWith;
+    if (driver === undefined || set.has(driver) || out.has(driver)) {
+      continue;
+    }
+    out.set(driver, [
+      ...requested.filter(
+        (name) =>
+          !(payload.modules.get(name)?.item.conflictsWith ?? []).includes(
+            driver
+          )
+      ),
+      driver,
+    ]);
+  }
+  return out;
+}
+
 /** Render a project from a payload. Pure: no disk, no network, no clock. */
 export function render(args: RenderArgs): RenderResult {
   const { payload, requested, options } = args;

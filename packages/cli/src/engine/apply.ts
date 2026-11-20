@@ -191,7 +191,7 @@ export interface PlanArgs {
    * its base here, in the render at the release the record names: a converted project's
    * files were written by several releases (plan 0116, Phase 5).
    */
-  bases?: ReadonlyMap<string, RenderResult>;
+  bases?: ReadonlyMap<string, readonly RenderResult[]>;
   format?: SourceFormatter;
   merger?: TextMerger;
   /**
@@ -288,12 +288,14 @@ export async function planApply(args: PlanArgs): Promise<Plan> {
     )?.files.get(path);
     const atRecord =
       record === undefined
-        ? undefined
-        : args.bases?.get(record.version)?.files.get(path);
+        ? []
+        : (args.bases?.get(record.version) ?? []).map((rendered) =>
+            rendered.files.get(path)
+          );
     const baseFile =
       record === undefined
         ? undefined
-        : [old, atRecord].find(
+        : [old, ...atRecord].find(
             (file) => file !== undefined && sha(file.content) === record.hash
           );
     const mine = await read(path);
@@ -532,7 +534,7 @@ export interface ApplyArgs {
    * Sides at other releases, by version: the base of each record whose release differs
    * from `previous`. A side that fails to render is left out, with a warning.
    */
-  bases?: ReadonlyMap<string, ApplySide>;
+  bases?: ReadonlyMap<string, readonly ApplySide[]>;
   /**
    * The lock and the manifest to start from, in place of the files: a version 1 project
    * converted in memory. The run's backup still copies the files on disk, so `--abort`
@@ -711,15 +713,17 @@ export async function apply(args: ApplyArgs): Promise<ApplyReport> {
 
   const theirs = render(args.next);
   const base = args.previous === undefined ? undefined : render(args.previous);
-  const bases = new Map<string, RenderResult>();
+  const bases = new Map<string, RenderResult[]>();
   const baseWarnings: string[] = [];
-  for (const [release, side] of args.bases ?? []) {
-    try {
-      bases.set(release, render(side));
-    } catch (error) {
-      baseWarnings.push(
-        `The render of saasaloy ${release} failed, so the files it wrote have no base: ${error instanceof Error ? error.message : String(error)}`
-      );
+  for (const [release, list] of args.bases ?? []) {
+    for (const side of list) {
+      try {
+        bases.set(release, [...(bases.get(release) ?? []), render(side)]);
+      } catch (error) {
+        baseWarnings.push(
+          `A render of saasaloy ${release} failed, so some files it wrote have no base: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
   }
   const plan = await planApply({

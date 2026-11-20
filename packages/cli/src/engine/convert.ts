@@ -19,7 +19,6 @@ import { templateVars } from "../lib/scaffold.js";
 import { compareVersions, parseVersion } from "../lib/semver.js";
 import { readTestingMode } from "../lib/testing.js";
 import type { ApplySide, SourceFormatter } from "./apply.js";
-import type { FileClass } from "./classes.js";
 import {
   MANIFEST_VERSION,
   payloadTemplateHash,
@@ -29,7 +28,7 @@ import type { FileRecord, ManifestV2 } from "./manifest.js";
 import { LOCAL_SOURCE } from "./payload.js";
 import { copiedContent, render } from "./render.js";
 import type { RenderedFile, RenderOptions, RenderResult } from "./render.js";
-import { isLocalRegistry, loadSide } from "./project.js";
+import { isLocalRegistry, loadSide, variantSides } from "./project.js";
 import type { LoadSideContext, ModuleCoordinate } from "./project.js";
 
 // The conversion of a version 1 project (plan 0116, Phase 5; research 0013, "The base of
@@ -103,11 +102,6 @@ export interface ConvertedFile {
   version?: string;
   /** The version 2 record, absent for a file that becomes a both-sides file. */
   record?: FileRecord;
-}
-
-/** True when the base came from another source of the same module: a driver variant. */
-export function isVariant(file: ConvertedFile): boolean {
-  return file.record !== undefined && file.record.from !== file.from;
 }
 
 export interface Conversion {
@@ -185,6 +179,8 @@ interface Candidate {
   version: string;
   side: ApplySide;
   rendered: RenderResult;
+  /** The driver a variant side gates in, absent for the project's own set. */
+  driver?: string;
 }
 
 /**
@@ -267,6 +263,32 @@ export async function convertProject(args: ConvertArgs): Promise<Conversion> {
       warnings.push(
         `${version}: could not render — ${error instanceof Error ? error.message : String(error)}`
       );
+      continue;
+    }
+    // A recorded source the set gates off (a driver the project left) renders only in a
+    // side with that driver. Such a render is a candidate like any other: it counts only
+    // when it writes the recorded source and that source's bytes hash to the record.
+    const variants = await variantSides(
+      side,
+      Object.values(v1.managed) as (ManagedEntry & { from: string })[],
+      (names) => args.load(version, names, options)
+    );
+    for (const warning of variants.warnings) {
+      warnings.push(`${version}: ${warning}`);
+    }
+    for (const variant of variants.sides) {
+      try {
+        candidates.push({
+          driver: variant.driver,
+          rendered: render(variant.side),
+          side: variant.side,
+          version,
+        });
+      } catch (error) {
+        warnings.push(
+          `${version} with ${variant.driver}: could not render — ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
   }
 
@@ -285,7 +307,6 @@ export async function convertProject(args: ConvertArgs): Promise<Conversion> {
     // version that merge took in.
     const want = entry.mergedWith ?? entry.hash;
     const matches: { version: string; file: RenderedFile }[] = [];
-    const variants: { version: string; file: RenderedFile }[] = [];
     for (const candidate of candidates) {
       const copied = copiedContent(
         candidate.side.payload,
@@ -295,35 +316,25 @@ export async function convertProject(args: ConvertArgs): Promise<Conversion> {
         candidate.rendered.testingMode
       );
       const rendered = candidate.rendered.files.get(path);
+      // The render must write the recorded source at this path: then the record's hash
+      // is of a render of the bytes the version 1 hash proves.
       if (
-        copied === undefined ||
-        hashContent(copied) !== want ||
-        rendered === undefined ||
-        rendered.module !== entry.module
+        copied !== undefined &&
+        hashContent(copied) === want &&
+        rendered !== undefined &&
+        rendered.module === entry.module &&
+        rendered.from === entry.from
       ) {
-        continue;
+        matches.push({ file: rendered, version: candidate.version });
       }
-      // The same module may write the path from another source in this set: a driver
-      // variant that `onlyWith` picks (`auth.sqlite.ts` recorded, `auth.pg.ts` gated in
-      // after a move to Postgres). The release is proved by the recorded source; the base
-      // is what that release renders at the path for the project's set.
-      (rendered.from === entry.from ? matches : variants).push({
-        file: rendered,
-        version: candidate.version,
-      });
     }
 
     const mine = await read(path);
-    const chosen = await nearest(
-      path,
-      matches.length > 0 ? matches : variants,
-      mine,
-      format
-    );
+    const chosen = await nearest(path, matches, mine, format);
     if (chosen !== undefined) {
       const record: FileRecord = {
         class: chosen.file.class,
-        from: chosen.file.from,
+        from: entry.from,
         hash: hashContent(chosen.file.content),
         module: entry.module,
         version: chosen.version,
@@ -338,15 +349,30 @@ export async function convertProject(args: ConvertArgs): Promise<Conversion> {
       });
       continue;
     }
-    if (mine === undefined && fallbackVersion !== undefined) {
-      // The owner deleted it. The record stays, so the file stays deleted.
-      const fileClass: FileClass = entry.seed === true ? "once" : "merged";
+    // The owner deleted a file with no base. It stays deleted (plan 0116, "The owner
+    // deleted a tracked file"), so it keeps a record: the render of the path at the first
+    // candidate that writes it, with that render's own hash and release. It has no base,
+    // and no merge needs one: the file is not on disk.
+    const held =
+      mine === undefined
+        ? candidates
+            .filter((candidate) => candidate.driver === undefined)
+            .map((candidate) => ({
+              file: candidate.rendered.files.get(path),
+              version: candidate.version,
+            }))
+            .find(
+              (found) =>
+                found.file !== undefined && found.file.module === entry.module
+            )
+        : undefined;
+    if (held?.file !== undefined) {
       const record: FileRecord = {
-        class: fileClass,
-        from: entry.from,
-        hash: entry.hash,
+        class: held.file.class,
+        from: held.file.from,
+        hash: hashContent(held.file.content),
         module: entry.module,
-        version: fallbackVersion,
+        version: held.version,
       };
       records[path] = record;
       files.push({ from: entry.from, module: entry.module, path, record });
