@@ -716,3 +716,7 @@ The emergency path is a token publish, for when GitHub Actions is down. It has n
 5. Check the result: `npm view saasaloy@X.Y.Z version`.
 
 The trusted publisher stays the normal path. npm keeps token publishes allowed on the package for this path only.
+
+## README module badge
+
+The module badge reads `apps/web/public/badges.json` through the raw GitHub URL. After you add or remove a module descriptor, run `pnpm badges:generate` and include the JSON file in your commit. The count includes providers and drivers. CI and the release preflight run `pnpm badges:check` to reject a missing or stale file.

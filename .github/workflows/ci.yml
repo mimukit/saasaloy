@@ -84,6 +84,8 @@ jobs:
       # source, CONTEXT.md and docs/adr/. A stale page fails here; `pnpm docs:generate` fixes it.
       - run: pnpm docs:check
 
+      - run: pnpm badges:check
+
   # A fresh project, not the template's files one by one (issue #347). It builds the CLI,
   # scaffolds the modules an agent's build adds on database-d1 from this checkout's
   # `modules/`, and runs that project's `pnpm check`. A type-aware lint error in a base

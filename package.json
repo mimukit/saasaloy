@@ -43,6 +43,8 @@
     "play:up": "node scripts/playground.ts up",
     "play:down": "node scripts/playground.ts down",
     "play:smoke": "node scripts/play-smoke.ts",
+    "badges:generate": "node scripts/badges-generate.ts",
+    "badges:check": "node scripts/badges-generate.ts --check",
     "docs:generate": "node scripts/docs-generate.ts",
     "docs:check": "node scripts/docs-generate.ts --check",
     "docs:stale": "node scripts/docs-stale.ts",

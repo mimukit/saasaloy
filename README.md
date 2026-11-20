@@ -9,7 +9,7 @@
 [![Node compatibility](https://img.shields.io/node/v/saasaloy?style=flat-square&logo=nodedotjs&logoColor=white&label=Node&labelColor=0B2253&color=315FE8)](https://www.npmjs.com/package/saasaloy)
 [![CI](https://img.shields.io/github/actions/workflow/status/mimukit/saasaloy/ci.yml?branch=main&event=push&style=flat-square&logo=githubactions&logoColor=white&label=CI&labelColor=0B2253)](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml)
 [![Monthly downloads](https://img.shields.io/npm/dm/saasaloy?style=flat-square&logo=npm&logoColor=white&label=downloads%2Fmonth&labelColor=0B2253&color=315FE8)](https://www.npmjs.com/package/saasaloy)
-[![Module count](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsaasaloy.com%2Fbadges.json&query=%24.modules&label=modules&style=flat-square&logo=github&logoColor=white&labelColor=101722&color=315FE8)](https://saasaloy.com/#catalog)
+[![Module count](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmimukit%2Fsaasaloy%2Fmain%2Fapps%2Fweb%2Fpublic%2Fbadges.json&query=%24.modules&label=modules&style=flat-square&logo=github&logoColor=white&labelColor=101722&color=315FE8)](https://saasaloy.com/#catalog)
 [![MIT license](https://img.shields.io/badge/license-MIT-315FE8?style=flat-square&logo=opensourceinitiative&logoColor=white&labelColor=0B2253)](LICENSE.md)
 [![Documentation](https://img.shields.io/badge/docs-getting_started-315FE8?style=flat-square&logo=readthedocs&logoColor=white&labelColor=101722)](https://github.com/mimukit/saasaloy/blob/main/docs/wiki/getting-started.md)
 
