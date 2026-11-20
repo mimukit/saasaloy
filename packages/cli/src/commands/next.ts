@@ -5,11 +5,19 @@ import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import { abortApply, apply, checkCleanTree } from "../engine/apply.js";
 import type { ApplyReport, PathResult, ResultKind } from "../engine/apply.js";
+import {
+  candidateLoader,
+  convertProject,
+  searchedReleases,
+} from "../engine/convert.js";
+import type { Conversion } from "../engine/convert.js";
+import { readManifestState } from "../engine/manifest.js";
 import { ensureCachedSnapshot } from "../engine/payload.js";
 import type { Payload } from "../engine/payload.js";
 import {
   assertReadyToRun,
   isLocalRegistry,
+  loadBaseSides,
   loadSide,
   readProjectState,
 } from "../engine/project.js";
@@ -27,6 +35,7 @@ import {
   upgradeCommand,
 } from "../lib/cli-requires.js";
 import { lineDiff } from "../lib/diff.js";
+import { loadLock } from "../lib/lock.js";
 import {
   EXIT_FAILURE,
   EXIT_OK,
@@ -1149,6 +1158,41 @@ export function updateReport(args: {
   return `${lines.join("\n")}\n`;
 }
 
+/**
+ * The first run of the render engine in a version 1 project converts its manifest and its
+ * lock (plan 0116, "Migration and rollback"). The result stays in memory: the run writes
+ * it with everything else, after the backup, so `--abort` restores the version 1 files.
+ */
+async function convertIfVersion1(
+  root: string,
+  cliVersion: string,
+  tui: TuiOptions
+): Promise<Conversion | undefined> {
+  if ((await readManifestState(root)).kind !== "v1") {
+    return undefined;
+  }
+  const conversion = await convertProject({
+    load: candidateLoader(await loadLock(root), { cliVersion }),
+    releases: searchedReleases(cliVersion),
+    root,
+  });
+  const found = conversion.files.filter(
+    (file) => file.version !== undefined
+  ).length;
+  const bothSides = conversion.files.filter(
+    (file) => file.record === undefined
+  ).length;
+  const rest =
+    bothSides > 0
+      ? `; ${String(bothSides)} with no base merge as files on both sides.`
+      : ".";
+  log.info(
+    `Converting a version 1 project: found the base of ${String(found)} of ${String(conversion.files.length)} tracked files${rest}`,
+    tui
+  );
+  return conversion;
+}
+
 async function updateNext(
   root: string,
   opts: UpdateNextOptions,
@@ -1156,7 +1200,13 @@ async function updateNext(
 ): Promise<number> {
   const tui = TUI_ON_STDERR;
   const cliVersion = await readVersion();
-  const state = await readProjectState(root);
+  const conversion = await convertIfVersion1(root, cliVersion, tui);
+  const state = await readProjectState(
+    root,
+    conversion === undefined
+      ? undefined
+      : { lock: conversion.lock, manifest: conversion.manifest }
+  );
   const preview = opts.dryRun || opts.diff;
   await assertReadyToRun(root, state.manifest);
 
@@ -1233,7 +1283,7 @@ async function updateNext(
   let previous: LoadedSide;
   try {
     previous = await loadSide(
-      sideSpec(state, state.requested, previousVersion),
+      { ...sideSpec(state, state.requested, previousVersion), partial: true },
       { cliVersion }
     );
   } catch (error) {
@@ -1258,6 +1308,13 @@ async function updateNext(
     sideSpec(state, state.requested, cliVersion, coordinates),
     { cliVersion }
   );
+  // Each record finds its base in the render of the release that wrote it.
+  const bases = isLocalRegistry()
+    ? undefined
+    : await loadBaseSides(state, previousVersion, { cliVersion });
+  for (const warning of bases?.warnings ?? []) {
+    log.warn(warning, tui);
+  }
 
   // `--merge` on a file an older release wrote needs that release's render as its base.
   // When it cannot be loaded, the merge falls back to two-way markers.
@@ -1356,6 +1413,14 @@ async function updateNext(
       force: opts.force,
       merge: merge.matched,
       ...(mergeBase === undefined ? {} : { mergeBase: mergeBase.side }),
+      ...(bases === undefined || bases.sides.size === 0
+        ? {}
+        : { bases: bases.sides }),
+      ...(conversion === undefined
+        ? {}
+        : {
+            state: { lock: conversion.lock, manifest: conversion.manifest },
+          }),
       next: next.side,
       pendingNotes: notes.pending,
       previous: previous.side,

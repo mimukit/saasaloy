@@ -186,6 +186,12 @@ export interface PlanArgs {
    * that wrote a `once` file, whose record is older than the old lock.
    */
   mergeBase?: RenderResult;
+  /**
+   * Renders at other releases, by version. A record whose hash `base` does not hold finds
+   * its base here, in the render at the release the record names: a converted project's
+   * files were written by several releases (plan 0116, Phase 5).
+   */
+  bases?: ReadonlyMap<string, RenderResult>;
   format?: SourceFormatter;
   merger?: TextMerger;
   /**
@@ -280,12 +286,16 @@ export async function planApply(args: PlanArgs): Promise<Plan> {
         ? args.mergeBase
         : base
     )?.files.get(path);
+    const atRecord =
+      record === undefined
+        ? undefined
+        : args.bases?.get(record.version)?.files.get(path);
     const baseFile =
-      old !== undefined &&
-      record !== undefined &&
-      sha(old.content) === record.hash
-        ? old
-        : undefined;
+      record === undefined
+        ? undefined
+        : [old, atRecord].find(
+            (file) => file !== undefined && sha(file.content) === record.hash
+          );
     const mine = await read(path);
     const fileClass = next?.class ?? record?.class ?? "merged";
     const module = next?.module ?? record?.module ?? "";
@@ -518,6 +528,17 @@ export interface ApplyArgs {
   previous?: ApplySide;
   /** The base of the `merge` paths, when the release that wrote them is older. */
   mergeBase?: ApplySide;
+  /**
+   * Sides at other releases, by version: the base of each record whose release differs
+   * from `previous`. A side that fails to render is left out, with a warning.
+   */
+  bases?: ReadonlyMap<string, ApplySide>;
+  /**
+   * The lock and the manifest to start from, in place of the files: a version 1 project
+   * converted in memory. The run's backup still copies the files on disk, so `--abort`
+   * restores the version 1 project.
+   */
+  state?: { lock: Lockfile; manifest: ManifestV2 };
   /** The release that runs. */
   version: string;
   /** Lock provenance for each module. See `nextLock`. */
@@ -683,15 +704,27 @@ async function skillNamesOnDisk(root: string): Promise<string[]> {
 export async function apply(args: ApplyArgs): Promise<ApplyReport> {
   const { root, version } = args;
   await assertNoJournal(root);
-  const manifest = await loadManifestV2(root);
+  const manifest = args.state?.manifest ?? (await loadManifestV2(root));
   const pending = await scanPendingMerges(root, manifest.pendingMerges);
   assertNoPendingMerges(pending);
-  const previousLock = await loadLock(root);
+  const previousLock = args.state?.lock ?? (await loadLock(root));
 
   const theirs = render(args.next);
   const base = args.previous === undefined ? undefined : render(args.previous);
+  const bases = new Map<string, RenderResult>();
+  const baseWarnings: string[] = [];
+  for (const [release, side] of args.bases ?? []) {
+    try {
+      bases.set(release, render(side));
+    } catch (error) {
+      baseWarnings.push(
+        `The render of saasaloy ${release} failed, so the files it wrote have no base: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
   const plan = await planApply({
     base,
+    ...(bases.size === 0 ? {} : { bases }),
     manifest: { ...manifest, pendingMerges: [] },
     root,
     theirs,
@@ -739,7 +772,7 @@ export async function apply(args: ApplyArgs): Promise<ApplyReport> {
     onceChanged: pick("once-left"),
     pendingMerges: plan.manifest.pendingMerges,
     results: plan.results,
-    warnings: [...theirs.warnings],
+    warnings: [...theirs.warnings, ...baseWarnings],
   };
   if (args.dryRun) {
     return { ...draft, lines: reportLines(draft) };

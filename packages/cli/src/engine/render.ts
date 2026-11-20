@@ -279,6 +279,31 @@ function templateTarget(from: string): string {
   return from.split("/").map(renderedName).join("/");
 }
 
+/**
+ * The bytes the render copies for one source file, before any patch runs over it: a
+ * template file with its `{{VAR}}` tokens and testing block filled, or a module file with
+ * its tokens filled. This is what the old engine hashed into a version 1 manifest, so the
+ * conversion (plan 0116, Phase 5) compares a recorded hash with it. `undefined` when the
+ * payload holds no such source.
+ */
+export function copiedContent(
+  payload: Pick<Payload, "base" | "modules">,
+  file: { module: string; from: string; path: string },
+  vars: TemplateVars,
+  testingMode: TestingMode
+): string | undefined {
+  if (file.module === BASE_MODULE) {
+    const raw = payload.base.files.get(file.from);
+    return raw === undefined
+      ? undefined
+      : renderTemplateFile(file.path, raw, vars, { testingMode });
+  }
+  const raw = payload.modules
+    .get(file.module)
+    ?.files.get(posix.normalize(file.from));
+  return raw === undefined ? undefined : applyVars(raw, vars);
+}
+
 /** Render a project from a payload. Pure: no disk, no network, no clock. */
 export function render(args: RenderArgs): RenderResult {
   const { payload, requested, options } = args;

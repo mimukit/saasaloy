@@ -109,7 +109,7 @@ export async function loadManifestV2(root: string): Promise<ManifestV2> {
   const state = await readManifestState(root);
   if (state.kind === "v1") {
     throw new RefusalError(
-      `${MANIFEST_FILE} is a version 1 manifest. Convert the project to version 2 before the render engine runs on it.`
+      `${MANIFEST_FILE} is a version 1 manifest. Run \`saasaloy update\` first: it converts the project to version 2.`
     );
   }
   return state.kind === "v2" ? state.manifest : emptyManifestV2();

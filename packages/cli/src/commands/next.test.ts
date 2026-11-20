@@ -648,6 +648,105 @@ describe("update on the render engine (two releases in the user cache)", () => {
     await expect(read(project, "apps/api/src/index.ts")).resolves.toBe(before);
     expect((await lockOf(project)).base?.cliVersion).toBe(OLD);
   });
+
+  it("converts a version 1 project, then updates it, and --abort restores version 1 (plan 0116, Phase 5)", async () => {
+    // Every other old-engine release is a cache entry that cannot load, so the conversion
+    // searches 0.8.0 and the running release and reads no network.
+    const cache = process.env[CACHE_DIR_ENV] ?? "";
+    const { OLD_ENGINE_RELEASES } = await import("../engine/convert.js");
+    for (const release of OLD_ENGINE_RELEASES) {
+      const entry = join(cache, "mimukit", `saasaloy@v${release}`);
+      if (release !== OLD && release !== cliVersion) {
+        await mkdir(entry, { recursive: true });
+        await writeFile(join(entry, CACHE_COMPLETE), `v${release}\n`);
+      }
+    }
+
+    // The state the old engine left: a version 1 manifest, and a lock with no
+    // `requested` list. Each file is recorded by the hash of the bytes it copied.
+    const v2 = JSON.parse(await read(project, ".saasaloy/manifest.json")) as {
+      files: Record<
+        string,
+        { module: string; from: string; hash: string; class: string }
+      >;
+    };
+    const managed = Object.fromEntries(
+      Object.entries(v2.files).map(([path, record]) => [
+        path,
+        {
+          from: record.from,
+          hash: record.hash,
+          module: record.module,
+          ...(record.module !== "base" && record.class === "once"
+            ? { seed: true }
+            : {}),
+        },
+      ])
+    );
+    await writeFile(
+      join(project, ".saasaloy/manifest.json"),
+      `${JSON.stringify({ links: {}, managed, patches: [], removeWarnings: {} }, null, 2)}\n`
+    );
+    const { requested: _requested, ...oldLock } = await lockOf(project);
+    await writeFile(
+      join(project, "saasaloy-lock.json"),
+      `${JSON.stringify(oldLock, null, 2)}\n`
+    );
+    const index = await read(project, "apps/api/src/index.ts");
+    await writeFile(
+      join(project, "apps/api/src/index.ts"),
+      index.replace("export const one = 1;", "export const one = 100;")
+    );
+    commit(project, "the old engine's state");
+    const v1Manifest = await read(project, ".saasaloy/manifest.json");
+    const v1Lock = await read(project, "saasaloy-lock.json");
+
+    // A preview converts in memory and writes nothing.
+    const preview = await captured(() => runUpdate(["--dry-run"]));
+    expect(preview.code).toBe(EXIT_OK);
+    await expect(read(project, ".saasaloy/manifest.json")).resolves.toBe(
+      v1Manifest
+    );
+
+    const run = await captured(() => runUpdate(["--yes"]));
+    expect(run.code).toBe(EXIT_WORK_PENDING);
+    const merged = await read(project, "apps/api/src/index.ts");
+    expect(merged).toContain("one = 100");
+    expect(merged).toContain("three = 33");
+    expect(merged).not.toContain("<<<<<<<");
+    const after = JSON.parse(
+      await read(project, ".saasaloy/manifest.json")
+    ) as {
+      version: number;
+      files: Record<string, { version: string; class: string }>;
+    };
+    expect(after.version).toBe(2);
+    expect(after.files["apps/api/src/index.ts"]?.version).toBe(cliVersion);
+    expect(after.files["apps/api/src/seed.ts"]).toMatchObject({
+      class: "once",
+      version: OLD,
+    });
+    const lock = await lockOf(project);
+    expect(lock.requested).toStrictEqual(["alpha"]);
+    expect(lock.base?.cliVersion).toBe(cliVersion);
+
+    // The run's backup holds the version 1 files, so --abort returns to them.
+    await expect(runUpdate(["--abort"])).resolves.toBe(EXIT_OK);
+    await expect(read(project, ".saasaloy/manifest.json")).resolves.toBe(
+      v1Manifest
+    );
+    await expect(read(project, "saasaloy-lock.json")).resolves.toBe(v1Lock);
+  });
+
+  it("add and remove refuse a version 1 project and name update", async () => {
+    await writeFile(
+      join(project, ".saasaloy/manifest.json"),
+      `${JSON.stringify({ links: {}, managed: {}, patches: [], removeWarnings: {} }, null, 2)}\n`
+    );
+    commit(project, "the old engine's state");
+    const add = await captured(() => runAdd(["alpha", "--yes"]));
+    expect(add.code).toBe(EXIT_REFUSED);
+  });
 });
 
 afterAll(() => {

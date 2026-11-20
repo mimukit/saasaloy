@@ -12,8 +12,8 @@ import {
 import type { ModuleProvenance } from "../lib/registry.js";
 import { loadConfig } from "../lib/saasaloy-config.js";
 import type { LoadedConfig } from "../lib/saasaloy-config.js";
-import { baseTemplateDir } from "../lib/scaffold.js";
 import { readTestingMode } from "../lib/testing.js";
+import { baseTemplateDir, templateVars } from "../lib/scaffold.js";
 import type { RenderOptions } from "./render.js";
 import { UNKNOWN_VERSION } from "../version.js";
 import {
@@ -30,6 +30,7 @@ import {
   readPayloadBase,
   readPayloadModules,
 } from "./payload.js";
+import { readDirNames } from "../lib/fs-utils.js";
 import type { Payload, PayloadFetcher, PayloadModule } from "./payload.js";
 
 // A project as the render engine reads it (plan 0116, Phase 4): the lock's `requested`
@@ -61,6 +62,13 @@ export interface SideSpec {
   /** The release the default registry and the base template are read at. */
   version: string;
   options: RenderOptions;
+  /**
+   * Keep only the requested modules the payload at `version` can load, with their
+   * prerequisites, instead of refusing an unknown one. The base of an old project's merge
+   * is a render at an older release, which may predate a module the project installed
+   * later (plan 0116, Phase 5).
+   */
+  partial?: boolean;
 }
 
 export interface LoadedSide {
@@ -81,6 +89,56 @@ export function isLocalRegistry(env: Env = process.env): boolean {
   return (env[REGISTRY_ENV] ?? "") !== "";
 }
 
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+
+/**
+ * The registry ref a side's version reads. A release reads its tag (ADR 0062). A commit
+ * SHA reads that commit: a version 1 project may hold a file whose bytes only a commit
+ * between two releases shipped, and its converted record names that commit.
+ */
+export function refOfVersion(version: string): string {
+  return COMMIT_SHA.test(version) ? version : releaseTag(version);
+}
+
+/**
+ * The render options of a side at `version`: `{{CLI_VERSION}}` is the CLI that wrote the
+ * render, so the base of a merge has the bytes that release wrote.
+ */
+function optionsAt(options: RenderOptions, version: string): RenderOptions {
+  if (options.vars !== undefined || COMMIT_SHA.test(version)) {
+    return options;
+  }
+  return {
+    ...options,
+    vars: { ...templateVars(options.projectName), CLI_VERSION: version },
+  };
+}
+
+/**
+ * The names among `requested` that `modulesDir` can load with their whole `dependsOn`
+ * closure. A module the folder lacks, or whose descriptor an older release wrote in a
+ * shape this CLI refuses, is left out.
+ */
+async function loadableModules(
+  modulesDir: string,
+  requested: readonly string[]
+): Promise<string[]> {
+  const present = new Set(await readDirNames(modulesDir));
+  const kept: string[] = [];
+  for (const name of requested) {
+    if (!present.has(name)) {
+      continue;
+    }
+    try {
+      await readPayloadModules(modulesDir, [name]);
+      kept.push(name);
+    } catch {
+      // Not loadable at this ref: the side renders without it.
+    }
+  }
+  return kept;
+}
+
 function localModulesDir(env: Env): string {
   const dir = env[REGISTRY_ENV] ?? "";
   return isAbsolute(dir) ? dir : resolve(dir);
@@ -96,8 +154,11 @@ export async function loadSide(
   context: LoadSideContext
 ): Promise<LoadedSide> {
   const env = context.env ?? process.env;
-  const requested = [...spec.requested];
+  let requested = [...spec.requested];
   if (isLocalRegistry(env)) {
+    if (spec.partial === true) {
+      requested = await loadableModules(localModulesDir(env), requested);
+    }
     const modules = await readPayloadModules(localModulesDir(env), requested);
     const payload: Payload = {
       base: await readPayloadBase(await baseTemplateDir()),
@@ -118,7 +179,7 @@ export async function loadSide(
   if (spec.version === UNKNOWN_VERSION) {
     throw new RefusalError(missingReleaseTagMessage(spec.version));
   }
-  const tag = releaseTag(spec.version);
+  const tag = refOfVersion(spec.version);
   const snapshotOf = async (source: string, ref: string) =>
     (
       await ensureCachedSnapshot({
@@ -169,6 +230,16 @@ export async function loadSide(
       modules.set(name, mod);
     }
   };
+  if (spec.partial === true && defaultGroup.names.length > 0) {
+    const snapshot = await snapshotOf(DEFAULT_SOURCE, tag);
+    const kept = new Set(
+      await loadableModules(snapshot.modulesDir, defaultGroup.names)
+    );
+    defaultGroup.names = defaultGroup.names.filter((name) => kept.has(name));
+    requested = requested.filter(
+      (name) => spec.coordinates.has(name) || kept.has(name)
+    );
+  }
   if (defaultGroup.names.length > 0) {
     const snapshot = await snapshotOf(DEFAULT_SOURCE, tag);
     take(
@@ -191,7 +262,11 @@ export async function loadSide(
       const group = owner.get(module) ?? defaultGroup;
       return { ref: group.ref, resolved: group.resolved, source: group.source };
     },
-    side: { options: spec.options, payload, requested },
+    side: {
+      options: optionsAt(spec.options, spec.version),
+      payload,
+      requested,
+    },
   };
 }
 
@@ -212,14 +287,27 @@ export interface ProjectState {
   options: RenderOptions;
 }
 
-/** Read a project's state and refuse a project the render engine did not write. */
-export async function readProjectState(root: string): Promise<ProjectState> {
+/** A lock and a manifest held in memory in place of the files: a conversion's result. */
+export interface StateOverride {
+  lock: Lockfile;
+  manifest: ManifestV2;
+}
+
+/**
+ * Read a project's state and refuse a project the render engine did not write. With
+ * `override`, the lock and the manifest come from memory: `update` converts a version 1
+ * project there, and writes the result only with the run.
+ */
+export async function readProjectState(
+  root: string,
+  override?: StateOverride
+): Promise<ProjectState> {
   const config = await loadConfig(root);
-  const lock = await loadLock(root);
-  const manifest = await loadManifestV2(root);
+  const lock = override?.lock ?? (await loadLock(root));
+  const manifest = override?.manifest ?? (await loadManifestV2(root));
   if (lock.requested === undefined && Object.keys(lock.modules).length > 0) {
     throw new RefusalError(
-      "saasaloy-lock.json has no `requested` list: an older engine wrote this project. Convert it to the render engine first."
+      "saasaloy-lock.json has no `requested` list: an older engine wrote this project. Run `saasaloy update`, which converts it to the render engine first."
     );
   }
   const requested = [...(lock.requested ?? [])];
@@ -253,6 +341,52 @@ export async function readProjectState(root: string): Promise<ProjectState> {
     root,
     version: lock.base?.cliVersion,
   };
+}
+
+/**
+ * The base sides of an update: one render for each release a record names other than
+ * `previous`, so a project whose files different releases wrote finds the base of each
+ * file by its hash (research 0013, "The base of a file"). Each side keeps only the
+ * modules its release can load. A release that cannot be loaded is left out, with a
+ * warning: its files merge with two-way markers.
+ */
+export async function loadBaseSides(
+  state: Pick<
+    ProjectState,
+    "manifest" | "requested" | "coordinates" | "options"
+  >,
+  previous: string,
+  context: LoadSideContext
+): Promise<{ sides: Map<string, ApplySide>; warnings: string[] }> {
+  const versions = [
+    ...new Set(
+      Object.values(state.manifest.files).map((record) => record.version)
+    ),
+  ]
+    .filter((version) => version !== previous)
+    .toSorted();
+  const sides = new Map<string, ApplySide>();
+  const warnings: string[] = [];
+  for (const version of versions) {
+    try {
+      const loaded = await loadSide(
+        {
+          coordinates: state.coordinates,
+          options: state.options,
+          partial: true,
+          requested: state.requested,
+          version,
+        },
+        context
+      );
+      sides.set(version, loaded.side);
+    } catch (error) {
+      warnings.push(
+        `Could not load saasaloy ${version}, the base of the files it wrote: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  return { sides, warnings };
 }
 
 /**
