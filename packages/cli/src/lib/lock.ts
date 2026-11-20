@@ -59,6 +59,11 @@ export interface LockBase {
 export interface Lockfile {
   $schema?: string;
   lockfileVersion: number;
+  /**
+   * The modules the owner asked for, sorted (plan 0116). The render engine writes it and
+   * derives the rest of `modules` from it. Absent on a lock the old engine wrote.
+   */
+  requested?: string[];
   modules: Record<string, LockModule>;
   /** Absent on a project scaffolded before the base carried provenance; `update` adopts it. */
   base?: LockBase;
@@ -102,6 +107,7 @@ export async function loadLock(root: string): Promise<Lockfile> {
   return {
     $schema: parsed.$schema ?? LOCK_SCHEMA_URL,
     lockfileVersion: parsed.lockfileVersion ?? LOCKFILE_VERSION,
+    ...(parsed.requested ? { requested: parsed.requested } : {}),
     modules: parsed.modules ?? {},
     ...(parsed.base ? { base: parsed.base } : {}),
   };

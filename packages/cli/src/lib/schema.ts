@@ -18,10 +18,16 @@ const Ajv2020 = AjvDefault as unknown as typeof AjvDefault.default;
 // error rather than surfacing as a mysterious applier crash later (build spec §3.2/§3.3).
 
 export type SchemaName =
-  "saasaloy" | "manifest" | "registry-item" | "saasaloy-lock" | "update-note";
+  | "saasaloy"
+  | "manifest"
+  | "manifest-v2"
+  | "registry-item"
+  | "saasaloy-lock"
+  | "update-note";
 
 const SCHEMA_FILES: Record<SchemaName, string> = {
   manifest: "manifest.schema.json",
+  "manifest-v2": "manifest-v2.schema.json",
   "registry-item": "registry-item.schema.json",
   saasaloy: "saasaloy.schema.json",
   "saasaloy-lock": "saasaloy-lock.schema.json",
@@ -268,6 +274,11 @@ export function validateSaasaloyConfig(
 
 export function validateManifest(data: unknown): Promise<ValidationResult> {
   return validate("manifest", data);
+}
+
+/** Validate a version 2 manifest, the render engine's format (plan 0116). */
+export function validateManifestV2(data: unknown): Promise<ValidationResult> {
+  return validate("manifest-v2", data);
 }
 
 export function validateRegistryItem(data: unknown): Promise<ValidationResult> {

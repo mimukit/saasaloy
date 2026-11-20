@@ -120,6 +120,46 @@ export async function formatPatchedFiles(
   }
 }
 
+/**
+ * Format one file's text in memory with the project's Prettier, as if it sat at `path`
+ * (relative to `root`), so the project's config, plugins and ignore file decide. The
+ * render engine formats both sides of a patched file before it compares them with the
+ * disk (plan 0116, "Formatting"). `undefined` when the project has no Prettier yet or
+ * Prettier fails: the caller keeps the raw text.
+ */
+export async function formatSource(
+  root: string,
+  path: string,
+  content: string
+): Promise<string | undefined> {
+  const bin = prettierBin(root);
+  if (!(await pathExists(bin))) {
+    return undefined;
+  }
+  return new Promise((resolvePromise) => {
+    const child = spawn(bin, ["--stdin-filepath", path], {
+      cwd: root,
+      shell: process.platform === "win32",
+      stdio: ["pipe", "pipe", "ignore"],
+    });
+    let output = "";
+    child.stdout?.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.on("error", () => {
+      // oxlint-disable-next-line unicorn/no-useless-undefined -- the promise resolves to `string | undefined`
+      resolvePromise(undefined);
+    });
+    child.on("close", (code) => {
+      resolvePromise(code === 0 ? output : undefined);
+    });
+    child.stdin?.on("error", () => {
+      // A Prettier that exits before it reads its input reports through `close`.
+    });
+    child.stdin?.end(content);
+  });
+}
+
 // Output is buffered, so a failure can say why and a success prints nothing. On Windows
 // the bin is a `.cmd` shim, which a bare spawn will not run, so it goes through the shell.
 function runChild(

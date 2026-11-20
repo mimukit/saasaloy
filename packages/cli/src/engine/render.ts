@@ -103,6 +103,12 @@ export interface RenderedFile {
   module: string;
   /** Module-relative source path (`files/src/x.ts`), or template-relative for `base`. */
   from: string;
+  /**
+   * A descriptor patch changed the file in this render. The old engine ran the project's
+   * Prettier over each patched file after the write, so `apply` formats both sides of
+   * such a file before it compares them with the disk (plan 0116, "Formatting").
+   */
+  transformed?: true;
 }
 
 export interface RenderResult {
@@ -456,7 +462,11 @@ export function render(args: RenderArgs): RenderResult {
       }
       const result = applyPatch(target.content, op, op.file);
       if (result.changed) {
-        files.set(op.file, { ...target, content: result.content });
+        files.set(op.file, {
+          ...target,
+          content: result.content,
+          transformed: true,
+        });
       } else if (result.reason !== undefined) {
         warnings.push(
           `${name}: ${op.kind} on ${op.file} not applied — ${result.reason}.`

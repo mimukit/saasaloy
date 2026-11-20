@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saasaloy.dev/schemas/manifest-v2.schema.json",
+  "title": ".saasaloy/manifest.json, version 2 — the render engine's file records",
+  "description": "Records each file the render engine wrote: the module and source path it came from, its class, the sha256 of the raw render (before Prettier), and the release that wrote that render (plan 0116). A version 1 manifest has no `version` key and validates against manifest.schema.json instead. Unknown fields are refused, so a CLI that reads only version 1 refuses this file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "files"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema for editor validation."
+    },
+    "version": {
+      "const": 2,
+      "description": "The manifest format version."
+    },
+    "files": {
+      "type": "object",
+      "description": "Project-relative POSIX path → the record of the render that wrote it.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["module", "from", "class", "hash", "version"],
+        "properties": {
+          "module": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "The module whose file this is, or `base` for a template file."
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Module-relative source path (`files/src/x.ts`), or template-relative for `base`."
+          },
+          "class": {
+            "enum": ["generated", "merged", "once"],
+            "description": "`generated`: written in full on every run. `merged`: a three-way merge on each run. `once`: written when the path is new, then left alone."
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "sha256 of the raw render, before Prettier, never of the bytes on disk. The engine accepts a render as the base of a merge only when its hash equals this value."
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The release that wrote this render. For a `once` file it stays at the release that wrote it, so the base of a later `update --merge` is findable."
+          }
+        }
+      }
+    },
+    "pendingMerges": {
+      "type": "array",
+      "description": "Files a run left with conflict markers. A run reads only these files to look for markers, clears an entry once no marker line remains, and refuses while any entry stays.",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "pendingNotes": {
+      "type": "array",
+      "description": "Update notes shown and not yet cleared with `saasaloy update --done <id>` (ADR 0058), in the order they were first shown.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "body"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*/[0-9]{4}-[a-z0-9][a-z0-9-]*$"
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "body": { "type": "string" },
+          "mayApply": { "type": "boolean" }
+        }
+      }
+    },
+    "doneNotes": {
+      "type": "array",
+      "description": "Update note ids `saasaloy update --done <id>` cleared, sorted, once each.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*/[0-9]{4}-[a-z0-9][a-z0-9-]*$"
+      }
+    }
+  }
+}
