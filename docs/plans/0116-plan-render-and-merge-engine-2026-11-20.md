@@ -63,7 +63,7 @@ Alternatives, each rejected for one reason:
 - Move the tables to generated files first. The payload would then fork before an engine exists that can write a generated file.
 - Keep a copy of the base render inside the project. It makes `remove` work offline with no cache, but it doubles every managed file in the owner's repo. Open question 2 keeps it for the grill.
 
-### Phase 1: Prototype the two generated tables that carry types
+### Phase 1: Prototype the two generated tables that carry types (#365)
 
 Throwaway code under `.dev/`, deleted after the answer. Scaffold the `full` preset with the current CLI. Move `auth.plugins`, `adminAuth.plugins` and the two client plugin arrays (`packages/auth/src/auth.ts`, `client.ts`) into generated files, and move the route chain of `apps/api/src/index.ts` into `routes.generated.ts` with an owner chain after it. Better Auth and the Hono RPC client both derive types from these values.
 
@@ -71,7 +71,7 @@ If a type is lost, that table stays inside its file as a transform, and Phase 7 
 
 Done when: the prototype project passes `pnpm typecheck`, one call to a plugin endpoint through the auth client and one RPC call through `@repo/api/client` typecheck in it, and the result for each of the two tables (kept types, or the compiler error) is written on the tracking issue.
 
-### Phase 2: The render function
+### Phase 2: The render function (#365)
 
 - `engine/payload.ts`: load the base template and every module of the resolved set into memory, from the registry at one ref or from a local directory.
 - `engine/render.ts`: resolve the set, apply the `when` gates, copy the template and the module files to their targets, apply each patch as a transform in the fixed order, and return path, bytes, class, module and source path for each file.
@@ -80,7 +80,7 @@ Done when: the prototype project passes `pnpm typecheck`, one call to a plugin e
 
 Done when: `pnpm --filter saasaloy test` runs a test that renders the `minimal` and `full` presets of `scripts/play-presets.json` and compares each file with a scaffold the old engine made by `init` and `add` in the fixed order. After Prettier runs on both sides, the trees are equal. A second test renders the same set from a shuffled module list and gets the same bytes.
 
-### Phase 3: Merge and apply
+### Phase 3: Merge and apply (#365)
 
 - `engine/merge.ts`: the three-way text merge through `git merge-file --diff3`, with the labels `mine`, `base` and `saasaloy <version>`.
 - `engine/json-merge.ts`: the merge by key.
@@ -91,7 +91,7 @@ Done when: `pnpm --filter saasaloy test` runs a test that renders the `minimal` 
 
 Done when: unit tests cover each action with a fixture of three sides, including the six result kinds of research 0013 (clean, already equal, conflict, both sides with no base, upstream delete against an owner edit, no base found). A test applies a set, edits one `merged` file and one `once` file, applies a newer fixture payload, and finds the merged file changed, the `once` file untouched, and the manifest hashes equal to the new render.
 
-### Phase 4: The commands on the new engine, behind the flag
+### Phase 4: The commands on the new engine, behind the flag (#365)
 
 - With `SAASALOY_ENGINE=next`, `init`, `add`, `remove` and `update` call `apply`. `--dry-run`, `--diff`, `--yes`, `--json` and `--with` keep their meaning.
 - `update` prints the report in place of the merge plan: the files with markers, the `once` files that upstream changed, the files left deleted, and the update notes.
@@ -100,14 +100,14 @@ Done when: unit tests cover each action with a fixture of three sides, including
 
 Done when: the registry round trip passes in `packages/cli/test/matrix/`: for each module in `modules/`, `add` on a fresh base and then `remove` gives the starting tree byte for byte, and for each pair with no dependency edge, both add orders give the same tree. `SAASALOY_ENGINE=next pnpm scaffold:check` passes.
 
-### Phase 5: Convert an existing project, and measure
+### Phase 5: Convert an existing project, and measure (#365)
 
 - `engine/convert.ts`: read a version 1 manifest and lock. For each tracked file, find the base by its recorded hash across the lock revision and the release tags, as research 0013 did, and write version 2 records. A file with no base found becomes a both-sides file.
 - `scripts/replay-update.ts <project> <commit>`: copy a project at a commit to a temporary folder, run the conversion and an update there with the new engine's classes and merge functions, and print the count of files that need an agent, by result kind.
 
 Done when: `node scripts/replay-update.ts /home/dev/projects/primeshopr d9cc35fc` prints at most 45 files that need an agent, and the conversion finds a base for at least 316 of the 317 tracked files. A fixture test converts a small version 1 project and checks the version 2 manifest.
 
-### Phase 6: Cut over and delete the old engines
+### Phase 6: Cut over and delete the old engines (#365)
 
 - The new engine becomes the default, and the flag goes.
 - Delete `applier.ts`, `updater.ts`, `remover.ts`, `merge-plan.ts`, `backfill.ts`, `commands/backfill-report.ts`, the inverse and refusal tables in `patch/index.ts`, and the tests that cover only them. Delete `--resolved` and `--from`.
@@ -117,7 +117,7 @@ Done when: `node scripts/replay-update.ts /home/dev/projects/primeshopr d9cc35fc
 
 Done when: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm scaffold:check` and `pnpm release:smoke` pass on the branch with the old engine files gone, `grep -rn -e "--resolved" -e "merge plan" packages/cli/templates modules llms.txt README.md CONTEXT.md docs/wiki` finds nothing, and `wc -l` over `packages/cli/src` without tests is below the 24,807 lines of `673e1230`.
 
-### Phase 7: Generated tables
+### Phase 7: Generated tables (#365)
 
 - The descriptor gains `tables` (the module that owns a table declares its id, file and shape) and `entries` (a module adds an entry to a table by id, with an optional `order`, default 1000). The schema and its types change in one PR.
 - A script converts the 157 table patches (`plugin-array` 100, `chained-route` 22, `const-array` 19, `nav-entry` 16) into `entries`, and the 48 tables into `tables`.
@@ -128,7 +128,7 @@ Done when: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm scaffold:check` and
 
 Done when: no descriptor in `modules/` holds a patch of the four table kinds (`jq` over `modules/*/registry-item.json` prints 0), `pnpm scaffold:check` and `pnpm release:smoke` pass, `prettier --check` passes on the generated files of the `full` preset, the Phase 4 round trip still passes, and `node scripts/replay-update.ts /home/dev/projects/primeshopr d9cc35fc` still prints at most 45.
 
-### Phase 8: Release
+### Phase 8: Release (#365)
 
 Attended: the owner approves the release that ships the new engine (ADR 0064). It cannot come first, because it ships the work of Phases 2 to 7.
 
