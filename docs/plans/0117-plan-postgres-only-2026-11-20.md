@@ -2,6 +2,8 @@
 
 Grilled: 2026-11-20
 
+Updated: 2026-11-20, after the grill. The owner kept the removal and added the why-Postgres wiki page and the `apps/web` landing site to Phase 4. The owner settled both rows in the session, so the stamp stands.
+
 Issue: [#366](https://github.com/mimukit/saasaloy/issues/366). Sources: [`docs/research/0010-research-restart-retrospective-2026-11-17.md`](../research/0010-research-restart-retrospective-2026-11-17.md) (change 3), [`docs/research/0013-research-three-way-merge-replay-2026-11-20.md`](../research/0013-research-three-way-merge-replay-2026-11-20.md), and the engine plan [`0116-plan-render-and-merge-engine-2026-11-20.md`](0116-plan-render-and-merge-engine-2026-11-20.md).
 
 ## Context
@@ -45,6 +47,8 @@ Target: 0 `onlyWith` entries (baseline 34), 0 twin files (baseline 17), and 0 fi
 | Follow-up work | Two `needs-planning` issues, filed during the grill on 2026-11-20: #371 merges `database-postgres` into `database`, blocked by #365, and #372 simplifies the code that works around a D1 limit. |
 | Outward actions | Only the afkkit authorization: commits on the issue branch, one push, one PR. The runner does not merge, and it files no issue. |
 | Docker on the box | `scaffold:check` and `release:smoke` start Postgres through the Docker backend of `db:setup`. The devaloy box has Docker. |
+| Why-Postgres wiki page | A new page `docs/wiki/why-postgres.md`, title "Why Postgres, not D1", section `Decisions`, mode `explanation`, with a `.wikimap.yaml` entry whose `documents` are `modules/database/**`, `modules/database-postgres/**` and the new ADR. It ships in the same PR as the removal, because until then the rest of the wiki names D1 as the default. Owner request, 2026-11-20. |
+| Landing site and docs content | `apps/web`, the Saasaloy site, changes with the template: `src/content/landing.ts` (the stack line, the `d1` tile, the `database` module line and the free-tier FAQ answers) and `src/lib/module-catalog.test.ts`. The FAQ uses the Neon and Hyperdrive numbers of this table. The `/docs` site renders `docs/wiki/`, so the wiki changes reach it with no extra step. Owner request, 2026-11-20. |
 | Test runner | The existing runners: `node:test` for scripts and module payload, the CLI's own suite for `packages/cli`. No new kind of test. |
 
 ## Approach
@@ -84,9 +88,16 @@ Done when: `grep -rn onlyWith packages/cli/src packages/cli/schemas` prints noth
 
 Done when: `pnpm test`, `pnpm scaffold:check` and `pnpm release:smoke` pass on the devaloy box with Docker; `.github/workflows/` names no `d1`.
 
-### Phase 4: the words: docs, skills, README and ADRs
+### Phase 4: the words: docs, wiki, landing site, skills, README and ADRs
 
-- `README.md` and `packages/cli/templates/base/packages/ui/src/content/landing.ts`: the free-tier promise on the Neon and Hyperdrive basis of Design decisions, and the database row as "Drizzle ORM on Postgres". The landing tile names `database-postgres` only.
+- `README.md`, `apps/web/src/content/landing.ts` and `packages/cli/templates/base/packages/ui/src/content/landing.ts`: the free-tier promise on the Neon and Hyperdrive basis of Design decisions, and the database row as "Drizzle ORM on Postgres". The landing tile names `database-postgres` only. Update `apps/web/src/lib/module-catalog.test.ts` to match.
+- Write `docs/wiki/why-postgres.md` and its `.wikimap.yaml` entry. The page covers, in this order:
+  1. The decision, its date (2026-11-19), and a link to the new ADR.
+  2. The D1 limits that shaped Saasaloy code, each with the module that shows it: no interactive transaction (the batched writes in `admin` and the `database` seed engine), the cap on bound parameters (the `admin` audit repository), `CAST AS TEXT` in the `payment` store, and no `SELECT … FOR UPDATE`, so `ecommerce` never ran on D1. Read each example from the code comments before Phase 4 rewrites them.
+  3. The D1 numbers from Cloudflare's D1 limits and pricing pages, quoted with the URL and the date read.
+  4. The cost of two dialects: 17 twin files, 34 `onlyWith` gates, two CI legs, and the PrimeShopr replay where one dialect variant turned 2 merge conflicts into 19 (research 0013).
+  5. What D1 gave and how the Postgres path covers it: no account (Neon's free tier needs no credit card, and Hyperdrive is on the Workers Free plan with 100,000 queries a day), and local development (the Docker backend of `db:setup`). Name the loss plainly: a deploy now needs a Neon account, and local development needs Docker.
+  6. What a project that wants D1 does: Saasaloy does not support it. A project that ports its own schema to D1 owns that fork, and every update that touches a table then conflicts.
 - The base template skills (`saasaloy-build`, `saasaloy-setup` and its product-spec template, `saasaloy-deploy`, `saasaloy-env`, `saasaloy-feature`, `saasaloy-testing`), `AGENTS.md`, `_env.example` and `docs/runbook-deploy.md` of the base template: remove the driver question and every D1 path.
 - The module skills that name D1 (`database`, `database-postgres`, `auth`, `waitlist`, `admin`, `api`, `ecommerce`, `e2e`, `infra-ci-deploy`, `queue`, `notification`, `payment`).
 - The D1 comments in module code: rewrite or remove; change no behaviour.
@@ -95,7 +106,7 @@ Done when: `pnpm test`, `pnpm scaffold:check` and `pnpm release:smoke` pass on t
 - `packages/cli/CHANGELOG.md`: a BREAKING CHANGES entry under the unreleased version.
 - Run `pnpm docs:generate` and `pnpm docs:freshness`.
 
-Done when: `pnpm lint`, `pnpm docs:check` and `pnpm test` pass, and `grep -rIl 'database-d1' . --exclude-dir={node_modules,.git,.dev} | grep -vE '^\./(docs/(adr|plans|research|refactor|qa|status)/|packages/cli/CHANGELOG\.md)'` prints nothing.
+Done when: `pnpm lint`, `pnpm docs:check`, `pnpm docs:freshness` and `pnpm test` pass; `docs/wiki/why-postgres.md` is in `.wikimap.yaml` and renders at `/docs/why-postgres` in a build of `apps/web`; `grep -rIn '\bD1\b' apps/web/src` prints nothing; and `grep -rIl 'database-d1' . --exclude-dir={node_modules,.git,.dev} | grep -vE '^\./(docs/(adr|plans|research|refactor|qa|status)/|packages/cli/CHANGELOG\.md)'` prints nothing.
 
 ## Open questions
 
