@@ -84,7 +84,7 @@ const SPEC = `# Product spec
 
 ## Database driver
 
-\`database-d1\`: no pick needs Postgres.
+\`database-postgres\`: the only driver.
 
 ## Entities
 

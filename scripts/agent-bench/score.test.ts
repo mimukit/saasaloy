@@ -321,7 +321,7 @@ const SPEC = `# Product spec
 
 ## Database driver
 
-\`database-d1\`: the default.
+\`database-postgres\`: the only driver.
 
 ## Entities
 
@@ -592,14 +592,14 @@ describe("the preview line", () => {
       });
     const calls = deployCalls(
       [
-        bash("grep -n d1_databases apps/api/wrangler.jsonc"),
+        bash("grep -n hyperdrive apps/api/wrangler.jsonc"),
         bash("rm -rf apps/api/.wrangler/state"),
-        bash("pnpm --filter api exec wrangler d1 migrations apply DB --remote"),
+        bash("pnpm --filter api exec wrangler hyperdrive list"),
         bash("npx wrangler@4.40.0 deploy"),
       ].join("\n")
     );
     assert.deepEqual(calls, [
-      "pnpm --filter api exec wrangler d1 migrations apply DB --remote",
+      "pnpm --filter api exec wrangler hyperdrive list",
       "npx wrangler@4.40.0 deploy",
     ]);
     assert.equal(
@@ -607,7 +607,7 @@ describe("the preview line", () => {
         "none",
         deployCalls(
           [
-            bash("grep -n d1_databases apps/api/wrangler.jsonc"),
+            bash("grep -n hyperdrive apps/api/wrangler.jsonc"),
             bash("rm -rf apps/api/.wrangler/state"),
           ].join("\n")
         )

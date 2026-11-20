@@ -11,8 +11,8 @@ import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
   addArgs,
-  databaseDriver,
   envFile,
+  hasDatabase,
   insideDir,
   listenerPids,
   parseArgs,
@@ -39,22 +39,21 @@ describe("parseArgs", () => {
     assert.throws(() => parseArgs(["down", "--db"]), /no flags/);
   });
 
-  it("reads up with the full preset on d1 by default", () => {
-    assert.deepEqual(parseArgs(["up"]), {
+  it("reads up with the full preset by default", () => {
+    assert.deepEqual(parseArgs(["up"]), { command: "up", preset: "full" });
+    assert.deepEqual(parseArgs(["up", "--preset", "minimal"]), {
       command: "up",
-      db: "d1",
-      preset: "full",
+      preset: "minimal",
     });
-    assert.deepEqual(
-      parseArgs(["up", "--preset", "minimal", "--db", "postgres"]),
-      { command: "up", db: "postgres", preset: "minimal" }
-    );
   });
 
-  it("refuses an unknown driver, a missing value or an unknown up flag", () => {
-    assert.throws(() => parseArgs(["up", "--db", "mysql"]), /d1 or postgres/);
+  it("refuses --db, a missing value or an unknown up flag", () => {
+    assert.throws(() => parseArgs(["up", "--db", "postgres"]), /--db/);
     assert.throws(() => parseArgs(["up", "--preset"]), /needs a value/);
-    assert.throws(() => parseArgs(["up", "--preset", "--db"]), /needs a value/);
+    assert.throws(
+      () => parseArgs(["up", "--preset", "--fast"]),
+      /needs a value/
+    );
     assert.throws(() => parseArgs(["up", "--fast"]), /--fast/);
   });
 
@@ -65,17 +64,13 @@ describe("parseArgs", () => {
   });
 });
 
-describe("databaseDriver", () => {
-  it("names the installed driver", () => {
-    assert.equal(databaseDriver(["api", "database", "database-d1"]), "d1");
-    assert.equal(
-      databaseDriver(["api", "database", "database-postgres"]),
-      "postgres"
-    );
+describe("hasDatabase", () => {
+  it("reads the Postgres driver as a database", () => {
+    assert.ok(hasDatabase(["api", "database", "database-postgres"]));
   });
 
   it("reads no driver as no database", () => {
-    assert.equal(databaseDriver(["api"]), undefined);
+    assert.ok(!hasDatabase(["api"]));
   });
 });
 
@@ -140,7 +135,7 @@ describe("play-presets.json", () => {
     }
   });
 
-  it("leaves the driver to --db", () => {
+  it("leaves the driver to play:up", () => {
     for (const preset of Object.values(presets)) {
       assert.ok(!preset.modules.some((m) => m.startsWith("database")));
     }
@@ -172,8 +167,8 @@ describe("addArgs and envFile", () => {
     modules: ["waitlist"],
   };
 
-  it("adds the driver --db picks", () => {
-    assert.deepEqual(addArgs(preset, "postgres"), [
+  it("adds the Postgres driver", () => {
+    assert.deepEqual(addArgs(preset), [
       "add",
       "waitlist",
       "--with",
@@ -183,7 +178,7 @@ describe("addArgs and envFile", () => {
   });
 
   it("adds nothing for a preset with no modules", () => {
-    assert.deepEqual(addArgs({ ...preset, modules: [] }, "d1"), []);
+    assert.deepEqual(addArgs({ ...preset, modules: [] }), []);
   });
 
   it("writes one sorted line per key", () => {

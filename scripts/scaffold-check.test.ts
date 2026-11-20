@@ -16,7 +16,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { MVP_MODULES, parseArgs } from "./scaffold-check.ts";
+import { MVP_MODULES, dbSetupArgs, parseArgs } from "./scaffold-check.ts";
 
 /** The two `scale` modules the build adds for `agent`'s key sign-in (plan 0110). */
 const AGENT_KEY_MODULES = ["api-keys", "api-keys-user"] as const;
@@ -79,6 +79,20 @@ describe("MVP_MODULES", () => {
     const names = new Set<string>(MVP_MODULES);
     assert.ok(names.has("database-d1"));
     assert.ok(!names.has("database-postgres"));
+  });
+});
+
+describe("dbSetupArgs", () => {
+  it("starts the Docker backend when SCAFFOLD_DATABASE_SERVER is unset or empty", () => {
+    assert.deepEqual(dbSetupArgs(), []);
+    assert.deepEqual(dbSetupArgs(""), []);
+  });
+
+  it("passes --server when SCAFFOLD_DATABASE_SERVER names a server", () => {
+    assert.deepEqual(
+      dbSetupArgs("postgres://postgres:postgres@127.0.0.1:5432/postgres"),
+      ["--server"]
+    );
   });
 });
 

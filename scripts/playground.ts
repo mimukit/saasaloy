@@ -7,13 +7,14 @@
 //                                            then `pnpm install`
 //   node scripts/playground.ts restore --db  also stop the api, wipe the database,
 //                                            migrate and seed; you start the api again
-//   node scripts/playground.ts up [--preset minimal|full] [--db d1|postgres]
+//   node scripts/playground.ts up [--preset minimal|full]
 //                                            a fresh playground from a preset in
 //                                            scripts/play-presets.json, migrated, seeded,
 //                                            snapped, with every app's dev server running
 //   node scripts/playground.ts down          stop the dev servers `up` started
 //
-// Ignored files survive a restore, so node_modules, the env files and the D1 state stay.
+// Ignored files survive a restore, so node_modules and the env files stay. The Postgres
+// database lives in a Docker volume, outside the playground, and only `--db` resets it.
 // Every git call pins GIT_DIR to the playground's own `.git`: the playground sits inside
 // this repository's work tree, and a git call that fell through to the outer repository
 // would reset the maintainer's own work. `saasaloy init` creates that `.git`: the
@@ -40,41 +41,35 @@ import {
 import { resolve } from "node:path";
 
 const USAGE =
-  "usage: node scripts/playground.ts snap | restore [--db] | up [--preset minimal|full] [--db d1|postgres] | down";
+  "usage: node scripts/playground.ts snap | restore [--db] | up [--preset minimal|full] | down";
 const API_PORT = 4000;
 const START_API =
   "the api is stopped; start it with: pnpm -C .dev/playground/apps/api dev";
 
-export type Driver = "d1" | "postgres";
-
 export type Args =
   | { command: "snap" }
   | { command: "restore"; db: boolean }
-  | { command: "up"; preset: string; db: Driver }
+  | { command: "up"; preset: string }
   | { command: "down" };
+
+/** The database driver `up` adds to every preset that installs a module. */
+const DRIVER = "database-postgres";
 
 function upArgs(flags: string[]): Args {
   let preset = "full";
-  let db: Driver = "d1";
   for (let i = 0; i < flags.length; i++) {
     const flag = flags[i] ?? "";
     const value = flags[i + 1];
-    if (flag !== "--preset" && flag !== "--db") {
+    if (flag !== "--preset") {
       throw new Error(`unknown flag ${flag}\n${USAGE}`);
     }
     if (value === undefined || value.startsWith("-")) {
       throw new Error(`${flag} needs a value\n${USAGE}`);
     }
     i++;
-    if (flag === "--preset") {
-      preset = value;
-    } else if (value === "d1" || value === "postgres") {
-      db = value;
-    } else {
-      throw new Error(`--db is d1 or postgres, not ${value}\n${USAGE}`);
-    }
+    preset = value;
   }
-  return { command: "up", db, preset };
+  return { command: "up", preset };
 }
 
 export function parseArgs(argv: string[]): Args {
@@ -99,14 +94,9 @@ export function parseArgs(argv: string[]): Args {
   return { command, db: flags.includes("--db") };
 }
 
-export function databaseDriver(modules: string[]): Driver | undefined {
-  if (modules.includes("database-d1")) {
-    return "d1";
-  }
-  if (modules.includes("database-postgres")) {
-    return "postgres";
-  }
-  return undefined;
+/** True when the playground holds a database: its Postgres driver is installed. */
+export function hasDatabase(modules: string[]): boolean {
+  return modules.includes(DRIVER);
 }
 
 /** The pids in `ss -ltnpH` output or in `lsof -t` output, whichever came back. */
@@ -235,8 +225,7 @@ async function sleep(ms: number): Promise<void> {
 }
 
 // Stop the api and every process under it, workerd included, and wait until they are
-// gone. Deleting D1 state under a running workerd leaves every later query failing with
-// SQLITE_CANTOPEN (see scripts/qa-tenant-scoping-serve.sh).
+// gone, so no running api holds a connection to the database the reset drops.
 async function stopApi(): Promise<void> {
   const listeners = apiPids();
   if (listeners.length === 0) {
@@ -296,33 +285,20 @@ await sql.unsafe("drop schema if exists drizzle cascade; drop schema if exists p
 await sql.end();
 `;
 
-function resetDatabase(driver: Driver): void {
+function resetDatabase(): void {
   const db = resolve(playground, "packages/db");
   // Migrations generated after the baseline are untracked, so the restore removed them.
   pnpm(["-C", db, "db:generate"]);
-  if (driver === "d1") {
-    rmSync(resolve(playground, "apps/api/.wrangler"), {
-      force: true,
-      recursive: true,
-    });
-    pnpm(["-C", db, "db:migrate:local"]);
-  } else {
-    const env = { ...process.env, DATABASE_URL: databaseUrl() };
-    run("node", ["--input-type=module", "--eval", WIPE_POSTGRES], {
-      cwd: db,
-      env,
-    });
-    pnpm(["-C", db, "db:migrate"], env);
-  }
-  console.log(`[play] wiped and migrated the ${driver} database`);
+  const env = { ...process.env, DATABASE_URL: databaseUrl() };
+  run("node", ["--input-type=module", "--eval", WIPE_POSTGRES], {
+    cwd: db,
+    env,
+  });
+  pnpm(["-C", db, "db:migrate"], env);
+  console.log("[play] wiped and migrated the database");
   // A playground made before the seed system (plan 0072) has no db:seed script.
   if (existsSync(resolve(db, "scripts/seed.ts"))) {
-    pnpm(
-      ["-C", db, "db:seed"],
-      driver === "d1"
-        ? undefined
-        : { ...process.env, DATABASE_URL: databaseUrl() }
-    );
+    pnpm(["-C", db, "db:seed"], env);
   }
 }
 
@@ -332,9 +308,9 @@ async function restore(db: boolean): Promise<void> {
   }
   const started = performance.now();
   const modules = db ? installed() : [];
-  const driver = databaseDriver(modules);
-  const withApi = db && driver !== undefined && modules.includes("api");
-  if (db && !driver) {
+  const database = hasDatabase(modules);
+  const withApi = db && database && modules.includes("api");
+  if (db && !database) {
     console.log(
       "[play] no database driver installed; --db has nothing to reset"
     );
@@ -349,8 +325,8 @@ async function restore(db: boolean): Promise<void> {
       `[play] files back at ${git(["rev-parse", "--short", "HEAD"]).trim()}`
     );
     pnpm(["install"]);
-    if (db && driver) {
-      resetDatabase(driver);
+    if (db && database) {
+      resetDatabase();
     }
   } catch (error) {
     if (withApi) {
@@ -422,12 +398,12 @@ export function readPresets(text: string): Record<string, Preset> {
   return presets;
 }
 
-/** The `saasaloy add` arguments for a preset, with the driver `--db` picked. */
-export function addArgs(preset: Preset, db: Driver): string[] {
+/** The `saasaloy add` arguments for a preset, with the Postgres driver. */
+export function addArgs(preset: Preset): string[] {
   if (preset.modules.length === 0) {
     return [];
   }
-  return ["add", ...preset.modules, "--with", `database-${db}`, "--yes"];
+  return ["add", ...preset.modules, "--with", DRIVER, "--yes"];
 }
 
 /** `packages/env/.env` for a preset: one `KEY=value` line per entry, sorted. */
@@ -622,7 +598,7 @@ async function waitForServers(
   }
 }
 
-async function up(name: string, db: Driver): Promise<void> {
+async function up(name: string): Promise<void> {
   const started = performance.now();
   const presets = readPresets(readFileSync(presetsFile, "utf-8"));
   const preset = presets[name];
@@ -653,47 +629,38 @@ async function up(name: string, db: Driver): Promise<void> {
     resolve(playground, "saasaloy")
   );
   chmodSync(resolve(playground, "saasaloy"), 0o755);
-  const add = addArgs(preset, db);
+  const add = addArgs(preset);
   if (add.length > 0) {
     run("./saasaloy", add, { stdio: "inherit" });
-  } else if (db !== "d1") {
-    console.log(
-      `[play] the ${name} preset installs no database; --db ${db} changes nothing`
-    );
   }
   pnpm(["install"]);
   step("write packages/env/.env and each app's .env");
-  const driver = databaseDriver(installed());
+  const database = hasDatabase(installed());
   const envPath = resolve(playground, "packages/env/.env");
   // `env:setup` refuses an unset DATABASE_URL, and `db:setup` is what names the database.
   // So the container's admin URL stands in until `db:setup` writes the real one.
-  const env =
-    driver === "postgres"
-      ? { ...preset, env: { ...preset.env, DATABASE_URL: POSTGRES_ADMIN_URL } }
-      : preset;
+  const env = database
+    ? { ...preset, env: { ...preset.env, DATABASE_URL: POSTGRES_ADMIN_URL } }
+    : preset;
   writeFileSync(envPath, envFile(env));
   pnpm(["env:setup"]);
-  if (driver) {
-    step(`migrate and seed the ${driver} database`);
+  if (database) {
+    step("migrate and seed the database");
     const dbDir = resolve(playground, "packages/db");
     pnpm(["-C", dbDir, "db:generate"]);
-    if (driver === "d1") {
-      pnpm(["db:setup"]);
-    } else {
-      // db:setup starts the Compose container (a named volume, no host path) and points
-      // DATABASE_URL in apps/api/.env at a fresh database. Copy that URL back to the
-      // value source, so a later `pnpm env:setup` keeps it.
-      freshPostgres();
-      pnpm(["db:setup", "--docker"], {
-        ...process.env,
-        COMPOSE_PROJECT_NAME: composeProject,
-      });
-      const url = databaseUrl();
-      writeFileSync(
-        envPath,
-        envFile({ ...preset, env: { ...preset.env, DATABASE_URL: url } })
-      );
-    }
+    // db:setup starts the Compose container (a named volume, no host path) and points
+    // DATABASE_URL in apps/api/.env at a fresh database. Copy that URL back to the
+    // value source, so a later `pnpm env:setup` keeps it.
+    freshPostgres();
+    pnpm(["db:setup", "--docker"], {
+      ...process.env,
+      COMPOSE_PROJECT_NAME: composeProject,
+    });
+    const url = databaseUrl();
+    writeFileSync(
+      envPath,
+      envFile({ ...preset, env: { ...preset.env, DATABASE_URL: url } })
+    );
     if (existsSync(resolve(dbDir, "scripts/seed.ts"))) {
       pnpm(["db:seed"]);
     }
@@ -711,7 +678,7 @@ async function up(name: string, db: Driver): Promise<void> {
   console.log(
     `\n[play] up in ${seconds}s; logs in .dev/play/, stop with pnpm play:down`
   );
-  if (driver) {
+  if (database) {
     console.log(
       '[play] sign in as superadmin@example.test, admin@, member@ or banned@ with "saasaloy-dev-password"'
     );
@@ -721,7 +688,7 @@ async function up(name: string, db: Driver): Promise<void> {
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (args.command === "up") {
-    await up(args.preset, args.db);
+    await up(args.preset);
     return;
   }
   if (args.command === "down") {

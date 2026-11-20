@@ -87,10 +87,14 @@ jobs:
       - run: pnpm badges:check
 
   # A fresh project, not the template's files one by one (issue #347). It builds the CLI,
-  # scaffolds the modules an agent's build adds on database-d1 from this checkout's
+  # scaffolds the modules an agent's build adds on database-postgres from this checkout's
   # `modules/`, and runs that project's `pnpm check`. A type-aware lint error in a base
   # template file passed every step of the gate above and failed every new project.
   # `pnpm scaffold:check` runs the same steps on a laptop.
+  #
+  # Postgres comes from a service container, the one e2e.yml uses. `SCAFFOLD_DATABASE_SERVER`
+  # names it, and the script then runs `db:setup --server`, which creates the project's
+  # database there rather than starting a container of its own.
   #
   # The scaffold installs from the npm registry. The cache key also hashes the template's
   # and the modules' manifests, so a new key saves a store that holds the scaffold's
@@ -99,6 +103,19 @@ jobs:
     name: scaffold
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
     steps:
       - uses: actions/checkout@v7
 
@@ -117,3 +134,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm scaffold:check
+        env:
+          SCAFFOLD_DATABASE_SERVER: postgres://postgres:postgres@127.0.0.1:5432/postgres

@@ -61,7 +61,7 @@ Nothing beyond the MVP set.
 
 ## 14. Database driver
 
-`database-d1`, as you recommend.
+`database-postgres`, the only driver.
 
 ## 15. Preview deploy
 

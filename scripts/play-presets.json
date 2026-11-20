@@ -1,5 +1,5 @@
 {
-  "$comment": "The presets pnpm play:up reads (#187), and that examples/full (#184) and CI read too. `modules` is the saasaloy add list; play:up adds the database driver --db picks. `env` is written to packages/env/.env as is. BETTER_AUTH_SECRET stays unset on purpose: Better Auth then uses its dev key, which the api allows only on a loopback BETTER_AUTH_URL.",
+  "$comment": "The presets pnpm play:up reads (#187), and that examples/full (#184) and CI read too. `modules` is the saasaloy add list; play:up adds database-postgres, the database driver. `env` is written to packages/env/.env as is. BETTER_AUTH_SECRET stays unset on purpose: Better Auth then uses its dev key, which the api allows only on a loopback BETTER_AUTH_URL.",
   "minimal": {
     "description": "The base template only: the web app, no modules.",
     "modules": [],

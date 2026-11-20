@@ -64,7 +64,7 @@ Stations first, then prep tasks.
 
 ## 14. Database driver
 
-`database-d1`, as you recommend.
+`database-postgres`, the only driver.
 
 ## 15. Preview deploy
 
