@@ -38,7 +38,12 @@
 // and holds no FAIL line (plan 0109). It costs a few `git` calls, so it runs before the
 // gate too. `scripts/bench-gate.ts` defines each term.
 //
-// Imports node: builtins and four sibling scripts. Node 24 strips the types, so there is no
+// The stale-docs check runs `docs:stale` in its stamp mode and prints each hand-written page
+// whose covered files changed after its stamp. It warns and never fails, the same as the
+// command: a stale page is information, and only a person can tell whether its text is wrong.
+// The site deploys the pages at the tag, so the release is the last point to read them.
+//
+// Imports node: builtins and six sibling scripts. Node 24 strips the types, so there is no
 // build step; `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawnSync } from "node:child_process";
@@ -60,6 +65,9 @@ import {
   lateNoteFooters,
   lateUpdateNotes,
 } from "./changelog-update-notes.ts";
+import type { Report as StaleReport } from "./docs-stale.ts";
+import { findStale, formatReport, repoGit } from "./docs-stale.ts";
+import { readWikimap, WIKI_DIR } from "./docs-wikimap.ts";
 import { cliSurface, llmsSurfaceProblems, releaseSkills } from "./llms-txt.ts";
 import { shortShaProblem, updateNoteOptOut } from "./update-note-footer.ts";
 
@@ -343,6 +351,23 @@ export function unpublishedTagMessage(name: string, tag: string): string {
   ].join("\n");
 }
 
+/**
+ * What to print when `docs:stale` lists pages, or undefined when every page is current. The
+ * list is the command's own report, so the preflight and `pnpm docs:stale` read the same.
+ */
+export function staleDocsMessage(report: StaleReport): string | undefined {
+  if (report.pages.length === 0) {
+    return undefined;
+  }
+  return [
+    formatReport(report).trimEnd(),
+    "",
+    "The site deploys these pages as they are at the tag. Read each one against its",
+    "commits, fix the wrong text, and move its stamp. Or release now and fix them later:",
+    "the warning does not stop the release.",
+  ].join("\n");
+}
+
 /** One line for a breaking commit that opted out of a note. */
 export function optOutMessage(optOut: OptOut): string {
   return `${optOut.shortHash} ${optOut.subject}: no update note (${optOut.reason})`;
@@ -481,6 +506,21 @@ async function main(): Promise<void> {
   // --- Does every breaking commit carry an update note? -----------------------------
 
   const tag = runUpdateNoteCheck();
+
+  // --- Do the hand-written docs pages still match the code? ---------------------------
+
+  const stale = staleDocsMessage(
+    findStale({
+      pages: readWikimap(root),
+      read: (path) => readFileSync(join(root, WIKI_DIR, path), "utf-8"),
+      git: repoGit(root),
+    })
+  );
+  if (stale === undefined) {
+    step("every hand-written docs page is current");
+  } else {
+    warn("hand-written docs pages may be stale", stale);
+  }
 
   // --- Is the last tag's version on npm? ----------------------------------------------
 

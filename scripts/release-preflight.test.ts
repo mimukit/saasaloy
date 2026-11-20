@@ -39,6 +39,7 @@ import {
   releaseSkills,
   REPORT_NAME,
   shouldSkipGate,
+  staleDocsMessage,
   staleMainMessage,
   UNATTENDED_CLI_CONTRACT,
   unpublishedTagMessage,
@@ -204,6 +205,32 @@ describe("unpublishedTagMessage", () => {
     assert.match(message, /saasaloy@0\.9\.0/);
     assert.match(message, /v0\.9\.0/);
     assert.match(message, /publish\.yml/);
+  });
+});
+
+describe("staleDocsMessage", () => {
+  it("is undefined when every page is current", () => {
+    assert.equal(staleDocsMessage({ base: undefined, pages: [] }), undefined);
+  });
+
+  it("lists each stale page with its commits and says the release goes on", () => {
+    const text = staleDocsMessage({
+      base: undefined,
+      pages: [
+        {
+          path: "getting-started.md",
+          title: "Getting started",
+          stamp: "928b4f03",
+          commits: [{ sha: "e04a7e7a", subject: "fix(cli): use org keys" }],
+          note: undefined,
+        },
+      ],
+    });
+    assert.ok(text !== undefined);
+    assert.match(text, /1 page\(s\) have covered files/);
+    assert.match(text, /docs\/wiki\/getting-started\.md \(Getting started\)/);
+    assert.match(text, /e04a7e7a fix\(cli\): use org keys/);
+    assert.match(text, /does not stop the release/);
   });
 });
 
