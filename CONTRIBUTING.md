@@ -86,6 +86,12 @@ skip flag in `scripts/release-preflight.ts`.
 That last file guards its `main()` call behind a `process.argv[1]` check, because a test importing
 its helpers must not start a registry scan. Keep the guard if you add another script test.
 
+`scripts/provider-selection.test.ts` checks the `<CAP>_PROVIDER` rule in every capability core: a
+module with both `files/src/define.ts` and a `files/src/providers/` folder. It imports each core's
+`define.ts`, so `pnpm test:scripts` loads `scripts/ts-resolve-hook.ts`, the hook `test:modules`
+uses. A new core fails that test until you add its row to `CORES`, with its env key, its
+`define<Cap>` export and its mode (`required`, `optional` or `list`).
+
 The second pass uses Node's own test runner rather than vitest, and the reason is mechanical.
 Vite loads a tsconfig for every file it transforms; a module payload's `tsconfig.json` extends
 `@repo/tsconfig/base.json`, which resolves only inside a scaffolded project, so vitest fails those
