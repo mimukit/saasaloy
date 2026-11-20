@@ -63,16 +63,16 @@ describe(classOf, () => {
     ).toBe("merged");
   });
 
-  it("merges the files the engine derives from the set", () => {
+  it("keeps the seed saasaloy.json and the owned key list once", () => {
     expect(
       classOf({ declaration, module: "base", path: "saasaloy.json" })
-    ).toBe("merged");
+    ).toBe("once");
     expect(
       classOf({
         declaration,
         module: "base",
         path: "packages/env/.env.example",
       })
-    ).toBe("merged");
+    ).toBe("once");
   });
 });

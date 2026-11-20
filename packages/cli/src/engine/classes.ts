@@ -20,18 +20,6 @@ export const FILE_CLASSES: readonly FileClass[] = [
   "once",
 ];
 
-/**
- * Files the engine derives from the whole module set, whatever the base declaration says
- * of them. `add` rewrites both on every run: `saasaloy.json` gains `installed` and the
- * scaffold aliases, and the key list gains each module's `envVars`. As `once` files an
- * `add` could never reach them, so they merge, and an owner's edit survives the merge the
- * way `writeEnvExample` keeps a typed value today.
- */
-export const DERIVED_MERGED: readonly string[] = [
-  "saasaloy.json",
-  "packages/env/.env.example",
-];
-
 export interface ClassInput {
   /** Project-relative POSIX path of the rendered file. */
   path: string;
@@ -50,9 +38,6 @@ export function classifier(
   const owned = ownedMatcher(declaration);
   const seeds = new Set(declaration.seedFiles);
   return ({ path, module, entry }) => {
-    if (DERIVED_MERGED.includes(path)) {
-      return "merged";
-    }
     if (module === BASE_MODULE) {
       return seeds.has(path) || owned(path) ? "once" : "merged";
     }

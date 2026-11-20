@@ -39,7 +39,7 @@ function payloadOf(modules: PayloadModule[]): Payload {
       declaration: {
         ownedFiles: ["packages/ui/src/blocks/**"],
         retiredSeedFiles: [],
-        seedFiles: ["README.md"],
+        seedFiles: ["README.md", "saasaloy.json"],
       },
       files: new Map([
         ["AGENTS.md", AGENTS],
@@ -142,7 +142,7 @@ describe(render, () => {
       class: "once",
     });
     expect(pick("package.json")).toMatchObject({ class: "merged" });
-    expect(pick("saasaloy.json")).toMatchObject({ class: "merged" });
+    expect(pick("saasaloy.json")).toMatchObject({ class: "once" });
   });
 
   it("applies patches in the fixed order, whatever order the names arrive in", () => {
