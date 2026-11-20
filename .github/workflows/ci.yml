@@ -14,9 +14,24 @@
 # install finds it. The release preflight runs `release:smoke`, which covers it.
 name: ci
 
+# A change that touches only the paths below skips this workflow. No gate script reads
+# them: Prettier ignores Markdown, `docs:check` reads CONTEXT.md, docs/adr and docs/wiki,
+# and `release:preflight` reads docs/research at release time, not here. Keep docs/adr,
+# docs/wiki, CONTEXT.md and every SKILL.md off this list, because the gate checks them.
+# A skipped run reports no status, so a required `ci` check would need a stub job.
 on:
   push:
+    paths-ignore: &docs-only
+      - "README.md"
+      - "docs/plans/**"
+      - "docs/qa/**"
+      - "docs/status/**"
+      - "docs/research/**"
+      - "docs/debug/**"
+      - "docs/refactor/**"
+      - "docs/seo/**"
   pull_request:
+    paths-ignore: *docs-only
 
 # A pull request pushed to twice does not need the first run's answer. Cancel it and
 # keep the branch's own pushes serialised by ref.

@@ -1,8 +1,9 @@
 # The public site's gate, for apps/web (plan 0091, Site workflow and Gate tooling rows).
 # A pull request that touches the site, the module registry it reads or the wiki it
-# links to runs lint, the catalog tests and the build, then checks the built page in a
-# real browser: axe in both themes at 375, 768 and 1440 px, and one mobile Lighthouse
-# run that must score 95 or more in all four categories.
+# links to runs the catalog tests and the build, then checks the built page in a real
+# browser: axe in both themes at 375, 768 and 1440 px, and one mobile Lighthouse run that
+# must score 95 or more in all four categories. Lint is not here: ci.yml runs `pnpm lint`
+# on the whole repo for every pull request that reaches this workflow.
 #
 # The job also checks for stale docs (plan 0114, Phase 5): it lists each
 # hand-written wiki page that covers a file the pull request changes while the pull
@@ -99,8 +100,6 @@ jobs:
           else
             gh api --method POST "repos/$REPO/issues/$PR/comments" -F body=@"$RUNNER_TEMP/stale.md" > /dev/null
           fi
-
-      - run: pnpm lint
 
       - run: pnpm --filter @saasaloy/web test
 
