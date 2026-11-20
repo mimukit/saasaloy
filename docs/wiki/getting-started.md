@@ -131,4 +131,4 @@ from any subdirectory.
 - [Architecture](architecture.md) if you want to know what the CLI is doing to your
   project before you let it.
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`9e0a34d8` on 2026-11-20._

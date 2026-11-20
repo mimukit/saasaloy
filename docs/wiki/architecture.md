@@ -156,4 +156,4 @@ module that ships an agent skill installs it into `.agents/skills/` with a
 Those links are tracked in the manifest, so unlike config patches they are removed when the
 module is.
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`9e0a34d8` on 2026-11-20._
