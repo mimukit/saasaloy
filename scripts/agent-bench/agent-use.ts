@@ -105,12 +105,14 @@ export function rowsIn(content: unknown): unknown[] | undefined {
 interface ToolEvent {
   type?: string;
   message?: { content?: { type?: string; input?: unknown }[] };
+  item?: { type?: string; command?: string; exit_code?: number };
 }
 
 /**
  * How many MCP `tools/call` requests the second agent's transcript holds. In a stream-json
  * transcript only tool inputs count (a command, a script it wrote), never its prose; a
- * plain-text line counts as written.
+ * plain-text line counts as written. Codex contributes successful completed command
+ * inputs, once per command, without counting output or duplicate start events.
  */
 export function mcpToolCalls(transcript: string): number {
   const count = (text: string) => text.split("tools/call").length - 1;
@@ -126,6 +128,15 @@ export function mcpToolCalls(transcript: string): number {
       continue;
     }
     const event = parsed as ToolEvent;
+    if (
+      event.type === "item.completed" &&
+      event.item?.type === "command_execution" &&
+      event.item.exit_code === 0 &&
+      typeof event.item.command === "string"
+    ) {
+      calls += count(event.item.command);
+      continue;
+    }
     if (event.type !== "assistant") {
       continue;
     }

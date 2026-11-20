@@ -127,6 +127,32 @@ describe("the second agent's transcript and reply", () => {
     assert.equal(readBackId("READ BACK: `42`"), "42");
     assert.equal(readBackId("Done, the id is bk_1."), undefined);
   });
+
+  it("counts completed Codex commands without counting prose, output, or duplicate start events", () => {
+    const event = (type: string, item: unknown) =>
+      JSON.stringify({ type, item });
+    const command = {
+      type: "command_execution",
+      command: 'curl -d \'{"method":"tools/call"}\' x/mcp',
+      exit_code: 0,
+    };
+    const transcript = [
+      event("item.started", command),
+      event("item.completed", command),
+      event("item.completed", {
+        type: "agent_message",
+        text: "I sent tools/call",
+      }),
+      event("item.completed", {
+        type: "command_execution",
+        command: "echo hello",
+        aggregated_output: "tools/call",
+        exit_code: 0,
+      }),
+      event("item.completed", { ...command, exit_code: 1 }),
+    ].join("\n");
+    assert.equal(mcpToolCalls(transcript), 1);
+  });
 });
 
 // --- A fake product ---------------------------------------------------------------
