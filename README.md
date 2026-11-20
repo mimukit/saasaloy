@@ -5,10 +5,13 @@
 
 **Open source, composable SaaS starter kit for Cloudflare.** A CLI plus a module registry, not a boilerplate. You scaffold a small base, then copy in the API, database, auth, subscription and product features one command at a time, as source files you own. Think shadcn/ui for a full-stack SaaS.
 
-[![npm version](https://img.shields.io/npm/v/saasaloy)](https://www.npmjs.com/package/saasaloy)
-[![CI](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml/badge.svg)](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
-[![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/mimukit/saasaloy?utm_source=oss&utm_medium=github&utm_campaign=mimukit%2Fsaasaloy&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
+[![npm version](https://img.shields.io/npm/v/saasaloy?style=flat-square&logo=npm&logoColor=white&labelColor=0B2253&color=315FE8)](https://www.npmjs.com/package/saasaloy)
+[![Node compatibility](https://img.shields.io/node/v/saasaloy?style=flat-square&logo=nodedotjs&logoColor=white&label=Node&labelColor=0B2253&color=315FE8)](https://www.npmjs.com/package/saasaloy)
+[![CI](https://img.shields.io/github/actions/workflow/status/mimukit/saasaloy/ci.yml?branch=main&event=push&style=flat-square&logo=githubactions&logoColor=white&label=CI&labelColor=0B2253)](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml)
+[![Monthly downloads](https://img.shields.io/npm/dm/saasaloy?style=flat-square&logo=npm&logoColor=white&label=downloads%2Fmonth&labelColor=0B2253&color=315FE8)](https://www.npmjs.com/package/saasaloy)
+[![Module count](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fsaasaloy.com%2Fbadges.json&query=%24.modules&label=modules&style=flat-square&logo=github&logoColor=white&labelColor=101722&color=315FE8)](https://saasaloy.com/#catalog)
+[![MIT license](https://img.shields.io/badge/license-MIT-315FE8?style=flat-square&logo=opensourceinitiative&logoColor=white&labelColor=0B2253)](LICENSE.md)
+[![Documentation](https://img.shields.io/badge/docs-getting_started-315FE8?style=flat-square&logo=readthedocs&logoColor=white&labelColor=101722)](https://github.com/mimukit/saasaloy/blob/main/docs/wiki/getting-started.md)
 
 > [!TIP]
 > **Are you an AI agent?** Read [`llms.txt`](llms.txt) first. It gives the one path to build a product with Saasaloy: `init`, the interview, the build. To change Saasaloy itself, read [`AGENTS.md`](AGENTS.md).
