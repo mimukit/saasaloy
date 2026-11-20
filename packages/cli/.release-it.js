@@ -13,6 +13,7 @@
 // PR already set. `scripts/release-order.test.ts` checks that a dry run runs no publish.
 
 import { finalizeUpdateNotes } from "../../scripts/changelog-update-notes.ts";
+import { releaseNotes } from "../../scripts/release-notes.ts";
 
 // release-it fills `${version}` itself. The string is its placeholder, not a JS template.
 // oxlint-disable-next-line no-template-curly-in-string
@@ -31,6 +32,10 @@ export default {
   github: {
     release: true,
     releaseName: TAG,
+    // The changelog plus a link to the npm package at this version. The repository home
+    // page lists only GitHub Packages, so the Release is where a reader finds the package.
+    // See `scripts/release-notes.ts`.
+    releaseNotes,
   },
   hooks: {
     "before:init": ["pnpm -w run release:preflight"],
