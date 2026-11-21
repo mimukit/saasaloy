@@ -30,6 +30,7 @@ import {
   parsePlanNotes,
   reportPaths,
   previousVersion,
+  upgradeAddTarget,
   readNoteFrontmatter,
 } from "./release-smoke.ts";
 
@@ -357,6 +358,20 @@ describe("compareSemver", () => {
 
   it("refuses a version that is not semver", () => {
     assert.throws(() => compareSemver("main", "0.8.0"), /not a semver/);
+  });
+});
+
+describe("upgradeAddTarget", () => {
+  it("pins the module to the tag of a release before 0.10.0", () => {
+    assert.equal(
+      upgradeAddTarget("0.9.0", "email-react"),
+      "mimukit/saasaloy@v0.9.0/email-react"
+    );
+  });
+
+  it("names the module bare from 0.10.0, which refuses a pin", () => {
+    assert.equal(upgradeAddTarget("0.10.0", "email-react"), "email-react");
+    assert.equal(upgradeAddTarget("0.11.0", "admin"), "admin");
   });
 });
 

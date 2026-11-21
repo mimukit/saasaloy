@@ -393,6 +393,20 @@ const UPGRADE_ADDS: readonly (readonly string[])[] = [
  */
 const UPGRADE_TESTING = "off";
 
+/**
+ * The first release whose `add` refuses a pinned default-registry module. From 0.10.0 the
+ * CLI reads the default registry at its own release tag (ADR 0062), so `add` names a
+ * module bare and the release decides the ref.
+ */
+const UNPINNED_ADD_FROM = "0.10.0";
+
+/** The `add` argument that takes `name` from the default registry at `previous`. */
+export function upgradeAddTarget(previous: string, name: string): string {
+  return compareSemver(previous, UNPINNED_ADD_FROM) >= 0
+    ? name
+    : `${UPGRADE_SOURCE}@v${previous}/${name}`;
+}
+
 /** What `update --dry-run` exits with: a preview stays 0 even while notes are pending. */
 const DRY_RUN_EXIT = 0;
 
@@ -1167,7 +1181,7 @@ async function checkUpgrade(
     { cwd: workDir, env: remoteEnv }
   );
   for (const [name, ...flags] of UPGRADE_ADDS) {
-    const target = `${UPGRADE_SOURCE}@v${previous}/${String(name)}`;
+    const target = upgradeAddTarget(previous, String(name));
     await runQuiet(
       previousBin,
       ["add", target, ...flags, "--yes"],
