@@ -20,7 +20,7 @@ Build the CLI with:
 pnpm install && pnpm --filter saasaloy build
 ```
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -42,7 +42,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 git -C /home/dev/projects/primeshopr status --short && git -C /home/dev/projects/primeshopr log --oneline -1
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: The conflicts the table move leaves are fair work for an agent  ·  🔴 Critical
 
@@ -56,7 +56,7 @@ git -C /home/dev/projects/primeshopr status --short && git -C /home/dev/projects
    node scripts/replay-update.ts /home/dev/projects/primeshopr 161af2e0 --to-local
    ```
 
-   - [ ] The count of files that need an agent, and the table files the list marks, are an amount of work you accept for the first update
+   - [x] The count of files that need an agent, and the table files the list marks, are an amount of work you accept for the first update
      - the agent measured 118 files, 525 conflict hunks, and 20 table files with 46 hunks
      - most hunks come from upstream changes between 0.8.0 and this branch, not from the table move
 2. Read update notes 0007 and 0008 with that list in front of you.
@@ -65,11 +65,11 @@ git -C /home/dev/projects/primeshopr status --short && git -C /home/dev/projects
    cat packages/cli/update-notes/0007-render-and-merge-engine.md packages/cli/update-notes/0008-generated-tables.md
    ```
 
-   - [ ] The notes tell an agent enough to resolve a table-file conflict without guessing
+   - [x] The notes tell an agent enough to resolve a table-file conflict without guessing
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -87,7 +87,7 @@ git -C /home/dev/projects/primeshopr status --short && git -C /home/dev/projects
 cd /home/dev/worktrees/saasaloy/issue-365-replace-the-add-update-and-remove-engines-with-one && git log --oneline -1
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-2.1: The Better Auth plugin order is safe  ·  🔴 Critical
 
@@ -107,13 +107,13 @@ cd /home/dev/worktrees/saasaloy/issue-365-replace-the-add-update-and-remove-engi
    jq -r '.name as $m | .entries[]? | select(.table=="auth.plugins") | "\(.order // 1000) \($m) \(.call)"' modules/*/registry-item.json | sort -k1,1n -k2,2
    ```
 
-   - [ ] `audience()` stays first, and no plugin depends on a plugin that now comes after it
+   - [x] `audience()` stays first, and no plugin depends on a plugin that now comes after it
      - hooks that read a session or an organization run after the plugin that sets it
      - the admin auth instance keeps the same guards as before
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -131,13 +131,13 @@ cd /home/dev/worktrees/saasaloy/issue-365-replace-the-add-update-and-remove-engi
    ls docs/adr/0066-* docs/adr/0067-* docs/adr/0068-* packages/cli/update-notes/0007-* packages/cli/update-notes/0008-*
    ```
 
-   - [ ] Each document states the rule the code applies, in plain words
+   - [x] Each document states the rule the code applies, in plain words
      - update note 0007 names the release order the conversion searches (the code tries the lock's release, then each release up to the running CLI, newest first)
      - the new `saasaloy-update` skill tells an agent how to resolve markers and when to run `update --merge <path>`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -217,6 +217,6 @@ pnpm release:smoke
 ## Overall result
 _Tick one when you finish the run, or skip the ticks. Report each failure in the agent session or as a PR comment, and the agent records it here._
 
-- [ ] Pass: every case passed
+- [x] Pass: every case passed
 - [ ] Fail: at least one case failed
 - [ ] Partial: cases were skipped or not reached
