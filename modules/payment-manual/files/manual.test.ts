@@ -140,7 +140,10 @@ function fakeStore(): PaymentStore {
         claimed(id, row.provider, next.transactionIdNormalized)
       ) {
         return Promise.reject(
-          new PaymentError("duplicate_transaction", "UNIQUE constraint failed")
+          new PaymentError(
+            "duplicate_transaction",
+            "duplicate key value violates unique constraint"
+          )
         );
       }
       rows.set(id, next);

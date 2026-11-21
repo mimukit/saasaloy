@@ -412,33 +412,19 @@ function receivingAccountOf(payment: Payment): ReceivingAccount | null {
 }
 
 /**
- * Whether a write broke a unique index. Postgres reports SQLSTATE 23505, and the check
- * also accepts a `UNIQUE constraint failed` message. Drizzle wraps the driver's error in its own, so walk the
- * `cause` chain. The query text Drizzle puts in its own message names the column, so the
- * check reads the driver's error, not that text.
+ * Whether a write broke a unique index: Postgres SQLSTATE 23505. Drizzle wraps the
+ * driver's error in its own, so walk the `cause` chain to the driver's error.
  */
 function isUniqueViolation(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current; depth += 1) {
-    if (typeof current === "object" && current !== null) {
-      const { code, message } = current as {
-        code?: unknown;
-        message?: unknown;
-      };
-      if (code === "23505") {
-        return true;
-      }
-      if (
-        typeof message === "string" &&
-        (message.includes("UNIQUE constraint failed") ||
-          message.includes("duplicate key value violates unique constraint"))
-      ) {
-        return true;
-      }
-      current = (current as { cause?: unknown }).cause;
-    } else {
+    if (typeof current !== "object" || current === null) {
       return false;
     }
+    if ((current as { code?: unknown }).code === "23505") {
+      return true;
+    }
+    current = (current as { cause?: unknown }).cause;
   }
   return false;
 }
