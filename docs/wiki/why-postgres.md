@@ -53,4 +53,4 @@ The loss is real. A deploy now needs a Neon account, or an account at another Po
 
 Saasaloy does not support D1. A project can port its own schema to D1, but it then owns that fork. Every Saasaloy update that touches a table conflicts with it, because each module ships its tables for Postgres only.
 
-_Verified against `main`@`e7396ab8` on 2026-11-21._
+_Verified against `main`@`e6d9b938` on 2026-11-21._

@@ -1,6 +1,6 @@
 # QA Plan: Simplify the code that works around D1 limits
 
-_Generated 2026-11-21 · updated 2026-11-21 · against `9de2a378` (clean; the fix commit changed one descriptor row after the run at `16659d4e`) · covers issue #372, plan 0120: 4 correctness sites, 10 clarity sites, notes and docs_
+_Generated 2026-11-21 · updated 2026-11-21 · against `b4b19ab6` (clean; the fix commit changed one descriptor row after the run at `65da3357`) · covers issue #372, plan 0120: 4 correctness sites, 10 clarity sites, notes and docs · the branch was rebased onto `main` at `4e9d1759`, which adds PR #376 (the database split change); the SHAs here are the rebased ones_
 
 ## Summary
 
@@ -11,7 +11,7 @@ _Generated 2026-11-21 · updated 2026-11-21 · against `9de2a378` (clean; the fi
 
 True for the whole plan. Do this once, before Scenario 1.
 
-- Branch under test: `issue-372-simplify-the-code-that-works-around-d1-limits` at `9de2a378`.
+- Branch under test: `issue-372-simplify-the-code-that-works-around-d1-limits` at `b4b19ab6`.
 - No UI changes. No dev server, credentials or feature flag is necessary.
 - No screenshots. The change has no screen to judge.
 
@@ -134,19 +134,19 @@ git grep -n -E "TRANSACTION_IS_ATOMIC|ROWS_PER_INSERT|sqlite-core|UNIQUE constra
 git diff --quiet origin/main...HEAD -- modules/multitenant/files/db/tenant.ts modules/database/files/src/seed/id.ts modules/database-postgres/files/scripts/lib/seed.ts
 ```
 
-- ✅ C1 · cms `publishEntry` → "keeps no revision and leaves the entry a draft when a later publish write fails" fails on `origin/main` source (`current transaction is aborted`, after the partial write) and passes after `da240b24`.
-- ✅ C2 · subscription `applyEvent` → "keeps no event row when the upsert fails, so the redelivery applies" fails on `origin/main` source and passes after `1ef0690d`. The same test redelivers the event and sees it apply.
-- ✅ C3 · payment `move` → "leaves the status unchanged when the event insert fails" fails on `origin/main` source and passes after `54a1bb5f`.
-- ✅ C4 · auth sign-up → "keeps no user when the sign-up's account insert fails" fails on `origin/main` source and passes after `35fe9878`.
-- ✅ C5 · `payment/files/api/payment-store.vitest.ts` and `subscription/files/api/subscription-store.vitest.ts` exist, with descriptor rows `when: { testing: true }`. At `9de2a378` the payment row also needs `installed: ["payment-console"]`, because the test pays through the console provider (acceptance blocker B1). A fresh project with `payment` and `payment-manual` gets no `apps/api/src/payment-store.test.ts`; one with `payment-console` gets it.
+- ✅ C1 · cms `publishEntry` → "keeps no revision and leaves the entry a draft when a later publish write fails" fails on `origin/main` source (`current transaction is aborted`, after the partial write) and passes after `91d6c9a1`.
+- ✅ C2 · subscription `applyEvent` → "keeps no event row when the upsert fails, so the redelivery applies" fails on `origin/main` source and passes after `7e980c31`. The same test redelivers the event and sees it apply.
+- ✅ C3 · payment `move` → "leaves the status unchanged when the event insert fails" fails on `origin/main` source and passes after `34c7357c`.
+- ✅ C4 · auth sign-up → "keeps no user when the sign-up's account insert fails" fails on `origin/main` source and passes after `45151932`.
+- ✅ C5 · `payment/files/api/payment-store.vitest.ts` and `subscription/files/api/subscription-store.vitest.ts` exist, with descriptor rows `when: { testing: true }`. At `b4b19ab6` the payment row also needs `installed: ["payment-console"]`, because the test pays through the console provider (acceptance blocker B1). A fresh project with `payment` and `payment-manual` gets no `apps/api/src/payment-store.test.ts`; one with `payment-console` gets it.
 - ✅ C6 · the grep over module code, skills and descriptors prints nothing. Over all of `modules` it prints 6 lines, all in the `database-postgres` update note that names the removed constant.
-- ✅ C7 · `adminWrite` always rethrows and has no `unaudited` kind; the audit insert is one statement; the search uses `ilike` (`0785eeda`). The admin route tests pass.
-- ✅ C8 · `setPreferences` runs in one `transaction(db, …)`; the notifications test inserts 21 rows in one statement (`f6359141`).
-- ✅ C9 · `seed/apply.ts` writes one multi-row upsert per step, and `seed/table.ts` has no SQLite branch (`372dfa59`). `pnpm --filter @repo/db db:seed` exits 0 twice on the scaffold, with the same row counts.
-- ✅ C10 · at `16659d4e`: `pnpm test` exits 0 (0 failures in each node pass), `pnpm lint` exits 0, `pnpm typecheck` exits 0. `pnpm scaffold:check` passes: 34 test files, 439 tests, then `pnpm check` green. `pnpm test:modules` gives 1701 passes.
+- ✅ C7 · `adminWrite` always rethrows and has no `unaudited` kind; the audit insert is one statement; the search uses `ilike` (`1590952a`). The admin route tests pass.
+- ✅ C8 · `setPreferences` runs in one `transaction(db, …)`; the notifications test inserts 21 rows in one statement (`9266af4b`).
+- ✅ C9 · `seed/apply.ts` writes one multi-row upsert per step, and `seed/table.ts` has no SQLite branch (`818d019b`). `pnpm --filter @repo/db db:seed` exits 0 twice on the scaffold, with the same row counts.
+- ✅ C10 · at `65da3357`: `pnpm test` exits 0 (0 failures in each node pass), `pnpm lint` exits 0, `pnpm typecheck` exits 0. `pnpm scaffold:check` passes: 34 test files, 439 tests, then `pnpm check` green. `pnpm test:modules` gives 1701 passes.
 - ✅ C10 · scaffold api suite → 20 files, 188 tests pass (baseline at `origin/main`: 18 files, 182 tests).
-- ✅ C10 · at `9de2a378` (the B1 fix): `pnpm test` exits 0 with 0 failures, `pnpm lint` exits 0, `pnpm docs:check` exits 0. The other results above ran at `16659d4e`; the fix changes only the payment descriptor row, which none of them reads except `scaffold:check` and C12, both of which install `payment-console`.
-- ✅ C11 · `pnpm docs:check` exits 0 and `pnpm docs:stale` exits 0. The update notes, the five module skills, `docs/wiki/why-postgres.md` section 2 and the changelog are in `16659d4e`.
+- ✅ C10 · at `b4b19ab6` (the B1 fix): `pnpm test` exits 0 with 0 failures, `pnpm lint` exits 0, `pnpm docs:check` exits 0. The other results above ran at `65da3357`; the fix changes only the payment descriptor row, which none of them reads except `scaffold:check` and C12, both of which install `payment-console`.
+- ✅ C11 · `pnpm docs:check` exits 0 and `pnpm docs:stale` exits 0. The update notes, the five module skills, `docs/wiki/why-postgres.md` section 2 and the changelog are in `65da3357`.
 - ✅ C12 · `pnpm release:smoke --upgrade-only` → "upgrade from 0.10.0 lists all 1 expected update notes", `database-postgres/0001-transaction-is-atomic` listed.
 - ✅ C12 · a project made with `saasaloy@0.10.0` with `admin`, `cms`, `payment`, `payment-console`, `subscription` and `subscription-console`, then `saasaloy update --yes` with this branch's CLI → 130 files updated, 0 conflict markers, no `TRANSACTION_IS_ATOMIC` left.
 - ✅ C13 · the kept files `tenant.ts`, `seed/id.ts` and `scripts/lib/seed.ts` are unchanged.
