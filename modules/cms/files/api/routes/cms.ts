@@ -1,5 +1,5 @@
 import { declare, zValidator } from "../contract";
-import { requireAdmin, withAuthScope } from "@repo/auth/server";
+import { adminGate } from "@repo/auth/server";
 import {
   excerptOf,
   cms as registry,
@@ -36,6 +36,7 @@ import {
 import { errorBody } from "@repo/validators/common";
 import { Hono } from "hono";
 import { apiEnv } from "../env";
+import { adminWrite } from "../lib/admin-write";
 import { publicImageUrl } from "../lib/file-uploads";
 import type { AuthDbBindings } from "@repo/auth/server";
 import type {
@@ -56,13 +57,12 @@ import type { FileUploadsEnv } from "../lib/file-uploads";
 // The CMS api: the admin routes behind the editor in `apps/admin`, and the public routes
 // `apps/web` reads the blog through.
 //
-//   /cms/admin/:collection/entries...   admin only (`requireAdmin`), the working drafts
-//   /cms/admin/rerender                 admin only, rebuilds every live revision's html
+//   /admin/cms/:collection/entries...   admin only (`adminGate`), the working drafts
+//   /admin/cms/rerender                 admin only, rebuilds every live revision's html
 //   /cms/:collection/entries...         public, published entries only
 //
 // Route module contract: export a Hono sub-app under a NAMED export matching the file,
-// built as ONE chained expression. Splitting the chain into statements empties the routes
-// out of `AppType`. This module's `api.routes` row mounts it at `/cms`.
+// Keep each sub-app in one chained expression so AppType retains its routes.
 //
 // Three rules run through the file:
 //
@@ -83,7 +83,7 @@ import type { FileUploadsEnv } from "../lib/file-uploads";
 //
 // No CORS and no `onError`: `modules/api`'s spine applies the credentialed `CORS_ORIGINS`
 // allowlist before this sub-app is mounted, and an unset `onError` inherits api's, which
-// renders the `HTTPException` `requireAdmin` throws as the shared error envelope.
+// renders the `HTTPException` `adminGate` throws as the shared error envelope.
 
 type Bindings = AuthDbBindings & FileUploadsEnv;
 type CmsContext = Context<{ Bindings: Bindings }>;
@@ -265,15 +265,18 @@ async function readBack(c: CmsContext, db: Db, collection: string, id: string) {
 async function repositoryFailure(
   c: CmsContext,
   error: unknown,
-  collection: string,
-  id?: string
+  conflict?: { db: Db; collection: string; id: string }
 ): Promise<Response> {
   if (!(error instanceof CmsRepositoryError)) {
     throw error;
   }
   const body = errorBody(error.code, error.message);
-  if (error.code === "conflict" && id !== undefined) {
-    const current = await withDb(c, (db) => getEntry(db, collection, id));
+  if (error.code === "conflict" && conflict) {
+    const current = await getEntry(
+      conflict.db,
+      conflict.collection,
+      conflict.id
+    );
     if (current) {
       return c.json(
         {
@@ -352,7 +355,7 @@ function publicFields(
   };
 }
 
-export const cms = new Hono<{ Bindings: Bindings }>()
+export const adminCms = new Hono<{ Bindings: Bindings }>()
   // --- Admin -------------------------------------------------------------------------
   //
   // Rebuild the html of every live revision inside the Worker, so production re-renders
@@ -360,34 +363,37 @@ export const cms = new Hono<{ Bindings: Bindings }>()
   // A revision whose collection is no longer registered, or whose body no longer renders,
   // keeps its html and is counted in `skipped`.
   .post(
-    "/admin/rerender",
+    "/rerender",
+    adminGate,
     declare({
       name: "cms_admin_rerender",
       description: "Rebuild the html of every live revision.",
       agent: { callable: false, reason: "Admin routes are never callable." },
     }),
     (c) =>
-      withAuthScope(c, async () => {
-        await requireAdmin(c);
+      adminWrite(c, async ({ db, audit }) => {
         const imageUrl = imageUrlFor(c);
         let skipped = 0;
-        const rerendered = await withDb(c, (db) =>
-          rerenderLiveRevisions(db, (snapshot) => {
-            const collection = collectionFor(snapshot.collection);
-            if (!collection) {
-              skipped += 1;
-              return null;
-            }
-            try {
-              return renderCollectionHtml(collection, snapshot.data, {
-                imageUrl,
-              });
-            } catch {
-              skipped += 1;
-              return null;
-            }
-          })
-        );
+        const rerendered = await rerenderLiveRevisions(db, (snapshot) => {
+          const collection = collectionFor(snapshot.collection);
+          if (!collection) {
+            skipped += 1;
+            return null;
+          }
+          try {
+            return renderCollectionHtml(collection, snapshot.data, {
+              imageUrl,
+            });
+          } catch {
+            skipped += 1;
+            return null;
+          }
+        });
+        audit({
+          action: "cms.rerender",
+          target: { id: "live", label: "Live revisions" },
+          after: { rerendered, skipped },
+        });
         return c.json({ rerendered, skipped }, 200);
       })
   )
@@ -395,44 +401,44 @@ export const cms = new Hono<{ Bindings: Bindings }>()
   // The list, most recently updated first. `status` is the filter chip: `current` (draft
   // and published, the default), `draft`, `published`, `archived` or `all`.
   .get(
-    "/admin/:collection/entries",
+    "/:collection/entries",
+    adminGate,
     declare({
       name: "cms_admin_entries_list",
       description: "List a collection's entries with their drafts.",
       agent: { callable: false, reason: "Admin routes are never callable." },
     }),
     validateList,
-    (c) =>
-      withAuthScope(c, async () => {
-        await requireAdmin(c);
-        const name = c.req.param("collection");
-        if (!collectionFor(name)) {
-          return unknownCollection(c, name);
-        }
-        const { page, status } = c.req.valid("query");
-        const result = await withDb(c, (db) =>
-          listEntries(db, name, {
-            filter: status,
-            page,
-            pageSize: config.cms.pageSize,
-          })
-        );
-        return c.json(
-          {
-            counts: result.counts,
-            entries: result.entries.map(toAdminSummary),
-            page: result.page,
-            pageCount: result.pageCount,
-            total: result.total,
-          },
-          200
-        );
-      })
+    async (c) => {
+      const name = c.req.param("collection");
+      if (!collectionFor(name)) {
+        return unknownCollection(c, name);
+      }
+      const { page, status } = c.req.valid("query");
+      const result = await withDb(c, (db) =>
+        listEntries(db, name, {
+          filter: status,
+          page,
+          pageSize: config.cms.pageSize,
+        })
+      );
+      return c.json(
+        {
+          counts: result.counts,
+          entries: result.entries.map(toAdminSummary),
+          page: result.page,
+          pageCount: result.pageCount,
+          total: result.total,
+        },
+        200
+      );
+    }
   )
 
   // Create a draft. The caller becomes its author and its last editor.
   .post(
-    "/admin/:collection/entries",
+    "/:collection/entries",
+    adminGate,
     declare({
       name: "cms_admin_entry_create",
       description: "Create a draft entry.",
@@ -440,8 +446,7 @@ export const cms = new Hono<{ Bindings: Bindings }>()
     }),
     validateCreate,
     (c) =>
-      withAuthScope(c, async () => {
-        const session = await requireAdmin(c);
+      adminWrite(c, async ({ db, audit, actor }) => {
         const name = c.req.param("collection");
         const collection = collectionFor(name);
         if (!collection) {
@@ -453,51 +458,59 @@ export const cms = new Hono<{ Bindings: Bindings }>()
           return checked.response;
         }
         try {
-          const entry = await withDb(c, async (db) => {
-            const row = await createEntry(db, {
-              authorId: session.user.id,
+          const row = await createEntry(db, {
+            authorId: actor.id,
+            collection: name,
+            data: checked.data,
+            slug: input.slug,
+            title: input.title,
+          });
+          const entry = await readBack(c, db, name, row.id);
+          audit({
+            action: "cms.entry.create",
+            target: { id: entry.id, label: entry.title },
+            after: {
               collection: name,
-              data: checked.data,
-              slug: input.slug,
-              title: input.title,
-            });
-            return readBack(c, db, name, row.id);
+              slug: entry.slug,
+              status: entry.status,
+              version: entry.version,
+            },
           });
           return c.json({ entry }, 201);
         } catch (error) {
-          return repositoryFailure(c, error, name);
+          return repositoryFailure(c, error);
         }
       })
   )
 
   // One entry with its working draft's `data`, for the editor.
   .get(
-    "/admin/:collection/entries/:id",
+    "/:collection/entries/:id",
+    adminGate,
     declare({
       name: "cms_admin_entry_read",
       description: "Read one entry's working draft.",
       agent: { callable: false, reason: "Admin routes are never callable." },
     }),
-    (c) =>
-      withAuthScope(c, async () => {
-        await requireAdmin(c);
-        const name = c.req.param("collection");
-        if (!collectionFor(name)) {
-          return unknownCollection(c, name);
-        }
-        const entry = await withDb(c, (db) =>
-          getEntry(db, name, c.req.param("id"))
-        );
-        if (!entry) {
-          return c.json(errorBody("not_found", "No such entry."), 404);
-        }
-        return c.json({ entry: toAdminEntry(c, entry) }, 200);
-      })
+    async (c) => {
+      const name = c.req.param("collection");
+      if (!collectionFor(name)) {
+        return unknownCollection(c, name);
+      }
+      const entry = await withDb(c, (db) =>
+        getEntry(db, name, c.req.param("id"))
+      );
+      if (!entry) {
+        return c.json(errorBody("not_found", "No such entry."), 404);
+      }
+      return c.json({ entry: toAdminEntry(c, entry) }, 200);
+    }
   )
 
   // Save the working draft. The live post does not change. A stale `version` is a 409.
   .put(
-    "/admin/:collection/entries/:id",
+    "/:collection/entries/:id",
+    adminGate,
     declare({
       name: "cms_admin_entry_save",
       description: "Save an entry's working draft.",
@@ -505,8 +518,7 @@ export const cms = new Hono<{ Bindings: Bindings }>()
     }),
     validateDraft,
     (c) =>
-      withAuthScope(c, async () => {
-        const session = await requireAdmin(c);
+      adminWrite(c, async ({ db, audit, actor }) => {
         const name = c.req.param("collection");
         const id = c.req.param("id");
         const collection = collectionFor(name);
@@ -519,21 +531,29 @@ export const cms = new Hono<{ Bindings: Bindings }>()
           return checked.response;
         }
         try {
-          const entry = await withDb(c, async (db) => {
-            await saveDraft(db, {
+          await saveDraft(db, {
+            collection: name,
+            data: checked.data,
+            editorId: actor.id,
+            id,
+            slug: input.slug,
+            title: input.title,
+            version: input.version,
+          });
+          const entry = await readBack(c, db, name, id);
+          audit({
+            action: "cms.entry.save",
+            target: { id: entry.id, label: entry.title },
+            after: {
               collection: name,
-              data: checked.data,
-              editorId: session.user.id,
-              id,
-              slug: input.slug,
-              title: input.title,
-              version: input.version,
-            });
-            return readBack(c, db, name, id);
+              slug: entry.slug,
+              status: entry.status,
+              version: entry.version,
+            },
           });
           return c.json({ entry }, 200);
         } catch (error) {
-          return repositoryFailure(c, error, name, id);
+          return repositoryFailure(c, error, { db, collection: name, id });
         }
       })
   )
@@ -541,25 +561,35 @@ export const cms = new Hono<{ Bindings: Bindings }>()
   // Hard delete. Only a draft or an archived entry; a published one is a 409
   // `invalid_state`, so a live post is unpublished on purpose before it can go.
   .delete(
-    "/admin/:collection/entries/:id",
+    "/:collection/entries/:id",
+    adminGate,
     declare({
       name: "cms_admin_entry_delete",
       description: "Delete an entry.",
       agent: { callable: false, reason: "Admin routes are never callable." },
     }),
     (c) =>
-      withAuthScope(c, async () => {
-        await requireAdmin(c);
+      adminWrite(c, async ({ db, audit }) => {
         const name = c.req.param("collection");
         const id = c.req.param("id");
         if (!collectionFor(name)) {
           return unknownCollection(c, name);
         }
         try {
-          await withDb(c, (db) => deleteEntry(db, { collection: name, id }));
+          const previous = await getEntry(db, name, id);
+          await deleteEntry(db, { collection: name, id });
+          audit({
+            action: "cms.entry.delete",
+            target: { id, label: previous?.title ?? id },
+            before: {
+              collection: name,
+              slug: previous?.slug,
+              status: previous?.status,
+            },
+          });
           return c.body(null, 204);
         } catch (error) {
-          return repositoryFailure(c, error, name);
+          return repositoryFailure(c, error);
         }
       })
   )
@@ -567,7 +597,8 @@ export const cms = new Hono<{ Bindings: Bindings }>()
   // Publish the working draft: a new revision with its rendered html becomes live. The
   // draft is checked again first, because a collection's schema can change after a save.
   .post(
-    "/admin/:collection/entries/:id/publish",
+    "/:collection/entries/:id/publish",
+    adminGate,
     declare({
       name: "cms_admin_entry_publish",
       description: "Publish an entry's draft.",
@@ -575,8 +606,7 @@ export const cms = new Hono<{ Bindings: Bindings }>()
     }),
     validateVersion,
     (c) =>
-      withAuthScope(c, async () => {
-        const session = await requireAdmin(c);
+      adminWrite(c, async ({ db, audit, actor }) => {
         const name = c.req.param("collection");
         const id = c.req.param("id");
         const collection = collectionFor(name);
@@ -585,7 +615,7 @@ export const cms = new Hono<{ Bindings: Bindings }>()
         }
         const { version } = c.req.valid("json");
         try {
-          const current = await withDb(c, (db) => getEntry(db, name, id));
+          const current = await getEntry(db, name, id);
           if (!current) {
             return c.json(errorBody("not_found", "No such entry."), 404);
           }
@@ -600,35 +630,45 @@ export const cms = new Hono<{ Bindings: Bindings }>()
             return checked.response;
           }
           const render = renderFor(c, collection);
-          const result = await withDb(c, async (db) => {
-            const published = await publishEntry(db, {
-              authorId: session.user.id,
+          const published = await publishEntry(db, {
+            authorId: actor.id,
+            collection: name,
+            id,
+            render: (snapshot) => render(snapshot.data),
+            version,
+          });
+          const result = {
+            entry: await readBack(c, db, name, id),
+            revision: {
+              createdAt: published.revision.createdAt.toISOString(),
+              html: published.revision.html,
+              id: published.revision.id,
+              slug: published.revision.slug,
+              title: published.revision.title,
+            },
+          };
+          const { entry } = result;
+          audit({
+            action: "cms.entry.publish",
+            target: { id: entry.id, label: entry.title },
+            after: {
               collection: name,
-              id,
-              render: (snapshot) => render(snapshot.data),
-              version,
-            });
-            return {
-              entry: await readBack(c, db, name, id),
-              revision: {
-                createdAt: published.revision.createdAt.toISOString(),
-                html: published.revision.html,
-                id: published.revision.id,
-                slug: published.revision.slug,
-                title: published.revision.title,
-              },
-            };
+              slug: entry.slug,
+              status: entry.status,
+              version: entry.version,
+            },
           });
           return c.json(result, 200);
         } catch (error) {
-          return repositoryFailure(c, error, name, id);
+          return repositoryFailure(c, error, { db, collection: name, id });
         }
       })
   )
 
   // Take a published entry offline. It becomes a draft and keeps its revisions.
   .post(
-    "/admin/:collection/entries/:id/unpublish",
+    "/:collection/entries/:id/unpublish",
+    adminGate,
     declare({
       name: "cms_admin_entry_unpublish",
       description: "Take an entry off the public site.",
@@ -636,8 +676,7 @@ export const cms = new Hono<{ Bindings: Bindings }>()
     }),
     validateVersion,
     (c) =>
-      withAuthScope(c, async () => {
-        const session = await requireAdmin(c);
+      adminWrite(c, async ({ db, audit, actor }) => {
         const name = c.req.param("collection");
         const id = c.req.param("id");
         if (!collectionFor(name)) {
@@ -645,25 +684,34 @@ export const cms = new Hono<{ Bindings: Bindings }>()
         }
         const { version } = c.req.valid("json");
         try {
-          const entry = await withDb(c, async (db) => {
-            await unpublishEntry(db, {
+          await unpublishEntry(db, {
+            collection: name,
+            editorId: actor.id,
+            id,
+            version,
+          });
+          const entry = await readBack(c, db, name, id);
+          audit({
+            action: "cms.entry.unpublish",
+            target: { id: entry.id, label: entry.title },
+            after: {
               collection: name,
-              editorId: session.user.id,
-              id,
-              version,
-            });
-            return readBack(c, db, name, id);
+              slug: entry.slug,
+              status: entry.status,
+              version: entry.version,
+            },
           });
           return c.json({ entry }, 200);
         } catch (error) {
-          return repositoryFailure(c, error, name, id);
+          return repositoryFailure(c, error, { db, collection: name, id });
         }
       })
   )
 
   // Archive: offline, and out of the default list. Publishing it again puts it back live.
   .post(
-    "/admin/:collection/entries/:id/archive",
+    "/:collection/entries/:id/archive",
+    adminGate,
     declare({
       name: "cms_admin_entry_archive",
       description: "Archive an entry.",
@@ -671,8 +719,7 @@ export const cms = new Hono<{ Bindings: Bindings }>()
     }),
     validateVersion,
     (c) =>
-      withAuthScope(c, async () => {
-        const session = await requireAdmin(c);
+      adminWrite(c, async ({ db, audit, actor }) => {
         const name = c.req.param("collection");
         const id = c.req.param("id");
         if (!collectionFor(name)) {
@@ -680,60 +727,66 @@ export const cms = new Hono<{ Bindings: Bindings }>()
         }
         const { version } = c.req.valid("json");
         try {
-          const entry = await withDb(c, async (db) => {
-            await archiveEntry(db, {
+          await archiveEntry(db, {
+            collection: name,
+            editorId: actor.id,
+            id,
+            version,
+          });
+          const entry = await readBack(c, db, name, id);
+          audit({
+            action: "cms.entry.archive",
+            target: { id: entry.id, label: entry.title },
+            after: {
               collection: name,
-              editorId: session.user.id,
-              id,
-              version,
-            });
-            return readBack(c, db, name, id);
+              slug: entry.slug,
+              status: entry.status,
+              version: entry.version,
+            },
           });
           return c.json({ entry }, 200);
         } catch (error) {
-          return repositoryFailure(c, error, name, id);
+          return repositoryFailure(c, error, { db, collection: name, id });
         }
       })
   )
 
   // The revisions drawer: newest first, the live one marked.
   .get(
-    "/admin/:collection/entries/:id/revisions",
+    "/:collection/entries/:id/revisions",
+    adminGate,
     declare({
       name: "cms_admin_revisions_list",
       description: "List an entry's revisions.",
       agent: { callable: false, reason: "Admin routes are never callable." },
     }),
-    (c) =>
-      withAuthScope(c, async () => {
-        await requireAdmin(c);
-        const name = c.req.param("collection");
-        const id = c.req.param("id");
-        if (!collectionFor(name)) {
-          return unknownCollection(c, name);
-        }
-        try {
-          const revisions = await withDb(c, (db) =>
-            listRevisions(db, name, id)
-          );
-          return c.json(
-            {
-              revisions: revisions.map((revision) => ({
-                ...revision,
-                createdAt: revision.createdAt.toISOString(),
-              })),
-            },
-            200
-          );
-        } catch (error) {
-          return repositoryFailure(c, error, name);
-        }
-      })
+    async (c) => {
+      const name = c.req.param("collection");
+      const id = c.req.param("id");
+      if (!collectionFor(name)) {
+        return unknownCollection(c, name);
+      }
+      try {
+        const revisions = await withDb(c, (db) => listRevisions(db, name, id));
+        return c.json(
+          {
+            revisions: revisions.map((revision) => ({
+              ...revision,
+              createdAt: revision.createdAt.toISOString(),
+            })),
+          },
+          200
+        );
+      } catch (error) {
+        return repositoryFailure(c, error);
+      }
+    }
   )
 
   // Copy a revision into the working draft. The live post changes on the next publish.
   .post(
-    "/admin/:collection/entries/:id/revisions/:revisionId/restore",
+    "/:collection/entries/:id/revisions/:revisionId/restore",
+    adminGate,
     declare({
       name: "cms_admin_revision_restore",
       description: "Copy a revision into the working draft.",
@@ -741,8 +794,7 @@ export const cms = new Hono<{ Bindings: Bindings }>()
     }),
     validateVersion,
     (c) =>
-      withAuthScope(c, async () => {
-        const session = await requireAdmin(c);
+      adminWrite(c, async ({ db, audit, actor }) => {
         const name = c.req.param("collection");
         const id = c.req.param("id");
         if (!collectionFor(name)) {
@@ -750,23 +802,32 @@ export const cms = new Hono<{ Bindings: Bindings }>()
         }
         const { version } = c.req.valid("json");
         try {
-          const entry = await withDb(c, async (db) => {
-            await restoreRevision(db, {
+          await restoreRevision(db, {
+            collection: name,
+            editorId: actor.id,
+            id,
+            revisionId: c.req.param("revisionId"),
+            version,
+          });
+          const entry = await readBack(c, db, name, id);
+          audit({
+            action: "cms.revision.restore",
+            target: { id: entry.id, label: entry.title },
+            after: {
               collection: name,
-              editorId: session.user.id,
-              id,
-              revisionId: c.req.param("revisionId"),
-              version,
-            });
-            return readBack(c, db, name, id);
+              slug: entry.slug,
+              status: entry.status,
+              version: entry.version,
+            },
           });
           return c.json({ entry }, 200);
         } catch (error) {
-          return repositoryFailure(c, error, name, id);
+          return repositoryFailure(c, error, { db, collection: name, id });
         }
       })
-  )
+  );
 
+export const cms = new Hono<{ Bindings: Bindings }>()
   // --- Public ------------------------------------------------------------------------
   //
   // No session. Published entries only, newest `published_at` first, `config.cms.pageSize`
