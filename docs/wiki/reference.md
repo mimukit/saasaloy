@@ -90,7 +90,7 @@ A bare module name reads the default registry at the tag `v<version>` of the CLI
 
 With no module named, `add` shows a multi-select over the source, listing only modules this project has not installed. With no terminal it exits 2 and prints the usage line. Unknown flags are rejected before any work happens, with exit 2.
 
-Name several modules to add them in one run: `saasaloy add admin teams --with database-d1 --yes`. `add` resolves every name into one graph, prints one plan, asks once, and runs every refusal (`requires.saasaloy`, `requiresOneOf`, `conflictsWith` and file collisions) on the whole set before it writes the first file. Prerequisites install first, and argv order decides between modules that do not depend on each other. A repeated name counts once. Every name reads from one registry: two coordinates that differ in owner, repo or ref exit 2 and name the two, and an `owner/repo` with no module cannot be mixed with names. When the registry has none of several names, one message lists them all. A named module that is already installed is skipped with a note, and the rest install. A message about a prerequisite says which named module pulled it in, `lefty (required by needs-lefty)`.
+Name several modules to add them in one run: `saasaloy add admin teams --with database-postgres --yes`. `add` resolves every name into one graph, prints one plan, asks once, and runs every refusal (`requires.saasaloy`, `requiresOneOf`, `conflictsWith` and file collisions) on the whole set before it writes the first file. Prerequisites install first, and argv order decides between modules that do not depend on each other. A repeated name counts once. Every name reads from one registry: two coordinates that differ in owner, repo or ref exit 2 and name the two, and an `owner/repo` with no module cannot be mixed with names. When the registry has none of several names, one message lists them all. A named module that is already installed is skipped with a note, and the rest install. A message about a prerequisite says which named module pulled it in, `lefty (required by needs-lefty)`.
 
 | Flag | Effect |
 |---|---|
@@ -99,7 +99,7 @@ Name several modules to add them in one run: `saasaloy add admin teams --with da
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
 | `--force` | merge or delete a file even with uncommitted changes, overwrite an edited `generated` file, and write a named module's tracked files that the project deleted again. |
 | `--abort` | put back the files the last `add`, `remove`, `update` or `testing` run changed, and stop. |
-| `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add waitlist --with database-d1 --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
+| `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add waitlist --with database-postgres --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
 | `--json` | with `--dry-run`, print the plan as one JSON document on stdout (see [JSON output](#json-output)). It never opens the picker or the driver prompt: name the module, and pass `--with` for an unmet `requiresOneOf`. |
 
 The `--dry-run --json` document carries `requested` (the named modules in argv order, a list also for one name), `prerequisites`, `install` (the install order), `alreadyInstalled`, `files` (each with `target`, `action`, `class` and `module`; `action` is the result kind, such as `new`, `updated`, `clean`, `conflict` or `deleted`), `onceChanged`, `pendingMerges` and `warnings`. Every file the text plan shows is in it. A module whose graph is already installed prints the same keys with empty lists.
@@ -121,34 +121,25 @@ and `--force` does not bypass it. `add` never uninstalls anything to resolve a c
 module installed before its lock entry existed can't be checked this way; `add` says so and
 proceeds.
 
-Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that rendered it. A module may write over a file owned by a module it declares in `dependsOn`, which is how `database-d1` puts its own `packages/db/tsconfig.json` over the one `database` scaffolds, and over nothing else. Two modules in one set that both write a path with no `dependsOn` edge either way are refused before anything is written, with exit 2 and every contested path named. Swapping `database-d1` for `database-postgres` is `saasaloy remove database-d1` then `saasaloy add database-postgres`.
+Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that rendered it. A module may write over a file owned by a module it declares in `dependsOn`, which is how `database-postgres` puts its own `packages/db/tsconfig.json` over the one `database` scaffolds, and over nothing else. Two modules in one set that both write a path with no `dependsOn` edge either way are refused before anything is written, with exit 2 and every contested path named. Swapping `api-keys-user` for `api-keys-organization` is `saasaloy remove api-keys-user` then `saasaloy add api-keys-organization`.
 
 A descriptor may also declare `requiresOneOf`, naming modules exactly one of which has to
 be present. `add` counts an option as present when it is already installed or arrives in
 the same resolved graph. When none is, an interactive run offers the list as a picker and
 adds what you choose to the plan; `--yes` or a run with no terminal exits 2 and names the
-options instead of choosing for you, with the flag that answers it: "Re-run as `saasaloy add waitlist --with database-d1`, or pick another from that list." `--with` picks on the command line. `database` declares it, so the core can never land on
+options instead of choosing for you, with the flag that answers it: "Re-run as `saasaloy add waitlist --with database-postgres`, or pick another from that list." `--with` picks on the command line. `database` declares it, so the core can never land on
 a project with no driver behind its `@repo/db/client` export.
 
-A file entry — in `files[]` or in a scaffold's `files[]` — may declare `onlyWith`, naming
-one module. The render writes that file only when the named module is in the resolved set: this run's graph plus the lock's `requested` list. Two entries may name the
-same `target` under disjoint conditions, which is how a module ships one file per database
-dialect and lets the installed driver pick. The render reads `onlyWith` as a `when.installed` gate, so every command sees the variant the project actually holds. When a target's entries are all conditional and none matches, `add` exits 2 and
-names the target and every candidate rather than leaving the file out.
-
-`database-d1` and `database-postgres` are the pair both fields point at today. They are
-**driver modules**, two implementations of the same capability's connection layer, and a
-project holds exactly one: `requiresOneOf` on the core stops it at zero, `conflictsWith` on
-each driver stops it at two. The `database` core carries the tables, the schema barrel and
-`db:generate`; the driver carries the client, the dialect and the migrate commands. Switch
-by removing one driver and adding the other, which moves no data
-([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)).
-
-`auth` and `waitlist` install under either driver. Each ships its table declarations twice,
-once against `sqlite-core` and once against `pg-core`, and the descriptor's `onlyWith`
-condition installs the variant matching the driver already in the project; `--dry-run`
-prints which source it chose. Switching driver later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
-and [ADR 0029](../adr/0029-adr-auth-holds-a-request-scoped-db-client-2026-08-31.md).
+`api-keys-user` and `api-keys-organization` use `requiresOneOf` on the `api-keys` core and
+`conflictsWith` on each other. They are **driver modules**, two implementations that write the
+same paths, and a project holds exactly one: `requiresOneOf` on the core stops it at zero,
+`conflictsWith` on each driver stops it at two
+([ADR 0055](../adr/0055-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)).
+`database` names one driver, `database-postgres`, in `requiresOneOf`. The `database` core
+carries the tables, the schema barrel and `db:generate`; the driver carries the client and the
+migrate commands ([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)). Postgres is
+the only SQL dialect, so every module ships one schema file
+([ADR 0065](../adr/0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md)).
 
 An entry in `files[]`, a scaffold's `files[]` or `patches` may also declare `when`, which decides whether it ships at all. `{ "testing": true }` ships it only while the project's testing mode is `tests-after` or `tdd`, and every test file a module ships carries it. `{ "installed": ["e2e"] }` ships it only while every named module is installed, which is how a feature module ships its Playwright journey spec beside `e2e`. Both keys together mean both. A target whose every entry `when` drops is skipped rather than refused. The render writes every entry whose `when` holds on each run, so an entry whose condition turns true later arrives with the next `add`, `update` or `testing` run. When a condition turns false, an unedited file is deleted and an edited one stays, untracked; `testing off` is the exception and deletes nothing.
 
@@ -294,7 +285,7 @@ The base's `seedFiles` and `ownedFiles` in `_saasaloy-base.json` and a module en
 
 ### The base of a merge
 
-The base is the render of the old lock, from the payload at the old ref, accepted only when its sha256 equals the hash the manifest recorded. The manifest hash is always the sha256 of the raw render, before Prettier, never the bytes on disk. When the old lock's render does not match, the run renders the release the record names in its `version`, a side rendered with another database driver included. With no match, the merge writes two-way markers ([ADR 0068](../adr/0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)).
+The base is the render of the old lock, from the payload at the old ref, accepted only when its sha256 equals the hash the manifest recorded. The manifest hash is always the sha256 of the raw render, before Prettier, never the bytes on disk. When the old lock's render does not match, the run renders the release the record names in its `version`. A descriptor read at an older release loads with a retired key translated: `onlyWith: X` reads as `when.installed: [X]`, so a release with twin files renders the twin of the installed driver. With no match, the merge writes two-way markers ([ADR 0068](../adr/0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)).
 
 The payload of each ref lives in a cache for each user: `$XDG_CACHE_HOME/saasaloy/payload/<source>@<ref>/`, else `~/.cache/saasaloy/payload/<source>@<ref>/`. A fetch fills it, and a later run reads it. A run that needs a merge, with a cold cache and no network, refuses with exit 2. The base template at the running CLI's release is the one bundled in the CLI.
 
@@ -485,6 +476,7 @@ interface. Pick one before you send anything.
 | `kv-cloudflare` | no API token and no secret. The `kv_namespaces` and `ratelimits` entries in `apps/api/wrangler.jsonc` are the credential, and it declares no `envVars`. Three platform limits apply and none is the module's to fix: KV is eventually consistent, with a write visible at once in its own location and up to 60 seconds later everywhere else; the TTL floor is 60 seconds, and a shorter one is refused rather than rounded up; the rate limiter counts per Cloudflare location, so a `limit` of 10 is 10 per colo. |
 | `storage-cloudflare` | the `BUCKET` binding alone for every read and write. Presigned URLs need more: an R2 API token with Object Read & Write, giving `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET_NAME`. All four are optional, and with any one missing the provider reports that it cannot sign and the core hands back its own proxy URL instead, so every byte streams through the Worker. `R2_BUCKET_NAME` must name the same bucket the binding points at. |
 | `subscription-stripe` | a Stripe account. `STRIPE_SECRET_KEY` (`sk_test_…` in development, `sk_live_…` in production) is required once `SUBSCRIPTION_PROVIDER=stripe`; the client is built on first use, so a project on `SUBSCRIPTION_PROVIDER=console` runs the whole capability with it unset. `STRIPE_WEBHOOK_SECRET` is the signing secret of the endpoint you register at `https://dashboard.stripe.com/webhooks` pointing at `https://<your-api>/auth/stripe/webhook`; every delivery is verified against it, so an unsigned POST is refused before any handler runs. |
+| `database-postgres` | a Postgres database for production. [Neon's free tier](https://neon.com/pricing) gives each project 1 GB and 100 compute hours a month with no credit card; any Postgres host works. Local development needs none: `db:setup` starts a Docker container. A `HYPERDRIVE` binding is an opt-in. Hyperdrive is on the Workers Free plan, and Hyperdrive Free fails queries past 100,000 a day ([Hyperdrive pricing](https://developers.cloudflare.com/hyperdrive/platform/pricing/), read 2026-11-20). |
 | `sms` | nothing for `sms-console`, which declares no `envVars`. `sms-khudebarta` needs a [Khudebarta](https://khudebarta.com/) account: `KHUDEBARTA_API_KEY` and `KHUDEBARTA_SECRET_KEY` are required, and `KHUDEBARTA_API_URL` optionally overrides the gateway URL. It sends to Bangladeshi (`+880`) numbers only and requires a sender, so `SMS_FROM` must name the sender id registered with Khudebarta. `SMS_FROM` on the core is otherwise optional: a provider routing through a pool or a messaging service assigns the sender itself, and a provider that requires one rejects a send with `invalid_message` when neither `SMS_FROM` nor the message carries a `from`. |
 
 ## Project files
@@ -520,4 +512,4 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 
 **A cold cache needs the network.** A run that must merge a file reads the payload of the old release. With no cache entry and no network it refuses with exit 2.
 
-_Verified against `main`@`b86486c3` on 2026-11-21._
+_Verified against `main`@`33bc729b` on 2026-11-21._

@@ -11,12 +11,8 @@
 // `pnpm verify:e2e`, when the module, the base template or Playwright moves. CI runs it in
 // `.github/workflows/e2e.yml` on a path filter.
 //
-// `--driver=d1` (the default) or `--driver=postgres` picks the database. Both are verified
-// on purpose: the driver split is this repo's load-bearing claim, and an e2e capability that
-// works under one driver proves the opposite of what it exists to prove. `db:setup` and
-// `db:seed` hide the difference, so this script carries no second code path, only a
-// different module name. Locally the postgres driver starts its own container through
-// `compose.yaml`, so it needs a Docker daemon. To use a server you already run, set
+// The database is Postgres, the only one Saasaloy supports. Locally `db:setup` starts the
+// project's own container through `compose.yaml`, so it needs a Docker daemon. To use a server you already run, set
 // `E2E_DATABASE_SERVER` to a connection string with CREATEDB rights and
 // `E2E_DB_SETUP_ARGS=--server`; CI does that with its service container.
 //
@@ -35,14 +31,18 @@ const root = resolve(import.meta.dirname, "..");
 const playground = join(root, ".dev/playground");
 const report = join(playground, "packages/e2e/playwright-report/index.html");
 
-/** The modules a full run needs: every shipped flow's tag, plus the suite itself. */
-export const MODULES = ["auth", "admin", "waitlist", "e2e"] as const;
-
-export const DRIVERS = {
-  d1: "database-d1",
-  postgres: "database-postgres",
-} as const;
-export type Driver = keyof typeof DRIVERS;
+/**
+ * The modules a full run needs, in order: the database driver first, so `database`
+ * resolves to it rather than stopping to ask, then every shipped flow's tag, plus the
+ * suite itself.
+ */
+export const MODULES = [
+  "database-postgres",
+  "auth",
+  "admin",
+  "waitlist",
+  "e2e",
+] as const;
 
 function fail(message: string, ...detail: string[]): never {
   console.error(`verify-e2e: ${message}`);
@@ -74,30 +74,14 @@ function run(
   }
 }
 
-/** `--driver=<name>`, defaulting to d1. Any other flag is a typo, not a request. */
-export function readDriver(
-  argv: readonly string[]
-): { driver: Driver } | { error: string } {
-  let driver: Driver = "d1";
-  for (const arg of argv) {
-    const match = /^--driver=(.+)$/.exec(arg);
-    if (!match) {
-      return {
-        error: `unknown flag ${arg}. This command takes --driver=d1 or --driver=postgres.`,
-      };
-    }
-    const value = match[1] ?? "";
-    if (!Object.hasOwn(DRIVERS, value)) {
-      return {
-        error: `unknown driver ${value}. Pick one of: ${Object.keys(DRIVERS).join(", ")}.`,
-      };
-    }
-    driver = value as Driver;
-  }
-  return { driver };
+/** The error for any argument: this command takes none, so one is a typo, not a request. */
+export function argumentError(argv: readonly string[]): string | undefined {
+  return argv.length === 0
+    ? undefined
+    : `unknown argument(s) ${argv.join(", ")}. This command takes none.`;
 }
 
-/** `E2E_DATABASE_SERVER`, or the driver's own container when it is unset or empty. */
+/** `E2E_DATABASE_SERVER`, or the project's own container when it is unset or empty. */
 export function databaseServer(value?: string): string {
   return value === undefined || value === "" ? CONTAINER_SERVER : value;
 }
@@ -127,14 +111,14 @@ export function placeWaitlistForm(source: string): string | undefined {
     .replace(renderAnchor, `${renderAnchor}\n    <WaitlistForm client:load />`);
 }
 
-/** The server the postgres driver's own `compose.yaml` container answers on. */
+/** The server the project's own `compose.yaml` container answers on. */
 export const CONTAINER_SERVER =
   "postgres://postgres:postgres@127.0.0.1:5432/postgres";
 
 /**
  * Give `DATABASE_URL` a value in an env file's text, replacing the line that is there.
  *
- * The postgres driver leaves the key blank in `packages/env/.env.example`, and
+ * `database-postgres` leaves the key blank in `packages/env/.env.example`, and
  * `pnpm env:setup` refuses a blank key. A server URL is the honest value before
  * `db:setup` runs: it names no database this project manages, so `db:setup` creates the
  * project's own one and writes its URL over this line. `db:setup --server` creates it on
@@ -152,16 +136,13 @@ export function withDatabaseUrl(source: string, url: string): string {
 }
 
 function main(): void {
-  const parsed = readDriver(process.argv.slice(2));
-  if ("error" in parsed) {
-    fail(parsed.error);
+  const error = argumentError(process.argv.slice(2));
+  if (error !== undefined) {
+    fail(error);
   }
-  const { driver } = parsed;
-  const module = DRIVERS[driver];
 
   // `play:reset`, not `play:init`: `init --force` writes over the old playground and keeps
-  // its `saasaloy.json`, so a driver installed by the last run would still own the database
-  // files and the other driver could not be added.
+  // its `saasaloy.json`, so modules the last run installed would still be recorded there.
   step("scaffolding a clean .dev/playground (play:reset builds the CLI first)");
   run("pnpm", ["run", "play:reset"], "play:reset");
 
@@ -175,9 +156,8 @@ function main(): void {
 
   // One module per call, through the shim `play:init` copied in: it points the CLI at THIS
   // worktree's `modules/` rather than the published registry, which is the only way an
-  // unreleased module gets tested. The driver goes first, so `database` resolves to it rather
-  // than stopping to ask.
-  for (const name of [module, ...MODULES]) {
+  // unreleased module gets tested.
+  for (const name of MODULES) {
     step(`adding ${name}`);
     run(
       "./saasaloy",
@@ -208,12 +188,7 @@ function main(): void {
   );
   writeFileSync(
     values,
-    driver === "postgres"
-      ? withDatabaseUrl(
-          example,
-          databaseServer(process.env.E2E_DATABASE_SERVER)
-        )
-      : example
+    withDatabaseUrl(example, databaseServer(process.env.E2E_DATABASE_SERVER))
   );
   // `--no-frozen-lockfile`, because pnpm freezes the lockfile by default when `CI` is set. The
   // lockfile `play:init` wrote predates the workspaces `saasaloy add` just made, such as
@@ -232,15 +207,13 @@ function main(): void {
   // worktree's playground on one machine shares it, and this drop reaches whatever another
   // worktree's playground left there. Point `E2E_DATABASE_SERVER` at a server of your own
   // when that matters.
-  if (driver === "postgres") {
-    step("dropping any database a previous playground left on the server");
-    const setupArgs = (process.env.E2E_DB_SETUP_ARGS ?? "")
-      .split(" ")
-      .filter(Boolean);
-    run("pnpm", ["run", "db:setup", ...setupArgs], "db:setup", playground);
-    run("pnpm", ["run", "db:drop"], "db:drop", playground);
-    run("pnpm", ["run", "env:setup"], "env:setup", playground);
-  }
+  step("dropping any database a previous playground left on the server");
+  const setupArgs = (process.env.E2E_DB_SETUP_ARGS ?? "")
+    .split(" ")
+    .filter(Boolean);
+  run("pnpm", ["run", "db:setup", ...setupArgs], "db:setup", playground);
+  run("pnpm", ["run", "db:drop"], "db:drop", playground);
+  run("pnpm", ["run", "env:setup"], "env:setup", playground);
 
   // A generated project ships schema files and no migrations: `db:generate` is a decision a
   // project owner makes, so no module runs it for them. The suite needs the tables, so do
@@ -284,7 +257,7 @@ function main(): void {
   step("running the suite");
   run("pnpm", ["run", "e2e"], "pnpm e2e", playground);
 
-  console.log(`\nverify-e2e: the ${driver} suite passed.`);
+  console.log("\nverify-e2e: the suite passed.");
 }
 
 // Only when run directly, so the test can import the pure functions above.

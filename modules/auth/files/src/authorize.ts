@@ -26,9 +26,8 @@ export const ADMIN_ROLE = config.auth.adminRole;
 
 /**
  * The role above `admin`. No sign-up wins it: a first sign-up gets `user` like any other.
- * The seed writes one in development, and `pnpm db:prod:superadmin` (Postgres) or the
- * auth skill's SQL (D1) makes the first one in production. Only it may act inside an
- * organization it does not belong to,
+ * The seed writes one in development, and `pnpm db:prod:superadmin` makes the first one
+ * in production. Only it may act inside an organization it does not belong to,
  * through the `x-organization-id` header the `multitenant` module reads. Everything
  * `admin` may do, `superadmin` may do, which is why `requireAdmin` admits either.
  */

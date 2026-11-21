@@ -1,6 +1,6 @@
 {
   "name": "saasaloy",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "An open source SaaS starter kit for Cloudflare: a CLI plus a module registry that copies source files you own.",
   "keywords": [
     "saas",

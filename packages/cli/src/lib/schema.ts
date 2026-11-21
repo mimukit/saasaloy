@@ -143,8 +143,7 @@ export interface SaasaloyConfig {
 /**
  * The condition on an optional descriptor entry (#242, ADR 0054). The keys combine with
  * AND: `testing` ships the entry only when the project's testing mode is not `off`, and
- * `installed` only when every named module is in the resolved install set. The applier
- * tests it before `onlyWith`, and only for a target the manifest does not track yet.
+ * `installed` only when every named module is in the resolved install set.
  */
 export interface When {
   testing?: true;
@@ -162,13 +161,6 @@ export interface RegistryFile {
    * only.
    */
   untested?: string;
-  /**
-   * Install this file only when the named module is in the resolved install set (#99).
-   * Two entries may share one `target` under disjoint conditions, which is how a module
-   * ships a sqlite and a pg variant of one dialect-bound file. `RegistryScaffold.files`
-   * is this same type, so the keyword covers a scaffold's workspace files too.
-   */
-  onlyWith?: string;
   /**
    * A module seed file (#310, ADR 0060): `add` and backfill write it once and record it,
    * and from then on it is the project's. `update` never overwrites or merges it, and puts

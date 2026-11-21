@@ -68,3 +68,7 @@ Three items are deferred by decision, not by doubt. This unattended run does not
 
 ## References
 Issue [#127](https://github.com/mimukit/saasaloy/issues/127), `docs/plans/0051-plan-storage-capability-module-2026-09-08.md`. Amends [ADR 0033](0033-adr-transient-state-capabilities-take-providers-2026-09-08.md). Related: [ADR 0001](0001-adr-all-in-on-cloudflare-2026-07-22.md) (its 2026-08-04 amendment), [ADR 0020](0020-adr-capability-owns-its-vendor-packages-2026-07-24.md), [ADR 0021](0021-adr-pulumi-iac-engine-for-infra-2026-07-25.md), [ADR 0026](0026-adr-database-driver-split-2026-08-28.md), [ADR 0028](0028-adr-routes-register-by-chained-route-patch-2026-08-28.md). Glossary: `CONTEXT.md` → "Provider module", "Driver module", "Object", "Object key", "Upload target", "Presign".
+
+## Amendment — 2026-11-20
+
+[ADR 0065](0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md) leaves `database` with one driver, `database-postgres`, and no D1 default; the `database` row stays on drivers, and the `api-keys` owners are now the example of two drivers.

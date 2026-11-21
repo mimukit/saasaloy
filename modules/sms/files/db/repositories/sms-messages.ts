@@ -3,7 +3,7 @@ import { smsMessages } from "../schema/sms-messages";
 import type { SmsStatus } from "../schema/sms-messages";
 import type { Db } from "../client";
 
-// The SMS log's queries, written once for both dialects. `@repo/sms` sends and never
+// The SMS log's queries. `@repo/sms` sends and never
 // writes here: a caller that wants a send on the record calls `logSms()` after
 // `createSms(env).send()`, success or failure. That keeps `packages/sms` free of any
 // database dependency.

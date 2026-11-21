@@ -20,7 +20,7 @@
 //     after each `add`, the first commit, and the resume rules, and the base `AGENTS.md`
 //     agrees with it on who runs `pnpm env:setup`;
 //   - the interview joins the build (plan 0109 phase 6): `saasaloy-setup` asks about
-//     fifteen questions, the preview one last, and ends with one read-back that starts
+//     fourteen questions, the preview one last, and ends with one read-back that starts
 //     `saasaloy-build`; the build commits once per spec entity; `saasaloy-feature` builds
 //     its screens from the four `shell` parts, which the `shell` module really writes;
 //     and `llms.txt`, the base `AGENTS.md` and the skills tell an agent with no brief and
@@ -329,21 +329,21 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     ...setup.matchAll(/^\| (\d+) \| \*\*([^*]+)\*\* \|/gm),
   ].map((match) => ({ number: Number(match[1]), name: match[2] ?? "" }));
 
-  it("asks about fifteen questions, numbered in order, with the preview last", () => {
+  it("asks about fourteen questions, numbered in order, with the preview last", () => {
     assert.deepEqual(
       questions.map((question) => question.number),
-      Array.from({ length: 15 }, (_, index) => index + 1)
+      Array.from({ length: 14 }, (_, index) => index + 1)
     );
     assert.equal(questions.at(-1)?.name, "Preview deploy");
   });
 
-  it("asks for the entities, the capabilities and the driver", () => {
+  it("asks for the entities and the capabilities, and not for a driver", () => {
     const names = new Set(questions.map((question) => question.name));
-    for (const name of ["Entities", "Capabilities", "Database driver"]) {
+    for (const name of ["Entities", "Capabilities"]) {
       assert.ok(names.has(name), `no ${name} question`);
     }
+    assert.ok(!names.has("Database driver"), "a Database driver question");
     assert.match(setup, /saasaloy list --json/);
-    assert.match(setup, /recommends one driver/);
   });
 
   it("records the preview choice in the frontmatter, and names the temporary database", () => {
@@ -387,8 +387,8 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     assert.match(build, /`feat\(build\): feature <table>` commit/);
   });
 
-  it("takes the driver and the picks from the spec, and drops each optional extra", () => {
-    assert.match(build, /spec's `## Database driver`/);
+  it("picks database-postgres, takes the picks from the spec, and drops each optional extra", () => {
+    assert.match(build, /Pick `database-postgres` for `database`/);
     assert.match(build, /spec's `## Modules`/);
     for (const extra of [
       "ci",

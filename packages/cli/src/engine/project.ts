@@ -9,12 +9,11 @@ import {
   REGISTRY_ENV,
   releaseTag,
 } from "../lib/registry.js";
-import type { ModuleProvenance } from "../lib/registry.js";
+import type { LoadOptions, ModuleProvenance } from "../lib/registry.js";
 import { loadConfig } from "../lib/saasaloy-config.js";
 import type { LoadedConfig } from "../lib/saasaloy-config.js";
 import { readTestingMode } from "../lib/testing.js";
 import { baseTemplateDir, templateVars } from "../lib/scaffold.js";
-import { variantSets } from "./render.js";
 import type { RenderOptions } from "./render.js";
 import { UNKNOWN_VERSION } from "../version.js";
 import {
@@ -122,7 +121,8 @@ function optionsAt(options: RenderOptions, version: string): RenderOptions {
  */
 async function loadableModules(
   modulesDir: string,
-  requested: readonly string[]
+  requested: readonly string[],
+  options: LoadOptions
 ): Promise<string[]> {
   const present = new Set(await readDirNames(modulesDir));
   const kept: string[] = [];
@@ -131,7 +131,7 @@ async function loadableModules(
       continue;
     }
     try {
-      await readPayloadModules(modulesDir, [name]);
+      await readPayloadModules(modulesDir, [name], options);
       kept.push(name);
     } catch {
       // Not loadable at this ref: the side renders without it.
@@ -157,8 +157,10 @@ export async function loadSide(
   const env = context.env ?? process.env;
   let requested = [...spec.requested];
   if (isLocalRegistry(env)) {
+    // A local checkout is the registry this run develops against, at no older ref: its
+    // descriptors are read strictly, whatever version the side names.
     if (spec.partial === true) {
-      requested = await loadableModules(localModulesDir(env), requested);
+      requested = await loadableModules(localModulesDir(env), requested, {});
     }
     const modules = await readPayloadModules(localModulesDir(env), requested);
     const payload: Payload = {
@@ -181,6 +183,11 @@ export async function loadSide(
     throw new RefusalError(missingReleaseTagMessage(spec.version));
   }
   const tag = refOfVersion(spec.version);
+  // A side at any release but the running CLI's reads a registry this CLI did not ship
+  // with, so its descriptors may carry a key the schema has since retired (plan 0117).
+  // Every module of the side, a third-party one at its pinned commit included, loads with
+  // that key translated. The running CLI's own side stays strict.
+  const load: LoadOptions = { atOldRef: spec.version !== context.cliVersion };
   const snapshotOf = async (source: string, ref: string) =>
     (
       await ensureCachedSnapshot({
@@ -234,7 +241,7 @@ export async function loadSide(
   if (spec.partial === true && defaultGroup.names.length > 0) {
     const snapshot = await snapshotOf(DEFAULT_SOURCE, tag);
     const kept = new Set(
-      await loadableModules(snapshot.modulesDir, defaultGroup.names)
+      await loadableModules(snapshot.modulesDir, defaultGroup.names, load)
     );
     defaultGroup.names = defaultGroup.names.filter((name) => kept.has(name));
     requested = requested.filter(
@@ -245,12 +252,15 @@ export async function loadSide(
     const snapshot = await snapshotOf(DEFAULT_SOURCE, tag);
     take(
       defaultGroup,
-      await readPayloadModules(snapshot.modulesDir, defaultGroup.names)
+      await readPayloadModules(snapshot.modulesDir, defaultGroup.names, load)
     );
   }
   for (const group of groups.values()) {
     const snapshot = await snapshotOf(group.source, group.resolved);
-    take(group, await readPayloadModules(snapshot.modulesDir, group.names));
+    take(
+      group,
+      await readPayloadModules(snapshot.modulesDir, group.names, load)
+    );
   }
 
   const base =
@@ -345,55 +355,11 @@ export async function readProjectState(
 }
 
 /**
- * The driver variant sides of `side`: for each record whose source the set gates off with
- * `onlyWith` (`variantSets`), a side with that driver in. A driver whose own
- * `conflictsWith` names a module of the set takes that module out, and a release that
- * cannot load the driver gives no side.
- */
-export async function variantSides(
-  side: ApplySide,
-  records: Iterable<{ module: string; from: string }>,
-  load: (requested: readonly string[]) => Promise<ApplySide | undefined>
-): Promise<{
-  sides: { driver: string; side: ApplySide }[];
-  warnings: string[];
-}> {
-  const sides: { driver: string; side: ApplySide }[] = [];
-  const warnings: string[] = [];
-  for (const [driver, names] of variantSets(
-    side.payload,
-    side.requested,
-    records
-  )) {
-    try {
-      let variant = await load(names);
-      const conflicts =
-        variant?.payload.modules.get(driver)?.item.conflictsWith ?? [];
-      if (
-        variant !== undefined &&
-        variant.requested.some((name) => conflicts.includes(name))
-      ) {
-        variant = await load(names.filter((name) => !conflicts.includes(name)));
-      }
-      if (variant?.requested.includes(driver) === true) {
-        sides.push({ driver, side: variant });
-      }
-    } catch (error) {
-      warnings.push(
-        `could not load the side with ${driver}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
-  return { sides, warnings };
-}
-
-/**
  * The base sides of an update, by version: the render of the project's set at each
  * release a record names other than `previous`, so a project whose files different
  * releases wrote finds the base of each file by its hash (research 0013, "The base of a
- * file"), and at every release a record names, the driver variant sides its records need
- * (`variantSides`). Each side keeps only the modules its release can load. A release that
- * cannot be loaded is left out, with a warning: its files merge with two-way markers.
+ * file"). Each side keeps only the modules its release can load. A release that cannot
+ * be loaded is left out, with a warning: its files merge with two-way markers.
  */
 export async function loadBaseSides(
   state: Pick<
@@ -403,49 +369,27 @@ export async function loadBaseSides(
   previous: string,
   context: LoadSideContext
 ): Promise<{ sides: Map<string, ApplySide[]>; warnings: string[] }> {
-  const byVersion = new Map<string, { module: string; from: string }[]>();
-  for (const record of Object.values(state.manifest.files)) {
-    byVersion.set(record.version, [
-      ...(byVersion.get(record.version) ?? []),
-      record,
-    ]);
-  }
+  const versions = new Set(
+    Object.values(state.manifest.files).map((record) => record.version)
+  );
   const sides = new Map<string, ApplySide[]>();
   const warnings: string[] = [];
-  const loadAt = async (
-    version: string,
-    requested: readonly string[]
-  ): Promise<ApplySide> =>
-    (
-      await loadSide(
+  for (const version of [...versions].toSorted()) {
+    if (version === previous) {
+      continue;
+    }
+    try {
+      const { side } = await loadSide(
         {
           coordinates: state.coordinates,
           options: state.options,
           partial: true,
-          requested,
+          requested: state.requested,
           version,
         },
         context
-      )
-    ).side;
-  for (const version of [...byVersion.keys()].toSorted()) {
-    try {
-      const side = await loadAt(version, state.requested);
-      const variants = await variantSides(
-        side,
-        byVersion.get(version) ?? [],
-        (names) => loadAt(version, names)
       );
-      warnings.push(
-        ...variants.warnings.map((warning) => `saasaloy ${version}: ${warning}`)
-      );
-      const list = [
-        ...(version === previous ? [] : [side]),
-        ...variants.sides.map((variant) => variant.side),
-      ];
-      if (list.length > 0) {
-        sides.set(version, list);
-      }
+      sides.set(version, [side]);
     } catch (error) {
       warnings.push(
         `Could not load saasaloy ${version}, the base of the files it wrote: ${error instanceof Error ? error.message : String(error)}`

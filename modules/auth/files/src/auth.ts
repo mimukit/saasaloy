@@ -97,7 +97,7 @@ const secret = requireAuthSecret(authEnv);
 // "Cannot perform I/O on behalf of a different request" on the second. `authDb` is a
 // proxy holding no client of its own; it reads the current request's out of an
 // `AsyncLocalStorage` that `withAuthScope` enters. Every `handler` and `api.*` call on
-// either instance therefore has to run inside that wrapper, on both drivers — `getSession(c)`
+// either instance therefore has to run inside that wrapper — `getSession(c)`
 // from `./server.ts` and `apps/api/src/routes/auth.ts` already do. See `./db-scope.ts`,
 // `./db-provider.ts` and ADR 0029.
 function sharedOptions(group: Audience) {
@@ -125,12 +125,9 @@ function sharedOptions(group: Audience) {
     // The first superadmin comes from outside the api instead:
     //
     //   development       the seed (`@db/seed/users.ts`) writes one
-    //   Postgres prod     `pnpm db:prod:superadmin --email <address>`
-    //   D1 prod           sign up, then `wrangler d1 execute <db> --remote --command
-    //                     "update users set role = 'superadmin' where email = '<email>'"`
+    //   production        `pnpm db:prod:superadmin --email <address>`
     //
-    // The auth skill carries the D1 SQL. From then on a superadmin grants every other
-    // admin-group role on the admin app (`./plugins/rank-guard.ts`).
+    // From then on a superadmin grants every other admin-group role on the admin app (`./plugins/rank-guard.ts`).
     advanced: {
       // Each instance names its own cookies, so the two sessions never overwrite each
       // other: `client.session_token` and `admin.session_token` (or the worktree-prefixed

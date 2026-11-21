@@ -28,7 +28,7 @@ The ready-made boilerplates promise to fix this, and they make it worse. You clo
 
 Saasaloy starts the other way around. Saasaloy is built on one rule: a SaaS has stages, and the code scaffold should match the stage. `saasaloy init` gives you a landing page and nothing else. Proably then add a waitlist module to collect potential customer's data. When the waitlist fills up, you add auth to make them registered users. When users ask for a team account, you add teams and tenancy. When someone wants to pay, you add subscription. Every module is production-grade code copied into your repo, arriving on the day the product earns it, and not one day sooner.
 
-The second philosophy is that validation stage of a SaaS idea should be free. Saasaloy is Cloudflare-native serverless architecture by default, it runs on Cloudflare by default because you never should be worried about server managment and cost just to explore your SaaS ideas. Workers, D1, KV and R2 keep most modules on the free tier, so you can go from a Saturday idea to a first paying customer with a hosting bill close to zero.
+The second philosophy is that validation stage of a SaaS idea should be free. Saasaloy is Cloudflare-native serverless architecture by default, it runs on Cloudflare by default because you never should be worried about server managment and cost just to explore your SaaS ideas. Workers, Hyperdrive, KV and R2 have free plans, and [Neon's free Postgres tier](https://neon.com/pricing) gives each project 1 GB and 100 compute hours a month with no credit card. That keeps most modules on free tiers, so you can go from a Saturday idea to a first paying customer with a hosting bill close to zero.
 
 Cloudflare is the default, not the cage. Every vendor sits behind a swappable provider, and every capability ships a console or in-memory version so you can build the whole thing offline, with no cloud account at all.
 
@@ -108,7 +108,7 @@ Each row installs on top of the previous one. Nothing from a later row lands in 
 | Marketing site (`apps/web`) | Astro on Workers static assets |
 | App (`apps/admin`) | TanStack Router + Vite SPA |
 | Backend (`apps/api`) | Hono on Cloudflare Workers |
-| Database | Drizzle ORM on D1 (SQLite) or Postgres |
+| Database | Drizzle ORM on Postgres |
 | Auth | Better Auth |
 | Subscription | Stripe, or a console provider |
 | Email | Cloudflare Email Sending, Plunk, or a console logger |
@@ -126,9 +126,9 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 | Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `agent`, `email`, `sms`, `queue`, `kv`, `storage`, `subscription`, `payment` |
 | Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `email-react`, `ratelimit`, `feature-flags`, `command`, `notification` |
 | Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-upstash`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe`, `payment-console`, `payment-manual`, `payment-bkash`, `payment-sslcommerz` |
-| Driver | `database-d1`, `database-postgres`, `api-keys-organization`, `api-keys-user` |
+| Driver | `database-postgres`, `api-keys-organization`, `api-keys-user` |
 
-What each module gives you and what it depends on is on the [Modules](docs/wiki/modules.md) page. Which ones need a paid Cloudflare plan or a third-party account is in the [Reference](docs/wiki/reference.md#email-providers). The short version: the base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the free tier, and every local provider runs with no account at all.
+What each module gives you and what it depends on is on the [Modules](docs/wiki/modules.md) page. Which ones need a paid Cloudflare plan or a third-party account is in the [Reference](docs/wiki/reference.md#email-providers). The short version: the base, `api`, `database-postgres`, `auth`, `admin`, `waitlist` and `teams` run on the Cloudflare and Neon free tiers, and every local provider runs with no account at all.
 
 The default registry is this repo. `saasaloy add waitlist` fetches `modules/waitlist/` from GitHub at a pinned commit SHA. Any repo with a `modules/` directory can serve as a registry with `saasaloy add owner/repo/<name>`. To publish your own, start at [Contribute a module](docs/wiki/how-to/contribute-a-module.md).
 
@@ -138,7 +138,7 @@ The default registry is this repo. `saasaloy add waitlist` fetches `modules/wait
 
 ## Deploy
 
-`pnpm deploy:production` deploys every Worker in the project with wrangler. It starts only from `main` or a `hotfix-*` branch with a clean tree that matches origin, and it stops on a new migration until you pass `--migrate`. It loads the production values from the value source in memory, checks every one of them before anything builds, deploys the Workers one at a time with the api first, requests each live host's smoke checks, and tags the commit `deploy-<UTC time>`. `--dry-run` reports all of it and changes nothing. Each Worker's secrets upload with its code. Wrangler creates the D1, KV, R2 and queue resources on the first deploy. Each deployable workspace keeps its own `wrangler.jsonc` and a `deploy` script that runs `env-deploy <service>`. See [Deploy to Cloudflare](docs/wiki/how-to/deploy-to-cloudflare.md).
+`pnpm deploy:production` deploys every Worker in the project with wrangler. It starts only from `main` or a `hotfix-*` branch with a clean tree that matches origin, and it stops on a new migration until you pass `--migrate`. It loads the production values from the value source in memory, checks every one of them before anything builds, deploys the Workers one at a time with the api first, requests each live host's smoke checks, and tags the commit `deploy-<UTC time>`. `--dry-run` reports all of it and changes nothing. Each Worker's secrets upload with its code. Wrangler creates the KV, R2 and queue resources on the first deploy. Each deployable workspace keeps its own `wrangler.jsonc` and a `deploy` script that runs `env-deploy <service>`. See [Deploy to Cloudflare](docs/wiki/how-to/deploy-to-cloudflare.md).
 
 ## Documentation
 

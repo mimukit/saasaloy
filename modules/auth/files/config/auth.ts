@@ -26,8 +26,7 @@ export function authConfig() {
     /**
      * The role above `admin`. Only it may act inside an organization it does not
      * belong to. No sign-up wins it: the seed writes one in development, and
-     * `pnpm db:prod:superadmin` (Postgres) or the auth skill's SQL (D1) makes the first
-     * one in production.
+     * `pnpm db:prod:superadmin` makes the first one in production.
      */
     superadminRole: "superadmin",
     /**

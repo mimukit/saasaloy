@@ -7,9 +7,8 @@
 # browser download. A path filter keeps it off a change that cannot affect it, and
 # `workflow_dispatch` runs it by hand.
 #
-# Two jobs, one per database driver. `db:setup` and `db:seed` hide the difference, so the two
-# differ by a flag and nothing else. Postgres comes from a service container reached through
-# `db:setup --server`.
+# One job on Postgres, the only database. Postgres comes from a service container reached
+# through `db:setup --server`.
 #
 # This workflow tests the registry. A generated project gets no workflow from the module;
 # CI there is the project's own opt-in.
@@ -34,15 +33,9 @@ permissions:
 
 jobs:
   suite:
-    name: suite (${{ matrix.driver }})
+    name: suite
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      # Both drivers report. One red and one green is the interesting result, and
-      # fail-fast would throw it away.
-      fail-fast: false
-      matrix:
-        driver: [d1, postgres]
 
     services:
       postgres:
@@ -84,14 +77,13 @@ jobs:
       - name: Install the browser's system libraries
         run: pnpm exec playwright install-deps chromium
 
-      # `E2E_DATABASE_SERVER` is the server the postgres job's database is created on, and
-      # `--server` tells `db:setup` to create it there rather than start a container of its
-      # own. The d1 job needs neither, and an empty value is the same as unset.
+      # `E2E_DATABASE_SERVER` is the server the job's database is created on, and `--server`
+      # tells `db:setup` to create it there rather than start a container of its own.
       - name: Run the suite
-        run: pnpm verify:e2e --driver=${{ matrix.driver }}
+        run: pnpm verify:e2e
         env:
-          E2E_DATABASE_SERVER: ${{ matrix.driver == 'postgres' && 'postgres://postgres:postgres@127.0.0.1:5432/postgres' || '' }}
-          E2E_DB_SETUP_ARGS: ${{ matrix.driver == 'postgres' && '--server' || '' }}
+          E2E_DATABASE_SERVER: postgres://postgres:postgres@127.0.0.1:5432/postgres
+          E2E_DB_SETUP_ARGS: --server
 
       # The report is what makes a red run readable. Only on failure: a green run's
       # artifact is noise nobody opens.
@@ -99,7 +91,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.driver }}
+          name: playwright-report
           path: |
             .dev/playground/packages/e2e/playwright-report
             .dev/playground/packages/e2e/test-results

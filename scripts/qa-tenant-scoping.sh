@@ -4,9 +4,8 @@
 # $API (default http://localhost:4000) and prints one PASS or FAIL line per acceptance
 # criterion of issue #128.
 #
-# Driver-agnostic on purpose: run it once with database-d1 installed and once with
-# database-postgres. `scripts/qa-tenant-scoping-serve.sh` brings the playground up on a
-# clean database for either one. It needs a clean database, because it creates two
+# It runs against database-postgres. `scripts/qa-tenant-scoping-serve.sh` brings the
+# playground up on a clean database. It needs a clean database, because it creates two
 # organizations by slug and a second run on a dirty one collides on `org-a`.
 set -u
 API=${API:-http://localhost:4000}
@@ -33,19 +32,13 @@ as() { u=$1; shift; curl -s -b "$J/$u.txt" -c "$J/$u.txt" "${O[@]}" "$@"; }
 code() { u=$1; shift; curl -s -o /dev/null -w '%{http_code}' -b "$J/$u.txt" "${O[@]}" "$@"; }
 
 # No sign-up promotes an account, the first one included, so step 0 promotes u1 by SQL,
-# the way an owner makes the first superadmin on a deployed D1 database. Set PG, as for
-# scripts/qa-tenant-scoping-serve.sh, to take the Postgres path. The session reads the
-# role from the `users` row on every request, so u1's cookie needs no new sign-in.
-ROOT=${ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
-PG=${PG:-}
+# the way an owner makes the first superadmin on a deployed database. It runs the SQL in
+# the qa128-pg container that scripts/qa-tenant-scoping-serve.sh migrates. The session
+# reads the role from the `users` row on every request, so u1's cookie needs no new
+# sign-in.
 promote() { # email
   q="update users set role = 'superadmin' where email = '$1'"
-  if [ -n "$PG" ]; then
-    docker exec qa128-pg psql -U pg -d pg -q -c "$q" >/dev/null
-  else
-    pnpm -C "$ROOT/.dev/playground/apps/api" exec wrangler d1 execute DB --local \
-      --persist-to .wrangler/state --command "$q" >/dev/null 2>&1
-  fi
+  docker exec qa128-pg psql -U pg -d pg -q -c "$q" >/dev/null
 }
 
 echo "== 0. accounts (a first sign-up gets user; SQL makes u1 the superadmin)"

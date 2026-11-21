@@ -11,7 +11,7 @@
       "type": "object",
       "additionalProperties": false,
       "minProperties": 1,
-      "description": "Ship this entry only while the condition holds (#242, ADR 0054). The keys combine with AND: `testing` ships it only when the project's testing mode is not `off`, and `installed` only when every named module is in the resolved install set. The applier tests it before `onlyWith`, and a target whose entries it drops is skipped, not refused. It decides the first write only: an entry already in the manifest stays managed in every mode. Backfill writes the entry once the condition turns true.",
+      "description": "Ship this entry only while the condition holds (#242, ADR 0054). The keys combine with AND: `testing` ships it only when the project's testing mode is not `off`, and `installed` only when every named module is in the resolved install set. A target whose entries it drops is skipped, not refused. It decides the first write only: an entry already in the manifest stays managed in every mode. Backfill writes the entry once the condition turns true.",
       "properties": {
         "testing": {
           "const": true,
@@ -113,9 +113,9 @@
     },
     "requiresOneOf": {
       "type": "array",
-      "description": "Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers (e.g. `database` naming `database-d1` and `database-postgres`). `add` counts a module as present when it is already installed or arrives in the same resolved graph, refuses when none is, and offers the list as a prompt on an interactive terminal. Use `dependsOn` for a single hard prerequisite; this field exists for a choice, so it takes at least two names (#98, ADR 0026).",
+      "description": "Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers or owners (e.g. `api-keys` naming `api-keys-organization` and `api-keys-user`, or `database` naming its one driver, `database-postgres`). `add` counts a module as present when it is already installed or arrives in the same resolved graph, refuses when none is, and offers the list as a prompt on an interactive terminal (#98, ADR 0026).",
       "uniqueItems": true,
-      "minItems": 2,
+      "minItems": 1,
       "items": {
         "type": "string",
         "pattern": "^[a-z0-9][a-z0-9-]*$"
@@ -158,11 +158,6 @@
             "pattern": "^@[a-z0-9][a-z0-9-]*/.+",
             "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
             "description": "Alias-prefixed destination (e.g. @api/routes/waitlist.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .gitignore is fine."
-          },
-          "onlyWith": {
-            "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "description": "Install this file only when the named module is in the resolved install set — this run's dependsOn graph plus what saasaloy.json already records (#99). Two entries may share one `target` when their conditions are disjoint: that is how a module ships a per-driver variant of a dialect-bound file. A target whose entries are all conditional and none matches is a plan-time refusal, not a silently missing file."
           },
           "when": { "$ref": "#/$defs/when" },
           "seed": {
@@ -503,11 +498,6 @@
                   "pattern": "^[^/@]",
                   "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
                   "description": "Destination relative to the workspace root (e.g. src/index.ts). No leading slash or @alias, and no '.' or '..' path segment (#98). A dot-leading file name such as .dev.vars.example is fine."
-                },
-                "onlyWith": {
-                  "type": "string",
-                  "pattern": "^[a-z0-9][a-z0-9-]*$",
-                  "description": "Install this file only when the named module is in the resolved install set — this run's dependsOn graph plus what saasaloy.json already records (#99). Same rule as a top-level files[] entry: two entries may share one `target` when their conditions are disjoint, and a target no candidate matches is a plan-time refusal. auth's per-driver db-provider.ts lives here rather than in files[], which is why both shapes carry the keyword."
                 },
                 "when": { "$ref": "#/$defs/when" },
                 "seed": {

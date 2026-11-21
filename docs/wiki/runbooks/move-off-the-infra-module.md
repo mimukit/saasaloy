@@ -2,11 +2,13 @@
 
 The `infra` module deployed every Worker through a Pulumi program and kept its state in `infra/state/`. It is gone ([ADR 0043](../../adr/0043-adr-wrangler-native-deploy-in-the-base-2026-10-18.md)). The base template now deploys with `pnpm deploy:production`, which runs `wrangler deploy` for each Worker. This runbook moves a project from the last release that shipped `infra` to the new command, and keeps its live Workers and data.
 
-Nothing in your Cloudflare account changes. The same Workers and the same D1 database stay where they are, and wrangler takes over the deploys that Pulumi did.
+Nothing in your Cloudflare account changes. The same Workers and the same data stay where they are, and wrangler takes over the deploys that Pulumi did.
+
+The releases that shipped `infra` kept the database on D1, through a driver Saasaloy no longer ships ([Why Postgres, not D1](../why-postgres.md)). This runbook moves the deploys only. Moving the data to Postgres is yours to plan, and no Saasaloy release does it.
 
 ## Never run `pulumi destroy`
 
-`pulumi destroy` deletes every resource in the stack: the Workers and the D1 database, with its data. Nothing in this runbook needs it. Do not run `pnpm --filter @repo/infra run destroy` either; it is the same command.
+`pulumi destroy` deletes every resource in the stack: the Workers and the database, with its data. Nothing in this runbook needs it. Do not run `pnpm --filter @repo/infra run destroy` either; it is the same command.
 
 ## Symptoms
 
@@ -20,10 +22,10 @@ Commit your current tree first. `infra/state/` is what lets you go back to `pulu
 
 ## 2. Point wrangler at the existing resources
 
-`infra` named each Worker after the `name` in its `wrangler.jsonc`, and it created each D1 database under the binding's `database_name`. Wrangler uses the same names, so a deploy updates the same Worker and finds the same database.
+`infra` named each Worker after the `name` in its `wrangler.jsonc`, and it created the database under the binding's `database_name`. Wrangler uses the same names, so a deploy updates the same Worker and finds the same database.
 
 - **Keep every name as it is.** Do not rename a Worker, a `database_name`, a bucket or a queue. A new name creates a new, empty resource. The project-name prefix that new installs get (issue #197) is not for an existing project.
-- **Remove the D1 placeholder.** `infra` left `"database_id": "local"` in `apps/api/wrangler.jsonc`. Delete that line, or replace `local` with the real id. Find the real id with `pnpm --filter @repo/db exec wrangler d1 info app-db` (use your `database_name`), or in the D1 resource's `uuid` under `infra/state/`. Wrangler sends any id it finds, so leaving `local` breaks every remote command.
+- **Remove the database placeholder.** `infra` left `"database_id": "local"` in `apps/api/wrangler.jsonc`. Delete that line, or replace `local` with the real id from the database resource's `uuid` under `infra/state/`. Wrangler sends any id it finds, so leaving `local` breaks every remote command.
 - **KV, R2 and queues are already right.** `infra` never created them. You created them with wrangler and put the ids in `wrangler.jsonc`, and they stay.
 
 ## 3. Move the credentials
@@ -64,7 +66,7 @@ The first command reports every deploy gate, the deploy order and the smoke chec
 pnpm deploy:production --migrate
 ```
 
-Commit and push first: the deploy starts only from a clean tree that matches origin. The project has no deploy tag yet, so every migration file counts as new and the migration gate asks for `--migrate`. Each Worker prints its `workers.dev` URL. With `database-d1`, `db:prod:migrate` runs first and finds the existing database by name, so it creates nothing and applies only the pending migrations. Open the api and check that a request reading the database returns the data you had.
+Commit and push first: the deploy starts only from a clean tree that matches origin. The project has no deploy tag yet, so every migration file counts as new and the migration gate asks for `--migrate`. Each Worker prints its `workers.dev` URL. `db:prod:migrate` runs first and applies only the pending migrations. Open the api and check that a request reading the database returns the data you had.
 
 ## 7. Delete what is left
 
@@ -78,4 +80,4 @@ Before step 7, restore `infra/` and the files step 4 changed from git, run `pnpm
 
 A later module named `infra-ci-deploy` (issue #199) writes a GitHub Actions workflow that runs `pnpm deploy:production` on a push to `main`. It has nothing to do with the deleted `infra` module, holds no Pulumi program, and needs no step from this runbook.
 
-_Verified against `main`@`b86486c3` on 2026-11-21._
+_Verified against `main`@`33bc729b` on 2026-11-21._

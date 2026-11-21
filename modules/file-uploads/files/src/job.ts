@@ -4,11 +4,11 @@ import { sweep } from "./sweep";
 //
 // The file lives in this package rather than in `packages/queue/src/jobs/`, and both
 // reasons matter. A file entry targeting `@queue/...` could not be shipped conditionally
-// when this was written: the old engine resolved the alias before it applied `onlyWith`,
-// so a project with no `queue` capability failed `saasaloy add file-uploads` on an
-// unknown alias. And a job file in
-// `packages/queue` that reached the database would pull the schema barrel's
-// `import.meta.glob` into a workspace that does not compile with Vite's types.
+// when this was written: the old engine resolved the alias before it applied a file
+// condition, so a project with no `queue` capability failed `saasaloy add file-uploads`
+// on an unknown alias. And a job file in `packages/queue` that reached the database
+// would pull the schema barrel's `import.meta.glob` into a workspace that does not
+// compile with Vite's types.
 //
 // So the job ships here unconditionally and goes nowhere until the `queue.jobs` and
 // `queue.schedules` rows register it, exactly as `packages/subscription` registers its own.

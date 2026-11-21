@@ -33,8 +33,7 @@ Files:
 - `@api/routes/feature-flags.ts`
 - `@api/lib/flags.ts`
 - `@api/middleware/maintenance.ts`
-- `@db/schema/feature-flags.ts` (only with `database-d1`)
-- `@db/schema/feature-flags.ts` (only with `database-postgres`)
+- `@db/schema/feature-flags.ts`
 - `@db/repositories/feature-flags.ts`
 - `@validators/feature-flags.ts`
 - `@ui/blocks/admin/feature-flags.tsx`

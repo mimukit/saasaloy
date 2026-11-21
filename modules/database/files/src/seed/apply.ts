@@ -3,8 +3,8 @@ import type { Column, Table } from "drizzle-orm";
 import type { PlanStep } from "./plan";
 
 // Turns the seed plan into Drizzle insert statements: one `insert … on conflict` per row,
-// in plan order. The statements are built and not run, so each driver decides how they
-// run: Postgres awaits them one by one inside a transaction, D1 sends them as one batch.
+// in plan order. The statements are built and not run, so the driver decides how they
+// run: it awaits them one by one inside a transaction.
 //
 // The update half reads `excluded.<column>`, the row the insert tried to write, rather than
 // binding every value a second time. A row that sets nothing outside its conflict key
@@ -12,8 +12,8 @@ import type { PlanStep } from "./plan";
 
 /**
  * The part of a Drizzle database (or Postgres transaction) the statements need. Typed
- * loosely on purpose: the Postgres and D1 clients declare `insert` with different generics,
- * and this file serves both.
+ * loosely on purpose, so the file takes a client or a transaction without naming the
+ * driver's generics.
  */
 export interface SeedDatabase {
   insert: (table: never) => unknown;

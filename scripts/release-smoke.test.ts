@@ -30,6 +30,7 @@ import {
   parsePlanNotes,
   reportPaths,
   previousVersion,
+  upgradeAddTarget,
   readNoteFrontmatter,
 } from "./release-smoke.ts";
 
@@ -215,16 +216,16 @@ describe("fullScaffolds", () => {
   it("builds one project per conflicting module, each with every free module", () => {
     const scaffolds = fullScaffolds([
       free("auth"),
-      { conflictsWith: ["database-postgres"], name: "database-d1" },
+      { conflictsWith: ["api-keys-user"], name: "api-keys-organization" },
       free("api"),
-      { conflictsWith: ["database-d1"], name: "database-postgres" },
+      { conflictsWith: ["api-keys-organization"], name: "api-keys-user" },
     ]);
     assert.deepEqual(scaffolds, [
-      { modules: ["database-d1", "api", "auth"], name: "full-database-d1" },
       {
-        modules: ["database-postgres", "api", "auth"],
-        name: "full-database-postgres",
+        modules: ["api-keys-organization", "api", "auth"],
+        name: "full-api-keys-organization",
       },
+      { modules: ["api-keys-user", "api", "auth"], name: "full-api-keys-user" },
     ]);
   });
 
@@ -247,24 +248,17 @@ describe("fullScaffolds", () => {
     ]);
   });
 
-  it("crosses independent choices and adds the database driver before API key ownership", () => {
+  // `add --yes` refuses a `requiresOneOf` nothing answers, so the driver must lead: the
+  // first `add` that reaches `database` has to hold `database-postgres` already.
+  it("adds the database driver ahead of every module that reaches database", () => {
     const modules = [
       free("api"),
       {
         ...free("database"),
         dependsOn: ["api"],
-        requiresOneOf: ["database-d1", "database-postgres"],
+        requiresOneOf: ["database-postgres"],
       },
-      {
-        conflictsWith: ["database-postgres"],
-        dependsOn: ["database"],
-        name: "database-d1",
-      },
-      {
-        conflictsWith: ["database-d1"],
-        dependsOn: ["database"],
-        name: "database-postgres",
-      },
+      { ...free("database-postgres"), dependsOn: ["database"] },
       { ...free("auth"), dependsOn: ["database"] },
       {
         ...free("api-keys"),
@@ -282,42 +276,54 @@ describe("fullScaffolds", () => {
         name: "api-keys-user",
       },
     ];
-    const scaffolds = fullScaffolds(modules);
-    assert.equal(scaffolds.length, 4);
-    const combinations = new Set<string>();
-    for (const scaffold of scaffolds) {
-      const drivers = scaffold.modules.filter((name) =>
-        name.startsWith("database-")
-      );
-      const owners = scaffold.modules.filter((name) =>
-        name.startsWith("api-keys-")
-      );
-      assert.equal(drivers.length, 1);
-      assert.equal(owners.length, 1);
-      assert.equal(scaffold.modules[0], drivers[0]);
-      assert.equal(scaffold.modules[1], owners[0]);
-      combinations.add(`${drivers[0]}/${owners[0]}`);
-    }
-    assert.equal(combinations.size, 4);
+    assert.deepEqual(fullScaffolds(modules), [
+      {
+        modules: [
+          "database-postgres",
+          "api-keys-organization",
+          "api",
+          "api-keys",
+          "auth",
+          "database",
+        ],
+        name: "full-api-keys-organization",
+      },
+      {
+        modules: [
+          "database-postgres",
+          "api-keys-user",
+          "api",
+          "api-keys",
+          "auth",
+          "database",
+        ],
+        name: "full-api-keys-user",
+      },
+    ]);
   });
 
-  // `ecommerce` depends on `database-postgres` by design (plan 0106: "Postgres only"), so
-  // `add ecommerce` refuses in a D1 project. The smoke expects that refusal and leaves the
-  // module out of every D1 project, as it does a module that depends on it.
+  it("leads with the driver when nothing conflicts", () => {
+    assert.deepEqual(
+      fullScaffolds([
+        free("api"),
+        { ...free("database"), requiresOneOf: ["database-postgres"] },
+        { ...free("database-postgres"), dependsOn: ["database"] },
+      ]),
+      [{ modules: ["database-postgres", "api", "database"], name: "full" }]
+    );
+  });
+
   it("leaves a module out of a project whose choice conflicts with what it depends on", () => {
     const scaffolds = fullScaffolds([
-      { conflictsWith: ["database-postgres"], name: "database-d1" },
-      { conflictsWith: ["database-d1"], name: "database-postgres" },
+      { conflictsWith: ["b"], name: "a" },
+      { conflictsWith: ["a"], name: "b" },
       free("api"),
-      { ...free("shop"), dependsOn: ["api", "database-postgres"] },
+      { ...free("shop"), dependsOn: ["api", "b"] },
       { ...free("shop-reports"), dependsOn: ["shop"] },
     ]);
     assert.deepEqual(scaffolds, [
-      { modules: ["database-d1", "api"], name: "full-database-d1" },
-      {
-        modules: ["database-postgres", "api", "shop", "shop-reports"],
-        name: "full-database-postgres",
-      },
+      { modules: ["a", "api"], name: "full-a" },
+      { modules: ["b", "api", "shop", "shop-reports"], name: "full-b" },
     ]);
   });
 
@@ -352,6 +358,20 @@ describe("compareSemver", () => {
 
   it("refuses a version that is not semver", () => {
     assert.throws(() => compareSemver("main", "0.8.0"), /not a semver/);
+  });
+});
+
+describe("upgradeAddTarget", () => {
+  it("pins the module to the tag of a release before 0.10.0", () => {
+    assert.equal(
+      upgradeAddTarget("0.9.0", "email-react"),
+      "mimukit/saasaloy@v0.9.0/email-react"
+    );
+  });
+
+  it("names the module bare from 0.10.0, which refuses a pin", () => {
+    assert.equal(upgradeAddTarget("0.10.0", "email-react"), "email-react");
+    assert.equal(upgradeAddTarget("0.11.0", "admin"), "admin");
   });
 });
 
@@ -412,7 +432,8 @@ describe("readNoteFrontmatter", () => {
 
   it("refuses a `when` key it cannot judge", () => {
     assert.throws(
-      () => readNoteFrontmatter("---\ntitle: X\nwhen:\n  driver: d1\n---\n"),
+      () =>
+        readNoteFrontmatter("---\ntitle: X\nwhen:\n  driver: postgres\n---\n"),
       /when\.driver/
     );
   });

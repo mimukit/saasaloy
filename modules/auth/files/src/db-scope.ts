@@ -80,9 +80,8 @@ const authDbTarget: Record<string, unknown> = {};
  *
  * Every read resolves against the client `withAuthScope` put in `dbScope` for the
  * request that is running, so one module-scope `auth` serves every request with that
- * request's own connection. A read outside a scope throws, under both drivers, so a
- * route that forgets the wrapper fails the same way on D1 as on Postgres rather than
- * passing in development and failing after the driver switch.
+ * request's own connection. A read outside a scope throws, so a route that forgets the
+ * wrapper fails on its first request rather than passing until a socket leaks.
  *
  * Methods come back bound to the real client. `db.select()` is called as a method, and
  * an unbound function would run with the proxy as its `this`.

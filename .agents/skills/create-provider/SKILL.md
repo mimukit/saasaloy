@@ -41,8 +41,8 @@ amendment carves out exactly one exception, and a new provider must land inside 
   state" means "driver".
 
 A stateful capability can still offer a **choice made once, at install time**, without becoming
-multi-provider. That is a driver module, and `database-d1` / `database-postgres` are the only pair
-today. It is a different shape with its own rules, so if that is what you are writing, stop here
+multi-provider. That is a driver module, and `api-keys-organization` / `api-keys-user` are the
+pair to read. It is a different shape with its own rules, so if that is what you are writing, stop here
 and read ADR 0026 instead.
 
 Also check that a real interface already exists. Provider modules only work where a capability has
@@ -81,10 +81,10 @@ gets documented; add a row to its provider table and, if the provider needs out-
 short runbook section there. One skill per capability keeps a consumer from installing five
 near-identical runbooks.
 
-> **Drivers are the exception, and they are not providers.** `database-d1` and `database-postgres`
-> each ship a skill folder, carry `scaffolds[]`, and replace files the capability would otherwise
-> own. They can do that because they exclude each other with `conflictsWith`, so a project installs
-> exactly one and receives exactly one runbook. That is a **driver module**, recorded in
+> **Drivers are the exception, and they are not providers.** `api-keys-organization` and
+> `api-keys-user` each ship the files that decide who owns a key, and `database-postgres` carries
+> `scaffolds[]` and a skill folder of its own. A driver can do that because its siblings exclude it
+> with `conflictsWith`, so a project installs exactly one and receives exactly one set of files. That is a **driver module**, recorded in
 > [ADR 0026](../../../docs/adr/0026-adr-database-driver-split-2026-08-28.md) and `CONTEXT.md`, not
 > a licence to grow a provider. If your module is mutually exclusive with a sibling, read that ADR.
 > If it is one of several that coexist behind an interface, every rule on this page still binds
@@ -92,8 +92,8 @@ near-identical runbooks.
 >
 > **A driver name belongs in exactly two places**: the capability's `requiresOneOf`, and the
 > `conflictsWith` each driver declares against its siblings. No consumer names a driver in
-> `dependsOn`. A feature depends on `database`, and the user picks `database-d1` or
-> `database-postgres` from the capability's prompt. The same rule holds for a provider: a consumer
+> `dependsOn`. A feature depends on `api-keys`, and the user picks `api-keys-organization` or
+> `api-keys-user` from the capability's prompt. The same rule holds for a provider: a consumer
 > depends on `email`, never on `email-resend`.
 
 ### Why the whole descriptor, and not one swappable function body

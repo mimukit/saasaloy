@@ -34,9 +34,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 //
 // `packages/payment` declares the port and never implements it: the core has zero npm
 // runtime dependencies, so the SQL lives here, in the one workspace that holds both the
-// schema and the request's client (ADR 0029). Every builder call below is the same under
-// D1 and Postgres; the dialect reaches only the table files `modules/payment` ships twice
-// under `onlyWith`.
+// schema and the request's client (ADR 0029). The dialect reaches only the table files
+// `modules/payment` ships.
 
 const storeScope = new AsyncLocalStorage<PaymentStore>();
 
@@ -249,7 +248,7 @@ export interface PaymentRefundView {
 
 // The payment tables keep a user id as `text`, while a project's `users.id` may be `text`
 // or `uuid`. Postgres has no `uuid = text` operator, so every join casts the users side
-// to text. `CAST(... AS TEXT)` rather than `::text`, because D1 runs this file too.
+// to text with the standard `CAST(... AS TEXT)`.
 const userIdText = sql<string>`CAST(${users.id} AS TEXT)`;
 
 /** The staff queue: one page of payments, newest first, oldest first for `submitted`. */
@@ -407,8 +406,8 @@ function receivingAccountOf(payment: Payment): ReceivingAccount | null {
 }
 
 /**
- * Whether a write broke a unique index. Postgres reports SQLSTATE 23505; D1 reports
- * `UNIQUE constraint failed`. Drizzle wraps the driver's error in its own, so walk the
+ * Whether a write broke a unique index. Postgres reports SQLSTATE 23505, and the check
+ * also accepts a `UNIQUE constraint failed` message. Drizzle wraps the driver's error in its own, so walk the
  * `cause` chain. The query text Drizzle puts in its own message names the column, so the
  * check reads the driver's error, not that text.
  */

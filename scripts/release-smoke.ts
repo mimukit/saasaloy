@@ -17,12 +17,12 @@
 // template reaches through a range can move under our exact pins with no change on our
 // side, and then a fresh project's dev server fails for everyone. Only a real install
 // finds that, so `.github/workflows/smoke.yml` runs this script on a schedule as well.
-// The second scaffolds a project with every module, one per database driver, and runs
+// The second scaffolds a project with every module, one per API key owner, and runs
 // that project's own `pnpm lint` (issue #152), `pnpm typecheck` (issue #220), `pnpm test`
 // and `pnpm build` (issue #347). Only there do imports between workspaces resolve, the
 // type-aware pass reach the installed blocks, `add` format its patches, a module's files
-// typecheck against each other, and the module route tests run. The Postgres projects'
-// tests need Docker: `pnpm db:setup` starts their server with `docker compose`, and the
+// typecheck against each other, and the module route tests run. The projects' tests need
+// Docker: `pnpm db:setup` starts their Postgres server with `docker compose`, and the
 // script stops it and deletes its volume at the end.
 //
 // The upgrade step needs the network too (issue #298). It installs the previous published
@@ -32,7 +32,7 @@
 // owed. `--upgrade-only` runs this step alone after the pack.
 //
 // The skipped-release step needs the network as well (issue #312). It scaffolds a project
-// with CLI 0.5.0 from npm, deletes one demo block, and runs the packed CLI's `update`. The
+// with CLI 0.7.0 from npm, deletes one demo block, and runs the packed CLI's `update`. The
 // run must convert the project, find the base of every file it did not delete, add the
 // aliases the project lacks, and leave the block deleted. `--skipped-only` runs this step
 // alone after the pack.
@@ -268,8 +268,11 @@ export function findRenderErrors(log: string): string[] {
  * `FULL_SCAFFOLD_CHECKS`. Exported for its own test.
  *
  * Each project takes a maximal compatible set of choices, then every conflict-free
- * module. Independent choices cross, so each API key owner runs with each database
- * driver. Dependencies order the choices before the remaining modules.
+ * module. Independent choices cross, so each API key owner gets a project of its own.
+ * Dependencies order the choices before the remaining modules. A module that answers a
+ * `requiresOneOf` goes ahead of the module that names it, because `add --yes` refuses a
+ * requirement nothing answers: `database-postgres` leads, so the `add` that reaches
+ * `database` already holds its driver.
  */
 export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
   const exclusive = modules
@@ -286,9 +289,6 @@ export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
     .filter((entry) => !exclusive.includes(entry.name))
     .map((entry) => entry.name)
     .toSorted();
-  if (exclusive.length === 0) {
-    return [{ modules: free, name: "full" }];
-  }
   const entries = new Map(modules.map((entry) => [entry.name, entry]));
   const conflicts = (a: string, b: string): boolean =>
     Boolean(entries.get(a)?.conflictsWith.includes(b)) ||
@@ -311,34 +311,8 @@ export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
     )
     .toSorted((a, b) => a.join(",").localeCompare(b.join(",")))
     .map((choice) => {
-      const selected = new Set(choice);
-      const visited = new Set<string>();
-      const ordered: string[] = [];
-      const visit = (name: string): void => {
-        if (visited.has(name)) {
-          return;
-        }
-        visited.add(name);
-        const entry = entries.get(name);
-        for (const dependency of entry?.dependsOn ?? []) {
-          visit(dependency);
-        }
-        const provider = entry?.requiresOneOf?.find((option) =>
-          selected.has(option)
-        );
-        if (provider !== undefined) {
-          visit(provider);
-        }
-        if (selected.has(name)) {
-          ordered.push(name);
-        }
-      };
-      for (const name of choice) {
-        visit(name);
-      }
-      // A free module that depends on a module this choice excludes cannot be added here:
-      // `add ecommerce` refuses in a D1 project by design. Leave it to the projects that
-      // can take it.
+      // A free module that depends on a module this choice excludes cannot be added here.
+      // Leave it to the projects that can take it.
       const dependencies = (
         name: string,
         seen = new Set<string>()
@@ -355,9 +329,44 @@ export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
         dependencies(name).every(
           (dependency) => !choice.some((other) => conflicts(dependency, other))
         );
+      const selected = new Set(choice);
+      const fitting = free.filter(fits);
+      const available = new Set([...choice, ...fitting]);
+      const providerOf = (name: string): string | undefined =>
+        entries
+          .get(name)
+          ?.requiresOneOf?.find((option) => available.has(option));
+      const providers = new Set(
+        [...available].flatMap((name) => providerOf(name) ?? [])
+      );
+      const visited = new Set<string>();
+      const ordered: string[] = [];
+      const visit = (name: string): void => {
+        if (visited.has(name)) {
+          return;
+        }
+        visited.add(name);
+        for (const dependency of entries.get(name)?.dependsOn ?? []) {
+          visit(dependency);
+        }
+        const provider = providerOf(name);
+        if (provider !== undefined) {
+          visit(provider);
+        }
+        if (selected.has(name) || providers.has(name)) {
+          ordered.push(name);
+        }
+      };
+      for (const name of [...choice, ...fitting]) {
+        visit(name);
+      }
+      const picked = ordered.filter((name) => selected.has(name));
       return {
-        modules: [...ordered, ...free.filter(fits)],
-        name: `full-${ordered.join("-")}`,
+        modules: [
+          ...ordered,
+          ...fitting.filter((name) => !ordered.includes(name)),
+        ],
+        name: picked.length === 0 ? "full" : `full-${picked.join("-")}`,
       };
     });
 }
@@ -375,7 +384,7 @@ const UPGRADE_SOURCE = "mimukit/saasaloy";
  */
 const UPGRADE_ADDS: readonly (readonly string[])[] = [
   ["email-react"],
-  ["admin", "--with", "database-d1"],
+  ["admin", "--with", "database-postgres"],
 ];
 
 /**
@@ -383,6 +392,20 @@ const UPGRADE_ADDS: readonly (readonly string[])[] = [
  * expected to stay out of the update report.
  */
 const UPGRADE_TESTING = "off";
+
+/**
+ * The first release whose `add` refuses a pinned default-registry module. From 0.10.0 the
+ * CLI reads the default registry at its own release tag (ADR 0062), so `add` names a
+ * module bare and the release decides the ref.
+ */
+const UNPINNED_ADD_FROM = "0.10.0";
+
+/** The `add` argument that takes `name` from the default registry at `previous`. */
+export function upgradeAddTarget(previous: string, name: string): string {
+  return compareSemver(previous, UNPINNED_ADD_FROM) >= 0
+    ? name
+    : `${UPGRADE_SOURCE}@v${previous}/${name}`;
+}
 
 /** What `update --dry-run` exits with: a preview stays 0 even while notes are pending. */
 const DRY_RUN_EXIT = 0;
@@ -668,20 +691,21 @@ export function checkPlanNotes(
 
 /**
  * The release the skipped-release project starts from. PrimeShopr's base was recorded at
- * 0.5.0 and skipped to 0.8.0 (issue #312), and 0.5.0 already writes the lock's `base`
- * record, so the conversion starts its base search at that release.
+ * 0.5.0 and skipped to 0.8.0 (issue #312). The step starts from 0.7.0, the first release
+ * that ships `database-postgres` (plan 0117). It writes the lock's `base` record too, so the
+ * conversion starts its base search at that release.
  */
-const SKIPPED_FROM = "0.5.0";
+const SKIPPED_FROM = "0.7.0";
 
 /**
- * What the skipped-release project takes from 0.5.0, one `add` each, in order. `auth`
- * now writes `@config/sections/auth.ts`, under an alias 0.5.0's `saasaloy.json` lacks,
- * so the update proves it adds the alias. 0.5.0 has no `--with`, so the driver goes first.
+ * What the skipped-release project takes from 0.7.0, one `add` each, in order. `auth`
+ * writes `@config/sections/auth.ts`, so the update must find the `@config` alias in the
+ * project's `saasaloy.json`. The driver goes first, so `database` resolves to it.
  */
-const SKIPPED_ADDS: readonly string[] = ["database-d1", "auth"];
+const SKIPPED_ADDS: readonly string[] = ["database-postgres", "auth"];
 
 /**
- * The demo block the skipped-release step deletes. 0.5.0 ships it and the packed template
+ * The demo block the skipped-release step deletes. 0.7.0 ships it and the packed template
  * still does, so the update tracks it and must leave it deleted rather than write it.
  */
 export const SKIPPED_BLOCK = "packages/ui/src/blocks/faq.tsx";
@@ -846,12 +870,9 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
   return entries;
 }
 
-/** The driver whose full scaffolds need a Postgres server for their tests. */
-const POSTGRES_DRIVER = "database-postgres";
-
 /**
  * Runs one task at a time, in the order they arrive. The full scaffolds' `pnpm test` runs
- * through one queue. The Postgres scaffolds' `db:setup` runs through another: the first
+ * through one queue. Their `db:setup` runs through another: the first
  * starts its compose project on port 5432, and the second finds the server answering and
  * creates its own database there. Two at once would race for the port.
  */
@@ -991,9 +1012,7 @@ async function checkFullScaffold(
     runQuiet("pnpm", ["db:setup"], `pnpm db:setup in ${scaffold.name}`, {
       cwd: dir,
     });
-  await (scaffold.modules.includes(POSTGRES_DRIVER)
-    ? serialPostgres(dbSetup)
-    : dbSetup());
+  await serialPostgres(dbSetup);
   await setupEnv(bin, dir, scaffold.name, env, registry);
   for (const check of FULL_SCAFFOLD_CHECKS) {
     const runCheck = () => {
@@ -1014,15 +1033,12 @@ async function checkFullScaffold(
 /**
  * Stop the Postgres container a full scaffold's `db:setup` started, and delete its volume.
  * `docker compose down -v` in a project that started nothing changes nothing, so it runs
- * in every Postgres scaffold that got far enough to hold a `compose.yaml`.
+ * in every scaffold that got far enough to hold a `compose.yaml`.
  */
 async function stopPostgres(scaffolds: readonly FullScaffold[]): Promise<void> {
   for (const scaffold of scaffolds) {
     const dir = join(workDir, scaffold.name);
-    if (
-      scaffold.modules.includes(POSTGRES_DRIVER) &&
-      (await pathPresent(join(dir, "compose.yaml")))
-    ) {
+    if (await pathPresent(join(dir, "compose.yaml"))) {
       spawnSync("docker", ["compose", "down", "-v"], {
         cwd: dir,
         stdio: "ignore",
@@ -1165,7 +1181,7 @@ async function checkUpgrade(
     { cwd: workDir, env: remoteEnv }
   );
   for (const [name, ...flags] of UPGRADE_ADDS) {
-    const target = `${UPGRADE_SOURCE}@v${previous}/${String(name)}`;
+    const target = upgradeAddTarget(previous, String(name));
     await runQuiet(
       previousBin,
       ["add", target, ...flags, "--yes"],
@@ -1196,10 +1212,9 @@ async function checkUpgrade(
     }
   );
   if (expected.length === 0) {
-    throw new StepError(
-      `the upgrade from ${previous} expects no update note, so the step proves nothing`,
-      ["Add a module to UPGRADE_ADDS whose notes reach this range."]
-    );
+    // A release with no update note in its range is normal. The step still proves the
+    // update runs, and that the report lists no note it should not.
+    step(`the upgrade from ${previous} expects no update note`);
   }
 
   step(`running \`saasaloy update --dry-run\` (${version}) in ${projectName}`);
@@ -1230,7 +1245,9 @@ async function checkUpgrade(
     step(`update note ${id} listed (may apply)`);
   }
   step(
-    `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
+    expected.length === 0
+      ? `${projectName} from ${previous} lists no update note, as expected (${seconds(started)})`
+      : `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
   );
 }
 
@@ -1372,14 +1389,14 @@ function outputTail(result: Captured, count = 30): string[] {
 }
 
 /**
- * Scaffold a project with CLI 0.5.0 and its modules at the `v0.5.0` tag, delete one demo
+ * Scaffold a project with CLI 0.7.0 and its modules at the `v0.7.0` tag, delete one demo
  * block, and run the packed CLI's `update` (issue #312, plan 0116). Four things must hold.
  * No run reports an unknown alias. The conversion finds the base of every tracked file but
  * the deleted block. The block stays deleted, and a report that names it lists it under
  * "Left deleted". A second run either has nothing to do and leaves the block absent, or
  * refuses with exit 2 while the first run's conflict markers are still in place.
  *
- * It needs the network twice: npm for 0.5.0, and GitHub for the modules 0.5.0 fetches.
+ * It needs the network twice: npm for 0.7.0, and GitHub for the modules 0.7.0 fetches.
  * `env` points the packed CLI at the payload cache `fillPayloadCache` wrote.
  */
 async function checkSkippedRelease(
@@ -1450,7 +1467,7 @@ async function checkSkippedRelease(
       outputTail(first)
     );
   }
-  // Every file but the deleted block was written by 0.5.0 from the cached v0.5.0 payload,
+  // Every file but the deleted block was written by 0.7.0 from the cached v0.7.0 payload,
   // so its recorded hash has a render to match.
   if (counts.found < counts.tracked - 1) {
     throw new StepError(
@@ -1754,7 +1771,7 @@ async function main(): Promise<void> {
     return;
   }
   const upgrade = checkUpgrade(bin, version, cacheEnv);
-  // Issue #312. A 0.5.0 project takes one update. `--skipped-only` runs this step alone.
+  // Issue #312. A 0.7.0 project takes one update. `--skipped-only` runs this step alone.
   const skipped = checkSkippedRelease(bin, cacheEnv);
   // The full run reads the outcomes later, through `Promise.allSettled`. A handler now
   // keeps an early rejection from counting as unhandled, which would end the process.
@@ -1814,16 +1831,15 @@ async function main(): Promise<void> {
   // project that fails, not only the first.
   const registry = await readModules(offlineEnv.SAASALOY_REGISTRY_DIR);
   const scaffolds = fullScaffolds(registry);
-  // The Postgres scaffolds' route tests need a server, and `db:setup` starts one with
+  // The full scaffolds' route tests need a Postgres server, and `db:setup` starts one with
   // `docker compose`. Say so before minutes of installs, not after them.
   if (
-    scaffolds.some((scaffold) => scaffold.modules.includes(POSTGRES_DRIVER)) &&
     spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status !==
-      0
+    0
   ) {
     fail(
       "`docker compose` is not available",
-      `The ${POSTGRES_DRIVER} scaffolds run their route tests on the Postgres that \`pnpm db:setup\` starts with docker compose.`,
+      "The full scaffolds run their route tests on the Postgres that `pnpm db:setup` starts with docker compose.",
       "Install Docker with the compose plugin, or start the Docker daemon, then run the smoke again."
     );
   }

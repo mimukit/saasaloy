@@ -84,7 +84,6 @@ interface Row {
 
 interface FileEntry {
   target: string;
-  onlyWith?: string;
   when?: string;
   seed?: boolean;
 }
@@ -136,11 +135,9 @@ function stringMap(value: unknown): Record<string, string> {
 
 function fileEntries(value: unknown): FileEntry[] {
   return records(value).map((record) => {
-    const onlyWith = field(record, "onlyWith");
     const when = field(record, "when");
     return {
       target: field(record, "target"),
-      ...(onlyWith === "" ? {} : { onlyWith }),
       ...(when === "" ? {} : { when }),
       ...(record.seed === true ? { seed: true } : {}),
     };
@@ -472,7 +469,6 @@ function scaffoldLines(item: Descriptor): string[] {
 
 function fileLine(entry: FileEntry): string {
   const notes = [
-    entry.onlyWith === undefined ? "" : `only with ${code(entry.onlyWith)}`,
     entry.when === undefined ? "" : `when ${code(entry.when)}`,
     entry.seed === true ? "seed, written once" : "",
   ].filter((note) => note !== "");

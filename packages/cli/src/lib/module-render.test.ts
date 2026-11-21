@@ -54,16 +54,16 @@ function api(): Promise<LoadedModule> {
   );
 }
 
-function d1(): Promise<LoadedModule> {
-  return writeModule("database-d1", {
+function kv(): Promise<LoadedModule> {
+  return writeModule("kv-store", {
     type: "saasaloy:capability",
     dependsOn: ["api"],
     patches: [
       {
         file: "apps/api/wrangler.jsonc",
         kind: "wrangler-binding",
-        bindingType: "d1_databases",
-        entry: { binding: "DB", database_name: "{{PROJECT_NAME}}-db" },
+        bindingType: "kv_namespaces",
+        entry: { binding: "KV", id: "{{PROJECT_NAME}}-kv" },
       },
     ],
   });
@@ -71,16 +71,16 @@ function d1(): Promise<LoadedModule> {
 
 describe(renderModule, () => {
   it("renders every string in a patch entry and leaves the rest as authored", async () => {
-    const rendered = renderModule(await d1(), templateVars("alpha"));
+    const rendered = renderModule(await kv(), templateVars("alpha"));
     expect(rendered.item.patches?.[0]).toMatchObject({
       file: "apps/api/wrangler.jsonc",
-      entry: { binding: "DB", database_name: "alpha-db" },
+      entry: { binding: "KV", id: "alpha-kv" },
     });
   });
 
   it("is a no-op on a module it already rendered", async () => {
     const vars = templateVars("alpha");
-    const once = renderModule(await d1(), vars);
+    const once = renderModule(await kv(), vars);
     expect(renderModule(once, vars).item).toStrictEqual(once.item);
   });
 

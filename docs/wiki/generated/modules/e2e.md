@@ -169,7 +169,7 @@ Three failures have a fix rather than a bug behind them:
 
 #### The database
 
-The suite uses the project's own `db:setup`, `db:seed` and `db:drop`, so it works the same under `database-d1` and `database-postgres` and carries no second code path. Both setup and seed carry the guard: `db:setup` refuses a `DATABASE_URL` its state block does not vouch for, and `db:seed` refuses `NODE_ENV=production` and any database that is not this project's own, before it connects.
+The suite uses the project's own `db:setup`, `db:seed` and `db:drop`, so it names no driver and carries no second code path. Both setup and seed carry the guard: `db:setup` refuses a `DATABASE_URL` its state block does not vouch for, and `db:seed` refuses `NODE_ENV=production` and any database that is not this project's own, before it connects.
 
 The database is dropped **on CI only**. Locally it is kept, because a drop means a full migration on the next run for no safety gained. Run `pnpm db:drop` yourself for a clean slate.
 

@@ -58,8 +58,7 @@ A starting order:
 
 Fill in and test this before you rely on it. A code rollback does not undo a migration, and a restore loses every write since the dump was taken. Only the owner decides on a restore.
 
-- Postgres: `db:prod:dump` and `db:prod:migrate` write a `pg_dump --format=custom` file named `<project>_production-<UTC time>.dump`. Restore it with `pg_restore --clean --if-exists --single-transaction`, through `pnpm --filter @repo/db exec env-deploy --run api -- <command>` so `DATABASE_URL` is the production value. Write the exact command for this project here.
-- D1: `db:prod:dump` writes a SQL file. Restore it with `wrangler d1 execute <database_name> --remote --file <dump>`, or roll the database back in place with D1 Time Travel (`wrangler d1 time-travel restore`).
+- `db:prod:dump` and `db:prod:migrate` write a `pg_dump --format=custom` file named `<project>_production-<UTC time>.dump`. Restore it with `pg_restore --clean --if-exists --single-transaction`, through `pnpm --filter @repo/db exec env-deploy --run api -- <command>` so `DATABASE_URL` is the production value. Write the exact command for this project here.
 
 After a restore, roll the api back to the version that matches that schema.
 

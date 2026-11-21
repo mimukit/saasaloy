@@ -14,7 +14,7 @@ import type { FormattingOptions } from "jsonc-parser";
 
 export interface WranglerBinding {
   /**
-   * Array to upsert into, e.g. "d1_databases", "kv_namespaces", "routes".
+   * Array to upsert into, e.g. "kv_namespaces", "routes".
    *
    * A value with a dot addresses a **nested** array — "queues.producers",
    * "queues.consumers", "triggers.crons" (ADR 0033). Missing parent objects are
@@ -98,7 +98,7 @@ export function upsertWranglerBinding(
 }
 
 /**
- * A `bindingType` as a `jsonc-parser` location path. "d1_databases" stays one
+ * A `bindingType` as a `jsonc-parser` location path. "kv_namespaces" stays one
  * segment; "queues.producers" becomes two, which is the whole of the dotted-path
  * extension ADR 0033 asks for.
  */

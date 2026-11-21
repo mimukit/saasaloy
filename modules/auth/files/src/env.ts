@@ -1,6 +1,6 @@
 // The env rules `src/auth.ts` applies at module scope, kept in their own file with
 // no imports at all. That is what makes them testable: `src/auth.ts` pulls in
-// `cloudflare:workers`, Better Auth and the D1 client the moment it loads, so a test
+// `cloudflare:workers`, Better Auth and the database client the moment it loads, so a test
 // that wanted `deriveCookieDomain` out of it would have to boot a Worker to get one
 // pure string function. The rules decide how sessions are signed and where the cookie
 // is scoped, which is exactly the code worth covering.

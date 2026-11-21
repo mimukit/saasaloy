@@ -122,7 +122,7 @@ The Cron Trigger fires every minute, which is **1,440 Worker invocations a day**
 
 ### Overlapping runs
 
-Cloudflare gives no lock. A schedule that fires every minute while its job takes 90 seconds has two runs in flight, and a retry can overlap the delivery it is retrying. The tick enqueues rather than running inline, which keeps the tick itself short, but it does not serialize anything. A job that must not overlap takes its own lock — a D1 row, or a KV key with a TTL once the `kv` capability lands (issue #129) — in the handler. The capability ships no lock of its own.
+Cloudflare gives no lock. A schedule that fires every minute while its job takes 90 seconds has two runs in flight, and a retry can overlap the delivery it is retrying. The tick enqueues rather than running inline, which keeps the tick itself short, but it does not serialize anything. A job that must not overlap takes its own lock — a database row, or a KV key with a TTL once the `kv` capability lands (issue #129) — in the handler. The capability ships no lock of its own.
 
 ### Write an idempotent handler
 

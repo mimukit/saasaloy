@@ -57,9 +57,9 @@ describe("detectCollisions — a legal overlap", () => {
     const found = detectCollisions({
       planned: [
         targets("database", "packages/db/tsconfig.json"),
-        targets("database-d1", "packages/db/tsconfig.json"),
+        targets("database-lite", "packages/db/tsconfig.json"),
       ],
-      modules: modules(mod("database"), mod("database-d1", ["database"])),
+      modules: modules(mod("database"), mod("database-lite", ["database"])),
     });
     expect(found).toStrictEqual([]);
   });
@@ -68,10 +68,13 @@ describe("detectCollisions — a legal overlap", () => {
     const found = detectCollisions({
       planned: [
         targets("database", "packages/db/tsconfig.json"),
-        targets("database-d1", "packages/db/tsconfig.json"),
+        targets("database-lite", "packages/db/tsconfig.json"),
       ],
       // Reversed: the capability names the driver instead.
-      modules: modules(mod("database", ["database-d1"]), mod("database-d1")),
+      modules: modules(
+        mod("database", ["database-lite"]),
+        mod("database-lite")
+      ),
     });
     expect(found).toStrictEqual([]);
   });
@@ -157,19 +160,19 @@ describe("detectCollisions — an illegal overlap", () => {
     const found = detectCollisions({
       planned: [
         targets("database", "packages/db/tsconfig.json"),
-        targets("database-d1", "packages/db/src/client.ts"),
+        targets("database-lite", "packages/db/src/client.ts"),
         targets("database-postgres", "packages/db/src/client.ts"),
       ],
       modules: modules(
         mod("database"),
-        mod("database-d1", ["database"]),
+        mod("database-lite", ["database"]),
         mod("database-postgres", ["database"])
       ),
     });
     expect(found).toStrictEqual([
       {
         target: "packages/db/src/client.ts",
-        module: "database-d1",
+        module: "database-lite",
         other: "database-postgres",
       },
     ] satisfies FileCollision[]);
@@ -287,18 +290,18 @@ function claim(
 describe("detectOwnedCollisions — a legal claim", () => {
   it("allows a module to write over a file owned by a module it dependsOn", () => {
     const found = detectOwnedCollisions(
-      [claim("packages/db/tsconfig.json", "database", "database-d1")],
-      modules(mod("database"), mod("database-d1", ["database"]))
+      [claim("packages/db/tsconfig.json", "database", "database-lite")],
+      modules(mod("database"), mod("database-lite", ["database"]))
     );
     expect(found).toStrictEqual([]);
   });
 
   it("allows a capability to rewrite a file its own driver took over", () => {
-    // `add database --force` on a d1 project: the driver reaches the capability, so the
+    // `add database --force` on a project with the lite driver: the driver reaches the capability, so the
     // pair is related and last-planner-wins still governs the bytes.
     const found = detectOwnedCollisions(
-      [claim("packages/db/tsconfig.json", "database-d1", "database")],
-      modules(mod("database"), mod("database-d1", ["database"]))
+      [claim("packages/db/tsconfig.json", "database-lite", "database")],
+      modules(mod("database"), mod("database-lite", ["database"]))
     );
     expect(found).toStrictEqual([]);
   });
@@ -323,15 +326,21 @@ describe("detectOwnedCollisions — a legal claim", () => {
 describe("detectOwnedCollisions — an illegal claim", () => {
   it("refuses a sibling driver taking the installed driver's file", () => {
     const found = detectOwnedCollisions(
-      [claim("packages/db/src/client.ts", "database-d1", "database-postgres")],
+      [
+        claim(
+          "packages/db/src/client.ts",
+          "database-lite",
+          "database-postgres"
+        ),
+      ],
       modules(
         mod("database"),
-        mod("database-d1", ["database"]),
+        mod("database-lite", ["database"]),
         mod("database-postgres", ["database"])
       )
     );
     expect(found).toStrictEqual([
-      claim("packages/db/src/client.ts", "database-d1", "database-postgres"),
+      claim("packages/db/src/client.ts", "database-lite", "database-postgres"),
     ] satisfies OwnedCollision[]);
   });
 
@@ -354,7 +363,7 @@ describe("detectOwnedCollisions — an illegal claim", () => {
     // The owner is installed but not in this run's graph, so no edge can be read and
     // the stricter answer is the safe one.
     const found = detectOwnedCollisions(
-      [claim("packages/db/src/client.ts", "database-d1", "blog")],
+      [claim("packages/db/src/client.ts", "database-lite", "blog")],
       modules(mod("blog"))
     );
     expect(found).toHaveLength(1);
@@ -364,15 +373,15 @@ describe("detectOwnedCollisions — an illegal claim", () => {
 describe("formatOwnedCollisions — the refusal text", () => {
   const owned = claim(
     "packages/db/src/client.ts",
-    "database-d1",
+    "database-lite",
     "database-postgres"
   );
 
   it("names the owner, the path, and the remove that clears it", () => {
     const message = formatOwnedCollisions([owned], "database-postgres");
-    expect(message).toContain("database-d1");
+    expect(message).toContain("database-lite");
     expect(message).toContain("packages/db/src/client.ts");
-    expect(message).toContain("saasaloy remove database-d1");
+    expect(message).toContain("saasaloy remove database-lite");
   });
 
   it("says --force does not cross module ownership", () => {
@@ -412,7 +421,7 @@ describe("formatOwnedCollisions — the refusal text", () => {
 describe(describeStaleOwner, () => {
   const stale: StaleOwner = {
     target: "packages/db/src/client.ts",
-    owner: "database-d1",
+    owner: "database-lite",
     claimant: "database-postgres",
     ownerKeepsFiles: false,
   };
@@ -420,10 +429,10 @@ describe(describeStaleOwner, () => {
   it("names the stale owner, the path, the claimant, and the remove that clears it", () => {
     const message = describeStaleOwner(stale);
 
-    expect(message).toContain("database-d1");
+    expect(message).toContain("database-lite");
     expect(message).toContain("packages/db/src/client.ts");
     expect(message).toContain("database-postgres");
-    expect(message).toContain("saasaloy remove database-d1");
+    expect(message).toContain("saasaloy remove database-lite");
   });
 
   it("does not read as a refusal", () => {
@@ -439,7 +448,7 @@ describe(describeStaleOwner, () => {
     const message = describeStaleOwner({ ...stale, ownerKeepsFiles: true });
 
     expect(message).not.toContain("saasaloy remove");
-    expect(message).toContain("database-d1");
+    expect(message).toContain("database-lite");
     expect(message).toContain("packages/db/src/client.ts");
     expect(message).toContain("leave it installed");
   });

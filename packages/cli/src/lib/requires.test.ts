@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { detectConflicts, formatConflicts } from "./conflicts.js";
+import { detectConflicts } from "./conflicts.js";
 import { emptyLock, upsertLock } from "./lock.js";
 import type { LoadedModule, ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
@@ -36,7 +36,7 @@ function config(...installed: string[]): SaasaloyConfig {
   return { aliases: {}, installed };
 }
 
-const DRIVERS = ["database-d1", "database-postgres"];
+const DRIVERS = ["database-lite", "database-postgres"];
 
 describe("detectMissingRequirements — what counts as satisfied", () => {
   it("flags a module whose choice is neither in the graph nor installed", () => {
@@ -54,7 +54,7 @@ describe("detectMissingRequirements — what counts as satisfied", () => {
       config: config(),
       graph: graph(
         mod("database", { requiresOneOf: DRIVERS }),
-        mod("database-d1", { dependsOn: ["database"] })
+        mod("database-lite", { dependsOn: ["database"] })
       ),
     });
     expect(missing).toStrictEqual([]);
@@ -104,8 +104,8 @@ describe("formatMissingRequirements — the refusal text", () => {
     );
     expect(message).toContain("Cannot add database");
     expect(message).toContain("database needs one of");
-    expect(message).toContain("database-d1, database-postgres");
-    expect(message).toContain("saasaloy add database --with database-d1");
+    expect(message).toContain("database-lite, database-postgres");
+    expect(message).toContain("saasaloy add database --with database-lite");
   });
 
   it("says which requested module dragged in the declaring prerequisite", () => {
@@ -154,25 +154,31 @@ describe("registry-item schema — requiresOneOf", () => {
 
   it("rejects a name that isn't a module name", async () => {
     expect(
-      (await validateRegistryItem(item(["Database-D1"]))).valid
+      (await validateRegistryItem(item(["Database-Lite"]))).valid
     ).toBeFalsy();
     expect((await validateRegistryItem(item(["../etc"]))).valid).toBeFalsy();
   });
 
   it("rejects a repeated name", async () => {
     const result = await validateRegistryItem(
-      item(["database-d1", "database-d1"])
+      item(["database-lite", "database-lite"])
     );
     expect(result.valid).toBeFalsy();
   });
 
-  it("rejects a single-option list — that is what dependsOn is for", async () => {
-    const result = await validateRegistryItem(item(["database-d1"]));
+  it("accepts a single-option list — database names its one driver", async () => {
+    const result = await validateRegistryItem(item(["database-postgres"]));
+    expect(result.errors).toStrictEqual([]);
+    expect(result.valid).toBeTruthy();
+  });
+
+  it("rejects an empty list", async () => {
+    const result = await validateRegistryItem(item([]));
     expect(result.valid).toBeFalsy();
   });
 
   it("rejects a string in place of the list", async () => {
-    const result = await validateRegistryItem(item("database-d1"));
+    const result = await validateRegistryItem(item("database-lite"));
     expect(result.valid).toBeFalsy();
   });
 });
@@ -204,26 +210,21 @@ const PROVENANCE: ModuleProvenance = {
 };
 
 describe("the first-party database driver wiring", () => {
-  it("has the core requiring one of the two drivers", async () => {
+  it("has the core requiring its one driver", async () => {
     expect((await descriptor("database")).requiresOneOf).toStrictEqual([
-      "database-d1",
       "database-postgres",
     ]);
   });
 
-  it("has each driver refusing the other", async () => {
-    expect((await descriptor("database-d1")).conflictsWith).toContain(
-      "database-postgres"
-    );
-    expect((await descriptor("database-postgres")).conflictsWith).toContain(
-      "database-d1"
-    );
+  it("has the driver refusing no module", async () => {
+    expect(
+      (await descriptor("database-postgres")).conflictsWith
+    ).toBeUndefined();
   });
 
   it("has neither payload pinning a driver — `database` is what guarantees one", async () => {
-    // #99 retracted the `dependsOn: ["database-d1"]` stopgap from both payloads. They ship
-    // a per-driver schema variant instead, so they depend on the `database` capability and
-    // let its `requiresOneOf` pick the driver (ADR 0029).
+    // #99 retracted a stopgap that pinned the D1 driver in both payloads. They depend on
+    // the `database` capability and let its `requiresOneOf` pick the driver (ADR 0029).
     expect((await descriptor("auth")).dependsOn).toStrictEqual([
       "api",
       "database",
@@ -240,7 +241,7 @@ describe("the first-party database driver wiring", () => {
       config: config(),
       graph: graph(
         await loaded("database"),
-        await loaded("database-d1"),
+        await loaded("database-postgres"),
         await loaded("auth")
       ),
     });
@@ -262,19 +263,19 @@ describe("the first-party database driver wiring", () => {
     });
 
     expect(missing).toStrictEqual([
-      { declaredBy: "database", options: ["database-d1", "database-postgres"] },
+      { declaredBy: "database", options: ["database-postgres"] },
     ]);
     const message = formatMissingRequirements(missing, "waitlist");
     expect(message).toContain("Cannot add waitlist");
     expect(message).toContain("database (required by waitlist)");
-    expect(message).toContain("database-d1, database-postgres");
+    expect(message).toContain("one of: database-postgres");
   });
 
   it("lets `add auth` through on a project already running database-postgres", async () => {
     // The #99 acceptance case, read off the real descriptors: `add database-postgres`,
     // then `add auth`. `auth` brings no driver of its own, so nothing collides with the
     // installed one and `database`'s requiresOneOf is already satisfied. Before #91 this
-    // pair was refused, because `auth` dragged `database-d1` in and the drivers exclude
+    // pair was refused, because `auth` dragged the D1 driver in and the drivers excluded
     // each other.
     const installed = await loaded("database-postgres");
     const lock = emptyLock();
@@ -289,30 +290,5 @@ describe("the first-party database driver wiring", () => {
     expect(
       detectMissingRequirements({ config: project, graph: incoming })
     ).toStrictEqual([]);
-  });
-
-  it("refuses `add database-d1` on a project already running database-postgres", async () => {
-    // The collision that survives #99 is driver against driver, and only that. The reverse
-    // pass reads the installed driver's lock entry to find it.
-    const installed = await loaded("database-postgres");
-    const lock = emptyLock();
-    upsertLock(lock, PROVENANCE, ["database-postgres"], graph(installed));
-
-    const report = detectConflicts({
-      config: config("database", "database-postgres"),
-      graph: graph(await loaded("database-d1")),
-      lock,
-    });
-
-    expect(report.conflicts).toStrictEqual([
-      {
-        conflictsWith: "database-postgres",
-        declaredBy: "database-d1",
-        installed: "database-postgres",
-      },
-    ]);
-    const message = formatConflicts(report.conflicts, "database-d1");
-    expect(message).toContain("Cannot add database-d1");
-    expect(message).toContain("saasaloy remove database-postgres");
   });
 });

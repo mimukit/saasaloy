@@ -72,7 +72,7 @@ function conditionalItem(
     type: "saasaloy:feature",
     files: [
       {
-        path: "files/db/schema/waitlist.sqlite.ts",
+        path: "files/db/schema/waitlist.ts",
         target: "@db/schema/waitlist.ts",
         ...extra,
       },
@@ -80,24 +80,23 @@ function conditionalItem(
   };
 }
 
-// `onlyWith` is authored on a file entry, and there are two of those objects in the
-// schema — top-level `files[]` and `scaffolds[].files[]`. Both set
-// `additionalProperties: false`, so a keyword added to one and forgotten on the other
-// rejects half the descriptors that use it. auth's variants live in a scaffold and
-// waitlist's in `files[]`, so #99 needs both.
-describe("registry-item schema — onlyWith (#99)", () => {
-  it("declares onlyWith on both file-entry shapes", async () => {
+// `onlyWith` is retired (ADR 0065). Both file-entry shapes, top-level `files[]` and
+// `scaffolds[].files[]`, set `additionalProperties: false`, so a descriptor of the running
+// registry that still carries the key fails here. Only a read at an older release
+// translates it first (`retired-keys.ts`).
+describe("registry-item schema — onlyWith is retired (ADR 0065)", () => {
+  it("declares onlyWith on neither file-entry shape", async () => {
     const schema = await readSchema("registry-item.schema.json");
-    expect(JSON.stringify(schema).match(/"onlyWith"/g)).toHaveLength(2);
+    expect(JSON.stringify(schema).match(/onlyWith/g)).toBeNull();
   });
 
-  it("accepts onlyWith on a top-level files[] entry", async () => {
+  it("refuses onlyWith on a top-level files[] entry", async () => {
     await expect(
-      validateRegistryItem(conditionalItem({ onlyWith: "database-d1" }))
-    ).resolves.toMatchObject({ valid: true });
+      validateRegistryItem(conditionalItem({ onlyWith: "database-postgres" }))
+    ).resolves.toMatchObject({ valid: false });
   });
 
-  it("accepts onlyWith on a scaffold files[] entry", async () => {
+  it("refuses onlyWith on a scaffold files[] entry", async () => {
     await expect(
       validateRegistryItem({
         name: "auth",
@@ -108,7 +107,7 @@ describe("registry-item schema — onlyWith (#99)", () => {
             aliases: { "@auth": "packages/auth/src" },
             files: [
               {
-                path: "files/src/db-provider.pg.ts",
+                path: "files/src/db-provider.ts",
                 target: "src/db-provider.ts",
                 onlyWith: "database-postgres",
               },
@@ -116,21 +115,6 @@ describe("registry-item schema — onlyWith (#99)", () => {
           },
         ],
       })
-    ).resolves.toMatchObject({ valid: true });
-  });
-
-  it("rejects a misspelt onlyWit", async () => {
-    await expect(
-      validateRegistryItem(conditionalItem({ onlyWit: "database-d1" }))
-    ).resolves.toMatchObject({ valid: false });
-  });
-
-  it("rejects a condition that is not one module name", async () => {
-    await expect(
-      validateRegistryItem(conditionalItem({ onlyWith: "Database D1" }))
-    ).resolves.toMatchObject({ valid: false });
-    await expect(
-      validateRegistryItem(conditionalItem({ onlyWith: ["database-d1"] }))
     ).resolves.toMatchObject({ valid: false });
   });
 });
@@ -150,7 +134,7 @@ const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
   },
   "package-json-dependency": { name: "zod", version: "4.4.3" },
   "package-json-script": { name: "db:generate", value: "drizzle-kit generate" },
-  "wrangler-binding": { array: "d1_databases", binding: "DB" },
+  "wrangler-binding": { array: "kv_namespaces", binding: "KV" },
 };
 
 // A kind the descriptor may author has to survive the round trip into the manifest.
@@ -282,8 +266,7 @@ describe("removal warnings", () => {
   });
 });
 
-// #242 Phase 2. `when` rides on the same three entry shapes `onlyWith` does, plus
-// `patches`, and the descriptor gains `untested` on a file and `enablesTesting` on itself.
+// #242 Phase 2. `when` rides on every file entry shape, plus `patches`, and the descriptor gains `untested` on a file and `enablesTesting` on itself.
 describe("registry-item schema — when, untested and enablesTesting (#242)", () => {
   it.each([
     [{ testing: true }],
@@ -310,11 +293,11 @@ describe("registry-item schema — when, untested and enablesTesting (#242)", ()
   it("accepts when on a scaffold files[] entry", async () => {
     await expect(
       validateRegistryItem({
-        name: "database-d1",
+        name: "database-lite",
         type: "saasaloy:capability",
         scaffolds: [
           {
-            workspace: "packages/db-d1",
+            workspace: "packages/db-lite",
             files: [
               {
                 path: "files/scripts/lib/dump.vitest.ts",
@@ -338,7 +321,7 @@ describe("registry-item schema — when, untested and enablesTesting (#242)", ()
     };
     await expect(
       validateRegistryItem({
-        name: "database-d1",
+        name: "database-lite",
         type: "saasaloy:capability",
         patches: [op],
       })
@@ -347,7 +330,7 @@ describe("registry-item schema — when, untested and enablesTesting (#242)", ()
       validateManifest({
         managed: {},
         patches: [
-          { module: "database-d1", file: op.file, patch: op, when: op.when },
+          { module: "database-lite", file: op.file, patch: op, when: op.when },
         ],
       })
     ).resolves.toMatchObject({ valid: true });
@@ -356,7 +339,7 @@ describe("registry-item schema — when, untested and enablesTesting (#242)", ()
   it("rejects when testing false on a patch", async () => {
     await expect(
       validateRegistryItem({
-        name: "database-d1",
+        name: "database-lite",
         type: "saasaloy:capability",
         patches: [
           {

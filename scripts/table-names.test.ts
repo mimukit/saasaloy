@@ -9,7 +9,7 @@
 // first sign-up. This test is where that mistake goes red before a project runs it.
 //
 // It reads the files as text, like `modules/auth/files/src/schema-version.test.ts`: the
-// schema variants import `drizzle-orm`, which this repo's root `node_modules` does not
+// schema files import `drizzle-orm`, which this repo's root `node_modules` does not
 // carry. Run it with `pnpm test:scripts`.
 
 import assert from "node:assert/strict";
@@ -37,7 +37,7 @@ function schemaFiles(): string[] {
       return [];
     }
     return entries
-      .filter((file) => /\.(pg|sqlite)\.ts$/.test(file))
+      .filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts"))
       .map((file) => join(dir, file));
   });
 }
@@ -51,7 +51,7 @@ function sourceFiles(dir: string): string[] {
 // Each call runs from its `export const` to the next one, so an index declared in the
 // table's third argument lands in that table's body.
 function tableCalls(source: string): TableCall[] {
-  const pattern = /export const (\w+) = (?:pgTable|sqliteTable)\(\s*"([^"]+)"/g;
+  const pattern = /export const (\w+) = pgTable\(\s*"([^"]+)"/g;
   const matches = [...source.matchAll(pattern)];
   return matches.map((match, i) => ({
     body: source.slice(match.index, matches[i + 1]?.index ?? source.length),
@@ -72,15 +72,6 @@ function camelCase(snake: string): string {
   return snake.replaceAll(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
-/** True when the schema file's module names `database-postgres` in its `dependsOn`. */
-function postgresOnly(file: string): boolean {
-  const module = relative(file).split("/")[1] ?? "";
-  const descriptor = JSON.parse(
-    readFileSync(join(MODULES, module, "registry-item.json"), "utf-8")
-  ) as { dependsOn?: string[] };
-  return descriptor.dependsOn?.includes("database-postgres") ?? false;
-}
-
 const relative = (file: string) => file.slice(ROOT.length);
 const files = schemaFiles();
 
@@ -96,7 +87,7 @@ describe("module schema table names", () => {
 
     describe(relative(file), () => {
       it("declares at least one table", () => {
-        assert.ok(calls.length > 0, "no pgTable or sqliteTable export found");
+        assert.ok(calls.length > 0, "no pgTable export found");
       });
 
       // oxlint-disable-next-line vitest/prefer-each -- node:test's describe has no .each
@@ -129,22 +120,6 @@ describe("module schema table names", () => {
       }
     });
   }
-
-  // A module that `dependsOn` `database-postgres` runs on Postgres only (`ecommerce`, plan
-  // 0106: its checkout locks rows with `SELECT … FOR UPDATE`), so its `.pg.ts` has no twin.
-  it("gives each .pg.ts file a .sqlite.ts twin with the same tables", () => {
-    for (const pg of files.filter(
-      (file) => file.endsWith(".pg.ts") && !postgresOnly(file)
-    )) {
-      const sqlite = pg.replace(/\.pg\.ts$/, ".sqlite.ts");
-      assert.ok(files.includes(sqlite), `${relative(pg)} has no sqlite twin`);
-      const shape = (path: string) =>
-        tableCalls(readFileSync(path, "utf-8"))
-          .map((call) => `${call.exportKey}=${call.tableName}`)
-          .toSorted();
-      assert.deepEqual(shape(sqlite), shape(pg), relative(pg));
-    }
-  });
 });
 
 describe("the Better Auth adapter", () => {

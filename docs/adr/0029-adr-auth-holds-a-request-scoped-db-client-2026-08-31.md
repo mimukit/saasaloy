@@ -26,3 +26,7 @@ accepted. It is the contract that replaced the `dependsOn: ["database-d1"]` stop
 
 ## References
 Plan: `docs/plans/0036-plan-dialect-neutral-payloads-2026-08-31.md`, rows "Auth connection lifetime", "Who closes the socket", "D1 goes through the ALS too", "`getSession` signature" and "Regression coverage". Issues: [#99](https://github.com/mimukit/saasaloy/issues/99), [#98](https://github.com/mimukit/saasaloy/issues/98). Prior: [ADR 0026](0026-adr-database-driver-split-2026-08-28.md) (the driver split and its amendment), [ADR 0020](0020-adr-capability-owns-its-vendor-packages-2026-07-24.md) (why no route imports `better-auth`), [ADR 0028](0028-adr-routes-register-by-chained-route-patch-2026-08-28.md) (why the auth route mounts on `base`). Code: `modules/auth/files/src/db-scope.ts`, `modules/auth/files/src/db-provider.d1.ts`, `modules/auth/files/src/db-provider.pg.ts`, `modules/auth/files/src/server.ts`, `modules/auth/files/api/routes/auth.ts`. Glossary: `CONTEXT.md` → "Driver module", "Conditional file entry".
+
+## Amendment — 2026-11-20
+
+[ADR 0065](0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md) deletes `database-d1`, so the D1 side of this record (the binding stub, the rejected D1-only option) is history. The request-scoped client stands for Postgres.

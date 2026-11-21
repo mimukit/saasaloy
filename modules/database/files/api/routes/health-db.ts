@@ -14,11 +14,9 @@ import { declare } from "../contract";
 // the Worker answers. The database module mounts this file at `/health/db` with an
 // `api.routes` row, so `get("/")` serves `GET /health/db`.
 //
-// One file serves both drivers. `withDb` is the call shape `database-d1` and
-// `database-postgres` both export, and the query goes through Drizzle's builder, which is
-// the same under either: `select 1 from (select 1) as health_db`. Drizzle's builder has no
-// `select` without a `from`, and the two drivers name their raw-SQL call differently
-// (`run` on D1, `execute` on Postgres), so the subquery is what keeps the file single.
+// `withDb` is the call shape the driver exports, and the query goes through Drizzle's
+// builder: `select 1 from (select 1) as health_db`. Drizzle's builder has no `select`
+// without a `from`, so the subquery gives it one.
 //
 // A failure answers 503 with a fixed message. The driver's error can carry a host, a user
 // name or a query, so it goes to the request's logger and never into the body.

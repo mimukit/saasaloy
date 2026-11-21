@@ -15,7 +15,17 @@ function descriptor(fields: Partial<RegistryDescriptor>): RegistryDescriptor {
 describe("moduleTier", () => {
   it("reads a module with conflictsWith as a driver", () => {
     assert.equal(
-      moduleTier(descriptor({ conflictsWith: ["database-postgres"] })),
+      moduleTier(descriptor({ conflictsWith: ["api-keys-organization"] })),
+      "driver"
+    );
+  });
+
+  it("reads a module another module names in requiresOneOf as a driver", () => {
+    assert.equal(
+      moduleTier(
+        descriptor({ name: "database-postgres" }),
+        new Set(["database-postgres"])
+      ),
       "driver"
     );
   });
@@ -241,7 +251,7 @@ describe("the real registry", () => {
     );
   });
 
-  it("gives the README's 19 providers and 4 drivers", () => {
+  it("gives the README's 19 providers and 3 drivers", () => {
     assert.deepEqual(namesOf("provider"), [
       "email-cloudflare",
       "email-console",
@@ -266,7 +276,6 @@ describe("the real registry", () => {
     assert.deepEqual(namesOf("driver"), [
       "api-keys-organization",
       "api-keys-user",
-      "database-d1",
       "database-postgres",
     ]);
   });

@@ -7,9 +7,8 @@ import type { Db } from "./client";
 // runtime check — a scoped read written without the tenant id does not build, and a table
 // with no `organizationId` column does not fit.
 //
-// This file is dialect-neutral. It never names `sqliteTable` or `pgTable`; it reads the
-// table type back out of `Db`, which `database-d1` and `database-postgres` each declare
-// for the driver the project holds. One file, both drivers.
+// This file never names `pgTable`. It reads the table type back out of `Db`, which the
+// installed driver declares.
 //
 // WHAT THIS DOES NOT DO: nothing stops a route from importing `db` and writing a raw
 // `db.select().from(projects)`. v1 enforces the wrapper by convention and by the
@@ -44,8 +43,7 @@ export function asTenantId(value: string): TenantId {
 
 /**
  * The table type this driver's Drizzle client accepts, read back off `Db` so this file
- * names neither dialect. Under `database-d1` it resolves to `SQLiteTable`, under
- * `database-postgres` to `PgTable`.
+ * names no dialect. Under `database-postgres` it resolves to `PgTable`.
  */
 type DialectTable = Parameters<Db["insert"]>[0];
 
@@ -88,7 +86,7 @@ export function forTenant(db: Db, tenantId: TenantId) {
       // The third cast, and it is dialect-driven. `database-postgres`' `.from()` guards
       // its argument with `TableLikeHasEmptySelection<T> extends true ? DrizzleTypeError
       // : T`, and a bare generic `T` cannot be shown to fail that test from inside a
-      // generic function, so `tsc` refuses it under Postgres and accepts it under D1.
+      // generic function, so `tsc` refuses it without the cast.
       // The public signature above is the strict one, and `T extends TenantTable` is
       // already a real table of this project's dialect.
       // The row type is restated rather than inferred, for the same reason: it is
