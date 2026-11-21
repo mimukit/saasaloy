@@ -180,7 +180,7 @@ function ChangeTable({ event }: { event: ActivityEvent }) {
         <Table className="table-fixed font-mono text-xs">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-28">Field</TableHead>
+              <TableHead className="w-32">Field</TableHead>
               <TableHead>Before</TableHead>
               <TableHead>After</TableHead>
             </TableRow>
@@ -188,7 +188,7 @@ function ChangeTable({ event }: { event: ActivityEvent }) {
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.field}>
-                <TableCell className="align-top wrap-anywhere whitespace-pre-wrap">
+                <TableCell className="truncate align-top" title={row.field}>
                   {row.field}
                 </TableCell>
                 <TableCell className="text-destructive-foreground align-top wrap-anywhere whitespace-pre-wrap">

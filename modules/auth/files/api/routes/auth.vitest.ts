@@ -341,6 +341,30 @@ describe("the admin instance", () => {
     expect(impersonate.status).toBe(404);
   });
 
+  it("closes direct profile and password writes for an admin session", async () => {
+    const admin = await sessionCookie(
+      database.env,
+      "admin@example.test",
+      "/admin/auth"
+    );
+
+    const profile = await call(database.env, "/admin/auth/update-user", admin, {
+      name: "Changed name",
+    });
+    expect(profile.status).toBe(404);
+
+    const password = await call(
+      database.env,
+      "/admin/auth/change-password",
+      admin,
+      {
+        currentPassword: "saasaloy-dev-password",
+        newPassword: "a-new-password",
+      }
+    );
+    expect(password.status).toBe(404);
+  });
+
   it("lets an admin list users and change a client's role", async () => {
     const admin = await sessionCookie(
       database.env,
