@@ -36,6 +36,7 @@ import {
 import { datePicker as copy } from "@repo/ui/content/date-picker";
 import {
   parseDateTime,
+  checkDay,
   quickRange,
   splitDateTime,
   stepHour,
@@ -106,9 +107,17 @@ function FieldMessage({ id, message }: { id: string; message: string | null }) {
 }
 
 /** The hidden input that posts the stored value under `name`, for a native form post. */
-function HiddenValue({ name, value }: { name?: string; value: string }) {
+function HiddenValue({
+  name,
+  value,
+  disabled,
+}: {
+  name?: string;
+  value: string;
+  disabled?: boolean;
+}) {
   return name === undefined ? null : (
-    <input type="hidden" name={name} value={value} />
+    <input type="hidden" name={name} value={value} disabled={disabled} />
   );
 }
 
@@ -265,7 +274,7 @@ export function DatePicker({
         weekStartsOn={weekStartsOn}
       />
       <FieldMessage id={errorId} message={field.message} />
-      <HiddenValue name={name} value={value} />
+      <HiddenValue name={name} value={value} disabled={disabled} />
     </div>
   );
 }
@@ -386,6 +395,7 @@ export function DateRangePicker({
   const popupRef = React.useRef<HTMLDivElement>(null);
   const limits = rangeLimits(value, { min, max });
   const choices = quickChoiceIds(quickChoices);
+  const [quickChoiceDay, setQuickChoiceDay] = React.useState(() => new Date());
 
   const apply = (next: DayRange) => {
     setDraft(next);
@@ -435,6 +445,7 @@ export function DateRangePicker({
             open={open}
             onOpenChange={(next) => {
               if (next) {
+                setQuickChoiceDay(new Date());
                 setDraft(value);
               }
               setOpen(next);
@@ -464,20 +475,28 @@ export function DateRangePicker({
                     aria-label={copy.quickChoicesLabel}
                     className="flex flex-row flex-wrap gap-1 border-b pb-2 sm:flex-col sm:border-e sm:border-b-0 sm:pe-2 sm:pb-0"
                   >
-                    {choices.map((choice) => (
-                      <Button
-                        key={choice}
-                        variant="ghost"
-                        size="sm"
-                        className="justify-start"
-                        onClick={() => {
-                          apply(quickRange(choice, new Date()));
-                          setOpen(false);
-                        }}
-                      >
-                        {copy.quickChoices[choice]}
-                      </Button>
-                    ))}
+                    {choices.map((choice) => {
+                      const range = quickRange(choice, quickChoiceDay);
+                      const bounds = { min, max };
+                      return (
+                        <Button
+                          key={choice}
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start"
+                          disabled={
+                            checkDay(range.from, bounds) !== "ok" ||
+                            checkDay(range.to, bounds) !== "ok"
+                          }
+                          onClick={() => {
+                            apply(range);
+                            setOpen(false);
+                          }}
+                        >
+                          {copy.quickChoices[choice]}
+                        </Button>
+                      );
+                    })}
                   </div>
                 ) : null}
                 <Calendar
@@ -510,8 +529,8 @@ export function DateRangePicker({
           ) : null}
         </div>
       </div>
-      <HiddenValue name={fromName} value={value.from} />
-      <HiddenValue name={toName} value={value.to} />
+      <HiddenValue name={fromName} value={value.from} disabled={disabled} />
+      <HiddenValue name={toName} value={value.to} disabled={disabled} />
     </div>
   );
 }
@@ -788,7 +807,7 @@ export function DateTimePicker({
         </div>
       </div>
       <FieldMessage id={errorId} message={field.message} />
-      <HiddenValue name={name} value={value} />
+      <HiddenValue name={name} value={value} disabled={disabled} />
     </div>
   );
 }
