@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.10.0](https://github.com/mimukit/saasaloy/compare/v0.9.0...v0.10.0) (2026-11-21)
+
+### ⚠ BREAKING CHANGES
+
+* **registry:** a module descriptor registers into a table with
+  entries; the four table patch kinds are gone. (update note: [packages/cli/update-notes/0008-generated-tables.md](https://github.com/mimukit/saasaloy/blob/v0.10.0/packages/cli/update-notes/0008-generated-tables.md))
+* **cli:** saasaloy update takes no module name, --resolved and
+  --from are gone, and the manifest is version 2. (update note: [packages/cli/update-notes/0007-render-and-merge-engine.md](https://github.com/mimukit/saasaloy/blob/v0.10.0/packages/cli/update-notes/0007-render-and-merge-engine.md))
+
+### Features
+
+* **cli:** convert a version 1 project and replay an update ([3ba571a](https://github.com/mimukit/saasaloy/commit/3ba571aaabf0ed5ca70e7cdd01f6bc20dee3abe5)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **cli:** make the render and merge engine the only engine ([23eb842](https://github.com/mimukit/saasaloy/commit/23eb842dd7039b9a2dfcbb72e5f1a57adac5edaa)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **cli:** merge a render into a project with one apply ([1d4cf09](https://github.com/mimukit/saasaloy/commit/1d4cf09c11767ea0fbdc8835126b90399a81244a)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **cli:** render a project from the payload in memory ([7f68cb8](https://github.com/mimukit/saasaloy/commit/7f68cb8ce131d522406bfdb246627e1877ab4983)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **cli:** run init, add, remove and update on the new engine ([7a8309a](https://github.com/mimukit/saasaloy/commit/7a8309a1f8fa124867ff1f3fa106abfa9170f9ab)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **registry:** write the registration tables into generated files ([162347d](https://github.com/mimukit/saasaloy/commit/162347d0980a15af27798547b59a36c505b645b8)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **release:** link the npm package in release notes ([6fec8b2](https://github.com/mimukit/saasaloy/commit/6fec8b20f0c49b62f36b2c3c651ee227c539dfb6))
+* **release:** make the agent benchmark run on demand ([c0bf701](https://github.com/mimukit/saasaloy/commit/c0bf70100f502cf0fbd38a7d2c7d9f83955d135d))
+* **repo:** add a release skill for the cli ([a60ba50](https://github.com/mimukit/saasaloy/commit/a60ba508062b9b707afd499972260b4db5342494))
+* **repo:** validate the tracked module badge count ([7c439fd](https://github.com/mimukit/saasaloy/commit/7c439fd9f0837d78ace5a7bba1f1d5351a4d202b))
+* **scripts:** warn about stale docs in the release preflight ([80e60ba](https://github.com/mimukit/saasaloy/commit/80e60ba2f51c0657651bd9758f698cf247955b73))
+* **web:** add branded badges and module count ([7931071](https://github.com/mimukit/saasaloy/commit/79310713f8d00ddefdbb766faebc0d5d51b1a774))
+
+### Bug Fixes
+
+* **cli:** accept a conversion base by its recorded hash only ([c0e1e42](https://github.com/mimukit/saasaloy/commit/c0e1e42cba12c884c0cdc597beaecccffbf0efb1)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **cli:** class seed and owned base files as once ([446f5b5](https://github.com/mimukit/saasaloy/commit/446f5b5e346951ac35fdb5fa439e2a44af7f5b4e)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **cli:** merge the files add must register a module in ([6705c9b](https://github.com/mimukit/saasaloy/commit/6705c9bb779dc4abb19a8b2337077be26bbd5e3e)), references [#365](https://github.com/mimukit/saasaloy/issues/365)
+* **web:** align docs copy button with code block ([83bc1ff](https://github.com/mimukit/saasaloy/commit/83bc1ffefdc1a1412012d62ed888d9b23ad0015e))
+
 ## [0.9.0](https://github.com/mimukit/saasaloy/compare/v0.8.0...v0.9.0) (2026-11-20)
 
 ### ⚠ BREAKING CHANGES
