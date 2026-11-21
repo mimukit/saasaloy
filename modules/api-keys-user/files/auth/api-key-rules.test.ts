@@ -16,7 +16,8 @@ import {
   emptyDemandDenial,
   permissionDenial,
 } from "../../../teams/files/auth/permission-rules.ts";
-import { keyAllows, ownerMayUseKeys, scopeDenial } from "./api-key-rules.ts";
+import { ownerMayUseKeys } from "../../../api-keys/files/auth/api-key-owner.ts";
+import { keyAllows, scopeDenial } from "./api-key-rules.ts";
 import type { CallerPrincipal } from "./api-key-rules.ts";
 
 const VOCABULARY = { cards: ["read", "write"], reviews: ["read"] };

@@ -32,7 +32,11 @@ jobs:
     # Four full scaffolds now test and build as well as lint and typecheck.
     timeout-minutes: 45
     steps:
+      # Full history and tags. The release preflight reads each `v*` tag with `git ls-tree`
+      # and `git archive`, and a shallow checkout has none of them.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # No `version` key: the action reads `packageManager` from package.json, the same
       # as ci.yml.

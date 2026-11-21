@@ -421,12 +421,12 @@ export const adminMembers = new Hono<{ Bindings: AuthDbBindings }>()
             refusal.status === 403 ? 403 : 400
           );
         }
-        // The reset ends the member's open sessions, as the dialog says.
+        audit({ action: "member.password.set", target: label });
+        // The password has changed even if session revocation fails.
         await adminAuth.api.revokeUserSessions({
           body: { userId: id },
           headers,
         });
-        audit({ action: "member.password.set", target: label });
         return c.json({ changed: true }, 200);
       })
   )

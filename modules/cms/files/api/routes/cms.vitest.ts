@@ -1,3 +1,4 @@
+import { auditEvents } from "@repo/db/schema/audit";
 import { users } from "@repo/db/schema/auth";
 import { cmsEntries, cmsRevisions } from "@repo/db/schema/cms";
 import { seedId } from "@repo/db/seed/id";
@@ -116,7 +117,7 @@ interface ConflictBody {
 
 /** Create a draft as `cookie` and return it. */
 async function create(cookie: string, slug: string, title = "Hello") {
-  const res = await send("/cms/admin/blog/entries", cookie, "POST", {
+  const res = await send("/admin/cms/blog/entries", cookie, "POST", {
     data: postData(),
     slug,
     title,
@@ -127,7 +128,7 @@ async function create(cookie: string, slug: string, title = "Hello") {
 
 describe("the admin guard", () => {
   it("answers 401 to a signed-out caller", async () => {
-    const res = await app.request("/cms/admin/blog/entries", {}, env());
+    const res = await app.request("/admin/cms/blog/entries", {}, env());
 
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: { code: string } };
@@ -135,7 +136,7 @@ describe("the admin guard", () => {
   });
 
   it("answers 401 to a write with no session, and writes nothing", async () => {
-    const res = await send("/cms/admin/blog/entries", "", "POST", {
+    const res = await send("/admin/cms/blog/entries", "", "POST", {
       data: postData(),
       slug: "sneaky",
       title: "Sneaky",
@@ -151,17 +152,47 @@ describe("the admin guard", () => {
       .set({ role: "user" })
       .where(eq(users.id, ADMIN));
 
-    const res = await call("/cms/admin/blog/entries", cookie);
+    const res = await call("/admin/cms/blog/entries", cookie);
 
     expect(res.status).toBe(403);
   });
 });
 
-describe("GET /cms/admin/:collection/entries", () => {
+describe("CMS audit events", () => {
+  it("records successful writes for the acting admin and skips failed writes", async () => {
+    const cookie = await signInAdmin();
+    const entry = await create(cookie, "cms-audit-entry");
+    const path = `/admin/cms/blog/entries/${entry.id}`;
+
+    const stale = await send(`${path}/publish`, cookie, "POST", {
+      version: entry.version + 1,
+    });
+    expect(stale.status).toBe(409);
+    const published = await send(`${path}/publish`, cookie, "POST", {
+      version: entry.version,
+    });
+    expect(published.status).toBe(200);
+
+    const rows = await database.db
+      .select({ action: auditEvents.action, actorId: auditEvents.actorUserId })
+      .from(auditEvents)
+      .where(eq(auditEvents.targetId, entry.id));
+
+    expect(rows).toHaveLength(2);
+    expect(rows).toStrictEqual(
+      expect.arrayContaining([
+        { action: "cms.entry.create", actorId: ADMIN },
+        { action: "cms.entry.publish", actorId: ADMIN },
+      ])
+    );
+  });
+});
+
+describe("GET /admin/cms/:collection/entries", () => {
   it("lists draft and published entries by default, with author and edit state", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call("/cms/admin/blog/entries", cookie);
+    const res = await call("/admin/cms/blog/entries", cookie);
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -186,7 +217,7 @@ describe("GET /cms/admin/:collection/entries", () => {
   it("filters by status, and hides archived entries from the default list", async () => {
     const cookie = await signInAdmin();
     const archived = await send(
-      `/cms/admin/blog/entries/${DRAFT}/archive`,
+      `/admin/cms/blog/entries/${DRAFT}/archive`,
       cookie,
       "POST",
       { version: 1 }
@@ -194,7 +225,7 @@ describe("GET /cms/admin/:collection/entries", () => {
     expect(archived.status).toBe(200);
 
     const ids = async (query: string) => {
-      const res = await call(`/cms/admin/blog/entries${query}`, cookie);
+      const res = await call(`/admin/cms/blog/entries${query}`, cookie);
       expect(res.status).toBe(200);
       const body = (await res.json()) as { entries: { id: string }[] };
       return body.entries.map((entry) => entry.id);
@@ -221,7 +252,7 @@ describe("GET /cms/admin/:collection/entries", () => {
   it("counts every status of the collection, whatever the filter", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call("/cms/admin/blog/entries?status=archived", cookie);
+    const res = await call("/admin/cms/blog/entries?status=archived", cookie);
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -233,7 +264,7 @@ describe("GET /cms/admin/:collection/entries", () => {
   it("answers 404 for a collection that is not registered", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call("/cms/admin/recipes/entries", cookie);
+    const res = await call("/admin/cms/recipes/entries", cookie);
 
     expect(res.status).toBe(404);
   });
@@ -241,13 +272,13 @@ describe("GET /cms/admin/:collection/entries", () => {
   it("answers 400 for an unknown status filter", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call("/cms/admin/blog/entries?status=deleted", cookie);
+    const res = await call("/admin/cms/blog/entries?status=deleted", cookie);
 
     expect(res.status).toBe(400);
   });
 });
 
-describe("POST /cms/admin/:collection/entries", () => {
+describe("POST /admin/cms/:collection/entries", () => {
   it("creates a draft written by the caller", async () => {
     const cookie = await signInAdmin();
 
@@ -262,7 +293,7 @@ describe("POST /cms/admin/:collection/entries", () => {
   it("refuses data that fails the collection's schema with the error envelope", async () => {
     const cookie = await signInAdmin();
 
-    const res = await send("/cms/admin/blog/entries", cookie, "POST", {
+    const res = await send("/admin/cms/blog/entries", cookie, "POST", {
       data: postData({ excerpt: 42 }),
       slug: "bad-data",
       title: "Bad",
@@ -276,7 +307,7 @@ describe("POST /cms/admin/:collection/entries", () => {
   it("refuses a body node the renderer does not know", async () => {
     const cookie = await signInAdmin();
 
-    const res = await send("/cms/admin/blog/entries", cookie, "POST", {
+    const res = await send("/admin/cms/blog/entries", cookie, "POST", {
       data: postData({
         body: { type: "doc", content: [{ type: "iframe" }] },
       }),
@@ -290,7 +321,7 @@ describe("POST /cms/admin/:collection/entries", () => {
   it("answers 409 slug_taken for a slug another entry uses", async () => {
     const cookie = await signInAdmin();
 
-    const res = await send("/cms/admin/blog/entries", cookie, "POST", {
+    const res = await send("/admin/cms/blog/entries", cookie, "POST", {
       data: postData(),
       slug: "welcome-to-the-blog",
       title: "Again",
@@ -302,11 +333,11 @@ describe("POST /cms/admin/:collection/entries", () => {
   });
 });
 
-describe("GET /cms/admin/:collection/entries/:id", () => {
+describe("GET /admin/cms/:collection/entries/:id", () => {
   it("reads one entry with its data", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call(`/cms/admin/blog/entries/${WELCOME}`, cookie);
+    const res = await call(`/admin/cms/blog/entries/${WELCOME}`, cookie);
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as EntryBody & {
@@ -323,7 +354,7 @@ describe("GET /cms/admin/:collection/entries/:id", () => {
       attrs: { objectId: "b", storageKey: "t/x/public-uploads/b/inline.png" },
       type: "image",
     };
-    const res = await send("/cms/admin/blog/entries", cookie, "POST", {
+    const res = await send("/admin/cms/blog/entries", cookie, "POST", {
       data: postData({
         body: { content: [image], type: "doc" },
         cover,
@@ -350,18 +381,18 @@ describe("GET /cms/admin/:collection/entries/:id", () => {
   it("answers 404 for an unknown id", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call("/cms/admin/blog/entries/nope", cookie);
+    const res = await call("/admin/cms/blog/entries/nope", cookie);
 
     expect(res.status).toBe(404);
   });
 });
 
-describe("PUT /cms/admin/:collection/entries/:id (save draft)", () => {
+describe("PUT /admin/cms/:collection/entries/:id (save draft)", () => {
   it("saves the draft, bumps the version and leaves the live post alone", async () => {
     const cookie = await signInAdmin();
 
     const res = await send(
-      `/cms/admin/blog/entries/${WELCOME}`,
+      `/admin/cms/blog/entries/${WELCOME}`,
       cookie,
       "PUT",
       {
@@ -391,7 +422,7 @@ describe("PUT /cms/admin/:collection/entries/:id (save draft)", () => {
 
   it("answers 409 for a stale version, naming who saved last and when", async () => {
     const admin = await signInAdmin();
-    const saved = await send(`/cms/admin/blog/entries/${DRAFT}`, admin, "PUT", {
+    const saved = await send(`/admin/cms/blog/entries/${DRAFT}`, admin, "PUT", {
       data: postData(),
       slug: "drafting-the-second-post",
       title: "Saved by the admin",
@@ -401,7 +432,7 @@ describe("PUT /cms/admin/:collection/entries/:id (save draft)", () => {
     const superadmin = await signInAdmin("superadmin@example.test");
 
     const res = await send(
-      `/cms/admin/blog/entries/${DRAFT}`,
+      `/admin/cms/blog/entries/${DRAFT}`,
       superadmin,
       "PUT",
       {
@@ -425,12 +456,12 @@ describe("PUT /cms/admin/:collection/entries/:id (save draft)", () => {
   });
 });
 
-describe("POST /cms/admin/:collection/entries/:id/publish", () => {
+describe("POST /admin/cms/:collection/entries/:id/publish", () => {
   it("publishes the draft and returns the rendered html", async () => {
     const cookie = await signInAdmin();
 
     const res = await send(
-      `/cms/admin/blog/entries/${DRAFT}/publish`,
+      `/admin/cms/blog/entries/${DRAFT}/publish`,
       cookie,
       "POST",
       { version: 1 }
@@ -455,7 +486,7 @@ describe("POST /cms/admin/:collection/entries/:id/publish", () => {
     const cookie = await signInAdmin();
 
     const res = await send(
-      `/cms/admin/blog/entries/${WELCOME}/publish`,
+      `/admin/cms/blog/entries/${WELCOME}/publish`,
       cookie,
       "POST",
       { version: 1 }
@@ -491,7 +522,7 @@ describe("POST /cms/admin/:collection/entries/:id/publish", () => {
     `);
 
     const res = await send(
-      `/cms/admin/blog/entries/${DRAFT}/publish`,
+      `/admin/cms/blog/entries/${DRAFT}/publish`,
       cookie,
       "POST",
       { version: 1 }
@@ -524,7 +555,7 @@ describe("unpublish and archive", () => {
     const cookie = await signInAdmin();
 
     const res = await send(
-      `/cms/admin/blog/entries/${WELCOME}/unpublish`,
+      `/admin/cms/blog/entries/${WELCOME}/unpublish`,
       cookie,
       "POST",
       { version: 2 }
@@ -542,30 +573,30 @@ describe("unpublish and archive", () => {
   });
 });
 
-describe("DELETE /cms/admin/:collection/entries/:id", () => {
+describe("DELETE /admin/cms/:collection/entries/:id", () => {
   it("refuses to delete a published entry, and the entry survives", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call(`/cms/admin/blog/entries/${WELCOME}`, cookie, {
+    const res = await call(`/admin/cms/blog/entries/${WELCOME}`, cookie, {
       method: "DELETE",
     });
 
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("invalid_state");
-    const still = await call(`/cms/admin/blog/entries/${WELCOME}`, cookie);
+    const still = await call(`/admin/cms/blog/entries/${WELCOME}`, cookie);
     expect(still.status).toBe(200);
   });
 
   it("deletes a draft", async () => {
     const cookie = await signInAdmin();
 
-    const res = await call(`/cms/admin/blog/entries/${DRAFT}`, cookie, {
+    const res = await call(`/admin/cms/blog/entries/${DRAFT}`, cookie, {
       method: "DELETE",
     });
 
     expect(res.status).toBe(204);
-    const gone = await call(`/cms/admin/blog/entries/${DRAFT}`, cookie);
+    const gone = await call(`/admin/cms/blog/entries/${DRAFT}`, cookie);
     expect(gone.status).toBe(404);
   });
 });
@@ -574,9 +605,9 @@ describe("DELETE /cms/admin/:collection/entries/:id", () => {
 async function publishTwice(cookie: string): Promise<string> {
   const entry = await create(cookie, "first-title", "First title");
   const steps: [string, string, unknown][] = [
-    [`/cms/admin/blog/entries/${entry.id}/publish`, "POST", { version: 1 }],
+    [`/admin/cms/blog/entries/${entry.id}/publish`, "POST", { version: 1 }],
     [
-      `/cms/admin/blog/entries/${entry.id}`,
+      `/admin/cms/blog/entries/${entry.id}`,
       "PUT",
       {
         data: postData(),
@@ -585,7 +616,7 @@ async function publishTwice(cookie: string): Promise<string> {
         version: 2,
       },
     ],
-    [`/cms/admin/blog/entries/${entry.id}/publish`, "POST", { version: 3 }],
+    [`/admin/cms/blog/entries/${entry.id}/publish`, "POST", { version: 3 }],
   ];
   for (const [path, method, body] of steps) {
     const res = await send(path, cookie, method, body);
@@ -600,7 +631,7 @@ describe("revisions", () => {
     const id = await publishTwice(cookie);
 
     const listed = await call(
-      `/cms/admin/blog/entries/${id}/revisions`,
+      `/admin/cms/blog/entries/${id}/revisions`,
       cookie
     );
     expect(listed.status).toBe(200);
@@ -616,7 +647,7 @@ describe("revisions", () => {
 
     const oldest = revisions[1]?.id ?? "";
     const restored = await send(
-      `/cms/admin/blog/entries/${id}/revisions/${oldest}/restore`,
+      `/admin/cms/blog/entries/${id}/revisions/${oldest}/restore`,
       cookie,
       "POST",
       { version: 4 }
@@ -631,11 +662,11 @@ describe("revisions", () => {
   });
 });
 
-describe("POST /cms/admin/rerender", () => {
+describe("POST /admin/cms/rerender", () => {
   it("rebuilds the html of every live revision", async () => {
     const cookie = await signInAdmin();
 
-    const res = await send("/cms/admin/rerender", cookie, "POST");
+    const res = await send("/admin/cms/rerender", cookie, "POST");
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { rerendered: number };
@@ -643,7 +674,7 @@ describe("POST /cms/admin/rerender", () => {
   });
 
   it("answers 401 to a signed-out caller", async () => {
-    const res = await send("/cms/admin/rerender", "", "POST");
+    const res = await send("/admin/cms/rerender", "", "POST");
 
     expect(res.status).toBe(401);
   });
@@ -721,7 +752,7 @@ describe("GET /cms/:collection/entries/:slug (public)", () => {
   it("answers 404 for an archived entry", async () => {
     const cookie = await signInAdmin();
     const archived = await send(
-      `/cms/admin/blog/entries/${WELCOME}/archive`,
+      `/admin/cms/blog/entries/${WELCOME}/archive`,
       cookie,
       "POST",
       { version: 2 }
@@ -740,13 +771,13 @@ describe("GET /cms/:collection/entries/:slug (public)", () => {
   it("answers 301 to the new slug after a published rename", async () => {
     const cookie = await signInAdmin();
     const steps = [
-      await send(`/cms/admin/blog/entries/${WELCOME}`, cookie, "PUT", {
+      await send(`/admin/cms/blog/entries/${WELCOME}`, cookie, "PUT", {
         data: postData(),
         slug: "hello-blog",
         title: "Hello blog",
         version: 2,
       }),
-      await send(`/cms/admin/blog/entries/${WELCOME}/publish`, cookie, "POST", {
+      await send(`/admin/cms/blog/entries/${WELCOME}/publish`, cookie, "POST", {
         version: 3,
       }),
     ];

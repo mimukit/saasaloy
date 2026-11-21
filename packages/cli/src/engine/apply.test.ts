@@ -684,6 +684,26 @@ describe(apply, () => {
     expect((await loadLock(root)).modules.notes?.ref).toBe("v0.2.0");
   });
 
+  it("keeps an owner-deleted seed absent when its upstream content changes", async () => {
+    await apply({ next: V1, root, version: "0.1.0" });
+    await rm(join(root, ONCE_PATH));
+
+    const report = await apply({
+      next: V2,
+      previous: V1,
+      root,
+      version: "0.2.0",
+    });
+
+    expect(report.exitCode).toBe(0);
+    expect(report.keptDeleted).toContain(ONCE_PATH);
+    await expect(pathExists(join(root, ONCE_PATH))).resolves.toBeFalsy();
+    expect((await v2Manifest()).files[ONCE_PATH]).toMatchObject({
+      class: "once",
+      hash: hashContent(ONCE_V2),
+    });
+  });
+
   it("writes markers on a conflict, still moves the lock and the manifest, and exits 3", async () => {
     await apply({ next: V1, root, version: "0.1.0" });
     await writeFile(

@@ -28,6 +28,8 @@ Everything the two share (the adapter, the secret, `trustedOrigins`, `advanced`)
 
 **The admin forward closes the same endpoints over HTTP.** `adminAuthRoute` in `apps/api/src/routes/auth.ts` answers 404 on every `/admin/auth/admin/*` path, reads and impersonation included, before it forwards to `adminAuth.handler`. It decodes the path and folds case and repeated slashes, so an encoded path gets the same 404. No browser code calls these endpoints, and an open `set-role` or `ban-user` would be a staff write with no audit row, under `/admin/auth/*` where the `admin` module's audit coverage test cannot see it (issue #310). Server code still reaches them: an api route under `/admin/` calls `adminAuth.api.*` with the caller's headers inside `withAuthScope`, and `adminAuthWrite` from the `admin` module when it changes something. That call runs the admin session check and the rank guard below.
 
+The admin forward also answers 404 on `/admin/auth/update-user` and `/admin/auth/change-password`. Use the audited member routes, `PATCH /admin/members/:id` for a profile change and `POST /admin/members/:id/password` for a password change.
+
 **`/admin/auth/*` is reserved.** The `auth` module mounts `adminAuthRoute` at `/admin/auth` with a second `api.baseRoutes` row on `base`, beside `authRoute` at `/auth`. The path sits under `/admin` so one edge rule (WAF, Access, a log filter) covers the whole admin group on the api. A middleware a project adds on `/admin/*` must skip `/admin/auth/*`, or the sign-in endpoint itself demands a session. A project without the `admin` module still has the `/admin/auth` route; nothing calls it.
 
 ## The database files

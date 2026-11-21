@@ -132,6 +132,23 @@
         "name": "cmsAgentEntry",
         "from": "./agent-entries/cms"
       }
+    },
+    {
+      "table": "api.routes",
+      "path": "/admin/cms",
+      "call": "adminCms",
+      "import": {
+        "name": "adminCms",
+        "from": "./routes/cms"
+      }
+    },
+    {
+      "table": "audit.actions",
+      "call": "cmsAuditActions",
+      "import": {
+        "name": "cmsAuditActions",
+        "from": "../audit/cms"
+      }
     }
   ],
   "files": [
@@ -261,6 +278,10 @@
     {
       "path": "files/web/pages/blog/sitemap.xml.ts",
       "target": "@web/pages/blog/sitemap.xml.ts"
+    },
+    {
+      "path": "files/api/audit/cms.ts",
+      "target": "@api/audit/cms.ts"
     }
   ],
   "scaffolds": [

@@ -1,10 +1,10 @@
-import { AUDIENCE_HEADER } from "@repo/auth/server";
+import { AUDIENCE_HEADER, adminAuth } from "@repo/auth/server";
 import { config } from "@repo/config";
 import { auditEvents } from "@repo/db/schema/audit";
 import { seedId } from "@repo/db/seed/id";
 import { testDatabase } from "@repo/db/testing";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import app from "../index";
 
 // The members routes, end to end, on the seeded `superadmin`, `admin` and `member`
@@ -340,6 +340,39 @@ describe("POST /admin/members/:id/password", () => {
     await expect(
       signIn("admin@example.test", "a-new-password")
     ).resolves.toHaveProperty("status", 200);
+  });
+
+  it("logs a completed reset when session revocation fails", async () => {
+    const cookie = await cookieOf("superadmin@example.test");
+    const revoke = vi
+      .spyOn(adminAuth.api, "revokeUserSessions")
+      .mockRejectedValueOnce(new Error("Session revocation failed"));
+    try {
+      const res = await call(
+        "POST",
+        `/admin/members/${ADMIN}/password`,
+        cookie,
+        {
+          newPassword: "a-new-password",
+        }
+      );
+
+      expect(res.status).toBe(500);
+      expect(revoke).toHaveBeenCalledOnce();
+      await expect(rowsOf("member.password.set")).resolves.toStrictEqual([
+        expect.objectContaining({
+          actorUserId: SUPERADMIN,
+          after: null,
+          before: null,
+          targetId: ADMIN,
+        }),
+      ]);
+      await expect(
+        signIn("admin@example.test", "a-new-password")
+      ).resolves.toHaveProperty("status", 200);
+    } finally {
+      revoke.mockRestore();
+    }
   });
 
   it("refuses a superadmin a reset shorter than the auth rule with 400, not 500", async () => {

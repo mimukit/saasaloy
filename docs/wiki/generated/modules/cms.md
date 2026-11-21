@@ -59,6 +59,7 @@ Files:
 - `@web/pages/blog/[slug].astro`
 - `@web/pages/blog/rss.xml.ts`
 - `@web/pages/blog/sitemap.xml.ts`
+- `@api/audit/cms.ts`
 
 ## Patches it applies
 
@@ -86,10 +87,11 @@ The CLI writes each table in full on every run, from the rows of the installed m
 |---|---|
 | `cms.collections` | 1 |
 | `config.sections` | 1 |
-| `api.routes` | 1 |
+| `api.routes` | 2 |
 | `ui.pageLinks` | 1 |
 | `admin.nav` | 1 |
 | `web.agentEntries` | 1 |
+| `audit.actions` | 1 |
 
 ## See the rest
 
@@ -112,7 +114,7 @@ Staff write and publish content in `apps/admin`, and `apps/web` serves it with n
 | `packages/db/src/repositories/cms.ts` | publish, restore, pruning, redirects and every other query |
 | `packages/validators/src/cms.ts` | the request bodies and queries |
 | `packages/config/src/sections/cms.ts` | the `cms` config section |
-| `apps/api/src/routes/cms.ts` | the admin and public routes at `/cms` |
+| `apps/api/src/routes/cms.ts` | the admin routes at `/admin/cms` and the public routes at `/cms` |
 | `apps/admin/src/routes/cms/$collection/` | the list, new-entry and editor screens |
 | `apps/web/src/pages/blog/` | the index, the post page, `rss.xml` and `sitemap.xml`, all on demand |
 | `apps/web/src/lib/cms.ts` | `cmsClient()`, the blog copy and the prose styles |
@@ -244,10 +246,10 @@ The image URL is baked into the stored HTML at publish. That is why a `STORAGE_P
 Run a re-render after a Tiptap or renderer upgrade, after a change to `cmsExtensions()` or the renderer's mappings, and after `STORAGE_PUBLIC_URL` or `STORAGE_IMAGE_TRANSFORMS` changes. It rebuilds `html` for every live revision. Drafts and older revisions stay as they are.
 
 - **Local:** `pnpm cms:rerender` from the repo root. It writes to the local database that `vite dev` uses, and it reads `apps/api/.env`. Under `database-postgres` that file must carry `DATABASE_URL`. It refuses `NODE_ENV=production`.
-- **A deployed Worker:** `POST /cms/admin/rerender` with an admin session. It runs inside the Worker, with that environment's bindings and `STORAGE_PUBLIC_URL`, and answers `{ rerendered, skipped }`. From the admin app, call it through the typed client, or from the browser console on the admin origin:
+- **A deployed Worker:** `POST /admin/cms/rerender` with an admin session. It runs inside the Worker, with that environment's bindings and `STORAGE_PUBLIC_URL`, and answers `{ rerendered, skipped }`. From the admin app, call it through the typed client, or from the browser console on the admin origin:
 
   ```ts
-  await fetch(`${API_URL}/cms/admin/rerender`, {
+  await fetch(`${API_URL}/admin/cms/rerender`, {
     method: "POST",
     credentials: "include",
     headers: { "x-auth-audience": "admin" },
@@ -352,7 +354,7 @@ Override a key in `packages/config/src/project.ts`. The module declares no env v
 | `409 slug_taken` | Another entry uses that slug as its draft or live slug. |
 | `400 invalid_input` with a `data.` message | `data` fails the collection's schema. A message about a node or mark means the renderer does not know a type in the body. |
 | `Collection "x" is not registered` | The factory is not in the collections array in `packages/cms/src/index.ts`. |
-| `cms:rerender` refuses to run | `NODE_ENV=production` is set. In production, call `POST /cms/admin/rerender`. |
+| `cms:rerender` refuses to run | `NODE_ENV=production` is set. In production, call `POST /admin/cms/rerender`. |
 | `rerender` answers a non-zero `skipped` | A live revision's collection is not registered, or its body holds a node the renderer does not know. |
 | The web client throws about `PUBLIC_API_URL` | `apps/web/.env` has no `PUBLIC_API_URL`. Run `pnpm env:setup`. |
 

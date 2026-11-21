@@ -27,6 +27,7 @@ This module declares no environment variables.
 ## Files and workspaces it writes
 
 Files:
+- `@auth/api-key-owner.ts`
 - `@config/sections/api-keys.ts`
 - `@auth/plugins/api-key-options.ts`
 - `@auth/plugins/api-key-client.ts`
@@ -159,6 +160,12 @@ A key's scope is a permission map from `packages/auth/src/access.ts`, the same v
 - **A scope is a snapshot at issue time.** A later role edit changes the members and never a key. `/api-key/update` is not guarded because it cannot write a scope. To change what a key may do, revoke it and issue another.
 
 The create form offers only the statements the caller holds. The form is a convenience. The guard is the gate.
+
+##### Creator bans
+
+The server records who creates each new organization key. During an active ban, the bearer resolver returns 401 `invalid api key` for every key that user created, even if the user leaves the organization. The key works again when the ban ends, provided the key still passes verification. Deleting the creator also stops the key from working.
+
+Existing keys without a recorded creator keep working. To replace a key, create a new key with the same scope and update its callers. Verify that the new key works, then revoke the old key.
 
 ##### The `api_keys` table in organization mode
 

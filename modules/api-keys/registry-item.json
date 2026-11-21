@@ -82,6 +82,10 @@
   ],
   "files": [
     {
+      "path": "files/auth/api-key-owner.ts",
+      "target": "@auth/api-key-owner.ts"
+    },
+    {
       "path": "files/config/api-keys.ts",
       "target": "@config/sections/api-keys.ts"
     },

@@ -1,5 +1,7 @@
 import { asTenantId } from "@repo/db/tenant";
 import { HTTPException } from "hono/http-exception";
+import { creatorMayUseKey } from "../api-key-creator";
+import type { KeyOwner } from "../api-key-owner";
 import { auth } from "../auth";
 import { withAuthScope } from "../db-provider";
 import { ORGANIZATION_HEADER, headerDenial } from "../tenant-rules";
@@ -46,6 +48,7 @@ interface VerifiedKey {
    * plugin's vocabulary is what arrives.
    */
   referenceId: string;
+  metadata?: unknown;
   permissions?: Record<string, string[]> | null;
 }
 
@@ -93,18 +96,28 @@ export function apiKeyTenant(): TenantResolver<TenantRequestContext> {
       // } }` for KEY_NOT_FOUND, KEY_DISABLED, KEY_EXPIRED and INVALID_API_KEY alike. All
       // four collapse to the same 401 here. The `try` is for a transport or database
       // failure underneath, which must not surface as a 500 naming the auth internals.
-      const result = await withAuthScope(c, async () => {
+      const verified = await withAuthScope(c, async () => {
         try {
-          return await auth.api.verifyApiKey({ body: { key } });
+          const result = await auth.api.verifyApiKey({ body: { key } });
+          if (!result.valid || !result.key) {
+            return null;
+          }
+          const found = result.key as unknown as VerifiedKey;
+          const allowed = await creatorMayUseKey(found.metadata, async (id) => {
+            const context = await auth.$context;
+            return (await context.internalAdapter.findUserById(
+              id
+            )) as KeyOwner | null;
+          });
+          return allowed ? found : null;
         } catch {
           return null;
         }
       });
 
-      if (!result?.valid || !result.key) {
+      if (!verified) {
         throw invalidKeyError();
       }
-      const verified = result.key as unknown as VerifiedKey;
 
       // The scope, exactly as it was written at issue time. The plugin parses the stored
       // JSON, so this is already a permission map; `can()` reads it the same way it reads
