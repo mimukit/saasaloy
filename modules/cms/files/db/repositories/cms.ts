@@ -2,6 +2,7 @@ import { and, count, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { users } from "../schema/auth";
 import { cmsEntries, cmsRedirects, cmsRevisions } from "../schema/cms";
+import { transaction } from "../client";
 import type { Db } from "../client";
 import {
   assertDeletable,
@@ -22,9 +23,8 @@ import type { CmsStatus, Snapshot } from "./cms-rules";
 // `@repo/cms`, and `packages/db` stays free of it. A publish takes a `render` callback, and
 // the api passes one built from `renderRichText`.
 //
-// A multi-step write runs without a transaction, so it is ordered to fail safe. A
-// publish inserts the revision first, then moves the entry with a version-checked update,
-// and deletes the revision again when that update loses the race.
+// A publish runs in one transaction: the revision insert, the version-checked entry
+// update, the redirect writes and the prune commit together or not at all.
 
 export { CmsRepositoryError, REVISION_LIMIT } from "./cms-rules";
 export type { CmsErrorCode, CmsStatus } from "./cms-rules";
@@ -419,81 +419,78 @@ export async function publishEntry(
   }
 ): Promise<{ entry: CmsEntryRow; revision: CmsRevisionRow }> {
   const { collection, id, version } = input;
-  const current = await requireRow(db, collection, id);
-  if (current.version !== version) {
-    throw conflict();
-  }
-  await assertSlugFree(db, collection, current.slug, id);
+  return transaction(db, async (tx) => {
+    const current = await requireRow(tx, collection, id);
+    if (current.version !== version) {
+      throw conflict();
+    }
+    await assertSlugFree(tx, collection, current.slug, id);
 
-  let previousLiveSlug: string | null = null;
-  if (current.publishedRevisionId !== null) {
-    const [previous] = await db
-      .select({ slug: cmsRevisions.slug })
-      .from(cmsRevisions)
-      .where(eq(cmsRevisions.id, current.publishedRevisionId))
-      .limit(1);
-    previousLiveSlug = previous?.slug ?? null;
-  }
+    let previousLiveSlug: string | null = null;
+    if (current.publishedRevisionId !== null) {
+      const [previous] = await tx
+        .select({ slug: cmsRevisions.slug })
+        .from(cmsRevisions)
+        .where(eq(cmsRevisions.id, current.publishedRevisionId))
+        .limit(1);
+      previousLiveSlug = previous?.slug ?? null;
+    }
 
-  const snapshot = {
-    collection,
-    data: current.data,
-    slug: current.slug,
-    title: current.title,
-  };
-  const html = input.render(snapshot);
-  const now = new Date();
-
-  const [revision] = await db
-    .insert(cmsRevisions)
-    .values({
-      authorId: input.authorId,
-      createdAt: now,
+    const snapshot = {
+      collection,
       data: current.data,
-      entryId: id,
-      html,
-      id: newId(),
       slug: current.slug,
       title: current.title,
-    })
-    .returning();
-  const created = revision as CmsRevisionRow;
+    };
+    const html = input.render(snapshot);
+    const now = new Date();
 
-  let entry: CmsEntryRow;
-  try {
-    entry = await updateAtVersion(db, collection, id, version, {
+    const [revision] = await tx
+      .insert(cmsRevisions)
+      .values({
+        authorId: input.authorId,
+        createdAt: now,
+        data: current.data,
+        entryId: id,
+        html,
+        id: newId(),
+        slug: current.slug,
+        title: current.title,
+      })
+      .returning();
+    const created = revision as CmsRevisionRow;
+
+    // A lost race throws here, and the rollback takes the revision with it.
+    const entry = await updateAtVersion(tx, collection, id, version, {
       publishedAt: publishedAtFor(current.publishedAt, now),
       publishedRevisionId: created.id,
       status: "published",
       updatedBy: input.authorId,
     });
-  } catch (error) {
-    await db.delete(cmsRevisions).where(eq(cmsRevisions.id, created.id));
-    throw error;
-  }
 
-  // The new live slug belongs to this entry now, so no redirect may point it elsewhere.
-  await db
-    .delete(cmsRedirects)
-    .where(
-      and(
-        eq(cmsRedirects.collection, collection),
-        eq(cmsRedirects.oldSlug, current.slug)
-      )
-    );
-  const oldSlug = redirectSlugFor(previousLiveSlug, current.slug);
-  if (oldSlug !== null) {
-    await db
-      .insert(cmsRedirects)
-      .values({ collection, entryId: id, id: newId(), oldSlug })
-      .onConflictDoUpdate({
-        set: { entryId: id },
-        target: [cmsRedirects.collection, cmsRedirects.oldSlug],
-      });
-  }
+    // The new live slug belongs to this entry now, so no redirect may point it elsewhere.
+    await tx
+      .delete(cmsRedirects)
+      .where(
+        and(
+          eq(cmsRedirects.collection, collection),
+          eq(cmsRedirects.oldSlug, current.slug)
+        )
+      );
+    const oldSlug = redirectSlugFor(previousLiveSlug, current.slug);
+    if (oldSlug !== null) {
+      await tx
+        .insert(cmsRedirects)
+        .values({ collection, entryId: id, id: newId(), oldSlug })
+        .onConflictDoUpdate({
+          set: { entryId: id },
+          target: [cmsRedirects.collection, cmsRedirects.oldSlug],
+        });
+    }
 
-  await pruneRevisions(db, id, created.id);
-  return { entry, revision: created };
+    await pruneRevisions(tx, id, created.id);
+    return { entry, revision: created };
+  });
 }
 
 /** Take a published entry offline. It becomes a draft; its revisions stay. */
