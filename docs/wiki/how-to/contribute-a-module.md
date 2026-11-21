@@ -1,9 +1,6 @@
 # Contribute a module
 
-A module is a folder under [`modules/`](../../../modules/) in this repo. There is no
-publish step and no package registry: merging it to `main` makes it installable by every
-downstream `saasaloy add`. This page tells you where the authoring rules live and what
-order to do things in.
+A module is a folder under [`modules/`](../../../modules/) in this repo. A plain `saasaloy add` can install the module after the next CLI release.
 
 ## Read these first
 
@@ -32,7 +29,7 @@ modules/
     skills/saasaloy-<name>/  # optional agent skill, installed alongside the files
 ```
 
-The descriptor requires `name` and `type`. Everything else is optional to the schema: `description`, `stage`, `needs`, `requires`, `dependsOn`, `conflictsWith`, `requiresOneOf`, `dependencies`, `devDependencies`, `files`, `envVars`, `envServices`, `envOptional`, `devVars`, `removeWarnings`, `patches`, `tables`, `entries`, `scaffolds`, `enablesTesting`, `agent`. Four of those decide how a module behaves beside other modules. `dependsOn` pulls a prerequisite in. `requiresOneOf` names a set of drivers and makes `add` prompt for one when none is present, the way `api-keys` names `api-keys-organization` and `api-keys-user`. `conflictsWith` refuses the pair outright, the way each of those two drivers names the other. `saasaloy doctor` still holds a registry to `description`, the one line `saasaloy list --json` gives an agent choosing modules, and every module in this repo also sets `stage` and `needs`. `removeWarnings` is an array of sentences `remove` reads from the descriptor at the lock's release and prints on the way out, for the state a removal cannot undo; `subscription` is the example to copy. The schema sets `additionalProperties: false`, so a field it has never heard of fails the run. The full contract is
+The descriptor requires `name` and `type`. Everything else is optional to the schema: `description`, `stage`, `needs`, `requires`, `dependsOn`, `conflictsWith`, `requiresOneOf`, `dependencies`, `devDependencies`, `files`, `envVars`, `envServices`, `envOptional`, `devVars`, `removeWarnings`, `patches`, `tables`, `entries`, `scaffolds`, `enablesTesting`, `agent`. Four of those decide how a module behaves beside other modules. `dependsOn` pulls a prerequisite in. `requiresOneOf` lists the drivers that can satisfy a capability. If the list has one driver, `add` includes it without a prompt. If the list has more than one driver, an interactive `add` asks you to choose unless the project or the command already selects one. `conflictsWith` prevents two modules from installing together. For example, the two `api-keys` drivers declare a conflict. `saasaloy doctor` still holds a registry to `description`, the one line `saasaloy list --json` gives an agent choosing modules, and every module in this repo also sets `stage` and `needs`. `removeWarnings` is an array of sentences `remove` reads from the descriptor at the lock's release and prints on the way out, for the state a removal cannot undo; `subscription` is the example to copy. The schema sets `additionalProperties: false`, so a field it has never heard of fails the run. The full contract is
 [`packages/cli/schemas/registry-item.schema.json`](../../../packages/cli/schemas/registry-item.schema.json),
 and `saasaloy add` validates against it, so a typo fails at install with a named error
 rather than a mystery crash. `modules/email-cloudflare/registry-item.json` is a short,
@@ -97,7 +94,7 @@ Test the removal side too. `saasaloy remove` renders the project again without t
 
 Open a pull request against `main` the same as any other change. A GitHub Actions gate runs on every push and pull request, and it runs the same seven scripts you run locally, in this order: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins`, `pnpm docs:check` and `pnpm badges:check`. `pnpm deps:verify` is deliberately left out of it. A green local tree is a green CI run, so run the seven before you push. A new module changes the module count that `badges:check` compares, so run `pnpm badges:generate` and commit `apps/web/public/badges.json` with the module.
 
-A merged module reaches a plain `saasaloy add` at the next CLI release, because the CLI reads the default registry at the tag of its own version ([ADR 0062](../../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)). It reaches anyone who reads `@main` at once, so a broken descriptor on `main` is still a live incident for them. [A bad descriptor reached `main`](../runbooks/bad-descriptor-on-main.md) is the runbook for that, and it is worth reading before your first merge, not after.
+The CLI reads the default registry at the tag of its own version. `saasaloy list @main` and a local checkout can show modules before the next release. See [ADR 0062](../../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md) and the [runbook for a bad descriptor on `main`](../runbooks/bad-descriptor-on-main.md).
 
 ## Registries other than this one
 
