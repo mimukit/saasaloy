@@ -39,7 +39,7 @@ Steps 1 and 2 are a script rather than a `globalSetup` hook because of step 3. T
 | `apps/admin` | 3001 | `admin` is installed |
 | `apps/app` | 3002 | `app` is installed |
 
-These are the project's pinned dev ports, the same ones in `AGENTS.md`. `lib/project.ts` reads `.devports.json` at the repository root when `pnpm dev:ports` wrote one, and takes the host and each app's port from it, so a linked worktree tests its own servers. With no record it uses these pinned ports on `localhost`, and a record that does not parse fails the run. Off CI, `reuseExistingServer` is on, so a `pnpm dev` you already have running is used instead of a second one on a busy port. On CI it is off, because reusing would hide a start-up failure.
+These are the project's pinned dev ports, the same ones in `AGENTS.md`. `lib/project.ts` reads `.devports.json` at the repository root when `pnpm dev:ports` wrote one, and takes the host and each app's port from it, so a linked worktree tests its own servers. With no record it uses these pinned ports on `localhost`, and a record that does not parse fails the run. Off CI, Playwright can reuse running app servers. For projects with a database, Playwright starts a fresh API so it reads the checked database URL. Stop any API server on the test port before you run the suite. On CI, Playwright starts every server.
 
 Playwright waits on the api's `/health` (`http://localhost:4000/health` in the main checkout), not on its origin. The Worker answers `GET /` with a 404 envelope, and Playwright reads any status at or above 400 as "not ready".
 
@@ -49,7 +49,7 @@ Whenever the suite starts the api, it also writes the api's output to `packages/
 
 `lib/tee-log.ts` does the copy: `node lib/tee-log.ts <log file> <command...>` runs the command and writes its output to the file and to the terminal. A shell `2>&1 | tee` does the same on macOS and Linux, but `tee` is not on Windows. The file starts empty on each run. `logs/` is gitignored in `packages/e2e/.gitignore`, and `pnpm --filter @repo/e2e clean` removes it.
 
-A reused api writes no log, because the suite did not start it. Off CI, if you keep your own api running for the suite, start it through the same script from the repo root:
+A reused api writes no log, because the suite did not start it. For a local project without a database, you can start your own API server through the same script from the repo root:
 
 ```sh
 node packages/e2e/lib/tee-log.ts packages/e2e/logs/api.log pnpm --filter @repo/api dev
@@ -121,7 +121,7 @@ Three failures have a fix rather than a bug behind them:
 
 ## The database
 
-The suite uses the project's own `db:setup`, `db:seed` and `db:drop`, so it names no driver and carries no second code path. Both setup and seed carry the guard: `db:setup` refuses a `DATABASE_URL` its state block does not vouch for, and `db:seed` refuses `NODE_ENV=production` and any database that is not this project's own, before it connects.
+The suite uses the project's own `db:setup`, `db:seed` and `db:drop`. For a local run with Postgres, it rejects `main`, `master` and a detached HEAD before setup. After setup, it checks that the API and seed URLs point to the current branch database before it starts the seed. With `CI=true`, it skips these E2E checks. Both setup and seed carry the guard: `db:setup` refuses a `DATABASE_URL` its state block does not vouch for, and `db:seed` refuses `NODE_ENV=production` and any database that is not this project's own, before it connects.
 
 The database is dropped **on CI only**. Locally it is kept, because a drop means a full migration on the next run for no safety gained. Run `pnpm db:drop` yourself for a clean slate.
 

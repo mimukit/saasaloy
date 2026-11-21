@@ -73,11 +73,9 @@ const webServer = installedApps(config).map((app) => ({
   // detection off; the name reads backwards, but it is the only lever the CLI exposes, and
   // `--background` stays the opt-in. Harmless for the two vite apps, which never detach.
   env: { ASTRO_DEV_BACKGROUND: "1" },
-  // Off CI, attach to a `pnpm dev` you already have running rather than failing on a busy
-  // port. On CI nothing is running, and reusing would hide a start-up failure. A reused
-  // api was not started through `lib/tee-log.ts`, so it writes no `API_LOG` unless you
-  // started it that way yourself: see "The api log" in the `saasaloy-e2e` skill.
-  reuseExistingServer: !process.env.CI,
+  // Start a fresh API when tests write to the database checked by prepare.ts.
+  reuseExistingServer:
+    !process.env.CI && (app !== "api" || !hasModule(config, "database")),
   // A cold `vite dev` in a fresh checkout compiles the whole graph on first request.
   timeout: 120_000,
   stdout: "pipe" as const,

@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { pathToFileURL } from "node:url";
 
 import { chromium } from "@playwright/test";
 
@@ -91,30 +92,67 @@ function pnpm(args: readonly string[]): void {
   }
 }
 
-/**
- * Migrate, then seed. Both commands belong to the installed database driver, so the suite
- * names no driver and carries no second path.
- *
- * Both also carry the guard. `db:setup` refuses a `DATABASE_URL` its state block does not
- * vouch for, and `db:seed` refuses `NODE_ENV=production` and any database that is not this
- * project's own `<prefix>` or `<prefix>_<branch>`, before it opens a connection. The suite
- * adds no check of its own on top: the seed's is the same check, made where the database is
- * written.
- *
- * The seed is what gives the admin specs an account. It upserts every slice row, so the
- * seeded superadmin is back to its known password on every run, and rows a spec wrote
- * before are left alone.
- */
-function prepareDatabase(): void {
-  pnpm(["db:setup", ...extraSetupArgs()]);
-  pnpm(["db:seed"]);
+function assertLocalBranch(): void {
+  const result = spawnSync("git", ["branch", "--show-current"], {
+    cwd: ROOT,
+    encoding: "utf-8",
+  });
+  const branch = result.stdout?.trim();
+  if (
+    result.status !== 0 ||
+    !branch ||
+    branch === "main" ||
+    branch === "master"
+  ) {
+    refuse(
+      "pnpm e2e requires a local feature branch. Switch to one and run pnpm e2e again."
+    );
+  }
+}
+
+async function assertLocalDatabase(): Promise<void> {
+  // E2E also works without a database, so these driver files can be absent.
+  const scripts = path.resolve(ROOT, "packages/db/scripts/lib");
+  try {
+    const { loadContext } = await import(
+      pathToFileURL(path.join(scripts, "context.ts")).href
+    );
+    const { databaseOf } = await import(
+      pathToFileURL(path.join(scripts, "url.ts")).href
+    );
+    const { database, env, isDefaultBranch, prefix } = loadContext(ROOT);
+    const apiUrl = env.values.get("DATABASE_URL") ?? "";
+    const seedUrl = process.env.DATABASE_URL || apiUrl;
+    if (
+      !isDefaultBranch &&
+      database !== `${prefix}_test` &&
+      databaseOf(apiUrl) === database &&
+      databaseOf(seedUrl) === database
+    ) {
+      return;
+    }
+  } catch {
+    // Connection URLs can contain credentials. Keep them out of the refusal.
+  }
+  refuse(
+    "pnpm e2e requires both the API and seed to use this branch's development database."
+  );
 }
 
 const config = readConfig();
+const hasDatabase = hasModule(config, "database");
+const localDatabase = hasDatabase && process.env.CI !== "true";
+if (localDatabase) {
+  assertLocalBranch();
+}
 assertChromium();
 assertEnvFiles(installedApps(config));
-if (hasModule(config, "database")) {
-  prepareDatabase();
+if (hasDatabase) {
+  pnpm(["db:setup", ...extraSetupArgs()]);
+  if (localDatabase) {
+    await assertLocalDatabase();
+  }
+  pnpm(["db:seed"]);
 } else {
   say("No database module installed, so there is nothing to migrate or seed.");
 }
