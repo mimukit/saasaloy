@@ -82,10 +82,11 @@ describe("the api-keys core", () => {
     ]);
   });
 
-  it("ships its config section, the shared options and the client plugin, and no owner file", async () => {
+  it("ships shared files without an owner-specific plugin", async () => {
     const files = (await readDescriptor("api-keys")).files as FileEntry[];
 
     expect(files.map((file) => file.target)).toStrictEqual([
+      "@auth/api-key-owner.ts",
       "@config/sections/api-keys.ts",
       "@auth/plugins/api-key-options.ts",
       "@auth/plugins/api-key-client.ts",
@@ -106,13 +107,17 @@ describe("the api-keys-organization owner", () => {
     expect(descriptor.agent).toBeUndefined();
   });
 
-  it("ships every file the single module used to, at the same targets", async () => {
+  it("keeps the original file targets and ships the creator check", async () => {
     const files = (await readDescriptor("api-keys-organization"))
       .files as FileEntry[];
 
     // The targets an installed `api-keys` project already holds. `add` adopts a file
     // only at the path the manifest records it under.
     expect(files).toStrictEqual([
+      {
+        path: "files/auth/api-key-creator.ts",
+        target: "@auth/api-key-creator.ts",
+      },
       {
         path: "files/db/schema/api-keys.ts",
         target: "@db/schema/api-keys.ts",

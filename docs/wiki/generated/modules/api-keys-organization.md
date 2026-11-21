@@ -26,6 +26,7 @@ This module declares no environment variables.
 ## Files and workspaces it writes
 
 Files:
+- `@auth/api-key-creator.ts`
 - `@db/schema/api-keys.ts`
 - `@auth/plugins/api-key.ts`
 - `@auth/resolvers/api-key.ts`

@@ -1,7 +1,9 @@
 import { HTTPException } from "hono/http-exception";
 import { auth } from "./auth";
-import { keyAllows, ownerMayUseKeys } from "./api-key-rules";
-import type { Caller, KeyOwner, ScopeDemand } from "./api-key-rules";
+import { ownerMayUseKeys } from "./api-key-owner";
+import type { KeyOwner } from "./api-key-owner";
+import { keyAllows } from "./api-key-rules";
+import type { Caller, ScopeDemand } from "./api-key-rules";
 import { SIGNED_OUT } from "./authorize";
 import type { Denial } from "./authorize";
 import { withAuthScope } from "./db-provider";

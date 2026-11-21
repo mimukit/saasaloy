@@ -6,6 +6,7 @@ import {
   getSessionFromCtx,
 } from "better-auth/api";
 import { env } from "cloudflare:workers";
+import { CREATOR_ID, creatorIdOf } from "../api-key-creator";
 import { SUPERADMIN_ROLE } from "../authorize";
 import type { AuthDbBindings } from "../db-provider";
 import { can } from "../permission-rules";
@@ -129,6 +130,55 @@ export function apiKeyScopeGuard(): BetterAuthPlugin {
     id: "api-key-scope-guard",
     hooks: {
       before: [
+        {
+          matcher: (context) => context.path === "/api-key/create",
+          handler: createAuthMiddleware(async (ctx) => {
+            const session = await getSessionFromCtx(ctx, {
+              disableCookieCache: true,
+            });
+            const creatorId =
+              session?.user.id ??
+              (ctx.request ? undefined : field(ctx.body, "userId"));
+            if (typeof creatorId !== "string") {
+              return;
+            }
+
+            const metadata = field(ctx.body, "metadata");
+            if (metadata && typeof metadata !== "object") {
+              return;
+            }
+            ctx.body.metadata = {
+              ...(typeof metadata === "object" ? metadata : {}),
+              [CREATOR_ID]: creatorId,
+            };
+          }),
+        },
+        {
+          matcher: (context) => context.path === "/api-key/update",
+          handler: createAuthMiddleware(async (ctx) => {
+            const metadata = field(ctx.body, "metadata");
+            const keyId = field(ctx.body, "keyId");
+            if (typeof metadata !== "object" || typeof keyId !== "string") {
+              return;
+            }
+
+            const key = await ctx.context.adapter.findOne<{
+              metadata?: unknown;
+            }>({
+              model: "apikey",
+              where: [{ field: "id", value: keyId }],
+            });
+            // The plugin replaces metadata on update. Carry the stored creator
+            // through the replacement and discard the caller's reserved field.
+            const next = { ...metadata } as Record<string, unknown>;
+            delete next[CREATOR_ID];
+            const creatorId = creatorIdOf(key?.metadata);
+            if (creatorId !== undefined) {
+              next[CREATOR_ID] = creatorId;
+            }
+            ctx.body.metadata = next;
+          }),
+        },
         {
           // An undefined path matches nothing. Fail closed the safe way round: no path
           // means no guard to run, not a guard that runs on every endpoint.
