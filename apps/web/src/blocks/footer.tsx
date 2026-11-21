@@ -119,6 +119,11 @@ function CreditLink({ label, href }: { label: string; href: string }) {
   );
 }
 
+// A wider hit area for the small links on the dimension line. The negative margins cancel
+// the padding, so the line keeps its layout.
+const HIT_AREA =
+  "-mx-2 -my-2 inline-block rounded-sm px-2 py-2 hover:bg-highlight/10 focus-visible:bg-highlight/10 focus-visible:outline-none";
+
 const LINK_ICONS: Record<string, ReactNode> = {
   github: GITHUB_MARK,
   "getting-started": <BookOpenIcon aria-hidden="true" className="size-4" />,
@@ -205,13 +210,22 @@ export function Footer({
           <span aria-hidden="true" className="dimension-arm" />
           {(notice || version) && (
             <p className="text-center text-balance">
-              {notice &&
-                notice.split(" · ").map((part, index) => (
-                  <Fragment key={index}>
-                    {index > 0 && " · "}
-                    <span className="whitespace-nowrap">{part}</span>
-                  </Fragment>
-                ))}
+              {notice && (
+                <a
+                  href={landing.footer.noticeHref}
+                  {...externalLinkProps(landing.footer.noticeHref)}
+                  title={landing.footer.noticeTitle}
+                  className={HIT_AREA}
+                >
+                  {notice.split(" · ").map((part, index) => (
+                    <Fragment key={index}>
+                      {index > 0 && " · "}
+                      <span className="whitespace-nowrap">{part}</span>
+                    </Fragment>
+                  ))}
+                  {newTabHint(landing.footer.noticeHref)}
+                </a>
+              )}
               {version && (
                 <>
                   {notice && (
@@ -224,7 +238,10 @@ export function Footer({
                     <a
                       href={version.href}
                       {...externalLinkProps(version.href)}
-                      className="normal-case underline underline-offset-4"
+                      title={interpolate(landing.footer.versionTitle, {
+                        version: build.version,
+                      })}
+                      className={`${HIT_AREA} normal-case underline underline-offset-4`}
                     >
                       {version.label}
                       {newTabHint(version.href)}
@@ -237,7 +254,10 @@ export function Footer({
                             sha: commit,
                           })}
                           {...externalLinkProps(landing.footer.commitHref)}
-                          className="normal-case underline underline-offset-4"
+                          title={interpolate(landing.footer.commitTitle, {
+                            sha: commit.slice(0, 7),
+                          })}
+                          className={`${HIT_AREA} normal-case underline underline-offset-4`}
                         >
                           <span className="sr-only">{ui.footer.commit} </span>
                           {commit.slice(0, 7)}

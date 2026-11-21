@@ -498,6 +498,11 @@ export const landing = {
     version: "v{version}",
     releaseHref: `${REPO}/releases/tag/v{version}`,
     commitHref: `${REPO}/commit/{sha}`,
+    /** The dimension label links to the repository. */
+    noticeHref: REPO,
+    noticeTitle: "Saasaloy source code and MIT license on GitHub",
+    versionTitle: "Release notes for v{version} on GitHub",
+    commitTitle: "Commit {sha} on GitHub",
   },
 };
 
