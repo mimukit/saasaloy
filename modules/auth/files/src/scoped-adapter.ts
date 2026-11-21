@@ -14,9 +14,9 @@ import type { Audience } from "./authorize";
 // lookup keyed on `token`, so a row of the other audience is simply not found. There is
 // no extra read: the condition rides on the query Better Auth already runs.
 //
-// The transaction path needs its own wrap. `drizzleAdapter` runs here without the
-// `transaction` option, so Better Auth's transaction hands the callback the inner adapter,
-// not this wrapper. Wrapping `transaction(cb)` scopes that adapter too, so a lookup made
+// The transaction path needs its own wrap. `./auth.ts` turns the adapter's `transaction`
+// option on, and Better Auth's transaction then hands the callback a fresh adapter built
+// over the transaction client, not this wrapper. Wrapping `transaction(cb)` scopes that adapter too, so a lookup made
 // inside a transaction is refused the same way. `auth.vitest.ts` pins both paths: a
 // better-auth bump that moves the lookup fails the build, not a user's session.
 //

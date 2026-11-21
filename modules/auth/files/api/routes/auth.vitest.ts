@@ -3,7 +3,7 @@ import { config } from "@repo/config";
 import { sessions, users } from "@repo/db/schema/auth";
 import { seedId } from "@repo/db/seed/id";
 import { testDatabase } from "@repo/db/testing";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import app from "../index";
 
@@ -463,5 +463,31 @@ describe("password length", () => {
       .from(users)
       .where(eq(users.email, "new@example.test"));
     expect(row?.role).toBe("user");
+  });
+
+  // Better Auth writes the user, then the credential account. The adapter runs both in one
+  // transaction, so a failed account insert leaves no user who could never sign in. The
+  // trigger is DDL inside the test's transaction, so it rolls back with the test.
+  it("keeps no user when the sign-up's account insert fails", async () => {
+    await database.db.execute(sql`
+      create function auth_test_fail_accounts() returns trigger language plpgsql as $$
+      begin
+        raise exception 'the account insert failed';
+      end;
+      $$
+    `);
+    await database.db.execute(sql`
+      create trigger auth_test_fail_accounts before insert on accounts
+      for each row execute function auth_test_fail_accounts()
+    `);
+
+    const res = await signUp(database.env, "twelve-chars");
+
+    expect(res.ok).toBeFalsy();
+    const rows = await database.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, "new@example.test"));
+    expect(rows, "the failed sign-up keeps no user row").toStrictEqual([]);
   });
 });
