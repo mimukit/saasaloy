@@ -1,6 +1,7 @@
 import { config } from "@repo/config";
 import { and, count, desc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { notificationOptOuts, notifications } from "../schema/notifications";
+import { transaction } from "../client";
 import type { Db } from "../client";
 
 // Every query the two notification tables take, in one file. The table declarations live
@@ -207,20 +208,20 @@ export async function setPreference(
 }
 
 /**
- * Apply several `setPreference` calls, one per category in `changes`. A category the body
- * leaves out keeps its current state.
- *
- * One statement per category, not one transaction: each write is a no-op on a retry, so a
- * half-applied body is fixed by sending it again.
+ * Apply several `setPreference` calls, one per category in `changes`, in one transaction:
+ * the body applies whole or not at all. A category the body leaves out keeps its current
+ * state.
  */
 export async function setPreferences(
   db: Db,
   userId: string,
   changes: Readonly<Record<string, boolean>>
 ): Promise<void> {
-  for (const [category, enabled] of Object.entries(changes)) {
-    await setPreference(db, userId, category, enabled);
-  }
+  await transaction(db, async (tx) => {
+    for (const [category, enabled] of Object.entries(changes)) {
+      await setPreference(tx, userId, category, enabled);
+    }
+  });
 }
 
 export interface RetentionDays {
