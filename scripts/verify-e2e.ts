@@ -154,6 +154,11 @@ function main(): void {
     run("git", ["init", "-q", "."], "git init", playground);
   }
 
+  if (process.env.CI !== "true") {
+    step("switching the playground to its local E2E branch");
+    run("git", ["switch", "-c", "verify-e2e"], "git switch", playground);
+  }
+
   // One module per call, through the shim `play:init` copied in: it points the CLI at THIS
   // worktree's `modules/` rather than the published registry, which is the only way an
   // unreleased module gets tested.
