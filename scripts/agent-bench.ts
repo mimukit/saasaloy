@@ -409,8 +409,12 @@ async function agentCommand(options: Options): Promise<string[]> {
         output: process.stdout,
       });
       const cancelled = new AbortController();
-      input.once("close", () => cancelled.abort());
-      input.once("SIGINT", () => input.close());
+      input.once("close", () => {
+        cancelled.abort();
+      });
+      input.once("SIGINT", () => {
+        input.close();
+      });
       try {
         return await input.question(
           "Which agent should run the benchmark? (claude/codex): ",
@@ -429,7 +433,7 @@ async function agentCommand(options: Options): Promise<string[]> {
       existsSync
     );
   } catch (error) {
-    fatal(error instanceof Error ? error.message : String(error));
+    return fatal(error instanceof Error ? error.message : String(error));
   }
 }
 
