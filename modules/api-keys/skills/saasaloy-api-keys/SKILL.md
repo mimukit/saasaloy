@@ -104,6 +104,12 @@ A key's scope is a permission map from `packages/auth/src/access.ts`, the same v
 
 The create form offers only the statements the caller holds. The form is a convenience. The guard is the gate.
 
+### Creator bans
+
+The server records who creates each new organization key. During an active ban, the bearer resolver returns 401 `invalid api key` for every key that user created, even if the user leaves the organization. The key works again when the ban ends, provided the key still passes verification. Deleting the creator also stops the key from working.
+
+Existing keys without a recorded creator keep working. To replace a key, create a new key with the same scope and update its callers. Verify that the new key works, then revoke the old key.
+
 ### The `api_keys` table in organization mode
 
 `apiKeyPlugin()` sets `references: "organization"` and renames `referenceId` to `organizationId`, so the table meets the tenant column convention. The rename in `packages/auth/src/plugins/api-key.ts` and the snapshot in `packages/db/src/schema/api-keys.ts` change together, or the adapter writes into a column that is not there.

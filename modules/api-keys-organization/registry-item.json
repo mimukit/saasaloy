@@ -15,6 +15,10 @@
   ],
   "files": [
     {
+      "path": "files/auth/api-key-creator.ts",
+      "target": "@auth/api-key-creator.ts"
+    },
+    {
       "path": "files/db/schema/api-keys.ts",
       "target": "@db/schema/api-keys.ts"
     },
