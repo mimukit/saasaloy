@@ -31,12 +31,12 @@ The command runs `packages/tooling/src/deploy-production.ts`. It stops at the fi
    A failed gate stops the run before anything builds, and every message ends with the command that clears it.
 2. **Env check.** `node packages/env/src/deploy.ts --check` loads the production values of every service and exits non-zero, naming each blank key, when one is missing.
 3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`. With `database-postgres` it dumps the production database first. With `database-d1` it creates the D1 database when the account has none by that name, dumps an existing one with `wrangler d1 export --remote`, then applies the pending migrations. A failed or empty dump stops the migration with either driver. No deploy migrates without the flag.
-4. **Workers**, one at a time, lowest `order` first from `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`: `api` (10), `admin` (20), `app` (25), `web` (30), for the workspaces the project has. The base ships only the `web` row, and each module adds its own. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the run. Each Worker runs `pnpm --filter <package> run deploy`, which is `env-deploy <service>`:
+4. **Workers**, one at a time, lowest `order` first from `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`: `api` (10), `admin` (20), `app` (25), `web` (30), for the workspaces the project has. The base ships only the `web` row. Each module adds its own row to `targets.generated.ts`, which the CLI writes on every run and `DEPLOY_TARGETS` spreads. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the run. Each Worker runs `pnpm --filter <package> run deploy`, which is `env-deploy <service>`:
    - load that service's production values and the Cloudflare credentials into memory,
    - run `pnpm run build` with them in the environment, so the bundle inlines the production `PUBLIC_*` values while `apps/*/.env` keeps its dev values,
    - write the Worker's secrets to a `0600` file under the OS temp directory,
    - run `wrangler deploy --secrets-file <file>`, and delete the file whether that passed or failed.
-5. **Smoke checks.** Each `SMOKE_CHECKS` row in `targets.ts` is requested on every custom domain of its service, three tries 5 seconds apart. The host comes from a `routes[]` entry with `custom_domain: true` in the Worker's `wrangler.jsonc`. A service with no custom domain gets no check, and the run says so.
+5. **Smoke checks.** Each `SMOKE_CHECKS` row, the base's in `targets.ts` and each module's in `targets.generated.ts`, is requested on every custom domain of its service, three tries 5 seconds apart. The host comes from a `routes[]` entry with `custom_domain: true` in the Worker's `wrangler.jsonc`. A service with no custom domain gets no check, and the run says so.
 6. **Tag.** HEAD gets an annotated `deploy-<UTC yyyymmdd-hhmm>` tag, pushed to origin. The newest tag is what is live, and `git log <tag>..main` lists what the next deploy ships.
 
 A variable your shell exports wins over the value source, for both the check and the build. That is how CI passes the Cloudflare credentials. To deploy from GitHub Actions on every push to `main`, run `saasaloy add infra-ci-deploy`; its skill lists the repository secrets to set.
@@ -172,4 +172,4 @@ A project scaffolded before this flow may still have an `infra/` workspace and a
 
 _The gated flow was checked against branch `issue-234-gate-order-and-tag-the-production-deploy` on 2026-10-23 with `pnpm deploy:production --dry-run` in a generated project; no live deploy ran. Checked against branch `issue-198` on 2026-10-21 with live deploys to a disposable Cloudflare account: the landing page, and a project with `api`, `database-d1`, `auth`, `kv-cloudflare` and `queue-cloudflare`. The teardown above ran in this order. R2 and the `infra` runbook were not run live._
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`b86486c3` on 2026-11-21._

@@ -12,6 +12,7 @@ Nothing in your Cloudflare account changes. The same Workers and the same D1 dat
 
 - `saasaloy doctor` reports `infra/ is the Pulumi deploy that pnpm deploy:production replaced`.
 - `saasaloy update` installs `pnpm deploy:production`, but the project still has an `infra/` workspace, an `infra` row in `packages/env/src/services.ts`, and a `# @services infra` section in `packages/env/.env.example`.
+- `saasaloy update` from 0.10.0 refuses with exit 2, because the lock still lists `infra` and the registry at that release has no `infra` module.
 
 ## 1. Keep the old state until the end
 
@@ -38,14 +39,14 @@ With the `local` value source, put both keys in `packages/env/.env.prod`, with t
 ## 4. Remove the module
 
 ```bash
-saasaloy remove infra
+pnpm dlx saasaloy@0.9.0 remove infra
 ```
 
-`remove` works offline from the project's manifest. It deletes the files `infra` installed and takes back its patch to `packages/env/src/services.ts`. It leaves `infra/state/` and `infra/.env`, which it did not write. Then finish by hand:
+Run `remove` with 0.9.0, the last release of the old engine. Its `remove` works offline from the project's manifest. From 0.10.0, `remove` renders the project from the registry, which has no `infra` module since 0.6.0, and it refuses a project an older CLI wrote. The 0.9.0 `remove` deletes the files `infra` installed and takes back its patch to `packages/env/src/services.ts`. It leaves `infra/state/` and `infra/.env`, which it did not write. Then finish by hand:
 
 - In `pnpm-workspace.yaml`, delete the `"infra"` entry under `packages:` and the `protobufjs: true` line under `allowBuilds:`.
 - In `packages/env/.env.example`, change `# @services infra` to `# @services deploy`, rename `CLOUDFLARE_DEFAULT_ACCOUNT_ID` to `CLOUDFLARE_ACCOUNT_ID`, and delete `PULUMI_CONFIG_PASSPHRASE`.
-- Check that `packages/env/src/services.ts` has a `{ name: "deploy", environment: "prod", omit: [] }` row and no `infra` row. `saasaloy update` merges that file three ways, so check it for conflict markers.
+- Check that `packages/env/src/services.ts` has a `{ name: "deploy", environment: "prod", omit: [] }` row and no `infra` row. From 0.10.0 the file is written once: `saasaloy update` changes it only under `saasaloy update --merge packages/env/src/services.ts`, and update note `base/0008-generated-tables` says how to move its module rows into `services.generated.ts`.
 - Run `pnpm install`.
 
 ## 5. Check before anything uploads
@@ -71,10 +72,10 @@ Once step 6 passes, delete `infra/` (the state and the old `.env` with it) and c
 
 ## Rolling back
 
-Before step 7, restore `infra/` and the files step 4 changed from git, run `pnpm install`, and deploy with `pnpm --filter @repo/infra run deploy` as before. After step 7, the way back is the last release that ships `infra`, installed as `saasaloy add mimukit/saasaloy@<tag>/infra`, with the state restored from git history.
+Before step 7, restore `infra/` and the files step 4 changed from git, run `pnpm install`, and deploy with `pnpm --filter @repo/infra run deploy` as before. After step 7, the way back is the last release that ships `infra`, installed with a CLI older than 0.10.0 as `pnpm dlx saasaloy@0.9.0 add mimukit/saasaloy@<tag>/infra`, with the state restored from git history. From 0.10.0, `add` refuses a ref on the default registry.
 
 ## `infra-ci-deploy` is something else
 
 A later module named `infra-ci-deploy` (issue #199) writes a GitHub Actions workflow that runs `pnpm deploy:production` on a push to `main`. It has nothing to do with the deleted `infra` module, holds no Pulumi program, and needs no step from this runbook.
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`b86486c3` on 2026-11-21._

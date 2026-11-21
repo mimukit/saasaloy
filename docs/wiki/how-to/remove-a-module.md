@@ -31,13 +31,13 @@ saasaloy remove waitlist --diff
 
 ## Warnings the module declares
 
-A module descriptor may carry a `removeWarnings` array. `remove` prints each entry before the plan. `subscription` declares two, one of which reads:
+A module descriptor may carry a `removeWarnings` array. `remove` prints each entry before the plan. `subscription` declares three, one of which reads:
 
 ```text
 The deployed subscriptions and subscription_events tables survive this removal, and so does the users.subscription_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.
 ```
 
-`subscription` declares one about routes still wrapped in `requireFeature()` or `requireWithinLimit()`. A warning never blocks the removal. Read it and act on it yourself.
+The other two say that the removal cancels nothing at the payment provider, and that a route still wrapped in `requireFeature()` or `requireWithinLimit()` loses its import. A warning never blocks the removal. Read it and act on it yourself.
 
 ## Files you changed
 
@@ -45,7 +45,7 @@ The engine never deletes a file whose bytes differ from what it wrote ([ADR 0034
 
 - **Unchanged:** deleted.
 - **Changed by you:** kept on disk, dropped from the manifest, and listed with one report line under "Kept, no longer tracked". It is yours now. Delete it by hand when nothing imports it.
-- **A file the module patched, such as `apps/api/src/index.ts` or `package.json`:** it stays, because another module or the base still renders it. The run merges the render without the module with your copy three ways, so the module's lines go and your own lines stay. Where both changed the same lines, the file gets conflict markers and the run exits 3.
+- **A file the module patched, such as `apps/api/wrangler.jsonc` or `package.json`:** it stays, because another module or the base still renders it. The run merges the render without the module with your copy three ways, so the module's lines go and your own lines stay. Where both changed the same lines, the file gets conflict markers and the run exits 3.
 
 No prompt asks about a changed file, so `--yes` gives the same result as an interactive run.
 
@@ -79,4 +79,4 @@ saasaloy remove --abort
 - [Add a module](add-a-module.md)
 - [Reference](../reference.md#saasaloy-remove) for the full flag list
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`b86486c3` on 2026-11-21._

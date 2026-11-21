@@ -193,6 +193,7 @@ Exit codes: 0 when every declared variable is set, when nothing declares one ("N
 
 ```text
 saasaloy testing [off|tests-after|tdd]
+saasaloy testing --abort
 ```
 
 With no argument, prints the project's mode as a bare word on stdout (`off`), so a script can read it. A project whose `saasaloy.json` has no `testing` key reads as `off`.
@@ -289,7 +290,7 @@ Each rendered file has one class, recorded in the manifest ([ADR 0067](../adr/00
 | `merged` | three-way merge of the old render, the new render and the disk. `package.json`, `wrangler.jsonc`, `tsconfig.json`, `turbo.json` and `saasaloy.json` merge by key, with markers around a key both sides changed. |
 | `once` | written when the path is new, then left alone. `update --merge <path>` merges it on request. |
 
-The base's `seedFiles` and `ownedFiles` in `_saasaloy-base.json` and a module entry's `"seed": true` are `once`. `saasaloy.json` and `packages/env/.env.example` are `merged`. Every other file is `merged`.
+The base's `seedFiles` and `ownedFiles` in `_saasaloy-base.json` and a module entry's `"seed": true` are `once`. Each `<name>.generated.ts` file the render writes for a [registration table](../../CONTEXT.md#registration-table) is `generated`. Every other file is `merged`, `saasaloy.json` and `packages/env/.env.example` included.
 
 ### The base of a merge
 
@@ -454,7 +455,7 @@ Third-party module identity is expected to change with
 | `GITHUB_TOKEN` | `add`, `env`, `list`, `outdated`, `update` | authenticate GitHub API calls. Raises the rate limit from 60 to 5000 requests an hour and allows private registries. Hitting the anonymous limit produces `GitHub API rate limit hit … Set GITHUB_TOKEN to raise it.` |
 | `GIGET_AUTH` | `add`, `env`, `list`, `outdated`, `update` | fallback for the same purpose; `GITHUB_TOKEN` wins if both are set. |
 | `SAASALOY_GITHUB_API` | every command that reaches GitHub | override the GitHub API base URL. A trailing slash is stripped. It is not a GitHub Enterprise switch: nothing else in the CLI reads it, and a real GHES base would need `GIGET_GITHUB_URL` set to match. |
-| `SAASALOY_CACHE_DIR` | `add`, `remove`, `update`, `testing`, `outdated` | replace the `saasaloy/payload` part of the payload cache path, for tests. Without it the cache is `$XDG_CACHE_HOME/saasaloy/payload/`, else `~/.cache/saasaloy/payload/`. |
+| `SAASALOY_CACHE_DIR` | `add`, `remove`, `update`, `testing`, `outdated` | replace the whole payload cache folder, for tests. Without it the cache is `$XDG_CACHE_HOME/saasaloy/payload/`, else `~/.cache/saasaloy/payload/`. |
 | `SAASALOY_DEBUG` | every command | any non-empty value prints the full `cause` chain and stack under a failure's message, instead of the message alone. Set it before you paste an error into a bug report. |
 
 Every GitHub API call carries a 15-second timeout and no retry, so a connection that opens
@@ -499,7 +500,7 @@ by JSON Schema rather than repeated here, so the schema is always the current an
 |---|---|
 | `saasaloy.json` | [`saasaloy.schema.json`](../../packages/cli/schemas/saasaloy.schema.json) |
 | `saasaloy-lock.json` | [`saasaloy-lock.schema.json`](../../packages/cli/schemas/saasaloy-lock.schema.json) |
-| `.saasaloy/manifest.json` | [`manifest.schema.json`](../../packages/cli/schemas/manifest.schema.json) |
+| `.saasaloy/manifest.json` | [`manifest-v2.schema.json`](../../packages/cli/schemas/manifest-v2.schema.json); a version 1 manifest from 0.9.0 or earlier validates against [`manifest.schema.json`](../../packages/cli/schemas/manifest.schema.json) |
 
 Module authors write one more:
 
@@ -519,4 +520,4 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 
 **A cold cache needs the network.** A run that must merge a file reads the payload of the old release. With no cache entry and no network it refuses with exit 2.
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`b86486c3` on 2026-11-21._

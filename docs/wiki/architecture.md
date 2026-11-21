@@ -32,7 +32,8 @@ into seams:
 | Resolution | `lib/resolve.ts` | depth-first `dependsOn` walk, topologically ordered, cycle-detecting |
 | Payload | `engine/payload.ts` | load the base template and every module of a set at one ref, from the user cache, the registry or a local checkout |
 | Render | `engine/render.ts` | turn a set of modules into a map from path to bytes and class; reads no disk and no network |
-| Classes | `engine/classes.ts` | the one rule that gives each rendered path its class: `generated`, `merged` or `once` |
+| Tables | `engine/tables.ts` | print each registration table as a `<name>.generated.ts` file, its rows sorted by `order`, then module name; the render gives the file the class `generated` |
+| Classes | `engine/classes.ts` | the rule that gives every other rendered path its class: `merged` or `once` |
 | Apply | `engine/apply.ts` | compare the old render, the new render and the disk, and leave, write, delete, merge or report each path |
 | Merge | `engine/merge.ts`, `engine/json-merge.ts` | the three-way text merge through `git merge-file`, and the merge by key for JSON files |
 | Conversion | `engine/convert.ts` | turn a version 1 manifest and lock into version 2, finding each file's base by its hash |
@@ -154,4 +155,4 @@ module that ships an agent skill installs it into `.agents/skills/` with a
 [ADR 0015](../adr/0015-adr-module-skills-agents-canonical-claude-symlink-2026-07-24.md)).
 After each run the engine links every folder in `.agents/skills/` and drops each `.claude/skills/` link whose folder is gone, so a removed module's link goes with its skill.
 
-_Verified against `main`@`9e0a34d8` on 2026-11-20._
+_Verified against `main`@`b86486c3` on 2026-11-21._

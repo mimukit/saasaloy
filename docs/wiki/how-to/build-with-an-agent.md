@@ -104,4 +104,4 @@ The build never does these, and it lists them under `## Left for a human`:
 - Edit a secret, or set a production value.
 - Delete data outside the local dev database.
 
-_Verified against `main`@`9e0a34d8` on 2026-11-20._
+_Verified against `main`@`b86486c3` on 2026-11-21._

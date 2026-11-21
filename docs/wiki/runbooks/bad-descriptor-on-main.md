@@ -87,24 +87,15 @@ stage, so it exercises everything that was failing.
 
 Anyone who hit this needs one of two things:
 
-- **Nothing**, if the revert is already on `main`. Their next `add` resolves the new tip.
-- **A pinned coordinate**, if they need to move before the revert lands:
-
-  ```bash
-  saasaloy add mimukit/saasaloy@<last-good-sha>/<name>
-  ```
-
-  Any commit SHA works, and so does any tag the coordinate grammar accepts — a ref
-  containing `/` does not, so pin the tip SHA of a slash-named tag instead
-  ([reference](../reference.md#module-coordinates)). Because an explicit ref bypasses the
-  lock pin, this also gets a user off a bad SHA their own lockfile already recorded.
+- **Nothing**, if the revert is already on `main`. Their next `saasaloy list @main`, or a pull of the checkout `SAASALOY_REGISTRY_DIR` points at, reads the new tip.
+- **A pinned checkout**, if they need to move before the revert lands. Check out `<last-good-sha>` in the checkout `SAASALOY_REGISTRY_DIR` points at. `saasaloy add` refuses `mimukit/saasaloy@<last-good-sha>/<name>`, because the default registry moves as one release ([reference](../reference.md#module-coordinates)).
 
 ## Why there is no faster lever
 
 Merging publishes to every `@main` reader
 ([ADR 0012](../../adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md), [ADR 0062](../../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)),
 and CI does not validate descriptors. `.github/workflows/ci.yml` runs `pnpm lint`,
-`pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins` and `pnpm docs:check` on every push and pull request, and
+`pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins`, `pnpm docs:check` and `pnpm badges:check` on every push and pull request, and
 no step calls `saasaloy doctor` over `modules/`. Review is still the only thing between a
 descriptor and every downstream install.
 [#46](https://github.com/mimukit/saasaloy/issues/46) adds the gate that would have caught
@@ -113,4 +104,4 @@ this.
 Until then, the cheap prevention is `saasaloy doctor modules` or step 2, run *before* the merge. See
 [Contribute a module](../how-to/contribute-a-module.md#test-it-before-you-open-the-pr).
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`b86486c3` on 2026-11-21._

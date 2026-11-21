@@ -162,4 +162,4 @@ A project an older CLI (0.9.0 or earlier) wrote holds a version 1 manifest. `add
 - [Architecture](../architecture.md) for what the engine does with renders, hashes and aliases
 - [Reference](../reference.md#saasaloy-add) for the full flag list
 
-_Verified against `main`@`928b4f03` on 2026-11-19._
+_Verified against `main`@`b86486c3` on 2026-11-21._
