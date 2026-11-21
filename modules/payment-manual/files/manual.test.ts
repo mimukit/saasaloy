@@ -79,7 +79,10 @@ function claimed(
 }
 
 function fakeStore(): PaymentStore {
-  return {
+  const store: PaymentStore = {
+    transaction(body) {
+      return body(store);
+    },
     appendEvent(record) {
       events.push(record);
       return Promise.resolve();
@@ -153,6 +156,7 @@ function fakeStore(): PaymentStore {
       return Promise.resolve(next);
     },
   };
+  return store;
 }
 
 const client = (options: Parameters<typeof manual>[0] = OPTIONS) =>

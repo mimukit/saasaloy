@@ -47,7 +47,10 @@ function memoryStore(): MemoryStore {
         row.status !== "cancelled"
     );
 
-  return {
+  const store: MemoryStore = {
+    transaction(body) {
+      return body(store);
+    },
     appendEvent(record) {
       events.push(record);
       return Promise.resolve();
@@ -135,6 +138,7 @@ function memoryStore(): MemoryStore {
       return Promise.resolve({ ...row });
     },
   };
+  return store;
 }
 
 /** A provider that answers every method; a test overrides the ones it cares about. */

@@ -47,6 +47,7 @@ Files:
 - `@api/audit/payment.ts`
 - `@api/routes/admin-payment.ts`
 - `@api/payment-store.ts`
+- `@api/payment-store.test.ts`
 - `@db/schema/payment.ts`
 - `@admin/routes/payments.tsx`
 - `@admin/extend/payments.ts` (seed, written once)

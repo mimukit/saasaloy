@@ -18,7 +18,7 @@ import type {
   RejectReason,
 } from "@repo/payment";
 import type { Db, DbBindings } from "@repo/db/client";
-import { withDb } from "@repo/db/client";
+import { transaction, withDb } from "@repo/db/client";
 import { users } from "@repo/db/schema/auth";
 import {
   paymentEvents,
@@ -80,6 +80,12 @@ export function withPaymentStore<T>(
 /** Build the port over `db`. Call it inside `withDb`, and hand it to `withPaymentStore`. */
 export function createPaymentStore(db: Db): PaymentStore {
   return {
+    // One Postgres transaction, with a store over its client. Inside `staffWrite`, or under
+    // a route test, `db` is already a transaction, so this opens a savepoint inside it.
+    transaction(body) {
+      return transaction(db, (tx) => body(createPaymentStore(tx)));
+    },
+
     async appendEvent(record: PaymentEventRecord) {
       await db.insert(paymentEvents).values({
         ...record,

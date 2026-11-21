@@ -44,7 +44,10 @@ let routes: Record<string, (body: Record<string, string>) => unknown>;
 const realFetch = globalThis.fetch;
 
 function fakeStore(): PaymentStore {
-  return {
+  const store: PaymentStore = {
+    transaction(body) {
+      return body(store);
+    },
     appendEvent(record) {
       events.push(record);
       return Promise.resolve();
@@ -101,6 +104,7 @@ function fakeStore(): PaymentStore {
       return Promise.resolve(next);
     },
   };
+  return store;
 }
 
 /** The slice of `KvClient` the provider uses, over a Map. TTLs are ignored. */

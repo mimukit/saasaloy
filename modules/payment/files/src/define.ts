@@ -167,7 +167,10 @@ export function definePayment(config: PaymentConfig): PaymentRegistry {
         }
       };
 
-      /** One conditional status write, its history row, and the listeners. */
+      /**
+       * One conditional status write and its history row, in one transaction, then the
+       * listeners after the commit. A listener never runs for a change that rolled back.
+       */
       const move = async (
         store: PaymentStore,
         payment: Payment,
@@ -180,23 +183,29 @@ export function definePayment(config: PaymentConfig): PaymentRegistry {
           note?: string | null;
         } = {}
       ): Promise<Payment | undefined> => {
-        const moved = await store.transition(
-          payment.id,
-          from,
-          to,
-          to === "successful" ? { ...patch, settledAt: new Date() } : patch
-        );
+        const moved = await store.transaction(async (tx) => {
+          const next = await tx.transition(
+            payment.id,
+            from,
+            to,
+            to === "successful" ? { ...patch, settledAt: new Date() } : patch
+          );
+          if (!next) {
+            return;
+          }
+          await tx.appendEvent({
+            actorUserId: event.actorUserId ?? null,
+            fromStatus: payment.status,
+            note: event.note ?? null,
+            paymentId: payment.id,
+            reason: event.reason ?? null,
+            toStatus: to,
+          });
+          return next;
+        });
         if (!moved) {
           return;
         }
-        await store.appendEvent({
-          actorUserId: event.actorUserId ?? null,
-          fromStatus: payment.status,
-          note: event.note ?? null,
-          paymentId: payment.id,
-          reason: event.reason ?? null,
-          toStatus: to,
-        });
         await notify(moved, payment.status, to);
         return moved;
       };

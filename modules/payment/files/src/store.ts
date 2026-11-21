@@ -83,6 +83,14 @@ export interface PaymentRefund extends PaymentRefundRecord {
  * conditional update, so the database picks the winner and the loser reads nothing back.
  */
 export interface PaymentStore {
+  /**
+   * Run `body` in one database transaction, with a store whose every method writes inside
+   * it, and commit when it resolves. A throw rolls back every write `body` made through
+   * that store. The core wraps a status change and its `payment_events` row in one, so a
+   * failed event insert leaves the old status. Never call a provider inside `body`: a
+   * transaction must not stay open across a vendor's network round trip.
+   */
+  transaction<T>(body: (store: PaymentStore) => Promise<T>): Promise<T>;
   insertPayment(row: NewPayment): Promise<Payment>;
   findPayment(id: string): Promise<Payment | undefined>;
   /** Set columns without a status change. Used to keep a provider's `create` answer. */
