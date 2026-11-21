@@ -8,12 +8,12 @@ The owner decided on 2026-11-19 that Saasaloy supports Postgres only. No project
 
 ## The D1 limits that shaped Saasaloy code
 
-A module that had to run on both dialects could use only what both allowed. Four D1 limits left marks you can still find in the code. The behaviour stays until issue [#372](https://github.com/mimukit/saasaloy/issues/372) simplifies it.
+A module that had to run on both dialects could use only what both allowed. Four D1 limits left marks in the code. Issue [#372](https://github.com/mimukit/saasaloy/issues/372) removed the marks that left a partial write or only cost a reader time, and kept the shapes that are right on Postgres too.
 
-- **No interactive transaction.** D1 cannot open a transaction, read a row back, and decide what to write next. The `admin` write wrapper (`modules/admin/files/api/lib/admin-write.ts`) could not roll a change back with its audit rows on D1, so each statement committed as it ran. The `database` seed engine computes every seed id as a UUIDv5 before the first write, so the whole seed could go to D1 as one atomic `db.batch` (`modules/database/files/src/seed/id.ts` and `plan.ts`). The `cms` publish and the `notification` preference writes are ordered steps that fail safe for the same reason.
-- **A cap on bound parameters.** D1 binds at most 100 parameters to one statement. The `admin` audit repository (`modules/admin/files/db/repositories/audit.ts`) binds 10 values a row, so it inserts at most 9 rows a statement and splits a long write into several statements.
-- **`CAST AS TEXT`.** Postgres has no `uuid = text` operator, so the `payment` store (`modules/payment/files/api/payment-store.ts`) casts the users side of each join to text. It writes `CAST(... AS TEXT)` and not `::text`, because the same file ran on D1. The same store also matched two unique-violation shapes: SQLSTATE 23505 from Postgres and `UNIQUE constraint failed` from D1.
-- **No `SELECT … FOR UPDATE`.** Checkout in `ecommerce` locks the variant rows it sells from. D1 has no row lock, so `ecommerce` depended on `database-postgres` and never ran on D1.
+- **No interactive transaction.** D1 cannot open a transaction, read a row back, and decide what to write next. Removed: the `admin` write wrapper (`modules/admin/files/api/lib/admin-write.ts`) no longer carries a branch for a database with no rollback, and `@repo/db/client` no longer exports the constant that told code whether a transaction could roll back. The `cms` publish, the `subscription` event write, the `payment` status change with its event row, Better Auth's sign-up writes and the `notification` preference writes each run in one transaction now. Kept: the seed engine still computes every seed id as a UUIDv5 before the first write (`modules/database/files/src/seed/id.ts`), because a slice needs the id of a row in another slice. `adminAuthWrite` still writes its audit rows after Better Auth commits its own change, and a payment refund still calls the gateway outside any transaction.
+- **A cap on bound parameters.** D1 binds at most 100 parameters to one statement. Removed: the `admin` audit repository (`modules/admin/files/db/repositories/audit.ts`) writes all audit rows of a change in one insert, where it split them at 9 rows a statement. The seed engine writes each table in one multi-row insert, where it wrote one row a statement.
+- **`CAST AS TEXT`.** Postgres has no `uuid = text` operator, so the `payment` store (`modules/payment/files/api/payment-store.ts`) casts the users side of each join to text. Kept: the `CAST(... AS TEXT)`, which Postgres needs. Removed: the store's match on D1's `UNIQUE constraint failed` message; it now reads SQLSTATE 23505 only. The audit search uses `ilike` in place of `lower(...) like`.
+- **No `SELECT … FOR UPDATE`.** Checkout in `ecommerce` locks the variant rows it sells from. D1 has no row lock, so `ecommerce` depended on `database-postgres` and never ran on D1. Nothing changed here.
 
 ## D1's numbers
 
@@ -53,4 +53,4 @@ The loss is real. A deploy now needs a Neon account, or an account at another Po
 
 Saasaloy does not support D1. A project can port its own schema to D1, but it then owns that fork. Every Saasaloy update that touches a table conflicts with it, because each module ships its tables for Postgres only.
 
-_Verified against `main`@`7fe1e866` on 2026-11-21._
+_Verified against `main`@`e7396ab8` on 2026-11-21._

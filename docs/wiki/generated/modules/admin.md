@@ -405,7 +405,7 @@ There is deliberately **no sign-up route** here, and `adminAuth` sets `disableSi
 
 #### What the transaction guarantees
 
-`adminWrite` is one Postgres transaction. The change and its audit rows commit together, and a body that throws or answers 4xx keeps nothing.
+`adminWrite` is one Postgres transaction. The change and its audit rows commit together, and a body that throws or answers 4xx keeps nothing. The audit rows go in as one insert. If that insert fails, the change rolls back with it and the request fails.
 
 `adminAuthWrite` gives a weaker guarantee, because Better Auth makes the change outside our transaction. The change commits as Better Auth runs it, and the audit rows go in after it. A failed audit insert is logged at `error` and the change stands. Validate before you call Better Auth.
 

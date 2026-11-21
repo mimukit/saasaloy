@@ -10,6 +10,21 @@
 * **cli:** a descriptor that declares `onlyWith` no longer
   validates. A descriptor read at an older release still loads,
   and its `onlyWith` reads as `when.installed`.
+* **database-postgres:** @repo/db/client no longer exports
+  TRANSACTION_IS_ATOMIC. (update note: [modules/database-postgres/update-notes/0001-transaction-is-atomic.md](https://github.com/mimukit/saasaloy/blob/main/modules/database-postgres/update-notes/0001-transaction-is-atomic.md))
+
+### Bug Fixes
+
+* **cms:** publish an entry in one transaction, so a failed
+  redirect write or a lost race leaves no orphan revision.
+* **subscription:** apply an event in one transaction, so a
+  failed row write does not turn the redelivery into a duplicate.
+  The port gains a required `transaction(body)` method. (update note: [modules/subscription/update-notes/0003-store-transaction.md](https://github.com/mimukit/saasaloy/blob/main/modules/subscription/update-notes/0003-store-transaction.md))
+* **payment:** write a status change and its `payment_events` row
+  in one transaction. The port gains a required `transaction(body)`
+  method. (update note: [modules/payment/update-notes/0005-store-transaction.md](https://github.com/mimukit/saasaloy/blob/main/modules/payment/update-notes/0005-store-transaction.md))
+* **auth:** let Better Auth write a sign-up's user and account
+  rows in one transaction.
 
 ### Features
 
