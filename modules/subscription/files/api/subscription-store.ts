@@ -54,7 +54,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // adapter.
 //
 // Dialect-neutral by construction. The dialect reaches the table declarations, which
-// `modules/subscription` ships twice under `onlyWith`; every builder call below is the same
+// `modules/subscription` ships; every builder call below is the same
 // under D1 and Postgres.
 
 /** The port belonging to the unit of work currently running, or nothing. */

@@ -75,10 +75,9 @@ describe("MVP_MODULES", () => {
     }
   });
 
-  it("picks the D1 driver", () => {
+  it("picks the Postgres driver", () => {
     const names = new Set<string>(MVP_MODULES);
-    assert.ok(names.has("database-d1"));
-    assert.ok(!names.has("database-postgres"));
+    assert.ok(names.has("database-postgres"));
   });
 });
 

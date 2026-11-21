@@ -22,8 +22,8 @@ describe("teams module descriptor", () => {
     await expect(validateRegistryItem(descriptor)).resolves.toMatchObject({
       valid: true,
     });
-    // No driver here. The schema ships in two dialects under `onlyWith`, the same
-    // shape `modules/auth` uses, so `teams` installs on either driver.
+    // No driver here. `database` names its driver, so `teams` depends on the
+    // capability alone, the same shape `modules/auth` uses.
     expect(descriptor.dependsOn).toStrictEqual([
       "api",
       "database",
@@ -33,14 +33,8 @@ describe("teams module descriptor", () => {
     expect(descriptor.files).toStrictEqual(
       expect.arrayContaining([
         {
-          path: "files/db/schema/teams.sqlite.ts",
+          path: "files/db/schema/teams.ts",
           target: "@db/schema/teams.ts",
-          onlyWith: "database-d1",
-        },
-        {
-          path: "files/db/schema/teams.pg.ts",
-          target: "@db/schema/teams.ts",
-          onlyWith: "database-postgres",
         },
         {
           path: "files/auth/access.ts",

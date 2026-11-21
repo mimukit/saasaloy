@@ -18,10 +18,7 @@ import { fileURLToPath } from "node:url";
 const read = (relative: string) =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf-8");
 
-const VARIANTS = [
-  { dialect: "sqlite", path: "./api-keys.sqlite.ts" },
-  { dialect: "postgres", path: "./api-keys.pg.ts" },
-];
+const VARIANTS = [{ dialect: "postgres", path: "./api-keys.ts" }];
 
 // This file runs on `node:test`, whose `describe` carries no `.each`. The rule below
 // reads the call as vitest's and is wrong here.

@@ -543,9 +543,7 @@ database.
 
 ## `auth` and `waitlist` install here
 
-Both ship their table declarations in two variants, one per dialect, and the descriptor's `onlyWith`
-condition picks the `pg-core` file on this driver and filters the SQLite one out before the plan is
-built. `saasaloy add auth --dry-run` prints which source it chose. Their route files are single
+Both ship their table declarations once, against `pg-core`. Their route files are single
 files under both drivers, because `withDb(c, …)` has the same signature here and on `database-d1`.
 
 `auth` carries one extra rule this driver forces: its two Better Auth instances (`auth` and `adminAuth`) are module-scope singletons and their database client is not. Every `api.*` call on either instance runs inside `withAuthScope(c, …)`, which is what

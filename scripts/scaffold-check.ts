@@ -54,7 +54,7 @@ const cliBin = join(root, "packages/cli/dist/index.js");
  */
 export const MVP_MODULES = [
   "database",
-  "database-d1",
+  "database-postgres",
   "api",
   "logger",
   "logger-console",
@@ -232,7 +232,7 @@ async function main(): Promise<void> {
   }
   const seconds = Math.round((Date.now() - started) / 1000);
   step(
-    `a fresh scaffold with ${String(MVP_MODULES.length)} modules on database-d1 passes \`pnpm check\` (${String(seconds)}s).`
+    `a fresh scaffold with ${String(MVP_MODULES.length)} modules on database-postgres passes \`pnpm check\` (${String(seconds)}s).`
   );
 }
 

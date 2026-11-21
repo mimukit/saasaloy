@@ -55,10 +55,8 @@ is applied.
 
 ## D1 is the default, and both feature modules run on either driver
 
-`auth` and `waitlist` ship their table declarations twice, once against `sqlite-core` and once
-against `pg-core`, and the descriptor's `onlyWith` condition installs the pair that matches the
-driver already in the project. Their route files are single files, because `withDb(c, …)` has the
-same signature under both. `saasaloy add auth --dry-run` prints which schema source it chose.
+`auth` and `waitlist` ship their table declarations once, against `pg-core`. Their route files are
+single files, because `withDb(c, …)` has the same signature under both drivers.
 
 Both modules declared `dependsOn: ["database-d1"]` until 2026-08-31, as a stopgap while the
 payloads were still SQLite-only. That is gone; ADR 0026's amendment records the retraction, and ADR

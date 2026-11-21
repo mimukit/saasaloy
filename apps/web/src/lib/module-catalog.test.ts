@@ -20,6 +20,16 @@ describe("moduleTier", () => {
     );
   });
 
+  it("reads a module another module names in requiresOneOf as a driver", () => {
+    assert.equal(
+      moduleTier(
+        descriptor({ name: "database-postgres" }),
+        new Set(["database-postgres"])
+      ),
+      "driver"
+    );
+  });
+
   it("reads a module that adds a row to a providers table as a provider", () => {
     assert.equal(
       moduleTier(descriptor({ entries: [providersRow] })),
@@ -241,7 +251,7 @@ describe("the real registry", () => {
     );
   });
 
-  it("gives the README's 19 providers and 4 drivers", () => {
+  it("gives the README's 19 providers and 3 drivers", () => {
     assert.deepEqual(namesOf("provider"), [
       "email-cloudflare",
       "email-console",
@@ -266,7 +276,6 @@ describe("the real registry", () => {
     assert.deepEqual(namesOf("driver"), [
       "api-keys-organization",
       "api-keys-user",
-      "database-d1",
       "database-postgres",
     ]);
   });

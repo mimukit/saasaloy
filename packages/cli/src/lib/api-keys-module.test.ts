@@ -115,14 +115,8 @@ describe("the api-keys-organization owner", () => {
     // only at the path the manifest records it under.
     expect(files).toStrictEqual([
       {
-        path: "files/db/schema/api-keys.sqlite.ts",
+        path: "files/db/schema/api-keys.ts",
         target: "@db/schema/api-keys.ts",
-        onlyWith: "database-d1",
-      },
-      {
-        path: "files/db/schema/api-keys.pg.ts",
-        target: "@db/schema/api-keys.ts",
-        onlyWith: "database-postgres",
       },
       {
         path: "files/auth/plugins/api-key.ts",
@@ -188,14 +182,8 @@ describe("the api-keys-user owner", () => {
 
     expect(files).toStrictEqual([
       {
-        path: "files/db/schema/api-keys.sqlite.ts",
+        path: "files/db/schema/api-keys.ts",
         target: "@db/schema/api-keys.ts",
-        onlyWith: "database-d1",
-      },
-      {
-        path: "files/db/schema/api-keys.pg.ts",
-        target: "@db/schema/api-keys.ts",
-        onlyWith: "database-postgres",
       },
       {
         path: "files/auth/plugins/api-key.ts",

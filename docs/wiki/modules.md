@@ -8,10 +8,10 @@ Dependencies install automatically: `saasaloy add waitlist` installs each module
 
 ```
 Cannot add waitlist — unmet requirement:
-  database (required by waitlist) needs one of: database-d1, database-postgres, and none is installed. Re-run as `saasaloy add waitlist --with database-d1`, or pick another from that list.
+  database (required by waitlist) needs one of: database-postgres, and none is installed. Re-run as `saasaloy add waitlist --with database-postgres`, or pick another from that list.
 ```
 
-`saasaloy add waitlist --with database-d1 --yes` installs the module and the driver in one run, with no terminal needed. Adding the driver first and then the module works too. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
+`saasaloy add waitlist --with database-postgres --yes` installs the module and the driver in one run, with no terminal needed. Adding the driver first and then the module works too. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
 
 To see what any module would do to your project before installing it:
 

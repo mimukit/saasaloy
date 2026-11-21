@@ -46,7 +46,7 @@ export const waitlist = new Hono<{ Bindings: DbBindings }>().post(
   // starts closing the moment the callback settles, and rejects every query issued after.
   //
   // The dialect only reaches the table declaration, which `modules/waitlist` ships twice
-  // (`files/db/schema/waitlist.sqlite.ts` and `.pg.ts`, selected by `onlyWith`). Drizzle's
+  // (`files/db/schema/waitlist.ts`). Drizzle's
   // query builder below is the same under either.
   (c) =>
     withDb(c, async (db) => {

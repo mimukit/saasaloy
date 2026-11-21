@@ -114,7 +114,7 @@ The descriptor also declares an `admin.nav` row, which adds `{ to: "/teams", lab
 
 `packages/db/src/schema/teams.ts` is a hand-written Better Auth 1.7.6 snapshot for the `organizations`, `members`, `invitations`, and `organization_roles` tables. `packages/db/src/schema/auth.ts` pre-declares the nullable `sessions.activeOrganizationId` field. Keep the Better Auth property names because its adapter matches those names.
 
-The module ships the snapshot in two dialects, `teams.sqlite.ts` and `teams.pg.ts`, and `onlyWith` installs the one matching the project's driver. Edit one table and edit its twin. A mismatch only shows up on the other driver's first install, long after the edit.
+The module ships the snapshot as one Postgres file, `teams.ts`.
 
 The `members`, `invitations` and `organization_roles` tables each follow the tenant column convention: a `organizationId` property on an `organization_id` column, `notNull`, `references(() => organizations.id)`, and one index. That is what lets `forTenant` from `@repo/db/tenant` accept them once `multitenant` is installed.
 

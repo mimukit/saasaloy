@@ -217,7 +217,7 @@
       "target": "@config/sections/ecommerce.ts"
     },
     {
-      "path": "files/db/schema/ecommerce.pg.ts",
+      "path": "files/db/schema/ecommerce.ts",
       "target": "@db/schema/ecommerce.ts"
     },
     {

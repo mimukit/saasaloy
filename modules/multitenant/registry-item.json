@@ -17,28 +17,16 @@
   "files": [
     { "path": "files/db/tenant.ts", "target": "@db/tenant.ts" },
     {
-      "path": "files/db/tenant-column.sqlite.ts",
-      "target": "@db/tenant-column.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/tenant-column.pg.ts",
-      "target": "@db/tenant-column.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/tenant-column.ts",
+      "target": "@db/tenant-column.ts"
     },
     {
       "path": "files/db/tenant.typecheck.ts",
       "target": "@db/tenant.typecheck.ts"
     },
     {
-      "path": "files/db/schema/projects.sqlite.ts",
-      "target": "@db/schema/projects.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/projects.pg.ts",
-      "target": "@db/schema/projects.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/projects.ts",
+      "target": "@db/schema/projects.ts"
     },
     {
       "path": "files/db/repositories/organization-roles.ts",

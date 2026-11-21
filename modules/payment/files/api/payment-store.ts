@@ -35,8 +35,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 // `packages/payment` declares the port and never implements it: the core has zero npm
 // runtime dependencies, so the SQL lives here, in the one workspace that holds both the
 // schema and the request's client (ADR 0029). Every builder call below is the same under
-// D1 and Postgres; the dialect reaches only the table files `modules/payment` ships twice
-// under `onlyWith`.
+// D1 and Postgres; the dialect reaches only the table files `modules/payment` ships.
 
 const storeScope = new AsyncLocalStorage<PaymentStore>();
 

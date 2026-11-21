@@ -43,7 +43,7 @@ The dependency runs `auth` → `subscription` and never back (ADR 0034). `packag
 
 `packages/subscription/src/subject.ts` owns who the bill is addressed to. It exports `resolveSubject(c)`, `authorizeSubject(user, subject, action)` and `assertSubject(...)`.
 
-The default bills the signed-in user: `customerType` is `"user"`, `referenceId` is the user id, and the only subject a user may act on is their own. **Installing `teams` replaces this one file** with an organization version under `onlyWith`, which reads the active organization off the session and checks membership instead. Nothing else in the capability — no route, no job, no entitlement check — learns which of the two it has. That is the whole point: moving subscription from users to organizations is a one-file change.
+The default bills the signed-in user: `customerType` is `"user"`, `referenceId` is the user id, and the only subject a user may act on is their own. **Installing `teams` replaces this one file** with an organization version, which reads the active organization off the session and checks membership instead. Nothing else in the capability — no route, no job, no entitlement check — learns which of the two it has. That is the whole point: moving subscription from users to organizations is a one-file change.
 
 `subscription-stripe` wires `authorizeSubject` into the plugin's `authorizeReference`, so the same rule guards the vendor's own endpoints as guards these routes.
 

@@ -172,7 +172,7 @@ Skill source: `modules/ecommerce/skills/saasaloy-ecommerce/SKILL.md`
 
 ### ecommerce: an in-house shop on Postgres
 
-`ecommerce` is a **feature module** (`saasaloy:feature`). It depends on api, database-postgres, validators, auth, auth-phone, admin, file-uploads, payment and cms, which `add` resolves and installs first. It runs on Postgres only: checkout locks variant rows with `SELECT … FOR UPDATE`.
+`ecommerce` is a **feature module** (`saasaloy:feature`). It depends on api, database-postgres, validators, auth, auth-phone, admin, file-uploads, payment and cms, which `add` resolves and installs first. It runs on Postgres only: checkout locks variant rows with `SELECT … FOR UPDATE`. In a D1 project `add` refuses and names `saasaloy remove database-d1`, because `database-postgres` conflicts with `database-d1`.
 
 Staff manage products, stock, orders, customers, shipping zones and reports in `apps/admin`. Shoppers buy on `apps/web`, after a phone code, with cash on delivery or any manual method `payment-manual` offers. The module wraps no external service, so it takes neither providers nor drivers.
 

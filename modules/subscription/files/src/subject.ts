@@ -5,7 +5,7 @@ import type { BillableSubject } from "./provider";
 //
 // The default bills the signed-in user: `customerType` is `"user"`, `referenceId` is the
 // user id, and the only subject a user may act on is their own. Installing `teams` ships
-// an organization version of this same file under `onlyWith`, which reads the active
+// an organization version of this same file, which reads the active
 // organization off the session and checks membership instead. Nothing else in the
 // capability — no route, no job, no entitlement check — learns which of the two it has,
 // which is what lets a project move subscription from users to organizations by replacing one

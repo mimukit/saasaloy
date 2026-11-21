@@ -29,10 +29,7 @@ import { fileURLToPath } from "node:url";
 const read = (relative: string) =>
   readFileSync(fileURLToPath(new URL(relative, import.meta.url)), "utf-8");
 
-const VARIANTS = [
-  { dialect: "sqlite", path: "../db/schema/auth.sqlite.ts" },
-  { dialect: "postgres", path: "../db/schema/auth.pg.ts" },
-];
+const VARIANTS = [{ dialect: "postgres", path: "../db/schema/auth.ts" }];
 const packageJson: { dependencies?: Record<string, string> } = JSON.parse(
   read("../package.json")
 );

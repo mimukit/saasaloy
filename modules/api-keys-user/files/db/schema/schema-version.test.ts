@@ -43,10 +43,7 @@ const pinned = descriptor.patches?.find(
   (patch) => patch.kind === "package-json-dependency" && patch.name === PACKAGE
 )?.range;
 
-const VARIANTS = [
-  { dialect: "sqlite", path: "./api-keys.sqlite.ts" },
-  { dialect: "postgres", path: "./api-keys.pg.ts" },
-];
+const VARIANTS = [{ dialect: "postgres", path: "./api-keys.ts" }];
 
 // This file runs on `node:test`, whose `describe` carries no `.each`. The rule below
 // reads the call as vitest's and is wrong here.

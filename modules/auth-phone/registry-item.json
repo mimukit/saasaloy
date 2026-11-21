@@ -40,16 +40,6 @@
       }
     },
     {
-      "file": "packages/db/src/schema/auth.ts",
-      "kind": "drizzle-column",
-      "exportName": "users",
-      "column": "phoneNumberVerified",
-      "value": "integer(\"phone_number_verified\", { mode: \"boolean\" }).notNull().default(false)",
-      "when": {
-        "installed": ["database-d1"]
-      }
-    },
-    {
       "file": "packages/db/src/column-classes/users.ts",
       "kind": "drizzle-column",
       "exportName": "users",

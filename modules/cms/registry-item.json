@@ -59,26 +59,6 @@
       "file": "packages/cms/package.json",
       "kind": "package-json-dependency",
       "section": "devDependencies",
-      "name": "wrangler",
-      "range": "4.145.0",
-      "when": {
-        "installed": ["database-d1"]
-      }
-    },
-    {
-      "file": "packages/cms/package.json",
-      "kind": "package-json-dependency",
-      "section": "devDependencies",
-      "name": "@cloudflare/workers-types",
-      "range": "5.20261001.1",
-      "when": {
-        "installed": ["database-d1"]
-      }
-    },
-    {
-      "file": "packages/cms/package.json",
-      "kind": "package-json-dependency",
-      "section": "devDependencies",
       "name": "postgres",
       "range": "3.4.9",
       "when": {
@@ -171,14 +151,8 @@
       "target": "@config/sections/cms.ts"
     },
     {
-      "path": "files/db/schema/cms.sqlite.ts",
-      "target": "@db/schema/cms.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/cms.pg.ts",
-      "target": "@db/schema/cms.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/cms.ts",
+      "target": "@db/schema/cms.ts"
     },
     {
       "path": "files/db/repositories/cms.ts",
@@ -365,14 +339,8 @@
           "target": "scripts/rerender.ts"
         },
         {
-          "path": "files/scripts/open-db.d1.ts",
-          "target": "scripts/open-db.ts",
-          "onlyWith": "database-d1"
-        },
-        {
-          "path": "files/scripts/open-db.pg.ts",
-          "target": "scripts/open-db.ts",
-          "onlyWith": "database-postgres"
+          "path": "files/scripts/open-db.ts",
+          "target": "scripts/open-db.ts"
         }
       ]
     }

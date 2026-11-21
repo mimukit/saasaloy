@@ -175,14 +175,8 @@
       "target": "@email/templates/account-locked.ts"
     },
     {
-      "path": "files/db/schema/subscription.sqlite.ts",
-      "target": "@db/schema/subscription.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/subscription.pg.ts",
-      "target": "@db/schema/subscription.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/subscription.ts",
+      "target": "@db/schema/subscription.ts"
     },
     {
       "path": "files/db/seed/subscriptions.ts",

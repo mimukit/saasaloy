@@ -15,14 +15,8 @@
   ],
   "files": [
     {
-      "path": "files/db/schema/api-keys.sqlite.ts",
-      "target": "@db/schema/api-keys.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/api-keys.pg.ts",
-      "target": "@db/schema/api-keys.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/api-keys.ts",
+      "target": "@db/schema/api-keys.ts"
     },
     {
       "path": "files/auth/plugins/api-key.ts",

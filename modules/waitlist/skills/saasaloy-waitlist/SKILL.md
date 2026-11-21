@@ -10,16 +10,11 @@ description: Runbook for the waitlist feature — a landing-page email waitlist 
 ## Either database driver
 
 This module installs against `database-d1` or `database-postgres`, and picks the right table
-declaration for whichever one the project holds. It ships the table twice:
+declaration for whichever one the project holds. It ships the table once:
 
-| Source in the module | Installs when | Dialect |
+| Source in the module | Lands as | Dialect |
 |---|---|---|
-| `files/db/schema/waitlist.sqlite.ts` | `onlyWith: "database-d1"` | `sqliteTable`, `drizzle-orm/sqlite-core` |
-| `files/db/schema/waitlist.pg.ts` | `onlyWith: "database-postgres"` | `pgTable`, `drizzle-orm/pg-core` |
-
-Both name the same `target`, `packages/db/src/schema/waitlist.ts`, so exactly one lands and the
-other is filtered out before the plan is built. `saasaloy add waitlist --dry-run` prints which
-source it chose.
+| `files/db/schema/waitlist.ts` | `packages/db/src/schema/waitlist.ts` | `pgTable`, `drizzle-orm/pg-core` |
 
 **Everything else is one file.** The route, the validators and the block are dialect-neutral,
 because Drizzle's query builder is the same under both dialects and the driver's `withDb(c, …)` is

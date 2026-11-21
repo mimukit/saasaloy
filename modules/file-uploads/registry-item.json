@@ -98,14 +98,8 @@
       "target": "@api/lib/storage-sweep.ts"
     },
     {
-      "path": "files/db/schema/file-uploads.sqlite.ts",
-      "target": "@db/schema/file-uploads.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/file-uploads.pg.ts",
-      "target": "@db/schema/file-uploads.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/file-uploads.ts",
+      "target": "@db/schema/file-uploads.ts"
     },
     {
       "path": "files/db/repositories/objects.ts",

@@ -20,14 +20,8 @@
       "target": "@config/sections/notification.ts"
     },
     {
-      "path": "files/db/schema/notifications.sqlite.ts",
-      "target": "@db/schema/notifications.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/notifications.pg.ts",
-      "target": "@db/schema/notifications.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/notifications.ts",
+      "target": "@db/schema/notifications.ts"
     },
     {
       "path": "files/db/repositories/notifications.ts",

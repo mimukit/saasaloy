@@ -36,18 +36,12 @@ This module installs against `database-d1` or `database-postgres`, and picks the
 whichever one the project holds. It depends on `api` and `database`, and names no driver:
 `database`'s own `requiresOneOf` is what guarantees one is present.
 
-Two files ship twice, and nothing else does:
+Two files carry the dialect, and nothing else does:
 
-| Source in the module | Installs when | What differs |
+| Source in the module | Lands as | What it holds |
 |---|---|---|
-| `files/db/schema/auth.sqlite.ts` | `onlyWith: "database-d1"` | `sqliteTable`, `drizzle-orm/sqlite-core`, millisecond-integer dates |
-| `files/db/schema/auth.pg.ts` | `onlyWith: "database-postgres"` | `pgTable`, `drizzle-orm/pg-core`, `timestamptz` dates, `boolean` flags |
-| `files/src/db-provider.d1.ts` | `onlyWith: "database-d1"` | `provider: "sqlite"`, and `withAuthScope` runs the body |
-| `files/src/db-provider.pg.ts` | `onlyWith: "database-postgres"` | `provider: "pg"`, and `withAuthScope` wraps `withDb` |
-
-Each pair names one `target` — `packages/db/src/schema/auth.ts` and
-`packages/auth/src/db-provider.ts` — so exactly one of the two lands and the other is filtered out
-before the plan is built. `saasaloy add auth --dry-run` prints which source it chose.
+| `files/db/schema/auth.ts` | `packages/db/src/schema/auth.ts` | `pgTable`, `drizzle-orm/pg-core`, `timestamptz` dates, `boolean` flags |
+| `files/src/db-provider.ts` | `packages/auth/src/db-provider.ts` | `provider: "pg"`, and `withAuthScope` wraps `withDb` |
 
 `auth.ts`, `env.ts`, `server.ts`, `client.ts` and `apps/api/src/routes/auth.ts` are single files
 under both drivers. The dialect reaches the table declarations and the four lines of
@@ -577,7 +571,7 @@ curl -X POST http://localhost:4000/auth/request-password-reset \
 
 ## Schema: hand-authored, never generated at `add` time
 
-`packages/db/src/schema/auth.ts` (one of `auth.sqlite.ts` and `auth.pg.ts`, chosen by the
+`packages/db/src/schema/auth.ts` (one of `auth.sqlite.ts` and `auth.ts`, chosen by the
 installed driver) is a **checked-in Drizzle snapshot** of Better Auth's core tables (`users`, `sessions`, `accounts`, `verifications`) plus the
 fields the `admin` plugin adds (`users.role`, `banned`, `ban_reason`, `ban_expires`, and
 `sessions.impersonated_by`), plus `sessions.audience` from this module's own `audience()` plugin (text, not null, default `'client'`), pinned to the exact `better-auth` version in
