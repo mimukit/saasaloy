@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### ⚠ BREAKING CHANGES
+
+* **database:** Saasaloy supports Postgres only (ADR 0065).
+  `saasaloy add database-d1` no longer resolves; use
+  `database-postgres`.
+* **cli:** a descriptor that declares `onlyWith` no longer
+  validates. A descriptor read at an older release still loads,
+  and its `onlyWith` reads as `when.installed`.
+
 ## [0.10.0](https://github.com/mimukit/saasaloy/compare/v0.9.0...v0.10.0) (2026-11-21)
 
 ### ⚠ BREAKING CHANGES

@@ -74,21 +74,20 @@ The one-file rule constrains a provider's runtime surface, not its descriptor. `
 
 `subscription-stripe` shows the other end of the same rule: one file with **two** exports, because Stripe reaches the project through two doors: the capability's `subscription.providers` table, and Better Auth's `auth.plugins` and `adminAuth.plugins` tables. So it carries three table rows and three `package-json-dependency` patches. `subscription-console` is its local twin: one file, one row, no secret, and the whole checkout flow with no network.
 
-A **driver module** (`database-d1`, `database-postgres`) is the mutually exclusive kind. Several
+A **driver module** is the mutually exclusive kind. Several
 providers coexist behind one interface and a runtime env var picks one; a project holds exactly one
-driver. Each driver names the other in `conflictsWith` so `saasaloy add` refuses the second with a
-non-zero exit, and the capability names both in `requiresOneOf` so `add` will not leave the core
-installed with no driver behind it. A driver also outgrows the provider shape on purpose. It carries `scaffolds[]` and
-replaces files the capability would otherwise own (`packages/db/src/client.ts`,
-`drizzle.config.ts`, `tsconfig.json`). It ships its own skill too, because a project installs
-exactly one driver and the two runbooks share almost nothing. See ADR 0026.
+driver. Each driver names its siblings in `conflictsWith` so `saasaloy add` refuses a second with a
+non-zero exit, and the capability names its drivers in `requiresOneOf` so `add` will not leave the core
+installed with no driver behind it. A driver also outgrows the provider shape on purpose. It may carry `scaffolds[]` and
+replace files the capability would otherwise own. See ADR 0026.
 
-The `database` trio is the worked example. The core (`database`) scaffolds `packages/db` with the
-schema barrel, the repository layer and `db:generate`, and knows no dialect. `database-d1` adds the
-`d1_databases` binding, the `db:migrate:local` script, the `db:prod:migrate` / `db:prod:dump` scripts and the D1 client.
-`database-postgres` adds `DATABASE_URL` to `envVars`, a `nodejs_compat` entry in the
+`database` has one driver, `database-postgres`, because Postgres is the only SQL dialect Saasaloy
+supports (ADR 0065). The core (`database`) scaffolds `packages/db` with the schema barrel, the
+repository layer and `db:generate`, and names `database-postgres` alone in `requiresOneOf`.
+`database-postgres` replaces `packages/db/src/client.ts`, `drizzle.config.ts` and `tsconfig.json`,
+and adds `DATABASE_URL` to `envVars`, a `nodejs_compat` entry in the
 `compatibility_flags` of `apps/api/wrangler.jsonc`, a single `db:migrate` script for the development database, the `db:prod:migrate` / `db:prod:dump` scripts, and a client that
-prefers a `HYPERDRIVE` binding over `DATABASE_URL` when one is bound. Neither driver migrates production on a deploy unless `pnpm deploy:production --migrate` asks for it (ADR 0048).
+prefers a `HYPERDRIVE` binding over `DATABASE_URL` when one is bound. It ships its own skill. The driver never migrates production on a deploy unless `pnpm deploy:production --migrate` asks for it (ADR 0048).
 
 `api-keys` takes owners by the same rule, without the scaffolds. The core names `api-keys-organization` and `api-keys-user` in `requiresOneOf`, and each owner names the other in `conflictsWith`. An owner ships `plugins/api-key.ts` at one fixed path, so the core's `auth.plugins` rows import the same name in either mode, plus the schema and every file that reads the owner column. The owners ship no skill: the core's `saasaloy-api-keys` covers both modes. See ADR 0055.
 

@@ -3,11 +3,10 @@
 // project runs stays green after `saasaloy add`, and the production read-only role never
 // meets a column nobody classified.
 //
-// For each module with `files/db/schema/*.{pg,sqlite}.ts`, every table those files export
+// For each module with `files/db/schema/*.ts`, every table those files export
 // must be the subject of a `defineColumnClasses(...)` in a file the module's descriptor
 // installs at `@db/column-classes/<table>.ts`, where `<table>` is the SQL name in
-// kebab-case, and that file must name every column key of the table, in both the Postgres
-// and the SQLite variant, and no other key. A `drizzle-column` patch that adds a column to
+// kebab-case, and that file must name every column key of the table, and no other key. A `drizzle-column` patch that adds a column to
 // another module's table must add its class to that table's class file the same way.
 //
 // Like `./seed-slices.test.ts`, it reads the files as text: the class files import
@@ -27,7 +26,7 @@ const SCHEMA_FILE = /^packages\/db\/src\/schema\/([a-z0-9-]+)\.ts$/;
 const CLASS_FILE = /^packages\/db\/src\/column-classes\/([a-z0-9-]+)\.ts$/;
 
 interface Table {
-  /** The schema file's base name, `auth` for `auth.pg.ts`. */
+  /** The schema file's base name, `auth` for `auth.ts`. */
   file: string;
   exportKey: string;
   tableName: string;
@@ -141,7 +140,7 @@ function schemaTables(module: string): Table[] {
   }
   const tables = new Map<string, Table>();
   for (const file of readdirSync(dir)) {
-    const variant = /^(.+)\.(pg|sqlite)\.ts$/.exec(file);
+    const variant = /^(?!.*\.test\.ts$)(.+)\.ts$/.exec(file);
     if (!variant) {
       continue;
     }

@@ -41,8 +41,7 @@ SMS_PROVIDER=khudebarta  uses sms-khudebarta
 - Workspace `packages/sms`, 10 files.
   - Alias `@sms` points at `packages/sms/src`.
 Files:
-- `@db/schema/sms-messages.ts` (only with `database-d1`)
-- `@db/schema/sms-messages.ts` (only with `database-postgres`)
+- `@db/schema/sms-messages.ts`
 - `@db/repositories/sms-messages.ts`
 - `@db/seed/slices/sms-messages.ts`
 - `@db/column-classes/sms-messages.ts`

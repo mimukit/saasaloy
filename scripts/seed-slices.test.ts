@@ -2,7 +2,7 @@
 // declares a table also ships the seed slice for it, so `pnpm db:seed` fills every table
 // and the completeness test a generated project runs stays green after `saasaloy add`.
 //
-// For each module with `files/db/schema/*.{pg,sqlite}.ts`, every table those files export
+// For each module with `files/db/schema/*.ts`, every table those files export
 // must be the subject of a `defineSlice(...)` in a file the module's descriptor installs at
 // `@db/seed/slices/<table>.ts`, where `<table>` is the SQL name in kebab-case. One file per
 // table keeps a table's seed rows where the next reader looks for them.
@@ -38,7 +38,7 @@ function schemaTables(module: string): Table[] {
   }
   const tables = new Map<string, Table>();
   for (const file of readdirSync(dir)) {
-    if (!/\.(pg|sqlite)\.ts$/.test(file)) {
+    if (!file.endsWith(".ts") || file.endsWith(".test.ts")) {
       continue;
     }
     const source = readFileSync(join(dir, file), "utf-8");

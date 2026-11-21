@@ -86,13 +86,13 @@ describe(upsertLock, () => {
     const withConflict: Graph = {
       order: ["database-pg"],
       modules: new Map([
-        ["database-pg", mod("database-pg", undefined, ["database-d1"])],
+        ["database-pg", mod("database-pg", undefined, ["database-lite"])],
       ]),
     };
     upsertLock(lock, PROVENANCE, ["database-pg"], withConflict);
     expect(lock.modules["database-pg"]).toStrictEqual({
       ...PROVENANCE,
-      conflictsWith: ["database-d1"],
+      conflictsWith: ["database-lite"],
     });
   });
 
@@ -103,7 +103,7 @@ describe(upsertLock, () => {
       item: {
         name: "database",
         type: "saasaloy:capability",
-        requiresOneOf: ["database-d1", "database-postgres"],
+        requiresOneOf: ["database-lite", "database-postgres"],
       },
     };
     upsertLock(lock, PROVENANCE, ["database"], {
@@ -112,7 +112,7 @@ describe(upsertLock, () => {
     });
     expect(lock.modules.database).toStrictEqual({
       ...PROVENANCE,
-      requiresOneOf: ["database-d1", "database-postgres"],
+      requiresOneOf: ["database-lite", "database-postgres"],
     });
     await expect(validateLock(lock)).resolves.toMatchObject({ valid: true });
   });
@@ -149,7 +149,7 @@ describe("lockfile shape", () => {
     const lock = emptyLock();
     lock.modules["database-pg"] = {
       ...PROVENANCE,
-      conflictsWith: ["database-d1"],
+      conflictsWith: ["database-lite"],
     };
     const result = await validateLock(lock);
     expect(result.errors).toStrictEqual([]);

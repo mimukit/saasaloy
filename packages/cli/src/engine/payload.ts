@@ -20,6 +20,7 @@ import {
   REGISTRY_ENV,
   withDeadline,
 } from "../lib/registry.js";
+import type { LoadOptions } from "../lib/registry.js";
 import { resolveGraphs } from "../lib/resolve.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
 import type { RegistryItem } from "../lib/schema.js";
@@ -209,14 +210,17 @@ export async function ensureCachedSnapshot(args: {
 
 /**
  * Read every module of the `dependsOn` closure of `requested` out of a `modules/` folder.
- * The set is the closure `lib/resolve.ts` walks; `render` orders it.
+ * The set is the closure `lib/resolve.ts` walks; `render` orders it. A folder that holds
+ * an older release than the running CLI's is read with `{ atOldRef: true }`, so its
+ * retired descriptor keys load translated (`lib/retired-keys.ts`).
  */
 export async function readPayloadModules(
   modulesDir: string,
-  requested: readonly string[]
+  requested: readonly string[],
+  options: LoadOptions = {}
 ): Promise<Map<string, PayloadModule>> {
   const graph = await resolveGraphs(
-    new LocalRegistrySource(modulesDir),
+    new LocalRegistrySource(modulesDir, options),
     requested
   );
   const modules = new Map<string, PayloadModule>();

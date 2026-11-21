@@ -93,7 +93,7 @@ function pnpm(args: readonly string[]): void {
 
 /**
  * Migrate, then seed. Both commands belong to the installed database driver, so the suite
- * runs the same under `database-d1` and `database-postgres` and carries no second path.
+ * names no driver and carries no second path.
  *
  * Both also carry the guard. `db:setup` refuses a `DATABASE_URL` its state block does not
  * vouch for, and `db:seed` refuses `NODE_ENV=production` and any database that is not this

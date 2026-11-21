@@ -12,23 +12,31 @@
 //   1. build the CLI;
 //   2. `saasaloy init` with testing on, which installs, writes the env files and makes
 //      the git repository;
-//   3. `saasaloy add` the Validate and MVP modules on `database-d1`, in one call;
+//   3. `saasaloy add` the Validate and MVP modules on `database-postgres`, in one call;
 //   4. install, generate the migrations, set up the database, write the env files,
 //      filling each key with no default the way the build skill does;
 //   5. `pnpm check`: typecheck, lint, test and build.
+//
+// The database is Postgres. With `SCAFFOLD_DATABASE_SERVER` set to a connection string
+// with CREATEDB rights, `db:setup --server` creates the project's database on that server;
+// CI sets it to its `postgres:18` service container. Unset or empty, `db:setup` starts the
+// project's own `compose.yaml` container, so a laptop needs a Docker daemon, and a green
+// run stops that container and deletes its volume.
 //
 // The installs need the npm registry; the CLI steps run offline. The scaffold lands in
 // `.dev/scaffold-check/`, and a green run deletes it unless `--keep` is passed. A red run
 // keeps it, so the failure can be read in place.
 //
-// Imports nothing but node: builtins and the smoke script's env helpers. Node 24 strips the
+// Imports nothing but node: builtins, the smoke script's env helpers and the e2e script's
+// `DATABASE_URL` writer. Node 24 strips the
 // types, so there is no build step; `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 import { localEnvValue, missingEnvKeys } from "./release-smoke.ts";
+import { withDatabaseUrl } from "./verify-e2e.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const scratch = join(root, ".dev/scaffold-check");
@@ -39,14 +47,14 @@ const cliBin = join(root, "packages/cli/dist/index.js");
 
 /**
  * The modules an agent's build adds before its first feature: the Validate stage's set and
- * the MVP stage's, as the `saasaloy-build` skill names them, on the local driver and
- * providers. `api-keys` and `api-keys-user` are `scale` modules that the build adds with
+ * the MVP stage's, as the `saasaloy-build` skill names them, on the Postgres driver and
+ * the local providers. `api-keys` and `api-keys-user` are `scale` modules that the build adds with
  * `agent` (plan 0110). `scaffold-check.test.ts` holds this list to the skill. Exported
  * for that test.
  */
 export const MVP_MODULES = [
   "database",
-  "database-d1",
+  "database-postgres",
   "api",
   "logger",
   "logger-console",
@@ -73,6 +81,26 @@ export interface CheckOptions {
   keep: boolean;
   /** Flags and positionals this script does not accept. */
   unknown: string[];
+}
+
+/**
+ * The `db:setup` arguments for a `SCAFFOLD_DATABASE_SERVER` value: `--server` when it names
+ * a server, and none when it is unset or empty, so `db:setup` starts the Docker backend.
+ * Exported for its own test.
+ */
+export function dbSetupArgs(server?: string): string[] {
+  return server === undefined || server === "" ? [] : ["--server"];
+}
+
+/**
+ * Point `DATABASE_URL` in `apps/api/.env` at the server, the file `db:setup --server` reads
+ * it from. `db:setup` then creates the project's database there and writes its URL over
+ * this line, and `pnpm env:setup` keeps it, because the key is checkout-owned.
+ */
+async function pointAtServer(server: string): Promise<void> {
+  const file = join(projectDir, "apps/api/.env");
+  const source = existsSync(file) ? await readFile(file, "utf-8") : "";
+  await writeFile(file, withDatabaseUrl(source, server));
 }
 
 /** Split this script's argv. Exported for its own test. */
@@ -182,20 +210,33 @@ async function main(): Promise<void> {
   run("node", ["add", ...MVP_MODULES, "--yes"], projectDir, registryEnv);
   run("pnpm", INSTALL, projectDir);
   run("pnpm", ["--filter", "@repo/db", "db:generate"], projectDir);
-  run("pnpm", ["db:setup"], projectDir);
+  const server = process.env.SCAFFOLD_DATABASE_SERVER;
+  const setupArgs = dbSetupArgs(server);
+  if (server !== undefined && setupArgs.length > 0) {
+    step("pointing DATABASE_URL in apps/api/.env at SCAFFOLD_DATABASE_SERVER");
+    await pointAtServer(server);
+  }
+  run("pnpm", ["db:setup", ...setupArgs], projectDir);
   await setupEnv(registryEnv);
   run("pnpm", ["check"], projectDir);
 
   if (!options.keep) {
+    if (setupArgs.length === 0) {
+      run("docker", ["compose", "down", "-v"], projectDir);
+    }
     await rm(scratch, { force: true, recursive: true });
+  } else if (setupArgs.length === 0) {
+    step(
+      `the Postgres container keeps running; \`docker compose down -v\` in ${relative(root, projectDir)} stops it.`
+    );
   }
   const seconds = Math.round((Date.now() - started) / 1000);
   step(
-    `a fresh scaffold with ${String(MVP_MODULES.length)} modules on database-d1 passes \`pnpm check\` (${String(seconds)}s).`
+    `a fresh scaffold with ${String(MVP_MODULES.length)} modules on database-postgres passes \`pnpm check\` (${String(seconds)}s).`
   );
 }
 
-// Only when run directly, so the test can import `MVP_MODULES` and `parseArgs`.
+// Only when run directly, so the test can import `MVP_MODULES`, `dbSetupArgs` and `parseArgs`.
 if (
   process.argv[1] !== undefined &&
   import.meta.filename === resolve(process.argv[1])

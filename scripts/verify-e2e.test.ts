@@ -3,26 +3,22 @@ import { describe, it } from "node:test";
 
 import {
   CONTAINER_SERVER,
+  argumentError,
   databaseServer,
   placeWaitlistForm,
-  readDriver,
   withDatabaseUrl,
 } from "./verify-e2e.ts";
 
-describe("readDriver", () => {
-  it("defaults to d1", () => {
-    assert.deepEqual(readDriver([]), { driver: "d1" });
+describe("argumentError", () => {
+  it("takes no argument", () => {
+    assert.equal(argumentError([]), undefined);
   });
 
-  it("takes either driver", () => {
-    assert.deepEqual(readDriver(["--driver=postgres"]), { driver: "postgres" });
-  });
-
-  it("names an unknown driver and an unknown flag", () => {
-    assert.deepEqual(readDriver(["--driver=mysql"]), {
-      error: "unknown driver mysql. Pick one of: d1, postgres.",
-    });
-    assert.ok("error" in readDriver(["--drvier=d1"]));
+  it("names an argument it does not take", () => {
+    assert.equal(
+      argumentError(["--drvier=postgres"]),
+      "unknown argument(s) --drvier=postgres. This command takes none."
+    );
   });
 });
 
@@ -78,7 +74,7 @@ describe("withDatabaseUrl", () => {
 });
 
 describe("databaseServer", () => {
-  it("falls back to the driver's container when unset or empty", () => {
+  it("falls back to the project's container when unset or empty", () => {
     assert.equal(databaseServer(), CONTAINER_SERVER);
     assert.equal(databaseServer(""), CONTAINER_SERVER);
   });

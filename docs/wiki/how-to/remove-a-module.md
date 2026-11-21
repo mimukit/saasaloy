@@ -79,4 +79,4 @@ saasaloy remove --abort
 - [Add a module](add-a-module.md)
 - [Reference](../reference.md#saasaloy-remove) for the full flag list
 
-_Verified against `main`@`b86486c3` on 2026-11-21._
+_Verified against `main`@`33bc729b` on 2026-11-21._

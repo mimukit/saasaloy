@@ -100,23 +100,21 @@ git log --oneline "$tag"..main  # what main has that production does not
 git merge-base --is-ancestor "$tag" main && echo "main holds the live commit"
 ```
 
-Name the tag in your answer. With no `deploy-*` tag, nothing has deployed through `pnpm deploy:production` yet: say so rather than answer from `main`. For production data and logs, follow the `saasaloy-prod-debug` skill on Postgres. On D1, `pnpm logs:prod` reads the api logs, and there is no read-only database tool.
+Name the tag in your answer. With no `deploy-*` tag, nothing has deployed through `pnpm deploy:production` yet: say so rather than answer from `main`. For production data and logs, follow the `saasaloy-prod-debug` skill.
 
 ## The first superadmin, before the first deploy
 
 No sign-up promotes an account: every sign-up gets `user`, the first one included. A project with `auth` needs its first superadmin made by hand, or nobody can open the admin app. The owner does this, because it needs their password and their production credentials.
 
-- **Postgres:** run the migrations, then the superadmin command, then the first deploy. `db:prod:superadmin` writes the `users` and `accounts` tables, so they must exist first. It asks for the password at the prompt.
-  ```sh
-  pnpm db:prod:migrate
-  pnpm db:prod:superadmin --email you@example.com
-  pnpm deploy:production --migrate
-  ```
-  The migration gate still counts every migration file on the first deploy, because there is no tag yet. `--migrate` then finds nothing pending and applies nothing.
-- **D1:** deploy, sign up on a client app with the owner's email, then promote that account from `apps/api`. `<db>` is the `database_name` in `apps/api/wrangler.jsonc`:
-  ```sh
-  wrangler d1 execute <db> --remote --command "update users set role = 'superadmin' where email = 'you@example.com'"
-  ```
+Run the migrations, then the superadmin command, then the first deploy. `db:prod:superadmin` writes the `users` and `accounts` tables, so they must exist first. It asks for the password at the prompt.
+
+```sh
+pnpm db:prod:migrate
+pnpm db:prod:superadmin --email you@example.com
+pnpm deploy:production --migrate
+```
+
+The migration gate still counts every migration file on the first deploy, because there is no tag yet. `--migrate` then finds nothing pending and applies nothing.
 
 Then sign in on the admin app with that email. The `saasaloy-auth` skill covers the roles.
 
@@ -295,13 +293,12 @@ A failure after the gates:
 
 - `--dry-run` prints the last deploy tag, the commits since it, the new migration files, every gate, the deploy order and the smoke checks, then runs the env check. It exits 0 and ends with the list of what would stop a real run.
 - `--migrate` runs `pnpm --filter @repo/db run db:prod:migrate` after the env check and before the first Worker, so a new migration lands before the code that reads it. A project with no `@repo/db` workspace refuses the flag. Keep each migration additive (a new table, a nullable or defaulted column), so old code runs on the new schema and a code rollback stays safe.
-  - `database-postgres`: `db:prod:migrate` checks that `DATABASE_URL` names `<project>_production` on a server other than the development one in `apps/api/.env`. It then dumps the database with `pg_dump` and applies the migrations with `drizzle-kit migrate`. No migration runs without a good dump. After the migration it re-applies the read-only role's grants, as `pnpm db:prod:readonly-grants` does. A failed grant step prints its error and the migration stands.
-  - `database-d1`: `db:prod:migrate` runs `wrangler d1 migrations apply DB --remote`, and creates the database first when the account has none by its `database_name`. Before it migrates an existing database, it dumps it with `wrangler d1 export --remote`. No migration runs without a good dump. A database it has just created gets no dump, because it holds nothing.
+  `db:prod:migrate` checks that `DATABASE_URL` names `<project>_production` on a server other than the development one in `apps/api/.env`. It then dumps the database with `pg_dump` and applies the migrations with `drizzle-kit migrate`. No migration runs without a good dump. After the migration it re-applies the read-only role's grants, as `pnpm db:prod:readonly-grants` does. A failed grant step prints its error and the migration stands.
 - `--skip-ci "<reason>"` passes the CI gate. The reason goes into the tag message. Every other gate still runs.
 - `--wait-ci` checks every other gate first. When one fails, the run reports the gates and does not wait. Otherwise it reads the CI gate again every 15 seconds until it passes or fails. A missing run counts as one GitHub has not listed yet for 5 minutes, and the whole wait ends after 30 minutes. The run then goes on with the state it last read: a dry run reports it, and a real run deploys only on a pass. It prints one line a minute while it waits, so a background log shows progress. `--wait-ci` with `--skip-ci` is an error. With no `ciWorkflow`, nothing waits.
 - `--only <service>` deploys one Worker after the same gates, and runs only its smoke checks. It writes no tag, because the tag means "this commit is live on every Worker".
 
-`pnpm db:prod:dump` takes a dump on its own: `pg_dump --format=custom` for Postgres, `wrangler d1 export --remote` for D1. Dumps land in `~/<project>-backups/` (mode 0700), or in `DB_DUMP_DIR` when it is set, outside the repository. For Postgres, `pg_dump` runs from the `postgres:<major>` image the root `compose.yaml` names, through Docker. Set `PG_DUMP=local` to use the `pg_dump` on `PATH` instead.
+`pnpm db:prod:dump` takes a dump on its own with `pg_dump --format=custom`. Dumps land in `~/<project>-backups/` (mode 0700), or in `DB_DUMP_DIR` when it is set, outside the repository. `pg_dump` runs from the `postgres:<major>` image the root `compose.yaml` names, through Docker. Set `PG_DUMP=local` to use the `pg_dump` on `PATH` instead.
 
 ## Changing the gates, the order and the smoke checks
 
@@ -388,10 +385,9 @@ When the run failed, report the step that failed, the error lines, what is live 
 
 1. Merge the root `package.json` scripts: `deploy:production` is `node packages/tooling/src/deploy-production.ts`, `prepare` is `husky && node packages/tooling/src/link-skills.ts`, `skills:link` is `node packages/tooling/src/link-skills.ts`, and `lint:types` and `lint:fix` include `packages/tooling/src`.
 2. Merge `turbo.json`: remove `^db:migrate:prod` from the `deploy` task's `dependsOn`, and remove the `db:migrate:prod` task.
-3. With `database-d1`, check `packages/db/package.json`. It needs `db:prod:migrate` and `db:prod:dump`, and the old `db:migrate:prod` script goes: rename it to `db:prod:migrate` if the update did not add that one. A D1 deploy no longer migrates on its own. Run `pnpm deploy:production --migrate` when the migration gate asks for it.
-4. Run `saasaloy doctor`. Its Deploy warnings name a `turbo.json` that still has `db:migrate:prod`, and each deploying workspace with no `DEPLOY_TARGETS` row. Each warning prints its fix.
-5. Add a `custom_domain` route to each Worker that has a production host, so its smoke checks run.
-6. Read `docs/runbook-deploy.md`. `saasaloy update` writes it when the project has none, and it is then the project's to edit.
+3. Run `saasaloy doctor`. Its Deploy warnings name a `turbo.json` that still has `db:migrate:prod`, and each deploying workspace with no `DEPLOY_TARGETS` row. Each warning prints its fix.
+4. Add a `custom_domain` route to each Worker that has a production host, so its smoke checks run.
+5. Read `docs/runbook-deploy.md`. `saasaloy update` writes it when the project has none, and it is then the project's to edit.
 
 ## A project made before the release step
 

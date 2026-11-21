@@ -10,10 +10,6 @@ Last updated: YYYY-MM-DD (saasaloy-setup)
 |--------|-------|-----|
 | `<module>` | `<stage from saasaloy list --json>` | <the answer it comes from> |
 
-## Database driver
-
-`<database-d1 or database-postgres>`: <the reason, in one sentence>
-
 ## Entities
 
 The build makes one Feature pass and one commit for each entity, in this order.

@@ -38,11 +38,9 @@ export const authGuards = defineGuards({ guards: [...authRouteGuards] });
 // singleton and its database client is not, so the handler runs inside a scope holding
 // this request's client. This route is where the scope is opened for every auth
 // endpoint: it is the only place that holds both `c.env` and `c.executionCtx`, which are
-// what the driver needs to open the client and to close it after the response. Under
-// `database-postgres` that close is what stops a socket outliving the request; under
-// `database-d1` there is nothing to close and the wrapper only enters the scope. One
-// file, both drivers — `AuthDbBindings` is whichever binding shape the installed driver
-// declares. See packages/auth/src/db-scope.ts.
+// what the driver needs to open the client and to close it after the response. That
+// close is what stops a socket outliving the request. `AuthDbBindings` is the binding
+// shape the installed driver declares. See packages/auth/src/db-scope.ts.
 //
 // The export is named, not default: `apps/api/src/routes.generated.ts` imports it as
 // `import { authRoute } from "./routes/auth"`.

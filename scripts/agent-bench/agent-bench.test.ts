@@ -154,7 +154,7 @@ describe(
       assert.match(calls[5]?.message ?? "", /^Take your first sample answer/);
       assert.match(
         calls[9]?.message ?? "",
-        /^15\. a\. No, keep it on my machine/
+        /^14\. a\. No, keep it on my machine/
       );
       assert.equal(calls[10]?.message, "a");
     });

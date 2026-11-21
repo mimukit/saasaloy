@@ -88,14 +88,14 @@ A site `admin` is an ordinary member on every tenant route. The site role grants
 Every table a request may read on behalf of one organization declares the same column and the same index:
 
 ```ts
-export const projects = sqliteTable(
+export const projects = pgTable(
   "projects",
   { id: text("id").primaryKey(), organizationId: tenantColumn(), /* ... */ },
   (table) => [tenantIndex(table, "projects")]
 );
 ```
 
-`tenantColumn()` and `tenantIndex()` come from `@repo/db/tenant-column`, which ships in two dialects. They expand to `text("organization_id").notNull().references(() => organization.id)` plus one index named `<table>_organization_id_idx`.
+`tenantColumn()` and `tenantIndex()` come from `@repo/db/tenant-column`. They expand to `text("organization_id").notNull().references(() => organization.id)` plus one index named `<table>_organization_id_idx`.
 
 Three parts matter, each for its own reason:
 

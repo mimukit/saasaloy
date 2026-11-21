@@ -2,8 +2,8 @@ import { seedId } from "./id";
 import { orderTables } from "./order";
 
 // The seed plan: every row the seed writes, in write order, with the conflict key each one
-// is upserted on. It is built in full before the first write, which is what lets Postgres
-// run it in one transaction and D1 in one atomic batch.
+// is upserted on. It is built in full before the first write, and the driver runs it in
+// one transaction.
 //
 // This file works on plain shapes (`TableShape`, `SliceShape`) rather than Drizzle tables,
 // so the repo tests it without a database or a Drizzle install. `./table.ts` reads the

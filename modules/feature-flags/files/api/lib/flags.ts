@@ -46,9 +46,8 @@ function toValue(row: {
 /**
  * The database, presented as a `FlagSource`.
  *
- * Each call opens its own `withDb` scope. Under `database-postgres` that is a connection
- * per load, closed when the load settles; under `database-d1` there is no socket and the
- * wrapper is a pass-through. It is never a per-request cost in practice, because the
+ * Each call opens its own `withDb` scope: a connection per load, closed when the load
+ * settles. It is never a per-request cost in practice, because the
  * resolver only reaches this level when a scope's document is missing from kv entirely.
  */
 export function dbFlagSource(c: FlagsRequestContext): FlagSource {

@@ -68,8 +68,7 @@ import { renderTables } from "./tables.js";
 // `.claude/skills/*` links, which are not files:
 //
 //   1. the base template, `_name` renamed and `{{VAR}}` filled, the testing block set;
-//   2. each module's files at their targets, its `when` gates applied, and `onlyWith`
-//      read as a `when.installed` gate;
+//   2. each module's files at their targets, its `when` gates applied;
 //   3. each descriptor patch as an in-memory transform, with the insert side of the
 //      codemods in `lib/patch/`;
 //   4. each registration table the set owns, as a generated file holding the rows the
@@ -206,17 +205,6 @@ interface SelectedFile {
   seed: boolean;
 }
 
-/** `onlyWith` read as one more `when.installed` name (plan 0116). */
-export function gateOf(
-  when: When | undefined,
-  onlyWith: string | undefined
-): When | undefined {
-  if (onlyWith === undefined) {
-    return when;
-  }
-  return { ...when, installed: [...(when?.installed ?? []), onlyWith] };
-}
-
 /**
  * The files one module ships in this set, keyed by target: `files[]`, each scaffold's
  * workspace files, then each `agent.skills` folder. An entry whose gate fails is
@@ -231,23 +219,22 @@ export function selectFiles(
   const record = (
     from: string,
     when: When | undefined,
-    onlyWith: string | undefined,
     seed: boolean | undefined,
     target: () => string
   ): void => {
-    if (!whenHolds(gateOf(when, onlyWith), ctx)) {
+    if (!whenHolds(when, ctx)) {
       return;
     }
     out.set(target(), { from, seed: seed === true });
   };
   for (const file of mod.item.files ?? []) {
-    record(file.path, file.when, file.onlyWith, file.seed, () =>
+    record(file.path, file.when, file.seed, () =>
       resolveTarget(aliases, file.target)
     );
   }
   for (const scaffold of mod.item.scaffolds ?? []) {
     for (const file of scaffold.files) {
-      record(file.path, file.when, file.onlyWith, file.seed, () =>
+      record(file.path, file.when, file.seed, () =>
         posix.join(scaffold.workspace, file.target)
       );
     }
@@ -305,51 +292,6 @@ export function copiedContent(
     .get(file.module)
     ?.files.get(posix.normalize(file.from));
   return raw === undefined ? undefined : applyVars(raw, vars);
-}
-
-/**
- * The driver variants a set gates off. A module file entry with `onlyWith: X` renders only
- * when X is in the set (plan 0116 reads it as a `when.installed` gate). For each record
- * whose source such an entry names, with X outside the set, this gives X and the requested
- * list that renders that source: X added, and each requested module that names X in its
- * `conflictsWith` left out. A project that moved from one driver to another still records
- * the old driver's source (`auth.sqlite.ts` after a move to Postgres), and only a render
- * with the old driver produces the bytes its hash proves.
- */
-export function variantSets(
-  payload: Pick<Payload, "modules" | "source" | "ref">,
-  requested: readonly string[],
-  records: Iterable<{ module: string; from: string }>
-): Map<string, string[]> {
-  const set = closure(payload, requested);
-  const out = new Map<string, string[]>();
-  for (const record of records) {
-    const mod = payload.modules.get(record.module);
-    if (mod === undefined || !set.has(record.module)) {
-      continue;
-    }
-    const from = posix.normalize(record.from);
-    const entries = [
-      ...(mod.item.files ?? []),
-      ...(mod.item.scaffolds ?? []).flatMap((scaffold) => scaffold.files),
-    ];
-    const driver = entries.find(
-      (entry) => posix.normalize(entry.path) === from
-    )?.onlyWith;
-    if (driver === undefined || set.has(driver) || out.has(driver)) {
-      continue;
-    }
-    out.set(driver, [
-      ...requested.filter(
-        (name) =>
-          !(payload.modules.get(name)?.item.conflictsWith ?? []).includes(
-            driver
-          )
-      ),
-      driver,
-    ]);
-  }
-  return out;
 }
 
 /** Render a project from a payload. Pure: no disk, no network, no clock. */

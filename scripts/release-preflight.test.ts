@@ -665,13 +665,13 @@ describe("gatedPaths", () => {
         `${BASE_SKILLS}saasaloy-build/SKILL.md`,
         "packages/cli/src/commands/env.ts",
         "modules/auth/files/src/auth.ts",
-        "modules/database-d1/registry-item.json",
+        "modules/database-postgres/registry-item.json",
       ]),
       [
         `${BASE_SKILLS}saasaloy-build/SKILL.md`,
         "packages/cli/src/commands/env.ts",
         "modules/auth/files/src/auth.ts",
-        "modules/database-d1/registry-item.json",
+        "modules/database-postgres/registry-item.json",
       ]
     );
   });
@@ -683,7 +683,7 @@ describe("gatedPaths", () => {
         "packages/cli/src/commands/add.ts",
         "packages/cli/src/commands/env.test.ts",
         "modules/teams/files/src/teams.ts",
-        "modules/database-postgres/registry-item.json",
+        "modules/cms/registry-item.json",
         "modules/authx/README.md",
         "packages/cli/templates/base/AGENTS.md",
       ]),

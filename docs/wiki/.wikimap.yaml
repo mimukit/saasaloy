@@ -164,6 +164,14 @@ pages:
     generated: true
     documents:
       - CONTEXT.md
+  - path: why-postgres.md
+    title: Why Postgres, not D1
+    section: Decisions
+    mode: explanation
+    documents:
+      - modules/database/**
+      - modules/database-postgres/**
+      - docs/adr/0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md
   - path: generated/adr.md
     title: Architecture decision records
     section: Decisions

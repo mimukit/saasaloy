@@ -3,7 +3,7 @@ import type { TestingMode } from "./testing.js";
 
 // The `when` condition on a descriptor entry (#242, ADR 0054). `when` decides whether an
 // optional entry ships: the render writes a gated file or applies a gated patch only
-// while its condition holds (plan 0116). `onlyWith` reads as one more `installed` name.
+// while its condition holds (plan 0116).
 
 /** What a `when` is tested against: the project's mode and its resolved install set. */
 export interface WhenContext {

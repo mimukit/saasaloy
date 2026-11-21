@@ -3,10 +3,8 @@ import { and, count, desc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { notificationOptOuts, notifications } from "../schema/notifications";
 import type { Db } from "../client";
 
-// Every query the two notification tables take, in one file, written once for both
-// dialects. The table declarations are the only part of this feature that knows whether
-// it talks to SQLite or Postgres, and Drizzle's query builder is neutral at call time, so
-// this file ships once and `apps/api` never branches on the driver.
+// Every query the two notification tables take, in one file. The table declarations live
+// in `schema/notifications.ts`.
 //
 // **This file is the access boundary.** Every request-path function takes the session
 // user's id and filters on it, so one user can never read or change another user's rows.
@@ -212,8 +210,8 @@ export async function setPreference(
  * Apply several `setPreference` calls, one per category in `changes`. A category the body
  * leaves out keeps its current state.
  *
- * One statement per category, not one transaction: D1 has no interactive transaction, and
- * each write is a no-op on a retry, so a half-applied body is fixed by sending it again.
+ * One statement per category, not one transaction: each write is a no-op on a retry, so a
+ * half-applied body is fixed by sending it again.
  */
 export async function setPreferences(
   db: Db,

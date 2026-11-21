@@ -34,7 +34,7 @@ Shelfnote
 
 English (\`en\`)
 
-## 15. Preview deploy
+## 14. Preview deploy
 
 a. No, keep it on my machine.
 `;
@@ -47,7 +47,7 @@ describe("parseAnswers", () => {
       [
         [1, "Shelfnote"],
         [2, "English (`en`)"],
-        [15, "a. No, keep it on my machine."],
+        [14, "a. No, keep it on my machine."],
       ]
     );
   });
@@ -88,7 +88,7 @@ describe("questionNumbers", () => {
 
   it("reads plain numbered questions when none is bold", () => {
     assert.deepEqual(
-      questionNumbers("13) Which capabilities?\n### 14. Which driver?"),
+      questionNumbers("13) Which capabilities?\n### 14. Preview deploy?"),
       [13, 14]
     );
   });
@@ -124,7 +124,7 @@ describe("isReadBack", () => {
 
   it("is false for a reply without it", () => {
     assert.equal(
-      isReadBack("**15. Put the finished build on a preview address?**"),
+      isReadBack("**14. Put the finished build on a preview address?**"),
       false
     );
   });
@@ -329,14 +329,14 @@ describe("the brief folders", () => {
     }
   });
 
-  it("answer questions 1 to 15 and the read-back with a", () => {
+  it("answer questions 1 to 14 and the read-back with a", () => {
     for (const name of readdirSync(briefs)) {
       const answers = parseAnswers(
         readFileSync(join(briefs, name, "answers.md"), "utf-8")
       );
       assert.deepEqual(
         [...answers.byNumber.keys()],
-        Array.from({ length: 15 }, (_, i) => i + 1),
+        Array.from({ length: 14 }, (_, i) => i + 1),
         name
       );
       assert.equal(answers.readBack, "a", name);

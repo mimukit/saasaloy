@@ -28,15 +28,11 @@ import type { FlatFields } from "./changed-fields";
 // Only a successful change leaves a row. When the body throws, or answers a status of 400
 // or more, the wrapper inserts no row and answers what the body answered.
 //
-// What "the same transaction" buys depends on the driver (issue #310, "D1 guarantee"):
-//
-// - Under `database-postgres` it is a real transaction. The change and its rows commit
-//   together or not at all, and a body that throws or answers 4xx keeps nothing it wrote.
-// - Under `database-d1` there is no interactive transaction. Each statement of the body
-//   commits as it runs, so a body that writes and then fails keeps its write; it only gets
-//   no row. The rows go in after the body. When that insert fails, the change has already
-//   stood, so the failure is logged at `error` and the route answers what the body
-//   answered. Validate before you write, and a D1 route keeps nothing on a 4xx either.
+// "The same transaction" is a real Postgres transaction. The change and its rows commit
+// together or not at all, and a body that throws or answers 4xx keeps nothing it wrote.
+// The wrapper still reads `TRANSACTION_IS_ATOMIC` from `@repo/db/client`: when a client
+// cannot roll back, the rows go in after the body, a failed insert is logged at `error`,
+// and the route answers what the body answered.
 //
 // A new admin write route, in four steps:
 //
@@ -190,8 +186,8 @@ export function isFailedAnswer(result: unknown): boolean {
 
 /**
  * Carries the body's answer out of the transaction. `refused`: the body answered a 4xx or
- * 5xx, and the throw rolls the write back. `unaudited`: under D1 the audit insert failed
- * after the change had already stood, so the answer stands with it. One class for both,
+ * 5xx, and the throw rolls the write back. `unaudited`: on a client that cannot roll back
+ * the audit insert failed after the change had already stood, so the answer stands with it. One class for both,
  * so nothing else a body throws is mistaken for either.
  */
 class CarriedAnswer {
@@ -323,8 +319,8 @@ export async function adminWrite<T>(
         try {
           await insertAuditEvents(db, rows);
         } catch (error) {
-          // Under Postgres the throw rolls the change back with its rows, and the request
-          // fails. Under D1 the change has already stood, so the answer stands with it.
+          // In a real transaction the throw rolls the change back with its rows, and the
+          // request fails. Without one the change has already stood, so the answer stands.
           if (TRANSACTION_IS_ATOMIC) {
             throw error;
           }

@@ -13,7 +13,7 @@ The capability can PUT an object and GET it back, and then knows nothing about i
 
 | File | What it owns |
 |---|---|
-| `packages/db/src/schema/file-uploads.ts` | The `storage_objects` table. One dialect variant landed; its twin is in the module. |
+| `packages/db/src/schema/file-uploads.ts` | The `storage_objects` table. |
 | `packages/db/src/repositories/objects.ts` | Every query against that table, and the access boundary. |
 | `packages/validators/src/file-uploads.ts` | The upload request and list query schemas. |
 | `apps/api/src/lib/file-uploads.ts` | `resolveTenant`, `resolveScope`, the two key scopes, `publicUrl`, `publicImageUrl`. |
@@ -101,7 +101,7 @@ The sweep runs at 04:00 UTC daily and makes three bounded passes: finish `deleti
 
 The three files always land; only the `queue.jobs` and `queue.schedules` rows need `queue`. In a project without it, `saasaloy add file-uploads` warns that each of the two rows is not written, because no module in the set owns its table, and it warns that the `packages/queue/package.json` patch target is missing. `packages/file-uploads/src/job.ts` is then dead code. That is the expected output, not a failure. Add `queue` later with `saasaloy add queue`: the run renders the whole set again, so the two registrations land in the same run.
 
-The sweep is split across three files for two reasons worth knowing before you move any of it. A file targeting `@queue/...` could not ship conditionally when this module was written, because the old engine resolved the alias before it applied `onlyWith`, so the job would have broken `add` in every project with no queue. And a job file inside `packages/queue` that imported `@repo/db` would pull the schema barrel's `import.meta.glob` into a workspace that does not compile with Vite's types. So `packages/file-uploads` holds the sweep and the registration with zero runtime dependencies, and `apps/api/src/lib/storage-sweep.ts` implements the port. It is `packages/subscription`'s arrangement, for the same reasons.
+The sweep is split across three files for two reasons worth knowing before you move any of it. A file targeting `@queue/...` could not ship conditionally when this module was written, because the old engine resolved the alias before it applied a file condition, so the job would have broken `add` in every project with no queue. And a job file inside `packages/queue` that imported `@repo/db` would pull the schema barrel's `import.meta.glob` into a workspace that does not compile with Vite's types. So `packages/file-uploads` holds the sweep and the registration with zero runtime dependencies, and `apps/api/src/lib/storage-sweep.ts` implements the port. It is `packages/subscription`'s arrangement, for the same reasons.
 
 ## Wire-up
 

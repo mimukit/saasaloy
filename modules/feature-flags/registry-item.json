@@ -90,14 +90,8 @@
       "target": "@api/middleware/maintenance.ts"
     },
     {
-      "path": "files/db/schema/feature-flags.sqlite.ts",
-      "target": "@db/schema/feature-flags.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/feature-flags.pg.ts",
-      "target": "@db/schema/feature-flags.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/feature-flags.ts",
+      "target": "@db/schema/feature-flags.ts"
     },
     {
       "path": "files/db/repositories/feature-flags.ts",

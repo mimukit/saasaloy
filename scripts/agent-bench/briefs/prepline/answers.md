@@ -62,10 +62,6 @@ Stations first, then prep tasks.
 
 `teams` and `multitenant`, because the entities belong to the kitchen. Nothing else.
 
-## 14. Database driver
-
-`database-d1`, as you recommend.
-
-## 15. Preview deploy
+## 14. Preview deploy
 
 a. No, keep it on my machine (`deploy: none`).

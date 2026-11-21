@@ -52,14 +52,22 @@ afterAll(async () => {
 });
 
 describe("e2e — several modules in one add run (#233)", () => {
-  it("refuses two conflicting drivers before the first write", async () => {
+  it("refuses two conflicting owners before the first write", async () => {
     const before = gitStatus();
 
-    const run = await cli(["add", "database-d1", "database-postgres", "--yes"]);
+    // `--with` answers the driver choice, so the run reaches the conflict check.
+    const run = await cli([
+      "add",
+      "api-keys-organization",
+      "api-keys-user",
+      "--with",
+      "database-postgres",
+      "--yes",
+    ]);
 
     expect(run.code).toBe(2);
     expect(run.output).toContain(
-      "Cannot add database-d1 and database-postgres — module conflict"
+      "Cannot add api-keys-organization, api-keys-user and database-postgres — module conflict"
     );
     expect(gitStatus()).toBe(before);
   });
@@ -70,7 +78,7 @@ describe("e2e — several modules in one add run (#233)", () => {
       "waitlist",
       "teams",
       "--with",
-      "database-d1",
+      "database-postgres",
       "--dry-run",
       "--json",
     ]);
@@ -82,7 +90,7 @@ describe("e2e — several modules in one add run (#233)", () => {
       schemaVersion: 3,
     });
     expect(doc.install).toStrictEqual(
-      expect.arrayContaining(["waitlist", "teams", "database-d1"])
+      expect.arrayContaining(["waitlist", "teams", "database-postgres"])
     );
   });
 
@@ -92,7 +100,7 @@ describe("e2e — several modules in one add run (#233)", () => {
       "admin",
       "teams",
       "--with",
-      "database-d1",
+      "database-postgres",
       "--yes",
     ]);
 
@@ -106,7 +114,7 @@ describe("e2e — several modules in one add run (#233)", () => {
     ) as { modules: { name: string }[] };
     const names = listed.modules.map((module) => module.name);
     expect(names).toStrictEqual(
-      expect.arrayContaining(["admin", "teams", "auth", "database-d1"])
+      expect.arrayContaining(["admin", "teams", "auth", "database-postgres"])
     );
   });
 

@@ -14,15 +14,15 @@ import {
 } from "./cms-rules";
 import type { CmsStatus, Snapshot } from "./cms-rules";
 
-// Every query the CMS tables need, written once for both dialects (the table declarations
-// in `schema/cms.sqlite.ts` and `.pg.ts` are the only driver-specific part).
+// Every query the CMS tables need, in one file. The table declarations live in
+// `schema/cms.ts`.
 //
 // The repository checks versions, statuses and slugs, and throws `CmsRepositoryError` with
 // a stable code. It never checks `data` against a collection and never renders: that needs
 // `@repo/cms`, and `packages/db` stays free of it. A publish takes a `render` callback, and
 // the api passes one built from `renderRichText`.
 //
-// D1 has no interactive transaction, so a multi-step write is ordered to fail safe. A
+// A multi-step write runs without a transaction, so it is ordered to fail safe. A
 // publish inserts the revision first, then moves the entry with a version-checked update,
 // and deletes the revision again when that update loses the race.
 
@@ -101,8 +101,8 @@ const liveRevision = eq(cmsRevisions.id, cmsEntries.publishedRevisionId);
 /**
  * The last editor's name, as a scalar subquery. The outer query already joins `users` for
  * the author, so the editor cannot take a second plain join without a dialect-specific
- * alias. Inside the parentheses `users` names the inner table, and SQLite and Postgres both
- * resolve the bare reference to the nearest scope.
+ * alias. Inside the parentheses `users` names the inner table, and Postgres resolves the bare
+ * reference to the nearest scope.
  */
 const updatedByName = sql<
   string | null

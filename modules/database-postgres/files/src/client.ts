@@ -165,11 +165,9 @@ export async function withDb<T>(
  * Run `body` in one transaction on `db`, and commit when it resolves. A throw rolls back
  * every write `body` made through the client it was handed.
  *
- * Both drivers export this with one signature, so code written against
- * `@repo/db/client` asks for a transaction without naming the driver. The guarantee is
- * not the same on both. Here it is a real Postgres transaction: the writes commit together
- * or not at all. Under `database-d1` there is no interactive transaction, and the same call
- * runs `body` on the plain client, so each statement commits as it runs. `adminWrite` in
+ * Code written against `@repo/db/client` asks for a transaction without naming the
+ * driver. It is a real Postgres transaction: the writes commit together or not at all.
+ * `adminWrite` in
  * `apps/api/src/lib/admin-write.ts` is the caller this was added for (issue #310).
  *
  * Under a route test `db` is the test's own transaction (see `TEST_DB`), so this opens a
@@ -190,7 +188,7 @@ export function transaction<T>(
 
 /**
  * Whether `transaction` rolls back on a throw. `true` here. Code that has to act
- * differently when it cannot (`adminWrite` logs a failed audit insert under D1 instead of
+ * differently when it cannot (`adminWrite` would log a failed audit insert instead of
  * failing a change that already stood) reads this and never names the driver.
  */
 export const TRANSACTION_IS_ATOMIC = true;

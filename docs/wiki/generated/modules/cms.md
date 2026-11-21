@@ -25,14 +25,13 @@ This module declares no environment variables.
 
 ## Files and workspaces it writes
 
-- Workspace `packages/cms`, 19 files.
+- Workspace `packages/cms`, 18 files.
   - Alias `@cms` points at `packages/cms/src`.
 Files:
 - `@api/routes/cms.ts`
 - `@api/routes/cms.test.ts`
 - `@config/sections/cms.ts`
-- `@db/schema/cms.ts` (only with `database-d1`)
-- `@db/schema/cms.ts` (only with `database-postgres`)
+- `@db/schema/cms.ts`
 - `@db/repositories/cms.ts`
 - `@db/repositories/cms-rules.ts`
 - `@db/seed/slices/cms-entries.ts`
@@ -70,8 +69,6 @@ Files:
 | `apps/web/package.json` | `package-json-dependency` |
 | `apps/web/wrangler.jsonc` | `wrangler-binding` |
 | `apps/web/wrangler.jsonc` | `wrangler-binding` |
-| `packages/cms/package.json` | `package-json-dependency` |
-| `packages/cms/package.json` | `package-json-dependency` |
 | `packages/cms/package.json` | `package-json-dependency` |
 | `package.json` | `package-json-script` |
 

@@ -82,10 +82,6 @@ const SPEC = `# Product spec
 |--------|-------|-----|
 | \`teams\` | \`teams\` | a team pays |
 
-## Database driver
-
-\`database-d1\`: no pick needs Postgres.
-
 ## Entities
 
 ### 1. Books
@@ -129,7 +125,6 @@ describe("the spec reader", () => {
     const shape = {
       headings: [
         "Modules",
-        "Database driver",
         "Entities",
         "Not in this build",
         "Left for the owner",

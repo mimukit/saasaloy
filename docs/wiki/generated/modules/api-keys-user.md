@@ -26,8 +26,7 @@ This module declares no environment variables.
 ## Files and workspaces it writes
 
 Files:
-- `@db/schema/api-keys.ts` (only with `database-d1`)
-- `@db/schema/api-keys.ts` (only with `database-postgres`)
+- `@db/schema/api-keys.ts`
 - `@auth/plugins/api-key.ts`
 - `@auth/api-key-scopes.ts`
 - `@auth/api-key-rules.ts`

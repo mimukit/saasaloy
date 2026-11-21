@@ -29,15 +29,15 @@ Each field is `` `name` type ``, with `required` when a row cannot exist without
 | `text` | text | string, trimmed, not empty when required | `Input` from `input` | the value |
 | `long text` | text | string | `Textarea` from `textarea` | leave it out of the list; show it in the detail |
 | `number` | integer | integer | `Input` with `type="number"` | the value, `align: "end"` |
-| `decimal` | real on D1, numeric on Postgres | number | `Input` with `type="number"` and a `step` | the value, `align: "end"` |
+| `decimal` | numeric | number | `Input` with `type="number"` and a `step` | the value, `align: "end"` |
 | `money` | integer, the smallest currency unit | integer, not below 0 | `Input` with `type="number"`, shown in the main unit | the amount in the brief's currency, `align: "end"` |
 | `date` | text `YYYY-MM-DD` | date string | `DatePicker` from `date-picker` | a `Date` |
 | `datetime` | a timestamp | date-time string | `DateTimePicker` from `date-picker` | a `Date` |
-| `yes/no` | boolean (an integer on D1) | boolean | `Switch` from `switch` | `Yes` or `No` |
+| `yes/no` | boolean | boolean | `Switch` from `switch` | `Yes` or `No` |
 | `one of a, b, c` | text, with the values as a TypeScript union | an enum of the values | `Select` from `select` | `StatusPill` from `status-pill` |
 | `link to <table>` | `<singular>_id`, a foreign key to that table, with an index | the id | `Select` of the owner's rows of that table | the linked row's title |
 
-The driver skill (`saasaloy-database-d1` or `saasaloy-database-postgres`) names the Drizzle helper for each column kind. Keep the column order of `saasaloy-database`.
+The driver skill, `saasaloy-database-postgres`, names the Drizzle helper for each column kind. Keep the column order of `saasaloy-database`.
 
 ### `Actions` becomes the routes
 
@@ -112,7 +112,7 @@ One file, one table, no edit anywhere else: the schema barrel and drizzle-kit bo
 
 ### 2. Migration
 
-Run `pnpm --filter @repo/db db:generate`. Read the generated SQL before you apply it: it must create the new table and touch no other table. Then apply it locally with the driver's command: `pnpm --filter @repo/db db:migrate:local` on D1. On Postgres, `saasaloy-database-postgres` names it.
+Run `pnpm --filter @repo/db db:generate`. Read the generated SQL before you apply it: it must create the new table and touch no other table. Then apply it locally: `pnpm --filter @repo/db db:migrate`.
 
 ### 3. Seed slice
 

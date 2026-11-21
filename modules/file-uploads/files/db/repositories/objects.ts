@@ -2,11 +2,8 @@ import { and, desc, eq, isNull, lt, or } from "drizzle-orm";
 import { storageObjects } from "../schema/file-uploads";
 import type { Db } from "../client";
 
-// Every query the `storage_objects` table takes, in one file, written once for both
-// dialects. The table declaration is the only part of this feature that knows whether it
-// is talking to SQLite or Postgres (`schema/file-uploads.sqlite.ts` and `.pg.ts`), and
-// Drizzle's query builder is neutral at call time — so this file ships once and
-// `apps/api` never branches on the driver.
+// Every query the `storage_objects` table takes, in one file. The table declaration lives
+// in `schema/file-uploads.ts`.
 //
 // **This file is the access boundary.** `file-uploads` does not depend on `multitenant`,
 // so there is no `forTenant` wrapper to make a cross-tenant read impossible. What carries
@@ -288,7 +285,7 @@ function scopedTo(scope: ObjectScope, id: string) {
   );
 }
 
-/** `<epoch-ms>.<id>`. Opaque to the caller, and stable across both dialects. */
+/** `<epoch-ms>.<id>`. Opaque to the caller. */
 function encodeCursor(row: StorageObjectRow): string {
   return `${row.createdAt.getTime()}.${row.id}`;
 }

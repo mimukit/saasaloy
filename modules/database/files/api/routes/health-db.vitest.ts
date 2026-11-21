@@ -2,7 +2,7 @@ import { TEST_DB } from "@repo/db/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import app from "../index";
 
-// The route's contract, with no database behind it. Both drivers' `getDb` return whatever
+// The route's contract, with no database behind it. The driver's `getDb` returns whatever
 // `env[TEST_DB]` holds, so each test hands the route a stand-in client: one whose query
 // answers, and one whose query fails the way an unreachable database does. The query
 // itself runs against a real database in the deploy's smoke check, which is the call this

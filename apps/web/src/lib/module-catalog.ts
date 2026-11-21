@@ -4,8 +4,8 @@
 //
 // The rule, from the Module catalog row of
 // docs/plans/0091-plan-public-site-and-brand-2026-10-26.md:
-//   1. a module with a non-empty `conflictsWith` is a driver (exactly one installed,
-//      chosen at `add` time; ADR 0026);
+//   1. a module with a non-empty `conflictsWith`, or one that another module names in
+//      `requiresOneOf`, is a driver (exactly one installed, chosen at `add` time; ADR 0026);
 //   2. a module that adds a row to a `<capability>.providers` table is a provider;
 //   3. every other module takes its registry `type`.
 // The driver check runs first, so a module that met both tests would read as a driver:
@@ -50,6 +50,7 @@ export interface RegistryDescriptor {
   stage?: string;
   dependsOn?: string[];
   conflictsWith?: string[];
+  requiresOneOf?: string[];
   entries?: { table: string }[];
 }
 
@@ -77,9 +78,18 @@ const TYPE_TIERS: Record<string, CatalogTier> = {
   "saasaloy:feature": "feature",
 };
 
-/** The tier one descriptor shows in the catalog. Throws on a type the rule does not know. */
-export function moduleTier(descriptor: RegistryDescriptor): CatalogTier {
-  if ((descriptor.conflictsWith ?? []).length > 0) {
+/**
+ * The tier one descriptor shows in the catalog. `required` holds every name some module
+ * lists in `requiresOneOf`. Throws on a type the rule does not know.
+ */
+export function moduleTier(
+  descriptor: RegistryDescriptor,
+  required: ReadonlySet<string> = new Set()
+): CatalogTier {
+  if (
+    (descriptor.conflictsWith ?? []).length > 0 ||
+    required.has(descriptor.name)
+  ) {
     return "driver";
   }
   const registersProvider = (descriptor.entries ?? []).some((row) =>
@@ -135,8 +145,11 @@ export function catalogRows(descriptors: RegistryDescriptor[]): CatalogRow[] {
   const rows = new Map<string, CatalogRow>();
   const variants: { parent: string; variant: CatalogVariant }[] = [];
   const dependsOn = new Map<string, string[]>();
+  const required = new Set(
+    descriptors.flatMap((descriptor) => descriptor.requiresOneOf ?? [])
+  );
   for (const descriptor of descriptors) {
-    const tier = moduleTier(descriptor);
+    const tier = moduleTier(descriptor, required);
     if (tier === "provider" || tier === "driver") {
       const parent = parentOf(descriptor);
       variants.push({

@@ -10,7 +10,7 @@ import { seedUsers } from "./users.generated";
 // The seed is how development gets its superadmin. No sign-up promotes an account, the
 // first one included: every sign-up gets the plain `user` role. Sign in as
 // `superadmin@example.test`. Production gets its first superadmin from
-// `pnpm db:prod:superadmin` on Postgres, or from the auth skill's SQL on D1.
+// `pnpm db:prod:superadmin`.
 //
 // The two site-admin roles come from `config.auth`, so a project that renames them in
 // `packages/config/src/project.ts` seeds the names its guards admit.

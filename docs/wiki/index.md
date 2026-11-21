@@ -47,6 +47,7 @@ You want to publish a module other projects can install.
 - [Architecture](architecture.md) — how the CLI, the registry and a generated project fit
   together.
 - [Reference](reference.md) — every command, flag, environment variable and config file.
+- [Why Postgres, not D1](why-postgres.md): why Postgres is the only SQL dialect, what D1 cost, and what the move gave up.
 
 ## Elsewhere in the repo
 
@@ -56,4 +57,4 @@ You want to publish a module other projects can install.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) covers development in this repo: the
   `.dev/playground`, the scripts, and the dependency update flow.
 
-_Verified against `main`@`b86486c3` on 2026-11-21._
+_Verified against `main`@`33bc729b` on 2026-11-21._

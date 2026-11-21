@@ -65,14 +65,8 @@
       "when": { "testing": true }
     },
     {
-      "path": "files/db/schema/audit.sqlite.ts",
-      "target": "@db/schema/audit.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/audit.pg.ts",
-      "target": "@db/schema/audit.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/audit.ts",
+      "target": "@db/schema/audit.ts"
     },
     {
       "path": "files/db/repositories/audit.ts",

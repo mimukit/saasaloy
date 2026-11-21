@@ -1,6 +1,6 @@
 // The shared helper for `modules/<name>/smoke.ts` (#187). A smoke script drives the
-// playground's api over HTTP only, so one script runs on D1 and on Postgres, and it is
-// never copied into a project. `scripts/play-smoke.ts` runs every installed module's
+// playground's api over HTTP only, so it reads no database directly, and it is never
+// copied into a project. `scripts/play-smoke.ts` runs every installed module's
 // script against a playground that `pnpm play:up` seeded.
 //
 // The helper signs a seeded user in, keeps the session cookie, and prints one PASS or

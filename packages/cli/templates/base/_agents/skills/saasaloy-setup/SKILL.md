@@ -1,6 +1,6 @@
 ---
 name: saasaloy-setup
-description: Interview the project owner once, about the landing page and about the product, then write docs/product-brief.md and docs/product-spec.md and start saasaloy-build in the same session. The brief is the shared context every other Saasaloy skill reads; the spec holds the modules, the database driver and one table for each entity. Use right after saasaloy init, when the owner says "set up this project", "tell you about my product", "build my product", "what is this project", when config.app.name is still the shipped "Saasaloy", when another skill needs product context and no brief exists yet, when re-running to update the brief or the spec after something changed, and when an unattended build runs on a brief whose frontmatter says autonomy: afk.
+description: Interview the project owner once, about the landing page and about the product, then write docs/product-brief.md and docs/product-spec.md and start saasaloy-build in the same session. The brief is the shared context every other Saasaloy skill reads; the spec holds the modules and one table for each entity. Use right after saasaloy init, when the owner says "set up this project", "tell you about my product", "build my product", "what is this project", when config.app.name is still the shipped "Saasaloy", when another skill needs product context and no brief exists yet, when re-running to update the brief or the spec after something changed, and when an unattended build runs on a brief whose frontmatter says autonomy: afk.
 ---
 
 # saasaloy-setup — find out what this project is, once
@@ -10,10 +10,10 @@ A scaffolded project knows nothing about the product it is going to become. Its 
 So this skill asks once and writes the answers down. It writes two files and two code facts:
 
 - **`docs/product-brief.md`**: the ten landing answers, and the run settings `autonomy` and `deploy` in its frontmatter.
-- **`docs/product-spec.md`**: the product part. The modules, the database driver, one table for each entity, the wishes that are not in this build, and the steps that stay with the owner. Its headings are fixed by [`product-spec-template.md`](product-spec-template.md), which sits beside this file.
+- **`docs/product-spec.md`**: the product part. The modules, one table for each entity, the wishes that are not in this build, and the steps that stay with the owner. Its headings are fixed by [`product-spec-template.md`](product-spec-template.md), which sits beside this file.
 - The product's name and its locale, in `packages/config/src/project.ts`.
 
-The interview has about fifteen questions and ends with one read-back. The owner's one confirmation there settles every thin answer, approves the screens, and sets `autonomy: afk`. Then this skill starts `saasaloy-build` in the same session, and nobody answers another question.
+The interview has about fourteen questions and ends with one read-back. The owner's one confirmation there settles every thin answer, approves the screens, and sets `autonomy: afk`. Then this skill starts `saasaloy-build` in the same session, and nobody answers another question.
 
 It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves behind.
 
@@ -36,12 +36,12 @@ Nothing else. You are not here to write the landing page, add a module or a depe
 3. **Stop when there is no brief and no person.** You have no brief when steps 1 and 2 found none. You have no person when the prompt says nobody is at the keyboard, or when you run with no way to ask a question (a headless run, such as `claude -p`). A headless run whose prompt says the owner is here and answers your questions has a person: ask each question in text, end your turn, and read the answer in the next message. Without a person, ask nothing and write nothing. Say this, and stop: "No product brief exists and nobody is here to answer the interview. Run /saasaloy-setup with the owner present, or supply a brief with `autonomy: afk` in its frontmatter." Never invent the answers yourself. A brief without `autonomy: afk` and no person is the same case: say "The brief has no `autonomy: afk`, and nobody is here to confirm it", and stop.
 4. **Read `packages/config/src/project.ts`** for the current `app.name`. It ships commented out, so the name is still the base's `"Saasaloy"` until someone sets it. When it is set, it is the best opening guess you have, and it belongs in question 1's samples. The project's directory name is the next best guess.
 5. **Look at git, and treat it as advice.** Run `git status --short` if there is a repo. A dirty tree or no repo at all is worth one sentence ("your changes aren't committed, so you can't undo this with git; every write here is previewed in the read-back anyway"), and then you carry on. `saasaloy init` creates the repository and commits the scaffold on `main`, unless it ran with `--no-git` or found no git identity. The build's Intake stage makes that commit when `init` could not. **Neither state is a reason to stop.**
-6. **Read the module list once**, for questions 13 and 14: run `saasaloy list --json`, and keep `modules[]`. Each module has `name`, `description`, `stage`, `needs`, `dependsOn`, `requiresOneOf` and `conflictsWith`.
-7. **Say how long this takes and what it is for**, in two lines, before question 1: about fifteen questions, then one read-back, then the build runs with no more questions. An owner who does not know why answers thinly.
+6. **Read the module list once**, for question 13: run `saasaloy list --json`, and keep `modules[]`. Each module has `name`, `description`, `stage`, `needs`, `dependsOn`, `requiresOneOf` and `conflictsWith`.
+7. **Say how long this takes and what it is for**, in two lines, before question 1: about fourteen questions, then one read-back, then the build runs with no more questions. An owner who does not know why answers thinly.
 
 ## Step 1 — the questions
 
-Fifteen of them, in two parts. **Question 1 is the project's name, it goes first, and it goes on its own**: every sample answer after it is built out of the name and the answers before it.
+Fourteen of them, in two parts. **Question 1 is the project's name, it goes first, and it goes on its own**: every sample answer after it is built out of the name and the answers before it.
 
 After that, ask in batches of **two or three**. Number them so the owner can answer by number.
 
@@ -62,17 +62,16 @@ After that, ask in batches of **two or three**. Number them so the owner can ans
 
 Write the brief after question 10, as [Step 2](#step-2--write-the-brief-and-the-spec) says, before the product part starts.
 
-### The product part: questions 11 to 15
+### The product part: questions 11 to 14
 
 | # | Dimension | What you are actually after |
 |---|-----------|----------------------------|
 | 11 | **Entities** | The things the product's user makes, tracks or reads. You propose one table for each entity, and the owner corrects it. See [Propose the entities](#propose-the-entities). |
 | 12 | **Order** | Which entity the build makes first, second, and so on. The build makes every entity, in this order. |
 | 13 | **Capabilities** | Which optional modules the product needs, from `saasaloy list --json`. See [The capabilities question](#the-capabilities-question). |
-| 14 | **Database driver** | `database-d1` or `database-postgres`. You recommend one. See [The driver question](#the-driver-question). |
-| 15 | **Preview deploy** | Whether to put the finished build on a preview address. Always the last question. See [The preview question](#the-preview-question). |
+| 14 | **Preview deploy** | Whether to put the finished build on a preview address. Always the last question. See [The preview question](#the-preview-question). |
 
-Then give the [read-back](#the-read-back). It is not a sixteenth question: it shows everything at once and asks for one confirmation.
+Then give the [read-back](#the-read-back). It is not a fifteenth question: it shows everything at once and asks for one confirmation.
 
 ### Every question ships with sample answers
 
@@ -213,20 +212,11 @@ When a pick depends on a capability with providers, write that capability's loca
 
 **A wish that no module covers.** When the owner asks for something no module and no entity does, such as "import from Goodreads", write it under `## Not in this build`, in the owner's words. Do not promise it, and do not stretch an entity to hold it.
 
-### The driver question
-
-Question 14 recommends one driver, and the owner confirms or changes it. Recommend from the picks, in this order:
-
-1. **`database-postgres`** when a pick depends on it in `dependsOn` (`ecommerce` does). Say that D1 cannot run that module.
-2. **`database-d1`** in every other case. It runs on the Cloudflare free tier with no server, and it needs nothing on the owner's machine.
-
-Offer three samples: the recommendation with its reason, the other driver with what it costs, and "you choose". Say what `database-postgres` costs locally: `pnpm db:setup` starts it in Docker, so the machine needs Docker. Say that the tool moves no data between drivers, so the choice holds for the life of the project.
-
 ### The preview question
 
-Question 15 is always the last question, and it goes on its own. It records `deploy: preview` or `deploy: none` in the brief's frontmatter.
+Question 14 is always the last question, and it goes on its own. It records `deploy: preview` or `deploy: none` in the brief's frontmatter.
 
-> **15. Put the finished build on a preview address?**
+> **14. Put the finished build on a preview address?**
 > a. No — keep it on my machine (`deploy: none`).
 > b. Yes — deploy a preview to `workers.dev` addresses when the build is done (`deploy: preview`). I will put a Cloudflare API token in `~/.config/<project>/cloudflare-preview.env` myself.
 > c. Not now — ask me again after I have looked at the local app (`deploy: none`).
@@ -234,15 +224,15 @@ Question 15 is always the last question, and it goes on its own. It records `dep
 Say these facts with it:
 
 - **The token never enters this conversation.** The owner writes it into the file, with mode 0600. Never ask for its value.
-- **With `database-postgres`, the preview runs on a temporary database**, a neon.new database that deletes itself a few days after it is made. The build log states the day it ends.
+- **The preview runs on a temporary database**, a neon.new database that deletes itself a few days after it is made. The build log states the day it ends.
 - **The build records the choice.** A build with no Preview stage lists the preview deploy under `## Left for a human`.
 
 ### The read-back
 
-After question 15, show everything in one message, and ask for one confirmation. Write the brief and the spec to disk first, so the owner can open them. The read-back has these parts, in this order:
+After question 14, show everything in one message, and ask for one confirmation. Write the brief and the spec to disk first, so the owner can open them. The read-back has these parts, in this order:
 
 1. **The brief.** Each of the ten answers in one line. Mark each `weak:` answer and say what the copy leaves out because of it.
-2. **The module list.** The MVP set the build always adds, then each pick from `## Modules` with the driver and each local provider.
+2. **The module list.** The MVP set the build always adds, then each pick from `## Modules` with each local provider.
 3. **Each entity with its screens**, in the owner's order. Name each screen: the app list, the app detail, the app create and update form, and the admin read-only list. Then say that each action of the entity is callable by agents too: an AI agent with a key the user makes can run it through the product's MCP server, with a `<table>:read`, `<table>:write` or `<table>:delete` scope. Name the scopes, such as "`books:read` for `list`, `books:write` for `create`, `update` and `finish`". A delete scope stays off on a new key until the user ticks it.
 4. **Not in this build.** Each wish from `## Not in this build`, or "nothing".
 5. **Left for the owner.** The vendor steps from `## Left for the owner`, the preview token when `deploy: preview`, and the steps no build takes: review and merge `build/mvp`, push it, and deploy to production.
@@ -313,23 +303,22 @@ https://ledgerly.com.bd/waitlist — a Tally form, live now.
 The frontmatter holds the run settings, and nothing else:
 
 - **`autonomy: afk`** only after the owner answered a at the read-back. Leave it out otherwise.
-- **`deploy: preview`** or **`deploy: none`**, from question 15. A brief with no `deploy` field reads as `deploy: none`.
+- **`deploy: preview`** or **`deploy: none`**, from question 14. A brief with no `deploy` field reads as `deploy: none`.
 
 Three rules about this file:
 
 - **Keep every `weak:` and `weak-accepted:` tag verbatim.** It is the thread the next run picks up.
 - **Write it before you touch any code.** Write it after question 10, and again after the read-back. If the owner walks away after question 6, a brief with six answers in it is worth having; six answers held in a conversation are not.
-- **Write no frontmatter before the read-back**, except `deploy` once question 15 is answered.
+- **Write no frontmatter before the read-back**, except `deploy` once question 14 is answered.
 
 ### The spec
 
-`docs/product-spec.md` is the second file. Copy `product-spec-template.md` from this skill's folder and fill it. Its `##` headings are fixed, in this order: `## Modules`, `## Database driver`, `## Entities`, `## Not in this build` and `## Left for the owner`. Each entity is a `### <n>. <Entity name>` heading under `## Entities`, in the owner's order, with one table whose rows are `Table`, `Fields`, `Who may see it`, `Actions` and `Screens`. `saasaloy-build` and `saasaloy-feature` read these names, so never rename one, drop one, or add another `##` heading.
+`docs/product-spec.md` is the second file. Copy `product-spec-template.md` from this skill's folder and fill it. Its `##` headings are fixed, in this order: `## Modules`, `## Entities`, `## Not in this build` and `## Left for the owner`. Each entity is a `### <n>. <Entity name>` heading under `## Entities`, in the owner's order, with one table whose rows are `Table`, `Fields`, `Who may see it`, `Actions` and `Screens`. `saasaloy-build` and `saasaloy-feature` read these names, so never rename one, drop one, or add another `##` heading.
 
 - **`## Modules`** lists each pick of question 13 and each local provider it brings, one row each, with its `stage` from `saasaloy list --json` and the answer it comes from. It does not list the MVP set. With no picks, write one row: `| None. | | |`.
-- **`## Database driver`** names the driver of question 14 in a code span, and the reason.
 - **`## Not in this build`** and **`## Left for the owner`** hold one list item each, or `- None.`
 
-Write the spec after question 14, and again after the read-back.
+Write the spec after question 13, and again after the read-back.
 
 ## Step 3 — set the two facts that are code
 
@@ -361,7 +350,7 @@ A brief on disk means the interview already happened.
 
 1. **Summarise it back** in a few lines, with the spec's entities and picks, and ask what changed.
 2. **Ask only about what moved**, plus every `weak:` and `weak-accepted:` tag, which is exactly the thread a second pass should pick up. "Last time 'it's faster' had no number behind it. Do you have one now?" Carry samples on those questions too.
-3. **A brief with no spec** comes from before the product part existed. Ask questions 11 to 15 to write one.
+3. **A brief with no spec** comes from before the product part existed. Ask questions 11 to 14 to write one.
 4. **Update `Last updated`** in each file you change, and rewrite only the sections that changed.
 5. **If a file was hand-edited**, that wins. Do not tidy someone's prose back into your own phrasing.
 6. **End with the read-back** when anything in the spec or the frontmatter changed, so the owner confirms it once more.

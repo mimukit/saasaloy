@@ -5,8 +5,8 @@ import { getTableConfig as sqliteTableConfig } from "drizzle-orm/sqlite-core";
 import type { ColumnShape, TableShape } from "./plan";
 
 // Reads the shape `./plan.ts` needs off a Drizzle table: its columns, its primary key and
-// the tables its foreign keys point at. One file serves both drivers, because each schema
-// file is a `pgTable` under `database-postgres` and a `sqliteTable` under `database-d1`.
+// the tables its foreign keys point at. Each schema file is a `pgTable`. The `sqliteTable`
+// branch below is kept until issue #372 removes it.
 
 /** Every Drizzle table in a module's exports, such as the schema barrel. */
 export function tablesIn(exports: Record<string, unknown>): Table[] {
@@ -22,8 +22,8 @@ function config(table: Table) {
 }
 
 /**
- * True when the database fills the column: a Postgres identity or serial, or a SQLite
- * `INTEGER PRIMARY KEY`, which is an alias for the rowid with or without `autoIncrement`.
+ * True when the database fills the column: a Postgres identity or serial. The
+ * `autoIncrement` and `SQLiteInteger` checks are kept until issue #372 removes them.
  */
 function isGenerated(column: Column, singleKey: boolean): boolean {
   const flags = column as Column & {

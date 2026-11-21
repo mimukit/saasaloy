@@ -37,7 +37,7 @@ Run `add` with no module name and you get a multi-select over the registry inste
 ## Install several at once
 
 ```bash
-saasaloy add admin teams --with database-d1 --yes
+saasaloy add admin teams --with database-postgres --yes
 ```
 
 Several names resolve into one graph, so you get one plan and one `Proceed?`. Every check that would refuse one module runs on the whole set before anything is written: a conflict between the first and the last name exits 2 with nothing on disk. A shell loop over `saasaloy add` gives you neither, because each run checks only its own graph and a refusal at the third module leaves the first two installed.
@@ -55,22 +55,22 @@ you and for any agent in the project.
 
 ## Drivers and mutually exclusive modules
 
-Some capabilities cannot run without a driver, so their descriptor declares `requiresOneOf`. `database` declares `requiresOneOf: ["database-d1", "database-postgres"]`. When nothing in the run and nothing installed satisfies that list, `add` prompts you to pick one, resolves it, and folds it into the same plan. It re-checks after each pick, up to eight rounds, because one driver can settle two requirements and a picked module can raise a requirement of its own.
+Some capabilities cannot run without a driver, so their descriptor declares `requiresOneOf`. `database` declares `requiresOneOf: ["database-postgres"]`. When nothing in the run and nothing installed satisfies that list, `add` prompts you to pick one, resolves it, and folds it into the same plan. It re-checks after each pick, up to eight rounds, because one driver can settle two requirements and a picked module can raise a requirement of its own.
 
-`--with <module>` answers the choice on the command line, so the run needs no prompt: `saasaloy add waitlist --with database-d1 --yes`. It is repeatable. A `--with` module that answers no unmet requirement exits 2 before anything is written, so it cannot install a module on the side.
+`--with <module>` answers the choice on the command line, so the run needs no prompt: `saasaloy add waitlist --with database-postgres --yes`. It is repeatable. A `--with` module that answers no unmet requirement exits 2 before anything is written, so it cannot install a module on the side.
 
 There is no prompt in a non-interactive run or under `--yes`. Without `--with`, both refuse and name the options, exit 2:
 
 ```text
 Cannot add database — unmet requirement:
-  database needs one of: database-d1, database-postgres, and none is installed. Re-run as `saasaloy add database --with database-d1`, or pick another from that list.
+  database needs one of: database-postgres, and none is installed. Re-run as `saasaloy add database --with database-postgres`, or pick another from that list.
 ```
 
-Two modules that must never sit side by side declare `conflictsWith`. `database-d1` and `database-postgres` name each other. `add` checks that after the driver prompt, before it plans a single file, and `--force` does not bypass it:
+Two modules that must never sit side by side declare `conflictsWith`. `api-keys-user` and `api-keys-organization` name each other. `add` checks that after the driver prompt, before it plans a single file, and `--force` does not bypass it:
 
 ```text
-Cannot add database-postgres — module conflict:
-  database-d1 is already installed and declares a conflict with database-postgres. Run `saasaloy remove database-d1` first.
+Cannot add api-keys-organization — module conflict:
+  api-keys-user is already installed and declares a conflict with api-keys-organization. Run `saasaloy remove api-keys-user` first.
 ```
 
 Provider modules are the other shape. A capability such as `email`, `kv`, `queue`, `storage`, `sms`, `logger` or `payment` takes any number of providers side by side, and a `<CAP>_PROVIDER` environment variable picks the one that runs. The value is always required and there is no default, so `add` lists the variable under **Env vars to set** and `saasaloy env` prompts for it.
@@ -162,4 +162,4 @@ A project an older CLI (0.9.0 or earlier) wrote holds a version 1 manifest. `add
 - [Architecture](../architecture.md) for what the engine does with renders, hashes and aliases
 - [Reference](../reference.md#saasaloy-add) for the full flag list
 
-_Verified against `main`@`b86486c3` on 2026-11-21._
+_Verified against `main`@`33bc729b` on 2026-11-21._

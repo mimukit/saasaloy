@@ -134,14 +134,8 @@
       "target": "@api/payment-store.ts"
     },
     {
-      "path": "files/db/schema/payment.sqlite.ts",
-      "target": "@db/schema/payment.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/payment.pg.ts",
-      "target": "@db/schema/payment.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/payment.ts",
+      "target": "@db/schema/payment.ts"
     },
     {
       "path": "files/admin/routes/payments.tsx",

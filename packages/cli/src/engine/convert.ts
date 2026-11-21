@@ -28,7 +28,7 @@ import type { FileRecord, ManifestV2 } from "./manifest.js";
 import { LOCAL_SOURCE } from "./payload.js";
 import { copiedContent, render } from "./render.js";
 import type { RenderedFile, RenderOptions, RenderResult } from "./render.js";
-import { isLocalRegistry, loadSide, variantSides } from "./project.js";
+import { isLocalRegistry, loadSide } from "./project.js";
 import type { LoadSideContext, ModuleCoordinate } from "./project.js";
 
 // The conversion of a version 1 project (plan 0116, Phase 5; research 0013, "The base of
@@ -179,8 +179,6 @@ interface Candidate {
   version: string;
   side: ApplySide;
   rendered: RenderResult;
-  /** The driver a variant side gates in, absent for the project's own set. */
-  driver?: string;
 }
 
 /**
@@ -263,32 +261,6 @@ export async function convertProject(args: ConvertArgs): Promise<Conversion> {
       warnings.push(
         `${version}: could not render — ${error instanceof Error ? error.message : String(error)}`
       );
-      continue;
-    }
-    // A recorded source the set gates off (a driver the project left) renders only in a
-    // side with that driver. Such a render is a candidate like any other: it counts only
-    // when it writes the recorded source and that source's bytes hash to the record.
-    const variants = await variantSides(
-      side,
-      Object.values(v1.managed) as (ManagedEntry & { from: string })[],
-      (names) => args.load(version, names, options)
-    );
-    for (const warning of variants.warnings) {
-      warnings.push(`${version}: ${warning}`);
-    }
-    for (const variant of variants.sides) {
-      try {
-        candidates.push({
-          driver: variant.driver,
-          rendered: render(variant.side),
-          side: variant.side,
-          version,
-        });
-      } catch (error) {
-        warnings.push(
-          `${version} with ${variant.driver}: could not render — ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
     }
   }
 
@@ -356,7 +328,6 @@ export async function convertProject(args: ConvertArgs): Promise<Conversion> {
     const held =
       mine === undefined
         ? candidates
-            .filter((candidate) => candidate.driver === undefined)
             .map((candidate) => ({
               file: candidate.rendered.files.get(path),
               version: candidate.version,

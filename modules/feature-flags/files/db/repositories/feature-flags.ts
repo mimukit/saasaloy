@@ -2,11 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { featureFlags, featureFlagOverrides } from "../schema/feature-flags";
 import type { Db } from "../client";
 
-// Every query the flag tables need, in one file, written once for both dialects. The table
-// declarations are the only part of this feature that knows whether it is talking to SQLite
-// or Postgres (`schema/feature-flags.sqlite.ts` and `.pg.ts`), and Drizzle's query builder
-// is neutral at call time — so this file ships once and `apps/api` never branches on the
-// driver.
+// Every query the flag tables need, in one file. The table declarations live in
+// `schema/feature-flags.ts`.
 //
 // It returns rows, not resolved flags. Turning a row into a value the resolver understands
 // happens in `apps/api/src/lib/flags.ts`, which keeps `packages/db` free of any dependency

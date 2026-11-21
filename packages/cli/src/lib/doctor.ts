@@ -1036,7 +1036,7 @@ export const DEPLOY_TARGETS_FILE = "packages/tooling/src/targets.ts";
 export const GENERATED_TARGETS_FILE =
   "packages/tooling/src/targets.generated.ts";
 
-/** The production migration task name the base and `database-d1` retired. */
+/** The production migration task name the base and the old D1 driver retired. */
 const RETIRED_MIGRATE_TASK = "db:migrate:prod";
 
 /** The managed wrapper behind `pnpm release` (ADR 0049). */

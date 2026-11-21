@@ -14,14 +14,8 @@
   ],
   "files": [
     {
-      "path": "files/db/schema/teams.sqlite.ts",
-      "target": "@db/schema/teams.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/teams.pg.ts",
-      "target": "@db/schema/teams.ts",
-      "onlyWith": "database-postgres"
+      "path": "files/db/schema/teams.ts",
+      "target": "@db/schema/teams.ts"
     },
     {
       "path": "files/auth/access.ts",

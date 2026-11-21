@@ -401,8 +401,8 @@ export async function readManifestDeps(
 
   // A descriptor's THIRD dependency site: a `package-json-dependency` patch, which writes
   // a version into a package.json some OTHER module scaffolded. It is the only way a
-  // module can pin a dep into a workspace it does not own (`database-d1` putting `wrangler`
-  // into packages/db, `database-postgres` putting `postgres` there), so a version parked
+  // module can pin a dep into a workspace it does not own (`database-postgres` putting
+  // `postgres` into packages/db), so a version parked
   // here is shipped to downstream projects exactly like a `dependencies[]` entry — and
   // would otherwise never reach the update sweep this script exists to run (ADR 0016).
   const pushPatches = () => {

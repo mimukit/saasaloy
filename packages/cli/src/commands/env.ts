@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
+import cliPackage from "../../package.json" with { type: "json" };
 import { ENV_EXAMPLE, parseEnvExample } from "../lib/env-example.js";
 import {
   appendVars,
@@ -276,11 +277,15 @@ async function loadDeclarations(
       }
       // Pin to the resolved SHA, not the ref: the descriptor has to describe the bytes
       // this project installed, and the ref has moved on by definition when it moved.
+      // A pin at this CLI's own release tag reads strictly, as the engine does. Any other
+      // pin may be an older release, so a retired descriptor key is read translated
+      // rather than refused (plan 0117).
       const ref = entry.resolved === "local" ? entry.ref : entry.resolved;
-      const key = `${entry.source}@${ref}`;
+      const atOldRef = entry.ref !== `v${cliPackage.version}`;
+      const key = `${entry.source}@${ref}@${String(atOldRef)}`;
       let cached = resolvers.get(key);
       if (!cached) {
-        cached = new RemoteRegistrySource(owner, repo, ref);
+        cached = new RemoteRegistrySource(owner, repo, ref, { atOldRef });
         resolvers.set(key, cached);
         sources.push(cached);
       }

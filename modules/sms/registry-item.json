@@ -79,17 +79,8 @@
   ],
   "files": [
     {
-      "path": "files/db/schema/sms-messages.sqlite.ts",
+      "path": "files/db/schema/sms-messages.ts",
       "target": "@db/schema/sms-messages.ts",
-      "onlyWith": "database-d1",
-      "when": {
-        "installed": ["database"]
-      }
-    },
-    {
-      "path": "files/db/schema/sms-messages.pg.ts",
-      "target": "@db/schema/sms-messages.ts",
-      "onlyWith": "database-postgres",
       "when": {
         "installed": ["database"]
       }

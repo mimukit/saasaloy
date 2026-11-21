@@ -64,7 +64,6 @@ Files:
 | `packages/auth/package.json` | `package-json-dependency` |
 | `packages/db/src/schema/auth.ts` | `drizzle-column` |
 | `packages/db/src/schema/auth.ts` | `drizzle-column` |
-| `packages/db/src/schema/auth.ts` | `drizzle-column` |
 | `packages/db/src/column-classes/users.ts` | `drizzle-column` |
 | `packages/db/src/column-classes/users.ts` | `drizzle-column` |
 

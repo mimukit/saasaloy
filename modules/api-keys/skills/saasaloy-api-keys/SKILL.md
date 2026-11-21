@@ -202,7 +202,7 @@ The columns stay in the snapshot because the plugin writes `requestCount` regard
 
 Both owners set `schema.apikey.modelName: "apiKey"`. `auth.ts` passes `usePlural: true` to the Drizzle adapter, so the adapter asks for the `apiKeys` export, stored as the `api_keys` table. Without it the adapter asks for `apikeys`, finds no export, and every key call throws. Change the `modelName` and the export key together.
 
-The snapshot is hand-authored against `@better-auth/api-key@1.7.7` and ships in two dialects, selected by `onlyWith`. A version bump means re-verifying every column against that version's `apiKeySchema()`. Each owner's `schema-version.test.ts` fails until its header and the range the core pins agree again.
+The snapshot is hand-authored against `@better-auth/api-key@1.7.7` and ships as one Postgres file. A version bump means re-verifying every column against that version's `apiKeySchema()`. Each owner's `schema-version.test.ts` fails until its header and the range the core pins agree again.
 
 ## Failure codes
 
