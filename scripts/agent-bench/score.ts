@@ -458,10 +458,28 @@ function kebab(table: string): string {
   return table.replaceAll("_", "-");
 }
 
+/** Matches a table name in a relative file path, including its kebab-case form. */
+function entityPath(table: string): RegExp {
+  return new RegExp(
+    `(?:^|[^a-z0-9_-])(?:${escape(table)}|${escape(kebab(table))})(?:[^a-z0-9_-]|$)`
+  );
+}
+
+/** Matches a Hono client call from a screen that can live at any route path. */
+function entityClient(table: string): RegExp {
+  const camel = table.replaceAll(/_[a-z]/g, (part) =>
+    part.slice(1).toUpperCase()
+  );
+  return new RegExp(
+    `\\bapi\\s*(?:\\.\\s*${escape(camel)}|\\[\\s*["'](?:${escape(table)}|${escape(kebab(table))})["']\\s*\\])\\s*\\.\\s*\\$(?:get|post|put|patch|delete)\\b`
+  );
+}
+
 /**
  * Which parts of one spec entity exist: its build log section, its `feat(build): feature
  * <table>` commit, its Drizzle table, an api route file, and an app screen. A route or a
  * screen is found by the table's name, snake or kebab case, in its path or as a route path.
+ * A screen can also call the entity's Hono client from another path, such as `/`.
  */
 export function entityParts(
   project: string,
@@ -471,7 +489,8 @@ export function entityParts(
 ): [string, boolean][] {
   const names = `(?:${escape(table)}|${escape(kebab(table))})`;
   const routePath = new RegExp(`["'\`]/${names}(?![a-z0-9_-])`);
-  const inPath = new RegExp(`(?:^|[^a-z0-9_-])${names}(?:[^a-z0-9_-]|$)`);
+  const inPath = entityPath(table);
+  const client = entityClient(table);
   const tableName = new RegExp(`["'\`]${escape(table)}["'\`]`);
   const routes = files(project, "apps/api/src/routes", ".ts").filter(
     (f) => !f.endsWith(".test.ts")
@@ -507,7 +526,10 @@ export function entityParts(
     [
       "app screen",
       screens.some(
-        (f) => inPath.test(relative(screensDir, f)) || routePath.test(read(f))
+        (f) =>
+          inPath.test(relative(screensDir, f)) ||
+          routePath.test(read(f)) ||
+          client.test(read(f))
       ),
     ],
   ];
@@ -815,7 +837,11 @@ export function judgeAudit(
   }
   const checks = report.checks ?? [];
   if (ran.code !== 0) {
-    const first = checks.find((check) => check.status === "FAIL");
+    const first = checks.find(
+      (check) =>
+        typeof check.status === "string" &&
+        check.status.toLowerCase() === "fail"
+    );
     const id = typeof first?.id === "string" ? first.id : "no check";
     const detail =
       typeof first?.detail === "string"
@@ -832,7 +858,10 @@ export function judgeAudit(
       "the audit exited 0, but agent is not installed, so no api check ran"
     );
   }
-  const passed = checks.filter((check) => check.status === "PASS").length;
+  const passed = checks.filter(
+    (check) =>
+      typeof check.status === "string" && check.status.toLowerCase() === "pass"
+  ).length;
   return pass(
     "agent-audit",
     `exit 0; ${String(passed)} checks pass, tools/list with the seeded key included`
@@ -992,8 +1021,11 @@ export function checkEntity(project: string, expect: Expect): LineResult {
     ],
     [
       "validator",
-      files(project, "packages/validators/src", ".ts").some((f) =>
-        mentions.test(read(f))
+      files(project, "packages/validators/src", ".ts").some(
+        (f) =>
+          entityPath(table).test(
+            relative(join(project, "packages/validators/src"), f)
+          ) || mentions.test(read(f))
       ),
     ],
     [

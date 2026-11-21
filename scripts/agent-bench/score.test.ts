@@ -298,6 +298,32 @@ describe("filesystem checks", () => {
     assert.equal(checkEntity(project, expect).verdict, "PASS");
   });
 
+  it("finds a validator by its entity filename with generic exports", () => {
+    put(
+      "validator-path/packages/validators/src/prep-tasks.ts",
+      "export const createInput = z.object({ title: z.string() });"
+    );
+    const result = checkEntity(join(dir, "validator-path"), {
+      ...expect,
+      entity: { table: "prep_tasks", word: "prep" },
+    });
+    assert.doesNotMatch(result.detail, /validator/);
+  });
+
+  it("does not count an unrelated validator filename", () => {
+    put(
+      "validator-unrelated/packages/validators/src/tasks.ts",
+      "export const createInput = z.object({ title: z.string() });"
+    );
+    assert.match(
+      checkEntity(join(dir, "validator-unrelated"), {
+        ...expect,
+        entity: { table: "prep_tasks", word: "prep" },
+      }).detail,
+      /validator/
+    );
+  });
+
   it("finds a kebab case seed slice for a snake case table", () => {
     const project = join(dir, "prepline");
     put("prepline/packages/db/src/seed/slices/prep-tasks.ts", "");
@@ -493,6 +519,48 @@ describe("entities end to end", () => {
     assert.deepEqual(
       parts.filter(([, ok]) => !ok).map(([name]) => name),
       []
+    );
+  });
+
+  it("finds a root screen that calls the entity API client", () => {
+    put(
+      "root-screen/apps/app/src/routes/index.tsx",
+      'export const Route = createFileRoute("/")({ component: Books }); function Books() { return api.books.$get(); }'
+    );
+    const parts = entityParts(join(dir, "root-screen"), "books", "", []);
+    assert.deepEqual(
+      parts.find(([name]) => name === "app screen"),
+      ["app screen", true]
+    );
+  });
+
+  it("matches snake-case API names without accepting a different entity", () => {
+    for (const [index, call, found] of [
+      [0, "api.prepTasks.$get()", true],
+      [1, 'api["prep-tasks"].$post({})', true],
+      [2, 'api["prep_tasks"].$patch({})', true],
+      [3, "api.prepTasksArchive.$get()", false],
+      [4, "api.prepTasks", false],
+    ] as const) {
+      const project = `client-screen-${String(index)}`;
+      put(`${project}/apps/app/src/routes/index.tsx`, call);
+      const parts = entityParts(join(dir, project), "prep_tasks", "", []);
+      assert.deepEqual(
+        parts.find(([name]) => name === "app screen"),
+        ["app screen", found]
+      );
+    }
+  });
+
+  it("does not count a root screen that only names an entity in its copy", () => {
+    put(
+      "unrelated-screen/apps/app/src/routes/index.tsx",
+      'export const Route = createFileRoute("/")({ component: () => <p>books</p> });'
+    );
+    const parts = entityParts(join(dir, "unrelated-screen"), "books", "", []);
+    assert.deepEqual(
+      parts.find(([name]) => name === "app screen"),
+      ["app screen", false]
     );
   });
 
@@ -739,6 +807,25 @@ describe("the agent audit line", () => {
     const result = judgeAudit({ code: 0, output: report(true) });
     assert.equal(result.verdict, "PASS");
     assert.match(result.detail, /2 checks pass/);
+  });
+
+  it("counts the lowercase statuses emitted by agent:audit", () => {
+    const result = judgeAudit({
+      code: 0,
+      output: report(true).replaceAll('"PASS"', '"pass"'),
+    });
+    assert.match(result.detail, /2 checks pass/);
+  });
+
+  it("names a failed check with a lowercase status", () => {
+    const result = judgeAudit({
+      code: 1,
+      output: report(true, { id: "api/tools-list", detail: "401" }).replaceAll(
+        '"FAIL"',
+        '"fail"'
+      ),
+    });
+    assert.match(result.detail, /exited 1; api\/tools-list: 401/);
   });
 
   it("fails on exit 0 when agent is not installed", () => {
