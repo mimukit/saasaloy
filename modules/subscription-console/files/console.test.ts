@@ -38,7 +38,10 @@ function fakeStore(): SubscriptionStore & { rows: Subscription[] } {
   const events = new Set<string>();
   const rows: Subscription[] = [];
 
-  return {
+  const store: SubscriptionStore & { rows: Subscription[] } = {
+    transaction(body) {
+      return body(store);
+    },
     latestSubscription(subject: BillableSubject) {
       return Promise.resolve(
         rows.findLast(
@@ -87,6 +90,7 @@ function fakeStore(): SubscriptionStore & { rows: Subscription[] } {
       return Promise.resolve(row);
     },
   };
+  return store;
 }
 
 /** What `apps/api/src/routes/subscription.ts` does with a `CheckoutResult.event`. */

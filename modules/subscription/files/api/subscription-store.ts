@@ -24,7 +24,7 @@ import { paymentFailed } from "@repo/email/templates/payment-failed";
 import { trialEnding } from "@repo/email/templates/trial-ending";
 import type { EmailEnv } from "@repo/email";
 import type { Db, DbBindings } from "@repo/db/client";
-import { withDb } from "@repo/db/client";
+import { transaction, withDb } from "@repo/db/client";
 import { users } from "@repo/db/schema/auth";
 import {
   subscriptionEvents,
@@ -288,6 +288,12 @@ export function createSubscriptionStore(db: Db): SubscriptionStore {
         .onConflictDoNothing()
         .returning({ provider: subscriptionEvents.provider })
         .then((rows) => rows.length > 0);
+    },
+
+    // One Postgres transaction, with a store over its client. Under a route test `db` is
+    // the test's own transaction, so this opens a savepoint inside it.
+    transaction(body) {
+      return transaction(db, (tx) => body(createSubscriptionStore(tx)));
     },
 
     upsertSubscription(subject: BillableSubject, input: SubscriptionInput) {

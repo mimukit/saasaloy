@@ -51,6 +51,9 @@ function fakeStore(seed: Subscription[] = []) {
   const calls = { latest: 0 };
 
   const store: SubscriptionStore = {
+    transaction(body) {
+      return body(store);
+    },
     latestSubscription(subject) {
       calls.latest += 1;
       return Promise.resolve(

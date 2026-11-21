@@ -43,6 +43,7 @@ SUBSCRIPTION_PROVIDER=stripe  uses subscription-stripe
 Files:
 - `@api/routes/subscription.ts`
 - `@api/subscription-store.ts`
+- `@api/subscription-store.test.ts`
 - `@config/sections/subscription.ts`
 - `@api/middleware/require-feature.ts`
 - `@admin/routes/subscription.tsx`
