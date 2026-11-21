@@ -40,6 +40,7 @@ import {
 } from "../lib/registry.js";
 import type { Coordinate } from "../lib/registry.js";
 import { listLabel } from "../lib/requested.js";
+import { formatSingleOption, singleOptions } from "../lib/requires.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
@@ -85,7 +86,7 @@ const HELP: CommandHelp = {
     "--force":
       "write even over uncommitted changes, overwrite edited generated files, and write the deleted files of a named module again",
     "--with <module>":
-      "answer a `requiresOneOf` choice, e.g. `--with database-postgres` (repeatable)",
+      "answer a `requiresOneOf` choice, e.g. `--with api-keys-user` (repeatable)",
     "--json": "with --dry-run, print the plan as one JSON document on stdout",
     "--abort":
       "put back the files the last add, remove, update or testing run changed",
@@ -500,8 +501,9 @@ async function addModules(
   const load = (list: readonly string[]): Promise<LoadedSide> =>
     loadSide(sideSpec(state, list, version, coordinates), { cliVersion });
 
-  // `requiresOneOf`: `--with` answers a choice up front, a terminal gets one prompt per
-  // unmet choice, and anything else refuses and names the options.
+  // `requiresOneOf`: `--with` answers a choice up front, a list with one option is added
+  // with one line and no question (plan 0119), a terminal gets one prompt per unmet choice,
+  // and anything else refuses and names the options.
   let next = await load([...requested, ...opts.with]);
   let unmet = unmetRequirements(next.side.payload, requested);
   const pending = new Set(opts.with);
@@ -520,6 +522,23 @@ async function addModules(
   if (pending.size > 0) {
     return out.refuse(withRefusal([...pending]), EXIT_REFUSED);
   }
+  // A module this adds can declare a one-option list of its own, so repeat until none is
+  // left. The bound only guards a descriptor cycle.
+  const settleSingleOptions = async (): Promise<void> => {
+    for (let round = 0; round < 8; round++) {
+      const singles = singleOptions(unmet);
+      if (singles.length === 0) {
+        return;
+      }
+      for (const single of singles) {
+        log.info(formatSingleOption(single), tui);
+        requested.push(single.option);
+      }
+      next = await load(requested);
+      unmet = unmetRequirements(next.side.payload, requested);
+    }
+  };
+  await settleSingleOptions();
   const unmetMessage = (list: Unmet[]): string =>
     [
       `Cannot add ${listLabel(names)} — unmet requirement${list.length > 1 ? "s" : ""}:`,
@@ -551,6 +570,7 @@ async function addModules(
     requested.push(picked);
     next = await load(requested);
     unmet = unmetRequirements(next.side.payload, requested);
+    await settleSingleOptions();
   }
   if (unmet.length > 0) {
     return out.refuse(unmetMessage(unmet), EXIT_REFUSED);

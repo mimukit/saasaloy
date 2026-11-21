@@ -22,7 +22,7 @@ It installs seven things:
 | `db:setup` / `db:status` / `db:drop`      | `packages/db/package.json` + root `package.json`     |
 | the development container                 | `compose.yaml` at the repo root                      |
 
-It also rewrites `packages/db/tsconfig.json` to put `node` in `compilerOptions.types`, because
+It also writes `packages/db/tsconfig.json`, the only copy, with `node` in `compilerOptions.types`, because
 `drizzle.config.ts` reads `process.env`, and patches `postgres` plus `@types/node` into that
 workspace. `nodejs_compat` is not optional: postgres.js opens a TCP socket through `node:net`, and
 without the flag the Worker fails to start.

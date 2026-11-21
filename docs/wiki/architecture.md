@@ -39,7 +39,7 @@ into seams:
 | Conversion | `engine/convert.ts` | turn a version 1 manifest and lock into version 2, finding each file's base by its hash |
 | Backup | `lib/backup.ts` | copy each file before a run changes it, for `--abort` |
 | Conflicts | `lib/conflicts.ts` | the `conflictsWith` check, read from descriptors and the lock |
-| Requirements | `lib/requires.ts` | the `requiresOneOf` check — a capability naming the drivers one of which must be present |
+| Requirements | `lib/requires.ts` | the `requiresOneOf` check — a capability naming the drivers one of which must be present — and the one-option rule `add` uses to add a list's only option with no question |
 | Design | `lib/design.ts` | detect a plan that writes `packages/ui/`, so `add` can flag the design contract |
 | Patch engine | `lib/patch/` | structural edits to JSONC, `package.json` and TypeScript modules, run by the render as transforms in memory |
 | Schemas | `lib/schema.ts` | ajv validation of every descriptor and state file |
@@ -155,4 +155,4 @@ module that ships an agent skill installs it into `.agents/skills/` with a
 [ADR 0015](../adr/0015-adr-module-skills-agents-canonical-claude-symlink-2026-07-24.md)).
 After each run the engine links every folder in `.agents/skills/` and drops each `.claude/skills/` link whose folder is gone, so a removed module's link goes with its skill.
 
-_Verified against `main`@`33bc729b` on 2026-11-21._
+_Verified against `main`@`7fe1e866` on 2026-11-21._

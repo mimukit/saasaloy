@@ -4,10 +4,9 @@ import type { LoadedModule } from "./registry.js";
 // Cross-module file collisions for `saasaloy add` — the deterministic core, kept beside
 // conflicts.ts and out of applier.ts's planning loop so it can be unit-tested.
 //
-// Two modules in one run may legitimately write the same target: `database` scaffolds
-// `packages/db/tsconfig.json` and a driver of it may scaffold a more specific one over
-// it, which is why buildPlan plans one entry per target and lets the last planner win
-// (#98). Two unrelated modules picking the same target is the opposite case: nothing says
+// Two modules in one run may legitimately write the same target: a capability scaffolds
+// a file and a driver that depends on it may scaffold a more specific one over it, which
+// is why buildPlan plans one entry per target and lets the last planner win (#98). Two unrelated modules picking the same target is the opposite case: nothing says
 // which copy the user wanted, and the silent overwrite is a data-loss bug (#91).
 //
 // The rule that separates them is `dependsOn`. An overlap is legal when one of the two
@@ -155,10 +154,10 @@ export function formatCollisions(
  * check uses: a module may take a file owned by a module it reaches through `dependsOn`,
  * and nothing else (plan decision Q4).
  *
- * The relation stays symmetric here, as it is in the same-run case. `add database --force`
- * on a project where a driver took over `packages/db/tsconfig.json` is the capability
- * rewriting its own driver's file, and refusing it would tell the user to remove a driver
- * that depends on the very module being installed.
+ * The relation stays symmetric here, as it is in the same-run case. `add <capability>
+ * --force` on a project where its driver took over a file the capability also writes is
+ * the capability rewriting its own driver's file, and refusing it would tell the user to
+ * remove a driver that depends on the very module being installed.
  *
  * An owner with no descriptor in `modules` reads as unrelated, which refuses the claim.
  * That is the safe answer: the run resolved every module it could reach, so an owner it

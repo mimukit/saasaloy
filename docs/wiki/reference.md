@@ -90,7 +90,7 @@ A bare module name reads the default registry at the tag `v<version>` of the CLI
 
 With no module named, `add` shows a multi-select over the source, listing only modules this project has not installed. With no terminal it exits 2 and prints the usage line. Unknown flags are rejected before any work happens, with exit 2.
 
-Name several modules to add them in one run: `saasaloy add admin teams --with database-postgres --yes`. `add` resolves every name into one graph, prints one plan, asks once, and runs every refusal (`requires.saasaloy`, `requiresOneOf`, `conflictsWith` and file collisions) on the whole set before it writes the first file. Prerequisites install first, and argv order decides between modules that do not depend on each other. A repeated name counts once. Every name reads from one registry: two coordinates that differ in owner, repo or ref exit 2 and name the two, and an `owner/repo` with no module cannot be mixed with names. When the registry has none of several names, one message lists them all. A named module that is already installed is skipped with a note, and the rest install. A message about a prerequisite says which named module pulled it in, `lefty (required by needs-lefty)`.
+Name several modules to add them in one run: `saasaloy add admin teams --yes`. `add` resolves every name into one graph, prints one plan, asks once, and runs every refusal (`requires.saasaloy`, `requiresOneOf`, `conflictsWith` and file collisions) on the whole set before it writes the first file. Prerequisites install first, and argv order decides between modules that do not depend on each other. A repeated name counts once. Every name reads from one registry: two coordinates that differ in owner, repo or ref exit 2 and name the two, and an `owner/repo` with no module cannot be mixed with names. When the registry has none of several names, one message lists them all. A named module that is already installed is skipped with a note, and the rest install. A message about a prerequisite says which named module pulled it in, `lefty (required by needs-lefty)`.
 
 | Flag | Effect |
 |---|---|
@@ -99,7 +99,7 @@ Name several modules to add them in one run: `saasaloy add admin teams --with da
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
 | `--force` | merge or delete a file even with uncommitted changes, overwrite an edited `generated` file, and write a named module's tracked files that the project deleted again. |
 | `--abort` | put back the files the last `add`, `remove`, `update` or `testing` run changed, and stop. |
-| `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add waitlist --with database-postgres --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
+| `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add api-keys --with api-keys-user --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
 | `--json` | with `--dry-run`, print the plan as one JSON document on stdout (see [JSON output](#json-output)). It never opens the picker or the driver prompt: name the module, and pass `--with` for an unmet `requiresOneOf`. |
 
 The `--dry-run --json` document carries `requested` (the named modules in argv order, a list also for one name), `prerequisites`, `install` (the install order), `alreadyInstalled`, `files` (each with `target`, `action`, `class` and `module`; `action` is the result kind, such as `new`, `updated`, `clean`, `conflict` or `deleted`), `onceChanged`, `pendingMerges` and `warnings`. Every file the text plan shows is in it. A module whose graph is already installed prints the same keys with empty lists.
@@ -121,14 +121,14 @@ and `--force` does not bypass it. `add` never uninstalls anything to resolve a c
 module installed before its lock entry existed can't be checked this way; `add` says so and
 proceeds.
 
-Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that rendered it. A module may write over a file owned by a module it declares in `dependsOn`, which is how `database-postgres` puts its own `packages/db/tsconfig.json` over the one `database` scaffolds, and over nothing else. Two modules in one set that both write a path with no `dependsOn` edge either way are refused before anything is written, with exit 2 and every contested path named. Swapping `api-keys-user` for `api-keys-organization` is `saasaloy remove api-keys-user` then `saasaloy add api-keys-organization`.
+Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that rendered it. A module may write over a file owned by a module it declares in `dependsOn`, and over nothing else. Two modules in one set that both write a path with no `dependsOn` edge either way are refused before anything is written, with exit 2 and every contested path named. Swapping `api-keys-user` for `api-keys-organization` is `saasaloy remove api-keys-user` then `saasaloy add api-keys-organization`.
 
 A descriptor may also declare `requiresOneOf`, naming modules exactly one of which has to
 be present. `add` counts an option as present when it is already installed or arrives in
-the same resolved graph. When none is, an interactive run offers the list as a picker and
+the same resolved graph. When none is and the list has one option, `add` adds that option to the plan with no question, also under `--yes` or with no terminal, and prints one line: "database needs database-postgres; adding it." When the list has two or more, an interactive run offers the list as a picker and
 adds what you choose to the plan; `--yes` or a run with no terminal exits 2 and names the
-options instead of choosing for you, with the flag that answers it: "Re-run as `saasaloy add waitlist --with database-postgres`, or pick another from that list." `--with` picks on the command line. `database` declares it, so the core can never land on
-a project with no driver behind its `@repo/db/client` export.
+options instead of choosing for you, with the flag that answers it: "Re-run as `saasaloy add api-keys --with api-keys-organization`, or pick another from that list." `--with` picks on the command line. `database` declares it, so the core can never land on
+a project with no driver behind its `@repo/db/client` export. `update` never adds a module: a release whose module starts to require one refuses and names the `saasaloy add` that settles it.
 
 `api-keys-user` and `api-keys-organization` use `requiresOneOf` on the `api-keys` core and
 `conflictsWith` on each other. They are **driver modules**, two implementations that write the
@@ -512,4 +512,4 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 
 **A cold cache needs the network.** A run that must merge a file reads the payload of the old release. With no cache entry and no network it refuses with exit 2.
 
-_Verified against `main`@`33bc729b` on 2026-11-21._
+_Verified against `main`@`7fe1e866` on 2026-11-21._

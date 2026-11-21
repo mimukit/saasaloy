@@ -8,6 +8,8 @@ import type { Graph } from "./resolve.js";
 import {
   detectMissingRequirements,
   formatMissingRequirements,
+  formatSingleOption,
+  singleOptions,
 } from "./requires.js";
 import { validateRegistryItem } from "./schema.js";
 import type { RegistryItem, SaasaloyConfig } from "./schema.js";
@@ -127,6 +129,51 @@ describe("formatMissingRequirements — the refusal text", () => {
     );
     expect(message).toContain("unmet requirements");
     expect(message.split("\n")).toHaveLength(3);
+  });
+});
+
+// Plan 0119: `add` settles a one-option list itself, with one line and no question.
+describe("singleOptions — the requirements `add` settles with no question", () => {
+  it("returns the one option of a one-option list", () => {
+    expect(
+      singleOptions([
+        { declaredBy: "database", options: ["database-postgres"] },
+      ])
+    ).toStrictEqual([{ declaredBy: "database", option: "database-postgres" }]);
+  });
+
+  it("leaves a list of two or more to the prompt or the refusal", () => {
+    expect(
+      singleOptions([
+        {
+          declaredBy: "api-keys",
+          options: ["api-keys-organization", "api-keys-user"],
+        },
+      ])
+    ).toStrictEqual([]);
+  });
+
+  it("keeps the order given and names a shared option once", () => {
+    expect(
+      singleOptions([
+        { declaredBy: "database", options: ["database-postgres"] },
+        { declaredBy: "api-keys", options: DRIVERS },
+        { declaredBy: "search", options: ["search-memory"] },
+        { declaredBy: "analytics", options: ["database-postgres"] },
+      ])
+    ).toStrictEqual([
+      { declaredBy: "database", option: "database-postgres" },
+      { declaredBy: "search", option: "search-memory" },
+    ]);
+  });
+
+  it("prints the line that names the added module", () => {
+    expect(
+      formatSingleOption({
+        declaredBy: "database",
+        option: "database-postgres",
+      })
+    ).toBe("database needs database-postgres; adding it.");
   });
 });
 

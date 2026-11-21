@@ -104,4 +104,4 @@ this.
 Until then, the cheap prevention is `saasaloy doctor modules` or step 2, run *before* the merge. See
 [Contribute a module](../how-to/contribute-a-module.md#test-it-before-you-open-the-pr).
 
-_Verified against `main`@`33bc729b` on 2026-11-21._
+_Verified against `main`@`7fe1e866` on 2026-11-21._
