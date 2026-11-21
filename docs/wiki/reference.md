@@ -512,4 +512,4 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 
 **A cold cache needs the network.** A run that must merge a file reads the payload of the old release. With no cache entry and no network it refuses with exit 2.
 
-_Verified against `main`@`5bbdaaf9` on 2026-11-21._
+_Verified against `main`@`7fe1e866` on 2026-11-21._
