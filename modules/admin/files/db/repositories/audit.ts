@@ -4,6 +4,7 @@ import {
   desc,
   eq,
   gte,
+  ilike,
   inArray,
   lt,
   lte,
@@ -17,8 +18,7 @@ import { auditEvents } from "../schema/audit";
 import type { AuditEventRow, NewAuditEvent } from "../schema/audit";
 
 // Every query the admin audit log needs, in one file. The table declarations live in
-// `schema/audit.ts`. The label search is case-blind: Postgres `like` is case-sensitive, so
-// the search lowers both sides.
+// `schema/audit.ts`. The label search is case-blind: it uses Postgres `ilike`.
 //
 // `insertAuditEvents` is called only by `adminWrite` and `adminAuthWrite` in
 // `apps/api/src/lib/admin-write.ts`. The Activity page reads the rest. Newest first, paged
@@ -27,12 +27,6 @@ import type { AuditEventRow, NewAuditEvent } from "../schema/audit";
 
 /** Rows per page on the Activity page. */
 export const AUDIT_PAGE_SIZE = 50;
-
-/**
- * Rows per insert statement. A row binds 10 parameters, so 9 rows keep a statement under
- * 100 bound parameters, and a long write goes in several statements.
- */
-const ROWS_PER_INSERT = 9;
 
 /** One row to insert. The id and the time are filled in when left out. */
 export type AuditEventInput = Omit<NewAuditEvent, "id"> & { id?: string };
@@ -56,11 +50,9 @@ export async function insertAuditEvents(
     createdAt: row.createdAt ?? at,
     id: row.id ?? crypto.randomUUID(),
   }));
-  for (let start = 0; start < values.length; start += ROWS_PER_INSERT) {
-    // oxlint-disable-next-line no-await-in-loop -- the statements run in order on one client, inside the caller's transaction on Postgres
-    await db
-      .insert(auditEvents)
-      .values(values.slice(start, start + ROWS_PER_INSERT));
+  // One statement for the whole write. Drizzle refuses an insert of no rows.
+  if (values.length > 0) {
+    await db.insert(auditEvents).values(values);
   }
 }
 
@@ -94,7 +86,10 @@ export interface AuditPage {
   nextCursor: AuditCursor | null;
 }
 
-/** `%` and `_` are wildcards in `like`; a typed one means the character itself. */
+/**
+ * `%` and `_` are wildcards in `ilike`; a typed one means the character itself. The
+ * backslash is the default escape character of Postgres `ilike`.
+ */
 function escapeLike(text: string): string {
   return text.replaceAll(/[\\%_]/g, (match) => `\\${match}`);
 }
@@ -113,11 +108,7 @@ function conditions(filter: AuditFilter): SQL[] {
   }
   const search = filter.search?.trim() ?? "";
   if (search !== "") {
-    // `escape` is spelled out, so the backslash in `escapeLike` is the escape character.
-    const pattern = `%${escapeLike(search.toLowerCase())}%`;
-    where.push(
-      sql`lower(${auditEvents.targetLabel}) like ${pattern} escape '\\'`
-    );
+    where.push(ilike(auditEvents.targetLabel, `%${escapeLike(search)}%`));
   }
   if (filter.from !== undefined) {
     where.push(gte(auditEvents.createdAt, filter.from));

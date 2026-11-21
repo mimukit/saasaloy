@@ -1,6 +1,5 @@
 import { AUDIENCE_HEADER } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
-import { TRANSACTION_IS_ATOMIC } from "@repo/db/client";
 import { auditEvents } from "@repo/db/schema/audit";
 import { users } from "@repo/db/schema/auth";
 import { seedId } from "@repo/db/seed/id";
@@ -137,10 +136,6 @@ function testRows() {
     .where(eq(auditEvents.action, TEST_ACTION));
 }
 
-const failedChange = TRANSACTION_IS_ATOMIC
-  ? "rolls the change back (Postgres)"
-  : "keeps the change, with no transaction to roll back";
-
 describe(adminWrite, () => {
   it("keeps the change and writes one audit_events row when the body succeeds", async () => {
     const res = await rename(
@@ -167,7 +162,7 @@ describe(adminWrite, () => {
     ["throws", 500],
     ["answers-422", 422],
   ] as const)(
-    `writes no audit_events row when the body %s, and ${failedChange}`,
+    "writes no audit_events row and rolls the change back when the body %s",
     async (mode, status) => {
       const res = await rename(
         database.env,
@@ -177,9 +172,7 @@ describe(adminWrite, () => {
 
       expect(res.status).toBe(status);
       await expect(testRows()).resolves.toHaveLength(0);
-      await expect(memberName()).resolves.toBe(
-        TRANSACTION_IS_ATOMIC ? "Grace Member" : NEW_NAME
-      );
+      await expect(memberName()).resolves.toBe("Grace Member");
     }
   );
 

@@ -2,12 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { config } from "@repo/config";
 import { requireAdmin, requireRole, withAuthScope } from "@repo/auth/server";
 import type { AuthRequestContext, RoleDemand } from "@repo/auth/server";
-import {
-  TEST_DB,
-  TRANSACTION_IS_ATOMIC,
-  transaction,
-  withDb,
-} from "@repo/db/client";
+import { TEST_DB, transaction, withDb } from "@repo/db/client";
 import type { Db } from "@repo/db/client";
 import { insertAuditEvents } from "@repo/db/repositories/audit";
 import type { AuditEventInput } from "@repo/db/repositories/audit";
@@ -30,9 +25,7 @@ import type { FlatFields } from "./changed-fields";
 //
 // "The same transaction" is a real Postgres transaction. The change and its rows commit
 // together or not at all, and a body that throws or answers 4xx keeps nothing it wrote.
-// The wrapper still reads `TRANSACTION_IS_ATOMIC` from `@repo/db/client`: when a client
-// cannot roll back, the rows go in after the body, a failed insert is logged at `error`,
-// and the route answers what the body answered.
+// A failed audit insert rolls the change back too, and the request fails.
 //
 // A new admin write route, in four steps:
 //
@@ -185,27 +178,15 @@ export function isFailedAnswer(result: unknown): boolean {
 }
 
 /**
- * Carries the body's answer out of the transaction. `refused`: the body answered a 4xx or
- * 5xx, and the throw rolls the write back. `unaudited`: on a client that cannot roll back
- * the audit insert failed after the change had already stood, so the answer stands with it. One class for both,
- * so nothing else a body throws is mistaken for either.
+ * Carries a refused answer out of the transaction: the body answered a 4xx or 5xx, and the
+ * throw rolls the write back. A class of its own, so nothing else a body throws is
+ * mistaken for it.
  */
-class CarriedAnswer {
-  readonly kind: "refused" | "unaudited";
+class RefusedAnswer {
   readonly result: unknown;
-  readonly error: unknown;
-  readonly actions: readonly string[];
 
-  constructor(
-    kind: "refused" | "unaudited",
-    result: unknown,
-    error: unknown = null,
-    actions: readonly string[] = []
-  ) {
-    this.kind = kind;
+  constructor(result: unknown) {
     this.result = result;
-    this.error = error;
-    this.actions = actions;
   }
 }
 
@@ -314,38 +295,19 @@ export async function adminWrite<T>(
           body({ actor, afterCommit, audit, db })
         );
         if (isFailedAnswer(answer)) {
-          throw new CarriedAnswer("refused", answer);
+          throw new RefusedAnswer(answer);
         }
-        try {
-          await insertAuditEvents(db, rows);
-        } catch (error) {
-          // In a real transaction the throw rolls the change back with its rows, and the
-          // request fails. Without one the change has already stood, so the answer stands.
-          if (TRANSACTION_IS_ATOMIC) {
-            throw error;
-          }
-          throw new CarriedAnswer(
-            "unaudited",
-            answer,
-            error,
-            rows.map((row) => row.action)
-          );
-        }
+        // A failed insert throws, which rolls the change back with its rows and fails
+        // the request.
+        await insertAuditEvents(db, rows);
         return answer;
       })
     );
   } catch (error) {
-    if (!(error instanceof CarriedAnswer)) {
-      throw error;
-    }
-    if (error.kind === "refused") {
+    if (error instanceof RefusedAnswer) {
       return error.result as T;
     }
-    log.error("the audit rows of an admin write were not written", {
-      actions: error.actions,
-      err: error.error,
-    });
-    result = error.result as T;
+    throw error;
   }
   await runAfterCommit(c, tasks, log);
   return result;
