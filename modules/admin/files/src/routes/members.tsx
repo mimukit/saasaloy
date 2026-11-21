@@ -170,6 +170,7 @@ function activeColumns(
     {
       id: "name",
       header: "Name",
+      grow: true,
       value: (member) => member.name,
       sortable: true,
       cell: (member) => (
@@ -219,6 +220,7 @@ function removedColumns(
     {
       id: "name",
       header: "Name",
+      grow: true,
       value: (member) => member.name,
       sortable: true,
       cell: (member) => (
@@ -1243,7 +1245,11 @@ function Members() {
             <EmptyState
               icon={UsersIcon}
               title="No removed members"
-              description="A member you remove shows here, and you can restore them."
+              description={
+                superadmin
+                  ? "Members you remove appear here. You can restore them."
+                  : undefined
+              }
             />
           }
         />
