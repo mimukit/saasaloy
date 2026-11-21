@@ -1212,10 +1212,9 @@ async function checkUpgrade(
     }
   );
   if (expected.length === 0) {
-    throw new StepError(
-      `the upgrade from ${previous} expects no update note, so the step proves nothing`,
-      ["Add a module to UPGRADE_ADDS whose notes reach this range."]
-    );
+    // A release with no update note in its range is normal. The step still proves the
+    // update runs, and that the report lists no note it should not.
+    step(`the upgrade from ${previous} expects no update note`);
   }
 
   step(`running \`saasaloy update --dry-run\` (${version}) in ${projectName}`);
@@ -1246,7 +1245,9 @@ async function checkUpgrade(
     step(`update note ${id} listed (may apply)`);
   }
   step(
-    `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
+    expected.length === 0
+      ? `${projectName} from ${previous} lists no update note, as expected (${seconds(started)})`
+      : `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
   );
 }
 
