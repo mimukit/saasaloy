@@ -5,7 +5,7 @@
   "description": "Tenant isolation with requireTenant(c) and the forTenant(db, tenantId) guard, plus custom roles and a Roles admin screen.",
   "stage": "teams",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "database", "auth", "teams", "admin"],
   "dependencies": [],
   "envVars": {},
@@ -13,33 +13,6 @@
     "The deployed projects table survives this removal. Run db:generate and review the resulting drop migration before you apply it.",
     "Every route written against requireTenant, forTenant or requirePermission stops compiling once packages/auth/src/tenant.ts, packages/auth/src/permissions.ts and packages/db/src/tenant.ts are gone. Rewrite or delete those routes before you remove this module.",
     "Custom roles stored in the organization_roles table stay live after this removal: teams keeps dynamicAccessControl, so members holding a custom role keep its statements, but the /roles screen that edits and deletes those roles goes with this module. Edit, reassign or delete custom roles before you remove this module, or manage them afterwards through the Better Auth organization API."
-  ],
-  "patches": [
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/tenant",
-      "call": "tenantRoute",
-      "import": { "name": "tenantRoute", "from": "./routes/tenant" }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/projects",
-      "call": "projects",
-      "import": { "name": "projects", "from": "./routes/projects" }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Manage",
-      "entry": { "to": "/roles", "label": "Roles" },
-      "icon": { "name": "ShieldCheckIcon", "from": "lucide-react" }
-    }
   ],
   "files": [
     { "path": "files/db/tenant.ts", "target": "@db/tenant.ts" },
@@ -113,6 +86,46 @@
     {
       "path": "files/admin/components/permission-grid.tsx",
       "target": "@admin/components/permission-grid.tsx"
+    }
+  ],
+  "tables": [
+    {
+      "id": "multitenant.resolvers",
+      "file": "@auth/tenant.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.routes",
+      "path": "/tenant",
+      "call": "tenantRoute",
+      "import": {
+        "name": "tenantRoute",
+        "from": "./routes/tenant"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/projects",
+      "call": "projects",
+      "import": {
+        "name": "projects",
+        "from": "./routes/projects"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Manage",
+      "entry": {
+        "to": "/roles",
+        "label": "Roles"
+      },
+      "import": {
+        "name": "ShieldCheckIcon",
+        "from": "lucide-react"
+      }
     }
   ],
   "agent": {

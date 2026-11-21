@@ -8,7 +8,7 @@ This note needs `api/0006-agent-scope`. Apply it first, or `pnpm typecheck` fail
 
 The callable public reads in `apps/api/src/routes/cms.ts`, `GET /cms/:collection/entries` and `GET /cms/:collection/entries/:slug`, add `scope: null` to their agent statement: they are public and demand no key. No gate, response or type changes.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/routes/cms.ts`, if you edited it. Keep your edits and take `scope: null` in each callable statement.
 

@@ -5,7 +5,7 @@
   "description": "A queue provider on Cloudflare Queues, which needs a paid Workers plan.",
   "stage": "scale",
   "needs": ["cloudflare-paid"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["queue"],
   "dependencies": [],
   "envVars": {},
@@ -46,12 +46,11 @@
       "kind": "wrangler-binding",
       "bindingType": "triggers.crons",
       "entry": "* * * * *"
-    },
+    }
+  ],
+  "entries": [
     {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "providers",
+      "table": "queue.providers",
       "call": "cloudflare",
       "import": {
         "name": "cloudflare",
@@ -59,10 +58,7 @@
       }
     },
     {
-      "file": "apps/api/src/worker.ts",
-      "kind": "plugin-array",
-      "exportName": "worker",
-      "arrayProp": "handlers",
+      "table": "worker.handlers",
       "call": "cloudflareQueueHandlers",
       "import": {
         "name": "cloudflareQueueHandlers",

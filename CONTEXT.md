@@ -18,7 +18,7 @@ Every SaaS needs the same parts (API, database, auth, admin, billing, email, job
 - Add a module with its `dependsOn` chain resolved and installed first.
 - Swap a vendor at runtime through a provider module, with a local `-console` or `-memory` provider for offline work, or pick a database at `add` time through a driver module.
 - Collect every environment value into one gated key list, and deploy every Worker with one checked command.
-- Remove a module through its manifest, and update the base and modules with a merge plan for edited files.
+- Remove a module by a render without it, and update the base and modules with a three-way merge of edited files.
 - Ship agent context in every project: `AGENTS.md`, `CLAUDE.md`, `DESIGN.md` and a skill per installed module.
 - Author a module with `saasaloy new`, and serve it from any GitHub repo that has a `modules/` directory.
 
@@ -34,7 +34,7 @@ An open-source **composable SaaS accelerator**: a CLI + module system that scaff
 _Avoid: boilerplate, starter template._
 
 ### Base
-The scaffold `saasaloy init` produces: `apps/web` (Astro), `packages/ui`, `packages/config`, `packages/env`, `packages/tooling` and `packages/tsconfig`, and nothing churny. It is inert on *functional* surfaces — no services, auth, database or network dependencies — which is where the anti-rot thesis actually bites. It is not bare, though: `packages/ui` owns the **design layer** (the Tailwind 4 theme, the vendored shadcn primitives, and the [blocks](#block) the landing page is composed from), because presentation dependencies rot aesthetically before they rot dangerously — a smaller blast radius than auth's, not an exemption from dependency auditing ([ADR 0022](docs/adr/0022-adr-design-layer-ships-in-the-base-2026-08-06.md)). Base files are recorded at `init` under the reserved module name `base` in `.saasaloy/manifest.json`, with a `base` record in `saasaloy-lock.json` naming the CLI version and template hash, so `outdated`, `update` and `doctor` treat the base like a module that ships with the CLI ([ADR 0032](docs/adr/0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)). Files the template declares as **seed** are recorded but never updated.
+The scaffold `saasaloy init` produces: `apps/web` (Astro), `packages/ui`, `packages/config`, `packages/env`, `packages/tooling` and `packages/tsconfig`, and nothing churny. It is inert on *functional* surfaces — no services, auth, database or network dependencies — which is where the anti-rot thesis actually bites. It is not bare, though: `packages/ui` owns the **design layer** (the Tailwind 4 theme, the vendored shadcn primitives, and the [blocks](#block) the landing page is composed from), because presentation dependencies rot aesthetically before they rot dangerously — a smaller blast radius than auth's, not an exemption from dependency auditing ([ADR 0022](docs/adr/0022-adr-design-layer-ships-in-the-base-2026-08-06.md)). Base files are recorded at `init` under the reserved module name `base` in `.saasaloy/manifest.json`, with a `base` record in `saasaloy-lock.json` naming the CLI version and template hash, so `outdated`, `update` and `doctor` treat the base like a module that ships with the CLI ([ADR 0032](docs/adr/0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)). Files the template declares as seed or owned are [`once`](#file-class) files: written when new, then never updated.
 
 ### Block
 A marketing-page composition in `packages/ui/src/blocks/` (for example `navbar`, `hero`, `pricing-table`, `faq` and `footer`), each entirely self-contained in one props-driven `.tsx` with its own copy defaults, and reachable only at its own `@repo/ui/blocks/<name>` subpath (never re-exported from the package root). A block composes vendored shadcn primitives; a primitive is the single control it composes. Filenames are semantic kebab-case, not shadcn's registry-style `{category}-{NN}` numbering. A [module](#module) that ships page UI ships it as a block under `@ui/blocks/`, and the owner places it by hand ([ADR 0030](docs/adr/0030-adr-module-ui-ships-as-a-ui-package-block-2026-09-02.md)); the base blocks read their copy from `content/landing.ts`, a module's block carries its own. The `shell` and `command` modules also ship [containers](#container) and components. A block is presentational: one that has to reach the network takes a function prop, and a small island under `apps/web/src/components/` supplies it, so `packages/ui` imports no api package.
@@ -85,7 +85,7 @@ How long a `useCommands` registration lives, and so which [shortcuts](#shortcut)
 _Avoid: context, layer._
 
 ### Shell extension
-A module's part of every shell app, declared as `{ id, Provider, header? }`: `Provider` wraps the whole layout and `header` renders in the header's right slot. Each app holds its own frozen list in `src/components/shell-extensions.ts`, built with `defineShellExtensions({ extensions: [] })` and passed to `ShellLayout`; the first entry is the outermost provider. A module ships a factory, such as `commandExtension()`, and each app's own descriptor carries a `plugin-array` patch, gated `when: { installed: ["<module>"] }`, that appends a bare call to it, so the module names no app ([ADR 0056](docs/adr/0056-adr-ui-contract-and-seam-in-shell-engine-in-command-2026-10-24.md)). Two entries with one `id` throw at module load.
+A module's part of every shell app, declared as `{ id, Provider, header? }`: `Provider` wraps the whole layout and `header` renders in the header's right slot. Each app holds its own frozen list in `src/components/shell-extensions.ts`, built with `defineShellExtensions({ extensions: [...adminShellExtensions] })` and passed to `ShellLayout`; the first entry is the outermost provider. A module ships a factory, such as `commandExtension()`, and each app's own descriptor carries a [table row](#table-row) in its `<app>.shellExtensions` table, gated `when: { installed: ["<module>"] }`, that calls it, so the module names no app ([ADR 0056](docs/adr/0056-adr-ui-contract-and-seam-in-shell-engine-in-command-2026-10-24.md)). Two entries with one `id` throw at module load.
 _Avoid: plugin, slot._
 
 ### Team
@@ -93,7 +93,7 @@ The product word for the `teams` feature module, which adds Better Auth organiza
 _Avoid: using team to mean an organization subdivision unless the nested plugin feature is enabled later._
 
 ### Provider module
-A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-plunk`, `email-console`, `sms-console`, `sms-khudebarta`, `payment-console`, `payment-manual`, `payment-bkash`, `payment-sslcommerz`, and the planned `email-resend` and `sms-twilio`. It carries a single file into the capability's `providers/` folder plus the patch that registers it, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. `sms` shows the surface can be empty on one side and still worth the module: it has no Cloudflare-native provider at all, because Cloudflare has no SMS product. The authoring guide is `.agents/skills/create-provider/`. Several providers coexist in one project and `<CAP>_PROVIDER` picks between them at runtime, with no fallback in either direction (except `logger`, where an unset `LOGGER_PROVIDER` selects the first registered provider). **A three-question test decides the shape**, not the word "stateless": a capability takes providers when the project owns neither the schema nor the migrations, and either a swap moves no data, or the alternate implementation *adds* one file where a [driver module](#driver-module) would *replace* files the core owns. The third question outranks the second, which is why `storage` takes providers although a swap copies every object by hand ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md), amended by [ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md); the stateless/stateful wording of [ADR 0001](docs/adr/0001-adr-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment no longer decides). A provider promises only that a project can *start* on a different vendor. It promises no migration of data already written. The one-file rule covers the *runtime* surface only: a provider that needs a Workers binding may carry several descriptor patches, and it registers any [handler set](#handler-set) through `apps/api/src/worker.ts`, never through the deploy tooling.
+A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-plunk`, `email-console`, `sms-console`, `sms-khudebarta`, `payment-console`, `payment-manual`, `payment-bkash`, `payment-sslcommerz`, and the planned `email-resend` and `sms-twilio`. It carries a single file into the capability's `providers/` folder plus the [table row](#table-row) that registers it in `<cap>.providers`, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. `sms` shows the surface can be empty on one side and still worth the module: it has no Cloudflare-native provider at all, because Cloudflare has no SMS product. The authoring guide is `.agents/skills/create-provider/`. Several providers coexist in one project and `<CAP>_PROVIDER` picks between them at runtime, with no fallback in either direction (except `logger`, where an unset `LOGGER_PROVIDER` selects the first registered provider). **A three-question test decides the shape**, not the word "stateless": a capability takes providers when the project owns neither the schema nor the migrations, and either a swap moves no data, or the alternate implementation *adds* one file where a [driver module](#driver-module) would *replace* files the core owns. The third question outranks the second, which is why `storage` takes providers although a swap copies every object by hand ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md), amended by [ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md); the stateless/stateful wording of [ADR 0001](docs/adr/0001-adr-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment no longer decides). A provider promises only that a project can *start* on a different vendor. It promises no migration of data already written. The one-file rule covers the *runtime* surface only: a provider that needs a Workers binding may carry several descriptor patches, and it registers any [handler set](#handler-set) through `apps/api/src/worker.ts`, never through the deploy tooling.
 _Taxonomy wart, on purpose: a provider module is typed `saasaloy:feature`, because `registry-item.schema.json` constrains `type` to `saasaloy:capability | saasaloy:feature`. It isn't a feature in the sense above — it adds no user-facing behavior. A third tier would be a descriptor-format change, and one wart is cheaper than that._
 
 ### Driver module
@@ -117,19 +117,23 @@ An auto-discovery folder or barrel a module drops into without patching another 
 _Avoid: extension hook._
 
 ### Registration table
-A file a capability publishes that names its entries **statically**, so a type can be derived from it — `apps/api/src/index.ts`'s `.route()` chain, a capability's `providers` barrel array. A module still drops its file, but it registers by patching one line into the table, and `remove` takes that line back out. The opposite of a [convention-based extension point](#convention-based-extension-point): a scan needs no patch and yields no type, a table needs a patch and yields one ([ADR 0028](docs/adr/0028-adr-routes-register-by-chained-route-patch-2026-08-28.md)).
-_Avoid: route manifest, registry (that is a [registry source](#registry-source))._
+A list that names its entries **statically**, so a type can be derived from it: the api's `.route()` chain, a capability's `providers` array. The module that owns it declares it in `registry-item.json` under `tables` as `{ id, file, shape }`, and the base declares its own in `_saasaloy-base.json`. The [render](#render) writes each table as a [`generated`](#file-class) file named `<name>.generated.ts` beside the file that used it, exported under the camelCase of its id (`email.providers` is `emailProviders`). The shape is `calls` (`[a(), b()]`), `objects` (`[{ … }]`, typed `T[]` when the table names a `type`), `routes` (a function such as `apiRoutes(app)` that chains `.route(path, router)` onto the app it takes) or `nav` (`[{ area, group, …row, icon }] as const`). The file the owner keeps imports the export and spreads it: the owning module's inline entries first, then the spread, then the owner's own entries. A module registers by a [table row](#table-row), so a render without the module has no row for it. The opposite of a [convention-based extension point](#convention-based-extension-point): a scan needs no row and yields no type, a table needs a row and yields one ([ADR 0028](docs/adr/0028-adr-routes-register-by-chained-route-patch-2026-08-28.md), plan 0116 Phase 7).
+_Avoid: route manifest, registry (that is a [registry source](#registry-source)), table patch (the four table patch kinds are deleted)._
+
+### Table row
+One item a module adds to a [registration table](#registration-table), declared in its `registry-item.json` under `entries` with the `table` id. The shape of the table decides the other fields: `call` and `import` for `calls`, `entry` for `objects`, `path`, `call` and `import` for `routes`, and `area`, `group`, `entry` and the icon as `import` for `nav`. `order` sorts the rows, 1000 when absent, then the module name; one module's rows keep their descriptor order. `when` gates a row like any [conditional entry](#conditional-entry-when). A row that repeats the call, the path or the nav target of an earlier row is written once.
+_Avoid: entry patch, registration patch. A row is data the render prints, not an edit to a file._
 
 ### Handler set
-An object a [provider module](#provider-module) contributes to `apps/api/src/worker.ts`'s `handlers` [registration table](#registration-table), carrying the non-`fetch` Worker entry points it needs: `queue` for a Queues consumer, `scheduled` for a Cron Trigger. `worker.ts` is the wrangler `main`; its local `defineWorker({ fetch: app.fetch, handlers: [] })` merges every registered set into the object the Worker exports, and `apps/api/src/index.ts` stays the Hono app with `export default app`, so ADR 0028's `chained-route` codemod is untouched. A set gates on its capability's `<CAP>_PROVIDER` and returns early when another provider is selected ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)).
+An object a [provider module](#provider-module) contributes to the `worker.handlers` [registration table](#registration-table) (`apps/api/src/worker.generated.ts`), carrying the non-`fetch` Worker entry points it needs: `queue` for a Queues consumer, `scheduled` for a Cron Trigger. `worker.ts` is the wrangler `main`; its local `defineWorker` call spreads `workerHandlers` and merges every registered set into the object the Worker exports, and `apps/api/src/index.ts` stays the Hono app with `export default app`. A set gates on its capability's `<CAP>_PROVIDER` and returns early when another provider is selected ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)).
 _Avoid: worker export, entry point — the entry is `worker.ts` itself, a handler set is one contribution to it._
 
 ### Job
-A unit of work the `queue` capability runs outside the request: a name, an optional payload schema, and a handler, declared once with `defineJob` and registered in `packages/queue`'s `jobs` [registration table](#registration-table). A caller enqueues it by name and never learns which provider carries it. A job declared `durable: true` runs as ordered steps with `ctx.step` and `ctx.sleep` between them.
+A unit of work the `queue` capability runs outside the request: a name, an optional payload schema, and a handler, declared once with `defineJob` and registered in the `queue.jobs` [registration table](#registration-table). A caller enqueues it by name and never learns which provider carries it. A job declared `durable: true` runs as ordered steps with `ctx.step` and `ctx.sleep` between them.
 _Avoid: task, worker, background job._
 
 ### Schedule
-A named binding of a five-field cron expression to a [job](#job), declared with `defineSchedule` in code and registered in `packages/queue`'s `schedules` table. A feature never patches `wrangler.jsonc` for one: `queue-cloudflare` installs a single `* * * * *` trigger, and its [handler set](#handler-set) matches every schedule against the tick truncated to the minute and enqueues the due ones. The tick enqueues, it never runs a job inline, so a scheduled run gets the same retries and dead-letter path as any other.
+A named binding of a five-field cron expression to a [job](#job), declared with `defineSchedule` in code and registered in the `queue.schedules` table. A feature never patches `wrangler.jsonc` for one: `queue-cloudflare` installs a single `* * * * *` trigger, and its [handler set](#handler-set) matches every schedule against the tick truncated to the minute and enqueues the due ones. The tick enqueues, it never runs a job inline, so a scheduled run gets the same retries and dead-letter path as any other.
 _Avoid: cron job, timer — `cron` is the expression, a schedule is the registered pairing._
 
 ### Plan
@@ -176,17 +180,17 @@ The channel for a value a project checks into its repo and ships identically to 
 _Avoid: settings, constants, app config for the object; `config` for a module descriptor (`registry-item.json`) or for `saasaloy.json`._
 
 ### Section
-One capability's contribution to [config](#config): a keyed object declared with `defineSection("<key>", { … })` in `packages/config/src/sections/<key>.ts`, registered by a `plugin-array` patch into `defineSections({ sections: [] })`. The key is the module name, flat and unique — `saasaloy add` refuses two modules claiming one, naming both. A section file lives in `packages/config` rather than in the capability, so the config package stays the leaf everything may import, and it reaches its helper by subpath (`@repo/config/define`).
+One capability's contribution to [config](#config): a keyed object declared with `defineSection("<key>", { … })` in `packages/config/src/sections/<key>.ts`, registered by a [table row](#table-row) in the `config.sections` table, which `defineSections` spreads. The key is the module name, flat and unique — `saasaloy add` refuses two modules claiming one, naming both. A section file lives in `packages/config` rather than in the capability, so the config package stays the leaf everything may import, and it reaches its helper by subpath (`@repo/config/define`).
 _Avoid: namespace, group. A section never reads another section._
 
 ### Project override
-`packages/config/src/project.ts`, the one file in `packages/config` a project owner is expected to edit, and a declared seed file so `saasaloy update` never rewrites it ([ADR 0034](docs/adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)). It is typed as a partial of the composed shape, so a key no installed [section](#section) defines fails `typecheck`. The merge is one level below the section: a leaf value is replaced, a nested record or an array is replaced whole.
+`packages/config/src/project.ts`, the one file in `packages/config` a project owner is expected to edit, and a [`once`](#file-class) file, so `saasaloy update` never rewrites it ([ADR 0067](docs/adr/0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md)). It is typed as a partial of the composed shape, so a key no installed [section](#section) defines fails `typecheck`. The merge is one level below the section: a leaf value is replaced, a nested record or an array is replaced whole.
 _Avoid: local config, overrides file, user config._
 
 ## Environment values
 
 ### Service
-A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `app`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and the `api`, `admin` and `app` modules each append their own with a `const-array` patch.
+A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `app`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the list and spreads the `env.services` [registration table](#registration-table) from `services.generated.ts`; the base seeds the `web` and `deploy` rows inline and the `api`, `admin` and `app` modules each add their own [table row](#table-row).
 _Avoid: "app" as a word for any service: `app` is the name of one service, the customer SPA at `apps/app`. `deploy` is a service and is not an app, and `packages/*` holds no service at all._
 
 ### Key list
@@ -200,13 +204,13 @@ Where `pnpm env:setup` gets its values, selected by `ENV_SOURCE`. The built-in `
 A key listed in `CHECKOUT_OWNED_KEYS` whose value on disk survives every `pnpm env:setup`, whoever wrote it. A per-branch `DATABASE_URL` is the case it exists for. `packages/env` never learns what a database is, only that some key is the checkout's to set.
 
 ### Preset
-A capability package's `src/env-preset.ts`: the `definePreset` call naming the keys that package reads, with a schema and a description for each. A service's `env.ts` folds the presets it installed into one `createEnv`, and a provider module appends its own preset to the capability's with a `plugin-array` patch. `scripts/env-presets.test.ts` fails when a preset and its descriptor's `envVars` disagree.
+A capability package's `src/env-preset.ts`: the `definePreset` call naming the keys that package reads, with a schema and a description for each. A service's `env.ts` folds the presets it installed into one `createEnv` (the api spreads the `api.envPresets` table), and a provider module adds its own preset as a [table row](#table-row) in the capability's `<cap>.envPresets` table. `scripts/env-presets.test.ts` fails when a preset and its descriptor's `envVars` disagree.
 _Avoid: schema for this. The schema is one key's validator; the preset is the set._
 
 ## Production deploy
 
 ### Deploy target
-A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30), and the api, admin and app modules append `api` (10), `admin` (20) and `app` (25) with a `const-array` patch, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
+A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30) inline, and the api, admin and app modules add `api` (10), `admin` (20) and `app` (25) as [table rows](#table-row) of the `tooling.deployTargets` [registration table](#registration-table) in `targets.generated.ts`, each with a row `order` equal to its object's `order`, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
 _Avoid: "app" as a word for any deploy target: `app` names one of them. A deploy target is a [service](#service) that has a Worker; the `deploy` service has none._
 
 ### Smoke check
@@ -303,21 +307,55 @@ _Avoid: staff role._
 The Better Auth plugin on the admin instance that keeps the admin group under `superadmin`. Before every `/admin/*` endpoint it asks `rankDenial()`: a caller who is not `superadmin` may not change an account that holds an [admin-app role](#admin-app-role), may not grant such a role, and may not call an `/admin/*` path its table does not name; nobody may take the role from the last `superadmin`; and impersonation is refused for everyone.
 _Avoid: role hierarchy, admin lock._
 
-## Registry & applier
+## Registry & engine
 
-### Applier
-The engine behind `saasaloy add`: it obtains a module descriptor from a [registry source](#registry-source), resolves file targets through the alias map, topologically sorts prerequisite modules, and applies files + npm deps + config patches — all `--dry-run`/`--diff`-able. Descriptors are fetched from a remote GitHub repo by default ([ADR 0012](docs/adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md)); a local checkout is a dev/offline override.
-_Avoid: registry (the applier is the engine; the "registry" is a [registry source](#registry-source))._
+### Engine
+The code behind `init`, `add`, `remove`, `update` and `testing <mode>`: one operation, `apply(oldLock, newLock)`, in `packages/cli/src/engine/apply.ts`. It [renders](#render) the old lock and the new lock, compares each path with the disk, and picks one action for it: leave, write, delete, merge or report. `add X` puts X in the lock's `requested` list, `remove X` takes it out, and `update` moves the release. Every action is `--dry-run`/`--diff`-able ([ADR 0066](docs/adr/0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md)).
+_Avoid: applier, updater, remover (the three old engines it replaced); registry (that is a [registry source](#registry-source))._
+
+### Render
+The pure function `render({ payload, requested, options })` in `packages/cli/src/engine/render.ts`. It resolves the set, applies the `when` and `onlyWith` gates, copies the template and the module files to their targets, applies each patch as a transform in memory in one fixed order (dependency order, then module name), writes each [registration table](#registration-table) from its [table rows](#table-row), and returns each path with its bytes, [file class](#file-class), module and source path. It reads no disk and no network, so the same set gives the same bytes in any install order, and a remove is a render without the module.
+_Avoid: apply a patch, reverse a patch. A patch has no inverse and needs none._
+
+### File class
+The one rule for each rendered path that says what a later run may do with it, decided in `packages/cli/src/engine/classes.ts` and recorded in the manifest ([ADR 0067](docs/adr/0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md)):
+- **`generated`**: the CLI writes it in full on every run. An owner edit refuses the run with exit `2`, and `--force` overwrites it.
+- **`merged`**: a three-way merge of the old render, the new render and the disk, by line for text and by key for `package.json`, `wrangler.jsonc`, `tsconfig.json`, `turbo.json` and `saasaloy.json`.
+- **`once`**: written when the path is new, then the project's. The base's `seedFiles` and `ownedFiles` and a module entry's `seed: true` all mean `once`. `update --merge <path>` merges one on request.
+
+_Avoid: managed file (every tracked file has a class now), seed (say `once`), owned file (say `once`)._
+
+### Owned file
+Retired. A base file listed in `_saasaloy-base.json`'s `ownedFiles` (the blocks, the components, the styles, the layout) is a [`once`](#file-class) file. Four of them held a [registration table](#registration-table) (`packages/env/src/services.ts`, `packages/env/src/sources.ts`, `packages/tooling/src/targets.ts`, `packages/ui/src/blocks/navbar.tsx`); the tables now live in `generated` files beside them, and the four are `once` like the rest.
+
+### Seed file
+Retired. A base file in `_saasaloy-base.json`'s `seedFiles` (`README.md`, `apps/web/DESIGN.md`, the landing page and its copy) and a module entry marked `"seed": true` are both [`once`](#file-class) files. A module seed is still the extension point a module file imports from, at `apps/admin/src/extend/<name>.ts(x)` or `apps/api/src/extend/<name>.ts` ([ADR 0060](docs/adr/0060-adr-a-module-file-may-be-a-seed-written-once-2026-11-04.md)). A seed the template moved stays in `retiredSeedFiles`.
+
+### Base of a merge
+The render the CLI wrote last time, which a three-way merge compares the disk and the new render against. It is the render of the old lock from the [payload](#payload-cache) at the old ref, accepted only when its sha256 equals the manifest hash; otherwise the render at the record's own `version`, including a side rendered with another driver for a file a driver gates off. With no match, the merge writes two-way markers, as git writes for "both added" ([ADR 0068](docs/adr/0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)).
+_Avoid: base snapshot, base copy. No copy of the base lives in the project. "Base" alone means the [base](#base) template._
+
+### Payload cache
+The folder for each user that holds the base template and every module at one ref: `$XDG_CACHE_HOME/saasaloy/payload/<source>@<ref>/`, else `~/.cache/saasaloy/payload/<source>@<ref>/`, and `SAASALOY_CACHE_DIR` in tests. A fetch fills it, and a later run reads it. A run that needs a merge, with a cold cache and no network, refuses with exit `2`. The template at the running CLI's release is the one bundled in the CLI.
+_Avoid: snapshot._
+
+### Pending merge
+A file the last run left with conflict markers, listed in the manifest's `pendingMerges`. The entry clears when no marker line remains in the file, so no flag records a resolution. While one still holds a marker line, `add`, `remove` and `update` refuse with exit `2`.
+_Avoid: unresolved file, waiting merge._
+
+### Conversion
+What the first `update` of the new engine does to a project an older CLI wrote: it reads the version 1 manifest and lock, finds each file's [base](#base-of-a-merge) by its recorded hash across the lock's release, the old-engine releases 0.1.0 to 0.9.0 newest first, and the lock's module commits, and writes version 2 records. A file with no base becomes a file on both sides. Only `update` converts, on a clean tree, as one reviewable diff that `--abort` reverses.
+_Avoid: migration (that word means a database migration), adoption._
 
 ### Registry source
-Where the applier fetches descriptors from: a GitHub repo (`owner/repo`) by convention (`modules/<name>/registry-item.json` + `files/`), resolved to a commit SHA and fetched via giget. `SAASALOY_REGISTRY_DIR` points the applier at a local checkout for dev/offline. The repo *is* the registry — no build step, no committed index, no central submission.
+Where the engine fetches descriptors from: a GitHub repo (`owner/repo`) by convention (`modules/<name>/registry-item.json` + `files/`), resolved to a commit SHA and fetched via giget into the [payload cache](#payload-cache). `SAASALOY_REGISTRY_DIR` points the engine at a local checkout for dev/offline. The repo *is* the registry — no build step, no committed index, no central submission.
 _Avoid: registry server, registry service._
 
 ### Default registry
-The built-in registry source (`mimukit/saasaloy`) a bare `saasaloy add <name>` resolves against. An explicit `owner/repo/name` [module coordinate](#module-coordinate) targets a third-party registry instead.
+The built-in registry source (`mimukit/saasaloy`) a bare `saasaloy add <name>` resolves against, at the release tag of the CLI that runs. It moves as one release: `update` moves every default module together, and `add` refuses a `@ref` on it. An explicit `owner/repo/name` [module coordinate](#module-coordinate) targets a third-party registry instead.
 
 ### Module coordinate
-How a module is addressed on the `saasaloy add` command line: `name` (default registry at the release tag of the CLI that runs, ADR 0062) | `name@ref` (default registry at a branch/tag/SHA, such as `@main`) | `owner/repo/name` | `owner/repo@ref/name` (pinned branch/tag/SHA) | `owner/repo` (no module ⇒ interactive picker over that repo).
+How a module is addressed on the `saasaloy add` command line: `name` (default registry at the release tag of the CLI that runs, ADR 0062) | `owner/repo/name` | `owner/repo@ref/name` (pinned branch/tag/SHA) | `owner/repo` (no module ⇒ interactive picker over that repo). `name@ref` on the default registry is refused by `add`; `list @main` still reads `main`.
 
 ### `registry-item.json`
 A module descriptor, shadcn-shaped: `files[]` (path → alias target), `dependsOn[]`, `dependencies[]` (npm), `patches`, and an `agent` block.
@@ -326,67 +364,58 @@ A module descriptor, shadcn-shaped: `files[]` (path → alias target), `dependsO
 The descriptor field pinning the skill folder(s) a module ships: `{ "skills": ["skills/saasaloy-<name>"] }`.
 
 ### `saasaloy.json`
-The consumer manifest in a generated project: the alias map plus the list of installed modules (which drives `dependsOn` resolution). A module enters `installed` only when the run that applied it wrote every file it planned, because bookkeeping describes disk. A half-applied module stays out of the list and a plain re-run of `saasaloy add` re-plans and completes it ([ADR 0031](docs/adr/0031-adr-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
+The consumer manifest in a generated project: the alias map plus the list of installed modules (which drives `dependsOn` resolution). The engine renders it and merges it by key, so the module aliases and `installed` stay true and an owner's own alias survives.
 
 ### `.saasaloy/manifest.json`
-Managed-file tracking: each file or skill a module applied, recorded with a content hash and its owning module, so update and `remove` know exactly what to undo. Base template files, `AGENTS.md` and `CLAUDE.md` included, are entries owned by the `base` module ([ADR 0032](docs/adr/0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)). An entry means those bytes are on disk ([ADR 0006](docs/adr/0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md)), which is why entries for a module that `saasaloy.json` does not list as installed mean a partial apply, and `saasaloy doctor` reports it as one ([ADR 0031](docs/adr/0031-adr-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
+The record of each file the engine wrote, at version 2: per path its `module`, its source path `from`, its [file class](#file-class), the sha256 `hash` of the raw render (before Prettier, never the bytes on disk), and the `version` of the release that wrote that render. It also holds `pendingMerges`, `pendingNotes` and `doneNotes`. Base template files are entries owned by the `base` module. A tracked file the owner deleted keeps its record and stays deleted; `update --restore <path>` writes it again.
+_Avoid: managed entry, adopted entry, tombstone. Version 2 has no `adopted`, `mergedWith` or `deleted` flag._
 
 ### Testing mode
 The one value in `saasaloy.json` under `testing.mode` that says how much testing a project wants: `off`, `tests-after` or `tdd`. An absent key reads as `off`, so testing is opt-in. `off` ships no module test file; `tests-after` ships them and asks each change for its test; `tdd` ships them and asks for the test first. `init --testing=<mode>` sets it, and `saasaloy testing <mode>` changes it, rewriting the marked block in the root `AGENTS.md` in the same run. The base skill `saasaloy-testing` maps each kind of change to its test ([ADR 0053](docs/adr/0053-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md)).
 _Avoid: test level, TDD flag. There is one mode, never a separate TDD switch._
 
 ### `saasaloy-lock.json`
-Machine-owned provenance at the consumer root: per installed module, its [registry source](#registry-source) + ref + resolved commit **SHA** + resolved `dependsOn` graph. The npm-style lock to `saasaloy.json`'s intent — it makes remote installs reproducible (the SHA *is* the integrity anchor), so the default ref can be a live branch rather than a hand-pinned tag.
+Machine-owned provenance at the consumer root: `requested`, the modules the owner asked for, and per installed module its [registry source](#registry-source) + ref + resolved commit **SHA** + resolved `dependsOn` graph, plus a `base` record that names the CLI release. The rest of the installed set derives from `requested`. The SHA *is* the integrity anchor that makes remote installs reproducible.
 _Avoid: putting resolved SHAs in `saasaloy.json`._
+
+### Journal
+`.saasaloy/journal.json`, written before the first write of a run and removed after the manifest and the lock. A journal left behind marks an unfinished run: every later run refuses with exit `2` until `--abort` restores the files from the backup the run made before it wrote.
+_Avoid: lock file (that is [`saasaloy-lock.json`](#saasaloy-lockjson)), re-run as recovery._
 
 ### File aliases
 The descriptor's path targets: `@<name>` keys mapped to workspace paths in `saasaloy.json`. The base seeds `@web`, `@ui`, `@env` and `@config`, and each module [scaffold](#scaffold) adds its own, such as `@api` and `@db`.
 
 ### Ledger
-The three files that record what Saasaloy wrote into a project: `.saasaloy/manifest.json`, `saasaloy.json` and `saasaloy-lock.json`. They describe what is on disk even after a failed write, and only `lib/ledger.ts` writes them.
+The three files that record what Saasaloy wrote into a project: `.saasaloy/manifest.json`, `saasaloy.json` and `saasaloy-lock.json`. The engine writes the project first and the manifest and the lock last, so a run that stops halfway leaves the old ledger and a [journal](#journal).
 
 ### Scaffold
 A descriptor's `scaffolds[]` entry: a new workspace a capability creates, with files relative to that workspace and the aliases it registers into `saasaloy.json` ([ADR 0013](docs/adr/0013-adr-module-dependency-ownership-and-scaffolds-files-split-2026-07-23.md)).
 
 ### Conditional file entry (`onlyWith`)
-A `files[]` or `scaffolds[].files[]` entry that installs **only when a named module is in the resolved install set** — this run's dependency graph plus what `saasaloy.json` and the lock say is already there. Two entries may share one `target` under disjoint conditions, which is how `auth` and `waitlist` ship a `sqlite-core` and a `pg-core` variant of the same table file and let the installed [driver module](#driver-module) pick. `listModuleFiles` (`packages/cli/src/lib/applier.ts`) filters before either engine plans, so the unchosen variant never reaches the lock, the manifest or drift detection. A target whose entries are all conditional and none match is a plan-time error, not a silent skip.
+A `files[]` or `scaffolds[].files[]` entry that installs **only when a named module is in the resolved install set**. Two entries may share one `target` under disjoint conditions, which is how `auth` and `waitlist` ship a `sqlite-core` and a `pg-core` variant of the same table file and let the installed [driver module](#driver-module) pick. The [render](#render) reads `onlyWith` as a `when.installed` gate, so the unchosen variant never reaches the manifest. A target whose entries are all conditional and none match is an error, not a silent skip.
 _Avoid: file variant, dialect flag. A patch carries no `onlyWith`; it may carry a [`when`](#conditional-entry-when)._
 
 ### Conditional entry (`when`)
-A `files[]`, `scaffolds[].files[]` or `patches` entry that ships **only while its condition holds**: `{ "testing": true }` needs a [testing mode](#testing-mode) other than `off`, `{ "installed": ["e2e"] }` needs every named module installed, and both keys together mean both. `when` decides the first write only: once the target is in the manifest it stays managed in every mode, so `saasaloy testing off` then `update` deletes nothing. When a condition turns true later, `saasaloy testing <on-mode>`, `add` and `update` **backfill** the untracked entries at each module's locked SHA, and `remove X` takes every entry whose `installed` names X. `untested` on a file entry gives the reason a file ships with no test, and `enablesTesting: true` on a descriptor turns an `off` project to `tests-after` when the module is added ([ADR 0054](docs/adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
-_Avoid: optional file, test flag. `onlyWith` picks one variant of a target; `when` decides whether an entry ships at all._
+A `files[]`, `scaffolds[].files[]`, `patches` or `entries` entry that ships **only while its condition holds**: `{ "testing": true }` needs a [testing mode](#testing-mode) other than `off`, `{ "installed": ["e2e"] }` needs every named module installed, and both keys together mean both. The [render](#render) writes every entry whose condition holds, so a condition that turns true later writes the entry on the next run. When a condition turns false, an unedited file is deleted and an edited one stays, untracked, with the one exception of `saasaloy testing off`, which keeps each gated test file and untracks it, so a mode change deletes nothing. `remove X` takes every entry whose `installed` names X. `untested` on a file entry gives the reason a file ships with no test, and `enablesTesting: true` on a descriptor turns an `off` project to `tests-after` when the module is added ([ADR 0054](docs/adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
+_Avoid: optional file, test flag, backfill (the render writes a gated entry like any other). `onlyWith` picks one variant of a target; `when` decides whether an entry ships at all._
 
 ### Config-patch engine
-The AST-codemod layer for the structural ~10% of edits: `magicast` for TS/JS module edits (e.g. a Better Auth plugin array) and `jsonc-parser` for `wrangler.jsonc` bindings. The patch kinds are `plugin-array`, `const-array`, `chained-route`, `nav-entry`, `wrangler-binding`, `package-json-dependency`, `package-json-script` and `drizzle-column`.
+The AST-codemod layer for the structural ~10% of edits: `magicast` for a Drizzle column and a const property, and `jsonc-parser` for `wrangler.jsonc` bindings and `package.json` entries. The patch kinds are `wrangler-binding`, `package-json-dependency`, `package-json-script`, `drizzle-column` and `const-property`. A [registration table](#registration-table) is not a patch: the four kinds that wrote one into a file the owner keeps (`plugin-array`, `const-array`, `chained-route`, `nav-entry`) are deleted. The [render](#render) uses the insert side of each codemod as a transform in memory.
 
-### Copy-in update (`saasaloy update`)
-The update path for existing projects: hash a managed file — match → clean overwrite; drift (hand-edited) → route to AI-merge rather than clobber. Two records override the hash and force the merge path: an [adopted entry](#adopted-entry) and an [owned file](#owned-file) ([ADR 0034](docs/adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)).
-_Avoid: versioned-package update._
+### Update (`saasaloy update`)
+The run that moves a project to the release of the CLI that runs, with every default-registry module and a third-party module to the tip of its recorded ref. It takes no module name; a staged update runs an older CLI with `pnpm dlx saasaloy@<version> update`. It needs a clean tree, merges each edited `merged` file three ways, and prints the [update report](#update-report) on stdout ([ADR 0066](docs/adr/0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md)).
+_Avoid: copy-in update, versioned-package update, `saasaloy update <module>`._
 
-### Adopted entry
-A `.saasaloy/manifest.json` entry whose hash the CLI took off disk rather than from bytes it wrote — what `saasaloy update` records for a project that had no base record. The flag exists because the two facts differ: the hash proves the file has not changed *since adoption*, not that the template wrote it. An adopted entry never earns an overwrite; it goes to the [AI-assisted merge](#ai-assisted-merge) until the CLI writes the file itself.
-_Avoid: pristine entry, baseline hash._
-
-### Owned file
-A base-template file the template ships once and the project owns afterwards — `globals.css`, `brand.css`, `web.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
-_Avoid: user file, editable file._
-
-### Seed file
-A base-template file the owner is meant to rewrite — `apps/web/DESIGN.md`, `README.md`, `saasaloy.json`, the landing page and its copy. Listed in `_saasaloy-base.json`'s `seedFiles`, recorded in the manifest and never updated, however far it drifts. A seed the template moved stays in `retiredSeedFiles`, so a project made before the move keeps its copy at the old path instead of losing it to a removal.
-
-### Module seed file
-A module file entry marked `"seed": true` in `files[]` or `scaffolds[].files[]`: written once by `add` or backfill, then the project's. The manifest records it with its owning module and `seed: true`. `saasaloy update` never overwrites or merges it and writes it again only when it is missing. `saasaloy remove` deletes it while its hash still matches and keeps one the project changed, with a warning naming the path. A managed file imports its extension point from one, at `apps/admin/src/extend/<name>.ts(x)` or `apps/api/src/extend/<name>.ts`, so the project edits the seed and the managed file stays clean ([ADR 0060](docs/adr/0060-adr-a-module-file-may-be-a-seed-written-once-2026-11-04.md)).
-_Avoid: extension file, user file. A base [seed file](#seed-file) is never restored; a module seed file is._
-
-### AI-assisted merge
-The structured, agent-consumable merge plan `saasaloy update` writes to stdout, or to `--out <path>`, for a drifted file — natural-language intent + target files + old/new context — handed straight to an agent CLI.
+### Update report
+The Markdown `saasaloy update` prints on stdout: the files with conflict markers, the `once` files that upstream changed, the files left deleted, the files kept and no longer tracked, the warnings, and the [update notes](#update-note), ending with a line that names `pnpm check`. It is text for an agent; the work is already on disk.
+_Avoid: AI-assisted merge, the plan the old `update` printed (an agent no longer merges whole files from it)._
 
 ### Update note
-A Markdown file of steps for a change that `saasaloy update` cannot make itself: an import in the owner's code, a moved stylesheet block, a port. It lives next to the code it describes, in `packages/cli/update-notes/` for the base and `modules/<name>/update-notes/` for a module, named `NNNN-<slug>.md`. Its id is its path (`shell/0001-admin-kit-move`). `update` selects the notes for the project's version gap and renders them in the [AI-assisted merge](#ai-assisted-merge) plan ([ADR 0058](docs/adr/0058-adr-update-notes-ship-beside-their-code-and-ride-the-merge-plan-2026-10-30.md)).
+A Markdown file of steps for a change that `saasaloy update` cannot make itself: an import in the owner's code, a moved stylesheet block, a port. It lives next to the code it describes, in `packages/cli/update-notes/` for the base and `modules/<name>/update-notes/` for a module, named `NNNN-<slug>.md`, with the parts `What update does`, `What update merges`, `What you do` and `Verify`. Its id is its path (`shell/0001-admin-kit-move`). `update` selects the notes for the project's version gap and prints them in the [update report](#update-report) ([ADR 0058](docs/adr/0058-adr-update-notes-ship-beside-their-code-and-ride-the-merge-plan-2026-10-30.md)).
 _Avoid: migration (that word means a database migration), upgrade note, release note._
 
 ### Pending note
-An [update note](#update-note) an applied `update` showed and nobody has marked done. It is recorded in `.saasaloy/manifest.json` under `pendingNotes`, repeats in every later merge plan, and keeps `update` at exit `3` until `saasaloy update --done <id>` clears it.
+An [update note](#update-note) an applied `update` showed and nobody has marked done. It is recorded in `.saasaloy/manifest.json` under `pendingNotes`, repeats in every later update report, and keeps `update` at exit `3` until `saasaloy update --done <id>` clears it.
 
 ## AI-agent-native
 

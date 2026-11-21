@@ -2,7 +2,7 @@
 
 /**
  * Send a command's whole clack TUI to stderr, leaving stdout free for the one thing a
- * caller might pipe. `saasaloy update` writes its merge plan to stdout, so
+ * caller might pipe. `saasaloy update` writes its report to stdout, so
  * `saasaloy update email | claude` has to work with no flag (issue #48, decision 9) —
  * every clack function takes this as its options object.
  */

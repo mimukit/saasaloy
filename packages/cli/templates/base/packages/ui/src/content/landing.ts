@@ -299,7 +299,7 @@ export const landing = {
         icon: "undo",
         title: "Reversible and updatable",
         description:
-          "`saasaloy remove` undoes a module. `saasaloy update` brings newer versions with a merge plan for files you edited.",
+          "`saasaloy remove` undoes a module. `saasaloy update` brings newer versions and merges the files you edited.",
       },
     ],
   },
@@ -651,7 +651,7 @@ export const landing = {
         id: "sync",
         question: "Is this a boilerplate I have to keep in sync?",
         answer:
-          "No. The CLI copies source files into your repo, and nothing is imported from a {siteName} package at runtime. `saasaloy update` re-applies newer versions with a merge plan for the files you edited.",
+          "No. The CLI copies source files into your repo, and nothing is imported from a {siteName} package at runtime. `saasaloy update` brings newer versions and merges the files you edited.",
       },
       {
         id: "account",

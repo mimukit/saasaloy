@@ -164,7 +164,7 @@ The other six run when the thing they own moves:
 - **`saasaloy-env`** covers `packages/env`: adding a key, the server and client split, `pnpm env:setup`.
 - **`saasaloy-testing`** says which test a change needs under this project's testing mode.
 - **`saasaloy-deploy`** covers `pnpm deploy:production`, its gates, the rollback, the first superadmin, and answering a production question against the last deploy tag.
-- **`saasaloy-update`** takes the project to a newer CLI and newer modules: `saasaloy update`, the merge plan, the update notes, `--resolved` and `--done`.
+- **`saasaloy-update`** takes the project to a newer CLI and newer modules: `saasaloy update`, the report, conflict markers, the update notes, `--done` and `--abort`.
 
 One runs when Saasaloy itself fails:
 

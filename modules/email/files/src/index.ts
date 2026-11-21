@@ -1,5 +1,6 @@
 import { defineEmail } from "./define";
 import type { EmailEnv } from "./provider";
+import { emailProviders } from "./providers.generated";
 
 export { defineEmail } from "./define";
 export type { EmailClient, EmailConfig, EmailRegistry } from "./define";
@@ -18,15 +19,12 @@ export type {
 export { deriveText, html, layout, raw, SafeHtml, safeUrl } from "./render";
 export type { LayoutOptions } from "./render";
 
-// The provider registry, and the patch point every `email-<provider>` module writes
-// into. `saasaloy add email-cloudflare` adds its import and appends `cloudflare()`
-// here — idempotently, so re-running it changes nothing.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with a real array literal. The codemod behind the `plugin-array` patch kind
-// (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into otherwise, and a
-// provider install fails silently. Never omit `providers`, even while it's empty.
-export const email = defineEmail({ providers: [] });
+// The provider registry. Every `email-<provider>` module adds a row to the
+// `email.providers` table, and the CLI writes `./providers.generated.ts` from those rows
+// on every run: `saasaloy add email-cloudflare` adds `cloudflare()`, and `saasaloy remove`
+// takes it back out. A provider of your own goes after the spread, never in the generated
+// file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
+export const email = defineEmail({ providers: [...emailProviders] });
 
 /**
  * Get a sender for this request's environment. Mirrors `getDb(c.env.DB)`, except it

@@ -31,7 +31,7 @@ export const DOWNLOAD_URL_TTL_SECONDS = 3600;
  */
 export const MAX_URL_TTL_SECONDS = 86_400;
 
-/** Where the proxy route is mounted, by `modules/storage`'s `chained-route` patch. */
+/** Where the proxy route is mounted, by `modules/storage`'s `api.routes` row. */
 const PROXY_PATH = "/storage/objects";
 
 export interface StorageConfig {
@@ -132,8 +132,8 @@ export interface StorageRegistry {
 }
 
 /**
- * Build the provider registry. The `providers` array is the patch point every
- * `storage-<provider>` module appends to — see `src/index.ts`.
+ * Build the provider registry. The `providers` array holds the `storage.providers` table,
+ * one generated row for every `storage-<provider>` module. See `src/index.ts`.
  */
 export function defineStorage(config: StorageConfig): StorageRegistry {
   const { providers } = config;

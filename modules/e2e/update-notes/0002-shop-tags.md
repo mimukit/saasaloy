@@ -8,7 +8,7 @@ title: The e2e suite knows the ecommerce and payment-manual tags
 
 `packages/e2e/lib/project.ts` adds `ecommerce` and `payment-manual` to `SPEC_TAGS`. `playwright.config.ts` turns every tag whose module is absent into `grepInvert`, so the shop journey is collected only in a project that has both modules. A spec that carries neither tag runs as before.
 
-## What the merge plan gets
+## What update merges
 
 `packages/e2e/lib/project.ts`, if you edited it. Keep your edits and take the two new names in `SPEC_TAGS`.
 

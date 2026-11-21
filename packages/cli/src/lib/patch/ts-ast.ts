@@ -1,7 +1,6 @@
-// The bits of AST and import handling both magicast codemods need. chained-route.ts and
-// ts-module.ts ask the same three questions in their inverse direction — "does the local
-// name still bind what we imported?", "is the name still used anywhere else?", "did recast
-// eat the file's terminator?" — so the answers live here once rather than twice.
+// The bits of AST and import handling the magicast codemods need: "does the local name
+// still bind what we imported?" and "did recast eat the file's terminator?".
+// drizzle-column.ts asks both.
 
 /** Structural view of magicast's import proxy: local name → what it binds. */
 export type ModuleImports = Record<
@@ -66,59 +65,4 @@ export function keepTerminator(source: string, code: string): string {
     return code.slice(0, -1);
   }
   return code;
-}
-
-/** The one thing `isReferenced` needs of a program: its top-level statements. */
-export interface ProgramLike {
-  body: unknown[];
-}
-
-// Does any non-import part of the program still read `name`? Walks the plain-object AST
-// rather than pulling in a visitor, since the only question is whether an `Identifier`
-// with this name survives outside the import declarations and outside member/property
-// positions (`x.waitlist` is not a use of `waitlist`).
-export function isReferenced(program: ProgramLike, name: string): boolean {
-  let found = false;
-
-  function walk(node: unknown, key?: string): void {
-    if (found || node === null || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        walk(child);
-      }
-      return;
-    }
-    const record = node as Record<string, unknown> & { type?: string };
-    if (typeof record.type !== "string") {
-      return;
-    }
-    if (record.type === "ImportDeclaration") {
-      return;
-    } // the import itself is not a use
-    if (record.type === "Identifier") {
-      // Skip a name in a non-reference slot: `a.name`, `{ name: … }`, `function name()`.
-      if (key !== "property" && key !== "key" && record.name === name) {
-        found = true;
-      }
-      return;
-    }
-    for (const [childKey, value] of Object.entries(record)) {
-      // recast hangs its own bookkeeping off these; walking them re-walks the whole file.
-      if (
-        childKey === "loc" ||
-        childKey === "comments" ||
-        childKey === "original"
-      ) {
-        continue;
-      }
-      // A computed member or key (`obj[name]`, `{ [name]: … }`) is a real reference, so
-      // clear the slot name and let the identifier count.
-      walk(value, record.computed === true ? undefined : childKey);
-    }
-  }
-
-  walk(program.body);
-  return found;
 }

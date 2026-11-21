@@ -18,7 +18,8 @@ export type AnySection = ConfigSection<string, object>;
 
 /**
  * Declare a section. Called by `src/sections/<module>.ts`, which a capability module
- * ships and appends to the registry with its `plugin-array` patch.
+ * ships and registers with a `config.sections` row, which the CLI writes into
+ * `./sections.generated.ts`.
  *
  * The key is inferred as a literal so the composed type carries it; the values are
  * inferred *widened* on purpose, so `name: "Acme"` types as `string` and a project may
@@ -33,9 +34,8 @@ export function defineSection<const K extends string, V extends object>(
 
 /**
  * The registry. Identity at runtime; it exists so `sections.ts` reads as
- * `export const sections = defineSections({ sections: [...] })` — the exact shape the
- * `plugin-array` codemod (packages/cli/src/lib/patch/ts-module.ts) pushes a section call
- * into. Never omit the `sections` property, even while it is empty.
+ * `export const sections = defineSections({ sections: [...] })`, with the generated
+ * `configSections` spread into the array and a project's own sections after it.
  */
 export function defineSections<const S extends readonly AnySection[]>(input: {
   sections: S;

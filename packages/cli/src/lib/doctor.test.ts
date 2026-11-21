@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { baseRecord } from "./base.js";
 import {
   checkBase,
   checkKeptDeleted,
@@ -34,8 +33,22 @@ import {
 import type { Finding, ModuleReport } from "./doctor.js";
 import { hashContent } from "./fs-utils.js";
 import { emptyLock } from "./lock.js";
-import { emptyManifest } from "./manifest.js";
-import type { Manifest } from "./manifest.js";
+import { emptyManifestV2 } from "../engine/manifest.js";
+import type { FileRecord, ManifestV2 } from "../engine/manifest.js";
+
+function record(
+  module: string,
+  hash: string,
+  fileClass: FileRecord["class"] = "merged"
+): FileRecord {
+  return { class: fileClass, from: "x", hash, module, version: "0.0.0" };
+}
+
+const BASE_RECORD = {
+  cliVersion: "0.0.0",
+  name: "web",
+  templateHash: "f".repeat(64),
+};
 
 // The fixtures live outside `src/` on purpose: several are invalid by design, one is not
 // parseable JSON at all, and the type-aware lint pass and the build both ignore anything
@@ -359,10 +372,10 @@ describe("doctor — the conventions the schema cannot check", () => {
   });
 });
 
-function manifestWith(managed: Record<string, string>): Manifest {
-  const manifest = emptyManifest();
-  for (const [target, module] of Object.entries(managed)) {
-    manifest.managed[target] = { hash: "sha256:x", module };
+function manifestWith(files: Record<string, string>): ManifestV2 {
+  const manifest = emptyManifestV2();
+  for (const [target, module] of Object.entries(files)) {
+    manifest.files[target] = record(module, "x");
   }
   return manifest;
 }
@@ -415,30 +428,9 @@ describe("checkPartialInstalls — a partial install (#49)", () => {
     ]);
   });
 
-  it("counts a tracked patch and a tracked skill link, not only a written file", () => {
-    const manifest = emptyManifest();
-    manifest.patches.push({
-      file: "apps/api/package.json",
-      module: "waitlist",
-      patch: {
-        kind: "package-json-dependency",
-        file: "apps/api/package.json",
-        name: "hono",
-        range: "4.0.0",
-        section: "dependencies",
-      },
-    });
-
-    expect(
-      messages(checkPartialInstalls({ installed: [], manifest }))
-    ).toStrictEqual([
-      "/installed/waitlist partial install — re-run `saasaloy add waitlist`",
-    ]);
-  });
-
   it("says nothing about an empty project", () => {
     expect(
-      checkPartialInstalls({ installed: [], manifest: emptyManifest() })
+      checkPartialInstalls({ installed: [], manifest: emptyManifestV2() })
     ).toStrictEqual([]);
   });
 });
@@ -454,53 +446,53 @@ describe("checkBase — the base's record and drift (#120)", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  async function tracked(files: Record<string, string>) {
-    const manifest = emptyManifest();
+  async function tracked(files: Record<string, string>, once: string[] = []) {
+    const manifest = emptyManifestV2();
     for (const [target, content] of Object.entries(files)) {
       await writeFile(join(root, target), content, "utf-8");
-      manifest.managed[target] = { module: "base", hash: hashContent(content) };
+      manifest.files[target] = record(
+        "base",
+        hashContent(content),
+        once.includes(target) ? "once" : "merged"
+      );
     }
-    const lock = { ...emptyLock(), base: baseRecord("0.0.0", "f".repeat(64)) };
+    const lock = { ...emptyLock(), base: BASE_RECORD };
     return { lock, manifest };
   }
 
-  it("reports an unrecorded project as untracked, with the seed list", async () => {
+  it("reports a project with no base record as untracked", async () => {
     const report = await checkBase({
       root,
       lock: emptyLock(),
-      manifest: emptyManifest(),
-      seedFiles: ["README.md"],
+      manifest: emptyManifestV2(),
     });
 
     expect(report.status).toBe("untracked");
-    expect(report.seed).toStrictEqual(["README.md"]);
   });
 
-  it("counts matching files, names drifted and missing ones, and lists seed files unchecked", async () => {
-    const state = await tracked({
-      "AGENTS.md": "a\n",
-      "CLAUDE.md": "c\n",
-      "README.md": "seed\n",
-      "gone.md": "g\n",
-    });
+  it("counts matching files, names drifted ones, and lists files written once unchecked", async () => {
+    const state = await tracked(
+      {
+        "AGENTS.md": "a\n",
+        "CLAUDE.md": "c\n",
+        "README.md": "seed\n",
+        "gone.md": "g\n",
+      },
+      ["README.md"]
+    );
     await writeFile(join(root, "CLAUDE.md"), "edited\n", "utf-8");
     await writeFile(join(root, "README.md"), "rewritten\n", "utf-8");
     await rm(join(root, "gone.md"));
 
-    const report = await checkBase({
-      root,
-      ...state,
-      seedFiles: ["README.md"],
-    });
+    const report = await checkBase({ root, ...state });
 
-    expect(report).toMatchObject({
-      status: "tracked",
-      matching: 1,
+    expect(report).toStrictEqual({
       drifted: ["CLAUDE.md"],
-      missing: ["gone.md"],
+      matching: 1,
+      record: BASE_RECORD,
       seed: ["README.md"],
+      status: "tracked",
     });
-    expect(report.record?.cliVersion).toBe("0.0.0");
   });
 
   it("reads a root package.json a release bumped as matching, and an edited one as drifted (ADR 0049)", async () => {
@@ -512,14 +504,12 @@ describe("checkBase — the base's record and drift (#120)", () => {
     const bumped = await checkBase({
       root,
       ...state,
-      seedFiles: [],
       templateVersion: "0.0.0",
     });
     await writeFile(join(root, "package.json"), at("0.3.0", "mine"), "utf-8");
     const edited = await checkBase({
       root,
       ...state,
-      seedFiles: [],
       templateVersion: "0.0.0",
     });
 
@@ -530,19 +520,16 @@ describe("checkBase — the base's record and drift (#120)", () => {
   it("never reads another module's files as base drift", async () => {
     const state = await tracked({ "AGENTS.md": "a\n" });
     await writeFile(join(root, "email.ts"), "x\n", "utf-8");
-    state.manifest.managed["email.ts"] = {
-      module: "email",
-      hash: "0".repeat(64),
-    };
+    state.manifest.files["email.ts"] = record("email", "0".repeat(64));
 
-    const report = await checkBase({ root, ...state, seedFiles: [] });
+    const report = await checkBase({ root, ...state });
 
     expect(report.drifted).toStrictEqual([]);
     expect(report.matching).toBe(1);
   });
 });
 
-describe("checkKeptDeleted — files kept deleted (#312)", () => {
+describe("checkKeptDeleted — tracked files the project deleted (ADR 0059)", () => {
   let root: string;
 
   beforeEach(async () => {
@@ -553,48 +540,24 @@ describe("checkKeptDeleted — files kept deleted (#312)", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("lists each tombstone still absent, and never as a missing base file", async () => {
-    // gone.md is deleted with no tombstone: missing, and not kept deleted.
+  it("lists each tracked file absent from disk, of every module", async () => {
     await writeFile(join(root, "AGENTS.md"), "a\n", "utf-8");
-    await writeFile(join(root, "back.md"), "b\n", "utf-8");
-    const manifest = emptyManifest();
-    manifest.managed["AGENTS.md"] = {
-      module: "base",
-      hash: hashContent("a\n"),
-    };
-    manifest.managed["gone.md"] = { module: "base", hash: hashContent("g\n") };
-    manifest.managed["showcase.tsx"] = {
-      module: "base",
-      hash: hashContent("s\n"),
-      deleted: true,
-    };
-    manifest.managed["email.ts"] = {
-      module: "email",
-      hash: hashContent("e\n"),
-      deleted: true,
-    };
-    // Back on disk: the owner restored it by hand, so it is no longer kept deleted.
-    manifest.managed["back.md"] = {
-      module: "base",
-      hash: hashContent("b\n"),
-      deleted: true,
-    };
-    const lock = { ...emptyLock(), base: baseRecord("0.0.0", "f".repeat(64)) };
+    const manifest = emptyManifestV2();
+    manifest.files["AGENTS.md"] = record("base", hashContent("a\n"));
+    manifest.files["showcase.tsx"] = record("base", hashContent("s\n"));
+    manifest.files["email.ts"] = record("email", hashContent("e\n"));
 
     await expect(checkKeptDeleted(root, manifest)).resolves.toStrictEqual([
       { module: "email", target: "email.ts" },
       { module: "base", target: "showcase.tsx" },
     ]);
-    const report = await checkBase({ root, lock, manifest, seedFiles: [] });
-    expect(report.missing).toStrictEqual(["gone.md"]);
-    expect(report.matching).toBe(2);
   });
 });
 
 describe("checkPartialInstalls — the base is not a module (#120)", () => {
   it("never reports the base's files as a partial install", () => {
-    const manifest = emptyManifest();
-    manifest.managed["AGENTS.md"] = { module: "base", hash: "a".repeat(64) };
+    const manifest = emptyManifestV2();
+    manifest.files["AGENTS.md"] = record("base", "a".repeat(64));
 
     expect(checkPartialInstalls({ installed: [], manifest })).toStrictEqual([]);
   });
@@ -619,10 +582,10 @@ describe("doctor — the repo's own registry", () => {
 
 // #107. The project rule, run over plain objects: `saasaloy.json` says a module is
 // installed, `.saasaloy/manifest.json` says it owns nothing.
-function manifestOwning(...modules: string[]): Manifest {
-  const manifest = emptyManifest();
+function manifestOwning(...modules: string[]): ManifestV2 {
+  const manifest = emptyManifestV2();
   for (const [index, module] of modules.entries()) {
-    manifest.managed[`src/file-${index}.ts`] = { module, hash: "abc" };
+    manifest.files[`src/file-${index}.ts`] = record(module, "abc");
   }
   return manifest;
 }
@@ -665,18 +628,6 @@ describe(checkProject, () => {
     });
 
     expect(findings).toStrictEqual([]);
-  });
-
-  it("ignores links and patches — managed files are the ledger", () => {
-    const manifest = emptyManifest();
-    manifest.links[".agents/skills/saasaloy-auth"] = ".claude/skills/x";
-    const findings = checkProject({
-      config: { aliases: {}, installed: ["auth"] },
-      manifest,
-    });
-
-    expect(findings).toHaveLength(1);
-    expect(findings[0]?.module).toBe("auth");
   });
 });
 
@@ -1073,7 +1024,7 @@ describe(checkDeploy, () => {
       "apps/admin deploys and has no DEPLOY_TARGETS row"
     );
     expect(findings[0]?.message).toContain(
-      `Add { service: "admin", order: <number> } to ${DEPLOY_TARGETS_FILE}`
+      `Add { service: "admin", order: <number> } to DEPLOY_TARGETS in ${DEPLOY_TARGETS_FILE}`
     );
     expect(findings[1]?.message).toContain("apps/docs");
   });

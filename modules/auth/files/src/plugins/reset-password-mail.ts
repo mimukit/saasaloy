@@ -5,12 +5,13 @@ import { createEmail } from "@repo/email";
 import type { EmailEnv } from "@repo/email";
 import { resetPassword } from "@repo/email/templates/reset-password";
 
-// The password reset mail, through `@repo/email`. `auth` ships this file, and the patch
-// that pushes `resetPasswordMail()` into the client instance's `plugins`, only when `email`
-// is installed (`when: { installed: ["email"] }`, ADR 0054). `saasaloy add email` in a
-// project that already has `auth` writes both; `saasaloy remove email` takes both away.
+// The password reset mail, through `@repo/email`. `auth` ships this file, and the
+// `auth.plugins` row that adds `resetPasswordMail()` to the client instance's `plugins`,
+// only when `email` is installed (`when: { installed: ["email"] }`, ADR 0054). `saasaloy
+// add email` in a project that already has `auth` writes both; `saasaloy remove email`
+// takes both away.
 //
-// It is a plugin rather than a line in `auth.ts` because no patch kind edits an options
+// It is a plugin rather than a line in `auth.ts` because no table row edits an options
 // object, and a plugin can: Better Auth merges what `init()` returns into the instance's
 // options before the first request (`runPluginInit`, better-auth 1.7.7), so this sets
 // `emailAndPassword.sendResetPassword` and `auth.ts` names no email code at all.

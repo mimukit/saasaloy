@@ -11,8 +11,8 @@ import type { Job, Schedule } from "../provider";
 // opens a database and prunes, through `setNotificationPruneRunner`, when the Worker
 // loads. `packages/subscription` and `packages/file-uploads` split their jobs the same way.
 //
-// Factories, not bare constants, because the tables register a *call*: that is what the
-// `plugin-array` patch appends and what `saasaloy remove` takes back out.
+// Factories, not bare constants, because the tables register a *call*: that is what a
+// `queue.jobs` or `queue.schedules` row names and what `saasaloy remove` takes back out.
 
 /** The job's name, as the schedule below and a `jobs` table trace both spell it. */
 export const PRUNE_NOTIFICATIONS_JOB = "notification.prune";

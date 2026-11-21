@@ -59,8 +59,8 @@ export type OrderPaymentListener = (
 ) => Promise<void>;
 
 /**
- * The listener, as the `plugin-array` patch registers it: `listeners:
- * [orderPaymentListener()]`. A payment for anything but an order is not ours. An order
+ * The listener, as its `payment.listeners` row registers it: a bare
+ * `orderPaymentListener()` call. A payment for anything but an order is not ours. An order
  * payment with no handler registered throws, which the payment core logs with the payment
  * id: the status change stands, and the log says why the order did not move.
  */

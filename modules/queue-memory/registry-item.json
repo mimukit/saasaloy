@@ -5,25 +5,22 @@
   "description": "A queue provider that runs jobs in-process, with no binding and no env var.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["queue"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
+    { "path": "files/memory.ts", "target": "@queue/providers/memory.ts" }
+  ],
+  "entries": [
     {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "providers",
+      "table": "queue.providers",
       "call": "memory",
       "import": {
         "name": "memory",
         "from": "./providers/memory"
       }
     }
-  ],
-  "files": [
-    { "path": "files/memory.ts", "target": "@queue/providers/memory.ts" }
   ],
   "scaffolds": []
 }

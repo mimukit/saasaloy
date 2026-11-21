@@ -125,7 +125,7 @@ async function copyTree(
       );
     } else if (entry.isFile()) {
       const raw = await readFile(srcPath, "utf-8");
-      const rendered = fillTestingBlock(target, applyVars(raw, vars), options);
+      const rendered = renderTemplateFile(target, raw, vars, options);
       await writeFile(destPath, rendered, "utf-8");
       written.push({
         path: destPath,
@@ -136,6 +136,20 @@ async function copyTree(
     }
   }
   return written;
+}
+
+/**
+ * One template file as a project receives it: the `{{VAR}}` tokens filled, and the root
+ * `AGENTS.md` testing block set to `options.testingMode`. Pure, so the render engine
+ * produces the bytes `copyTemplate` writes without touching disk.
+ */
+export function renderTemplateFile(
+  target: string,
+  raw: string,
+  vars: TemplateVars,
+  options: Pick<CopyTemplateOptions, "testingMode"> = {}
+): string {
+  return fillTestingBlock(target, applyVars(raw, vars), options);
 }
 
 /** Replace each `{{VAR}}` named in `vars`; an unknown token stays as authored. */
@@ -151,7 +165,7 @@ export function applyVars(content: string, vars: TemplateVars): string {
 function fillTestingBlock(
   target: string,
   content: string,
-  options: CopyTemplateOptions
+  options: Pick<CopyTemplateOptions, "testingMode">
 ): string {
   if (options.testingMode === undefined || target !== TESTING_BLOCK_FILE) {
     return content;

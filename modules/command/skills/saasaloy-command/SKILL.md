@@ -26,17 +26,15 @@ It also adds two exact-pinned dependencies to `packages/ui/package.json`: `@tans
 
 ## Wire-up
 
-You do nothing by hand. The `admin` and `app` descriptors each carry a `plugin-array` patch gated on `command`, so `saasaloy add command` writes this line into `apps/admin/src/components/shell-extensions.ts` and `apps/app/src/components/shell-extensions.ts`, with the import above it:
+You do nothing by hand. The `admin` and `app` descriptors each carry a row of their `<app>.shellExtensions` table gated on `command`, so `saasaloy add command` writes this call into `apps/admin/src/components/shell-extensions.generated.ts` and `apps/app/src/components/shell-extensions.generated.ts`, with the import above it:
 
 ```ts
 import { commandExtension } from "@repo/ui/containers/command/command-root";
 
-export const shellExtensions = defineShellExtensions({
-  extensions: [commandExtension()],
-});
+export const appShellExtensions = [commandExtension()];
 ```
 
-Install order does not matter. When `admin` or `app` lands after `command`, the backfill writes the patch in that run (ADR 0054). `ShellLayout` wraps the layout in the extension's provider and renders the header trigger at the right of the header, after the page path.
+`shell-extensions.ts` spreads that list into `extensions`. Install order does not matter. When `admin` or `app` lands after `command`, the render writes the row in that run, because it writes every entry whose `when` holds (ADR 0054). `ShellLayout` wraps the layout in the extension's provider and renders the header trigger at the right of the header, after the page path.
 
 A new SPA on the shell gets the same model in two steps. Copy `src/components/shell-extensions.ts` from `admin`, pass the list to `ShellLayout` as `extensions`, and add `commandExtension()` to it. Then declare the app's own commands from a child of `ShellLayout`, as `AdminCommands` in `apps/admin/src/components/app-shell.tsx` does. A `useCommands` call in the component that renders `ShellLayout` runs above the provider and registers nothing.
 

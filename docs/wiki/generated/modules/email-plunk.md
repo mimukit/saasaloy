@@ -13,7 +13,7 @@ An email provider on Plunk over plain HTTP, with no SDK and no binding; needs a 
 | Tier | provider |
 | Stage | mvp |
 | Needs | `vendor-account` |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`email`](email.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -34,10 +34,18 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/email/src/index.ts` | `plugin-array` |
-| `packages/email/src/env-preset.ts` | `plugin-array` |
+| `email.providers` | 1 |
+| `email.envPresets` | 1 |
 
 ## See the rest
 

@@ -1,12 +1,15 @@
 import { spawn } from "node:child_process";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { cancel, intro, isCancel, note, outro, spinner } from "@clack/prompts";
 import pc from "picocolors";
-import { hashContent, pathExists } from "../lib/fs-utils.js";
+import { apply } from "../engine/apply.js";
+import type { ApplyReport } from "../engine/apply.js";
+import { loadSide } from "../engine/project.js";
+import type { RenderOptions } from "../engine/render.js";
+import { pathExists } from "../lib/fs-utils.js";
 import type { SkillLinkResult } from "../lib/skill-links.js";
 import { linkAgentSkills } from "../lib/skill-links.js";
-import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import {
   EXIT_FAILURE,
   EXIT_OK,
@@ -14,16 +17,8 @@ import {
   exitCodeFor,
   formatFailure,
 } from "../lib/exit.js";
-import { baseRecord, recordBaseFiles, templateHash } from "../lib/base.js";
-import { loadLock, saveLock } from "../lib/lock.js";
 import { logger } from "../lib/logger.js";
-import { loadManifest, saveManifest } from "../lib/manifest.js";
 import { select, text } from "../lib/prompts.js";
-import {
-  baseTemplateDir,
-  copyTemplate,
-  templateVars,
-} from "../lib/scaffold.js";
 import {
   DEFAULT_TESTING_MODE,
   parseTestingMode,
@@ -37,13 +32,12 @@ import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
-// + @repo/tsconfig) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
-// (fixed common rules); nothing is generated. Two things are written rather than copied:
-// the `.claude/skills/*` link for the skills the base carries — a per-machine symlink, not
-// a file (see linkBaseSkills) — and the base's provenance, one manifest entry per rendered
-// file plus the lock's `base` record, so `outdated`/`update`/`doctor` can speak about the
-// base afterwards (#120, ADR 0032). Churny modules (api, database, auth, admin, features)
-// are added later via `saasaloy add`, which copies their own skills in.
+// + @repo/tsconfig) and print next steps. The scaffold is one apply from nothing to the
+// base template (plan 0116): it writes the render, one manifest record per file, and the
+// lock with its `base` record, so `outdated`, `update` and `doctor` can speak about the
+// base afterwards. The `.claude/skills/*` links for the skills the base carries are
+// per-machine symlinks, not files (see linkBaseSkills). Modules (api, database, auth,
+// admin, features) are added later with `saasaloy add`, which brings their own skills.
 
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -455,65 +449,9 @@ async function initProject(opts: InitOptions): Promise<number> {
     return EXIT_FAILURE;
   }
 
-  const s = spinner();
-  s.start(`Scaffolding ${pc.cyan(projectName)}`);
-  const templateDir = await baseTemplateDir();
-  // The mode fills the root AGENTS.md testing block, so the recorded hash is of the
-  // filled bytes and `update` compares against what this project really holds (#242).
-  const written = await copyTemplate(
-    templateDir,
-    target,
-    templateVars(projectName),
-    { testingMode }
-  );
-  s.stop(
-    `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
-  );
-
-  // Record what was just rendered: every file at the hash of its rendered bytes, and the
-  // template's own hash beside the CLI version. These ledgers decide whether later
-  // updates may overwrite files, so init must not report success if either write fails.
-  // The project's own name, recorded once. `update` re-renders this template to compare
-  // against and needs the same `{{PROJECT_NAME}}` it was rendered with here; without this
-  // it fell back to the directory name, and a git worktree or a CI checkout path then
-  // rewrote `package.json` `name`, `wrangler.jsonc` `name` and `siteName` (#144). The
-  // template ships the file without a name so the file it ships stays schema-valid.
-  // `testing.mode` is written in the same pass, always, so a new project never reads the
-  // absent key that `update` treats as a project from before the switch (#242).
-  try {
-    const config = await loadConfig(target);
-    await saveConfig(target, {
-      ...config,
-      name: projectName,
-      testing: { mode: testingMode },
-    });
-    const entry = written.find((file) => file.target === CONFIG_FILE);
-    if (entry) {
-      entry.hash = hashContent(await readFile(entry.path, "utf-8"));
-    }
-  } catch (error) {
-    cancel(
-      `Couldn't record the project name and testing mode: ${errorMessage(error)}`
-    );
-    return EXIT_FAILURE;
-  }
-
-  try {
-    const manifest = await loadManifest(target);
-    const lock = await loadLock(target);
-    recordBaseFiles(manifest, written);
-    lock.base = baseRecord(
-      await readVersion(),
-      await templateHash(templateDir)
-    );
-    await saveManifest(target, manifest);
-    await saveLock(target, lock);
-  } catch (error) {
-    cancel(
-      `Couldn't record the base template: ${errorMessage(error)}\n` +
-        `The scaffold files remain, but init cannot safely complete without its project state.`
-    );
-    return EXIT_FAILURE;
+  const scaffolded = await scaffold(target, projectName, testingMode);
+  if (scaffolded !== undefined) {
+    return scaffolded;
   }
 
   // Before the install: husky's `prepare` script runs during `pnpm install` and needs a
@@ -673,4 +611,50 @@ async function initProject(opts: InitOptions): Promise<number> {
   note(steps, "Next steps");
   outro(pc.green(`🎉 Created ${projectName} successfully.`));
   return EXIT_OK;
+}
+
+/**
+ * `init`'s scaffold on the render engine (plan 0116): one apply from nothing to the base
+ * template, with the project's name and testing mode. Writes manifest version 2 and the
+ * lock with an empty `requested` list. The caller has checked the target and the flags.
+ */
+export async function scaffoldProject(args: {
+  target: string;
+  projectName: string;
+  testingMode: RenderOptions["testingMode"];
+}): Promise<ApplyReport> {
+  const cliVersion = await readVersion();
+  const options: RenderOptions = {
+    projectName: args.projectName,
+    ...(args.testingMode === undefined
+      ? {}
+      : { testingMode: args.testingMode }),
+  };
+  const { side } = await loadSide(
+    { coordinates: new Map(), options, requested: [], version: cliVersion },
+    { cliVersion }
+  );
+  await mkdir(args.target, { recursive: true });
+  return apply({ next: side, root: args.target, version: cliVersion });
+}
+
+/** The scaffold step of `init`. Returns an exit code when it fails, `undefined` when it succeeds. */
+async function scaffold(
+  target: string,
+  projectName: string,
+  testingMode: TestingMode
+): Promise<number | undefined> {
+  const s = spinner();
+  s.start(`Scaffolding ${pc.cyan(projectName)}`);
+  try {
+    await scaffoldProject({ projectName, target, testingMode });
+  } catch (error) {
+    s.stop(pc.red(`Couldn't scaffold ${projectName}`));
+    cancel(errorMessage(error));
+    return exitCodeFor(error);
+  }
+  s.stop(
+    `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
+  );
+  return undefined;
 }

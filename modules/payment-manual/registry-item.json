@@ -5,7 +5,7 @@
   "description": "A payment provider for bKash, Nagad, Rocket and bank transfers that staff confirm by hand.",
   "stage": "money",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["payment", "validators"],
   "dependencies": [],
   "envVars": {},
@@ -15,22 +15,21 @@
   ],
   "patches": [
     {
-      "file": "packages/payment/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "payment",
-      "arrayProp": "providers",
-      "call": "manual",
-      "import": {
-        "name": "manual",
-        "from": "./providers/manual"
-      }
-    },
-    {
       "file": "packages/payment/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "@repo/validators",
       "range": "workspace:*"
+    }
+  ],
+  "entries": [
+    {
+      "table": "payment.providers",
+      "call": "manual",
+      "import": {
+        "name": "manual",
+        "from": "./providers/manual"
+      }
     }
   ],
   "files": [

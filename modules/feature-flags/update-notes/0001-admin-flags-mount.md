@@ -14,7 +14,7 @@ Every `feature-flags` route was admin-only, and only the admin Flags screen call
 
 It does not take the old `.route("/flags", featureFlags)` link out. `update` applies the new revision's patches and never reverses a recorded patch that the revision dropped, so after the update both links serve the same handlers. The `/flags` copy sits outside `/admin/`, so the gate test and the coverage test cannot see it.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/admin/src/routes/flags.tsx`, if you edited it. Keep your edits and take the new calls on `api.admin.flags`.
 - `apps/api/src/routes/feature-flags.ts`, if you edited it. Keep your edits and take `adminGate` before each validator and the `adminWrite` wrapper on the three writes.
@@ -24,10 +24,10 @@ It does not take the old `.route("/flags", featureFlags)` link out. `update` app
 1. Run the update:
 
    ```sh
-   saasaloy update feature-flags
+   saasaloy update
    ```
 
-2. Delete the old link from the route chain in `apps/api/src/index.ts`. Keep the `featureFlags` import, because the new link uses it:
+2. If the old link is still there, delete it from the route chain in `apps/api/src/index.ts`. Keep the `featureFlags` import, because the new link uses it:
 
    ```ts
    .route("/flags", featureFlags)

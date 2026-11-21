@@ -56,6 +56,14 @@ Files:
 | `packages/db/package.json` | `package-json-dependency` |
 | `packages/db/package.json` | `package-json-dependency` |
 
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+This module adds no row to a table.
+
 ## See the rest
 
 Run `saasaloy add database-d1 --dry-run` to print every file and patch the module writes, in install order, and write nothing.

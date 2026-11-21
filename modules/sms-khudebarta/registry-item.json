@@ -5,7 +5,7 @@
   "description": "An sms provider on the Khudebarta gateway for Bangladeshi numbers; needs a Khudebarta account.",
   "stage": "scale",
   "needs": ["vendor-account"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["sms"],
   "dependencies": [],
   "envVars": {
@@ -17,30 +17,6 @@
     "default": ["api"]
   },
   "envOptional": ["KHUDEBARTA_API_URL"],
-  "patches": [
-    {
-      "file": "packages/sms/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "sms",
-      "arrayProp": "providers",
-      "call": "khudebarta",
-      "import": {
-        "name": "khudebarta",
-        "from": "./providers/khudebarta"
-      }
-    },
-    {
-      "file": "packages/sms/src/env-preset.ts",
-      "kind": "plugin-array",
-      "exportName": "smsPreset",
-      "arrayProp": "extends",
-      "call": "khudebartaEnv",
-      "import": {
-        "name": "khudebartaEnv",
-        "from": "./env/khudebarta"
-      }
-    }
-  ],
   "files": [
     {
       "path": "files/khudebarta.ts",
@@ -49,6 +25,24 @@
     {
       "path": "files/env.ts",
       "target": "@sms/env/khudebarta.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "sms.providers",
+      "call": "khudebarta",
+      "import": {
+        "name": "khudebarta",
+        "from": "./providers/khudebarta"
+      }
+    },
+    {
+      "table": "sms.envPresets",
+      "call": "khudebartaEnv",
+      "import": {
+        "name": "khudebartaEnv",
+        "from": "./env/khudebarta"
+      }
     }
   ],
   "scaffolds": []

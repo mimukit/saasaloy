@@ -8,7 +8,7 @@ This note is one half of a pair. `payment/0001-review-from-pending` makes the co
 
 `packages/payment/src/providers/manual.ts` adds a `cod` method. It is off until you configure it. Its instructions carry no account and an empty `fields` list, its `submit` answers `invalid_request` with `providerCode: "no_submission"`, and staff confirm or reject it from `pending` on the Payments page.
 
-## What the merge plan gets
+## What update merges
 
 `packages/payment/src/providers/manual.ts`, if you edited it. Keep your edits and take the `cod` branch in `create`, `submit` and the option check.
 

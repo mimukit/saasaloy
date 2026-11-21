@@ -13,7 +13,7 @@ An apps/app TanStack Router SPA on port 3002 for every signed-in user: the shell
 | Tier | capability |
 | Stage | mvp |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.8.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md), [`auth`](auth.md), [`shell`](shell.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -34,12 +34,27 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+The CLI writes each table in full on every run, from the rows of the installed modules.
+
+| Table | Generated file | Shape |
+|---|---|---|
+| `app.navCounts` | `@app/components/nav-counts.generated.ts` | `objects` |
+| `app.nav` | `@app/components/nav.generated.ts` | `nav` |
+| `app.shellExtensions` | `@app/components/shell-extensions.generated.ts` | `calls` |
+| `app.authScreens` | `@app/lib/redirect.generated.ts` | `objects` |
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/env/src/services.ts` | `const-array` |
-| `packages/tooling/src/targets.ts` | `const-array` |
-| `packages/tooling/src/targets.ts` | `const-array` |
-| `apps/app/src/components/shell-extensions.ts` | `plugin-array` |
+| `env.services` | 1 |
+| `tooling.deployTargets` | 1 |
+| `tooling.smokeChecks` | 1 |
+| `app.shellExtensions` | 1 |
 
 ## See the rest
 
@@ -82,7 +97,7 @@ After `saasaloy add app`:
 
 Drop `src/routes/<screen>.tsx` with a `createFileRoute` whose id matches the file path. The file is a child of `src/routes/__root.tsx`, so it gets the shell and the session guard with no work of its own. `@tanstack/router-plugin` rewrites `src/routeTree.gen.ts` on the next `pnpm dev` or `pnpm build`, and `pnpm typecheck` runs `tsr generate` first, so a new route typechecks before Vite has run. Both read the generator options in `tsr.config.json`. Never edit `src/routeTree.gen.ts` by hand.
 
-A screen an anonymous visitor must open, such as a second sign-in screen, needs a row in `AUTH_SCREENS` in `src/lib/redirect.ts`. The root guard lets an anonymous visitor in on those paths and sends a signed-in one to `/`, and `resolveDestination()` never returns to one. A module adds its row with a `const-array` patch (`constName: "AUTH_SCREENS"`, `key: "path"`), as `auth-phone` does.
+A screen an anonymous visitor must open, such as a second sign-in screen, needs a row in `AUTH_SCREENS` in `src/lib/redirect.ts`. The root guard lets an anonymous visitor in on those paths and sends a signed-in one to `/`, and `resolveDestination()` never returns to one. A module adds its row to the `app.authScreens` table (`"entry": { "path": "/phone/sign-in" }`), as `auth-phone` does, and the CLI writes it into `src/lib/redirect.generated.ts`. A row of your own goes after the spread in `redirect.ts`, never in the generated file.
 
 Then put it in the sidebar: add a row to `NAV_AREAS` in `src/components/nav.ts`. The `to` is checked against the route tree, so a typo fails `pnpm typecheck`. A row takes an optional `shortcut`, `G` then a letter written as `"G P"`; pick the letter by hand and keep it unique, because the tool repo's `commands.test.ts` fails on two rows with one shortcut. Every row becomes a "Go to <label>" command in `src/components/commands.ts`, which `AppShell` declares next to sign out and the three theme choices. A screen declares its own with `useCommands(commands, { scope: "route", label })`. They do nothing until the `command` module is installed, which appends itself to `src/components/shell-extensions.ts`.
 
@@ -97,17 +112,16 @@ items: [
 
 A static `count` in `NAV_AREAS` is a number fixed at build time. A number that changes, such as how many notifications are unread, is a live count. `NAV_COUNTS` in `src/components/nav-counts.ts` lists them, one `{ to, path }` per row. `to` is the row's `to` in `NAV_AREAS`. `path` is an api path that answers `{ count: number }` behind the user's session.
 
-A module adds its entry with a `const-array` patch keyed on `to`:
+A module adds its entry with a row of the `app.navCounts` table. The CLI writes it into `src/components/nav-counts.generated.ts`, and `NAV_COUNTS` spreads that file:
 
 ```json
 {
-  "file": "apps/app/src/components/nav-counts.ts",
-  "kind": "const-array",
-  "constName": "NAV_COUNTS",
-  "key": "to",
+  "table": "app.navCounts",
   "entry": { "to": "/notifications", "path": "/notifications/unread-count" }
 }
 ```
+
+A count of your own goes after the spread in `nav-counts.ts`, never in the generated file. The CLI overwrites that file, and `saasaloy update` refuses when it was edited.
 
 `AppShell` runs one TanStack query per entry under the key `["nav-count", to]` and passes the numbers to `ShellLayout` as `counts`. Each query fetches `PUBLIC_API_URL` plus `path` with the session cookie. It refetches every 60 s while the tab is visible, on every window focus (`refetchOnWindowFocus: "always"`, so a count fetched inside the 30 s `staleTime` still refetches), and on a `pageshow` with `persisted` set, which is a back-forward cache restore. A live count replaces the row's static `count`, and a live 0 hides the badge.
 
@@ -342,7 +356,7 @@ These are the main checkout's ports, each the `devPort` on its row in `packages/
 - **The build fails naming `PUBLIC_API_URL`.** `apps/app/.env` lacks it. Run `saasaloy env` and `pnpm env:setup`; for a deploy, set it for the `app` service.
 - **`pnpm dev` fails with "Port 3002 is already in use".** Another process holds it, often an older `email-react` preview from before it moved to 3003. Stop that process with `pnpm dev:stop` if it belongs to this checkout; do not change the port. To run a second checkout beside this one, use a linked worktree and `pnpm dev:ports`.
 - **The pages render with no styles.** `src/main.tsx` no longer imports `@repo/ui/styles/app.css`, or `app.css` lost its `shell.css` import. Restore both.
-- **The sign-in card renders unstyled.** The blocks are missing: `packages/ui/src/blocks/auth/` is empty because `shell` was installed before `auth`'s blocks existed. Run `saasaloy update auth`.
+- **The sign-in card renders unstyled.** The blocks are missing: `packages/ui/src/blocks/auth/` is empty because `shell` was installed before `auth`'s blocks existed. Run `saasaloy update`.
 
 #### Next
 

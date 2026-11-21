@@ -1,7 +1,7 @@
 import type { AuditActionMap } from "../lib/audit-actions";
 
 // The feature-flags module's audit actions, one per write route under `/admin/flags`. The
-// descriptor's `plugin-array` patch appends `featureFlagsAuditActions()` into
+// descriptor's `audit.actions` row adds `featureFlagsAuditActions()` to
 // `AUDIT_ACTIONS` in `../lib/audit-actions.ts`, so `saasaloy remove feature-flags` takes
 // these with it.
 //

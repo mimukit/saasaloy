@@ -107,7 +107,7 @@ The same section holds `menuSize` (5 rows under the bell), `pageSize` (20 rows a
 
 ## The api routes
 
-The `chained-route` patch mounts the sub-app at `/notifications`. The three reads an agent may call (`GET /`, `GET /unread-count`, `GET /preferences`) open with `requireUser(c, { notifications: ["read"] })` from `@repo/auth/user-caller`, so a signed-in person and, with `api-keys-user`, a user's key holding `notifications:read` both pass. The three writes call `requireSession`, so no key reaches them. The `saasaloy-agent` skill has the gate.
+The module's `api.routes` row mounts the sub-app at `/notifications`. The three reads an agent may call (`GET /`, `GET /unread-count`, `GET /preferences`) open with `requireUser(c, { notifications: ["read"] })` from `@repo/auth/user-caller`, so a signed-in person and, with `api-keys-user`, a user's key holding `notifications:read` both pass. The three writes call `requireSession`, so no key reaches them. The `saasaloy-agent` skill has the gate.
 
 | Route | Answer |
 |---|---|
@@ -149,23 +149,23 @@ import { pruneNotifications } from "@repo/db/repositories/notifications";
 await withDb(scope, (db) => pruneNotifications(db, new Date()));
 ```
 
-Add `queue` later and `saasaloy add queue` backfills the two prune files and the three queue patches. `saasaloy remove queue` takes them out again and leaves the rest of this module.
+Add `queue` later and `saasaloy add queue` writes the two prune files and the three queue rows in the same run. `saasaloy remove queue` takes them out again and leaves the rest of this module.
 
 ## Wire-up
 
 No manual page edit is needed. The module's own app files import the three blocks: `notification-extension.tsx` renders `NotificationMenu` in the shell header, and `routes/notifications.tsx` renders `NotificationList` and `NotificationPreferences`. `saasaloy add` still prints "Manual wire-up needed ... on no page yet" for the three `@ui/blocks/notification/` files, because it flags every block target. For this module that line is wrong. Ignore it.
 
-The patches did the wiring:
+The table rows did the wiring. The CLI writes each row into the `.generated.ts` file beside the file that holds the table:
 
-| Patch | File | Effect |
+| Table | Generated file | Effect |
 |---|---|---|
-| `plugin-array` | `apps/app/src/components/shell-extensions.ts` | adds `notificationExtension()` to `extensions`, so the bell renders in the header |
-| `nav-entry` | `apps/app/src/components/nav.ts` | adds Notifications (`BellIcon`, shortcut `G N`) to the Workspace group of the `/` area in `NAV_AREAS` |
-| `const-array` | `apps/app/src/components/nav-counts.ts` | adds `{ to: "/notifications", path: "/notifications/unread-count" }` to `NAV_COUNTS`, so the row shows the live count |
-| `chained-route` | `apps/api/src/index.ts` | mounts `notifications` at `/notifications` |
-| `plugin-array` | `packages/config/src/sections.ts` | adds `notificationConfig()` to `sections` |
-| `plugin-array` | `packages/queue/src/index.ts` | adds `pruneNotificationsJob()` to `jobs` and `pruneNotificationsSchedule()` to `schedules`, only with `queue` |
-| `plugin-array` | `apps/api/src/worker.ts` | adds `notificationPruneHandlers()` to `handlers`, only with `queue` |
+| `app.shellExtensions` | `apps/app/src/components/shell-extensions.generated.ts` | adds `notificationExtension()` to `extensions`, so the bell renders in the header |
+| `app.nav` | `apps/app/src/components/nav.generated.ts` | adds Notifications (`BellIcon`, shortcut `G N`) to the Workspace group of the `/` area in `NAV_AREAS` |
+| `app.navCounts` | `apps/app/src/components/nav-counts.generated.ts` | adds `{ to: "/notifications", path: "/notifications/unread-count" }` to `NAV_COUNTS`, so the row shows the live count |
+| `api.routes` | `apps/api/src/routes.generated.ts` | mounts `notifications` at `/notifications` |
+| `config.sections` | `packages/config/src/sections.generated.ts` | adds `notificationConfig()` to `sections` |
+| `queue.jobs`, `queue.schedules` | `packages/queue/src/jobs.generated.ts`, `schedules.generated.ts` | adds `pruneNotificationsJob()` to `jobs` and `pruneNotificationsSchedule()` to `schedules`, only with `queue` |
+| `worker.handlers` | `apps/api/src/worker.generated.ts` | adds `notificationPruneHandlers()` to `handlers`, only with `queue` |
 
 After `add`:
 
@@ -191,7 +191,7 @@ The seed does not reset `read_at` on a seed row. A seed row you marked read stay
 
 ## What `remove` leaves behind
 
-`saasaloy remove notification` deletes the files it wrote and reverses its patches: the shell extension, the nav row, the `NAV_COUNTS` entry, the api mount, the config section, and the queue and worker entries when they were applied. It leaves these for you:
+`saasaloy remove notification` deletes the files it wrote and takes out its table rows: the shell extension, the nav row, the `NAV_COUNTS` entry, the api mount, the config section, and the queue and worker rows when they were written. It leaves these for you:
 
 - The `notifications` and `notification_opt_outs` tables. Run `pnpm db:generate`, read the drop migration, and apply it only when you want the rows gone.
 - Every `notify()` call you added to your own routes. Its import of `../lib/notify` breaks the build. Search `apps/api` for `lib/notify` before you remove the module.

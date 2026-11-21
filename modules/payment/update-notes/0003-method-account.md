@@ -10,7 +10,7 @@ This note is one half of a pair. `payment-manual/0002-method-account` fills the 
 
 The account is public by nature: every payer of the method is shown it in the instructions. A gateway and cash on delivery leave it unset.
 
-## What the merge plan gets
+## What update merges
 
 `packages/payment/src/provider.ts`, if you edited it. Keep your edits and take the `account` field on `PaymentMethod`.
 

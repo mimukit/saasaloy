@@ -48,6 +48,15 @@
         }
       }
     },
+    "requested": {
+      "type": "array",
+      "description": "The modules the owner asked for, sorted, once each (plan 0116). The render engine derives the rest of the installed set from this list through each module's `dependsOn`. Absent on a lock the old engine wrote.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
     "modules": {
       "type": "object",
       "description": "Module name → the source it was resolved from. Holds the full resolved graph (dependencies included), not just the top-level asks.",

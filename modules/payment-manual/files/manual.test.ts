@@ -234,7 +234,7 @@ describe("payment-manual methods", () => {
     assert.equal(nagad?.account, undefined);
   });
 
-  it("offers nothing with no options, the shape the install patch writes", () => {
+  it("offers nothing with no options, the bare call the install row writes", () => {
     assert.deepEqual(client({}).methods(), []);
   });
 

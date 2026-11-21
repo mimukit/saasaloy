@@ -45,7 +45,7 @@ import { authorizeSubject } from "../subject";
 //
 // `env` comes from `cloudflare:workers` rather than from a request, for the same reason
 // `packages/auth/src/auth.ts` reads it that way: the Better Auth instance is a module-scope
-// singleton, and the plugin array is patched into its literal. The contract methods take
+// singleton, and its plugin array spreads a generated table. The contract methods take
 // `SubscriptionEnv` as usual, so `createSubscription(c.env)` behaves exactly like every other
 // capability.
 

@@ -26,6 +26,14 @@
 // because every other `@repo/*` package is scaffolded by a module and is not on disk in this
 // repo at all.
 
+// It also answers a generated table file (plan 0116, Phase 7). A module file that holds a
+// table imports `./<name>.generated`, which the CLI writes into a project and no module
+// ships, so a test of that file would stop at the import. The hook answers a missing
+// `*.generated` specifier with a `data:` module: each name the importer takes from it is
+// the table's render with no rows, `[]`, or for a route table a function that returns the
+// app it is given. The names and shapes come from the descriptors' `tables`, so a new
+// table needs no edit here.
+
 // It also answers `lucide-react` with stub icons (#264). A payload file such as an app's
 // `components/nav.ts` imports its icons at runtime, and this repo installs no icon set, so
 // a test that walks the real NAV_AREAS would stop at the import. The hook reads the
@@ -34,7 +42,7 @@
 // icon; it only needs the import to bind. Reading the names from the importer, not from a
 // fixed list, means a module that adds a nav row with a new icon needs no edit here.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -93,10 +101,85 @@ function iconStub(parentURL: string | undefined): string {
   return `data:text/javascript,${encodeURIComponent(body)}`;
 }
 
+const GENERATED_SUFFIX = ".generated";
+
+let tableShapes: Map<string, string> | undefined;
+
+/** Every table of every descriptor: its export name (the camelCase of its id) to its shape. */
+function shapes(): Map<string, string> {
+  if (tableShapes) {
+    return tableShapes;
+  }
+  tableShapes = new Map();
+  const modules = join(here, "../modules");
+  for (const name of readdirSync(modules)) {
+    const path = join(modules, name, "registry-item.json");
+    if (!existsSync(path)) {
+      continue;
+    }
+    const item = JSON.parse(readFileSync(path, "utf-8")) as {
+      tables?: { id: string; shape: string }[];
+    };
+    for (const table of item.tables ?? []) {
+      const [head = "", ...rest] = table.id.split(/[.-]/);
+      const exported =
+        head +
+        rest.map((part) => part[0]?.toUpperCase() + part.slice(1)).join("");
+      tableShapes.set(exported, table.shape);
+    }
+  }
+  return tableShapes;
+}
+
+/** A `data:` module exporting the empty render of each table the importer names. */
+function generatedStub(
+  specifier: string,
+  parentURL: string | undefined
+): string {
+  const source =
+    parentURL?.startsWith("file:") === true
+      ? readFileSync(fileURLToPath(parentURL), "utf-8")
+      : "";
+  const quoted = specifier.replaceAll(".", String.raw`\.`);
+  const pattern = new RegExp(
+    String.raw`import\s*\{([^}]*)\}\s*from\s*["']${quoted}["']`,
+    "g"
+  );
+  const body: string[] = [];
+  for (const match of source.matchAll(pattern)) {
+    for (const part of (match[1] ?? "").split(",")) {
+      const name =
+        part
+          .trim()
+          .split(/\s+as\s+/)[0]
+          ?.trim() ?? "";
+      if (name === "" || name.startsWith("type ")) {
+        continue;
+      }
+      body.push(
+        shapes().get(name) === "routes"
+          ? `export const ${name} = (app) => app;`
+          : `export const ${name} = [];`
+      );
+    }
+  }
+  return `data:text/javascript,${encodeURIComponent(body.join("\n"))}`;
+}
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === ICON_PACKAGE) {
       return { shortCircuit: true, url: iconStub(context.parentURL) };
+    }
+    if (RELATIVE.test(specifier) && specifier.endsWith(GENERATED_SUFFIX)) {
+      try {
+        return nextResolve(`${specifier}.ts`, context);
+      } catch {
+        return {
+          shortCircuit: true,
+          url: generatedStub(specifier, context.parentURL),
+        };
+      }
     }
     const workspace = WORKSPACES.get(specifier);
     if (workspace) {

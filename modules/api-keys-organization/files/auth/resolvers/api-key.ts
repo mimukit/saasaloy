@@ -22,8 +22,8 @@ export { INVALID_API_KEY } from "../plugins/api-key-options";
 
 // The bearer credential, as a tenant resolver.
 //
-// `multitenant` ships an empty `tenantResolvers` table in `packages/auth/src/tenant.ts`;
-// this module's `plugin-array` patch appends `apiKeyTenant()` to it. From then on a
+// `multitenant` ships the `multitenant.resolvers` table in `packages/auth/src/tenant.ts`;
+// this module's row adds `apiKeyTenant()` to it. From then on a
 // request carrying `Authorization: Bearer <key>` is claimed here and never touches the
 // session path, so a rejected key cannot quietly fall back to whatever cookie rode along
 // with it.
@@ -56,7 +56,7 @@ function invalidKeyError(): HTTPException {
 
 /**
  * The bearer resolver. Registered into `tenantResolvers.resolvers` by this module's
- * `plugin-array` patch, and never called directly.
+ * `multitenant.resolvers` row, and never called directly.
  *
  * `claims` is the cheap synchronous half: it answers "is this my credential", not "is it
  * valid". Returning `true` commits the request to this resolver, so `resolve` either

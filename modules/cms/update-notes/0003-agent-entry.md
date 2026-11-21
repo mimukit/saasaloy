@@ -8,7 +8,7 @@ This note needs the base note `0005-agent-files`. Apply it first, or the patch h
 
 `cms` adds `apps/web/src/lib/agent-entries/cms.ts` and appends `cmsAgentEntry()` to `agentEntries` in `apps/web/src/lib/agent-entries.ts`. The site's `/llms.txt` gets a section, titled with `config.cms.rssTitle`, that links the blog index, the blog sitemap and the RSS feed. Posts are published at run time and `/llms.txt` is built at build time, so the section names where the posts are listed rather than each post.
 
-## What the merge plan gets
+## What update merges
 
 Nothing. Both changes land in files `cms` did not write before.
 

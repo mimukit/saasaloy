@@ -58,16 +58,13 @@ describe("teams module descriptor", () => {
     );
   });
 
-  it("patches every Better Auth plugin array it owns", async () => {
+  it("adds a row to every Better Auth plugin table", async () => {
     const descriptor = await readDescriptor();
 
-    expect(descriptor.patches).toStrictEqual(
+    expect(descriptor.entries).toStrictEqual(
       expect.arrayContaining([
         {
-          file: "packages/auth/src/auth.ts",
-          kind: "plugin-array",
-          exportName: "auth",
-          arrayProp: "plugins",
+          table: "auth.plugins",
           call: "organizationPlugin",
           import: {
             name: "organizationPlugin",
@@ -75,11 +72,8 @@ describe("teams module descriptor", () => {
           },
         },
         {
-          file: "packages/auth/src/client.ts",
-          kind: "plugin-array",
-          exportName: "authClientPlugins",
-          arrayProp: "plugins",
-          // The wrapper, not `organizationClient` itself: the patch engine records a
+          table: "client.plugins",
+          // The wrapper, not `organizationClient` itself: a `calls` table prints a
           // zero-argument call, and the client plugin needs `{ ac, roles }`.
           call: "organizationClientPlugin",
           import: {
@@ -91,10 +85,7 @@ describe("teams module descriptor", () => {
           // The base-role lock ships with `dynamicAccessControl`, which this module
           // turns on. A project that enabled the switch without the guard would let a
           // stored row named `admin` widen the static `admin`.
-          file: "packages/auth/src/auth.ts",
-          kind: "plugin-array",
-          exportName: "auth",
-          arrayProp: "plugins",
+          table: "auth.plugins",
           call: "roleLockGuard",
           import: {
             name: "roleLockGuard",
@@ -155,16 +146,14 @@ describe("teams module descriptor", () => {
         },
       ])
     );
-    expect(descriptor.patches).toStrictEqual(
+    expect(descriptor.entries).toStrictEqual(
       expect.arrayContaining([
         {
-          file: "apps/admin/src/components/nav.ts",
-          kind: "nav-entry",
-          constName: "NAV_AREAS",
+          table: "admin.nav",
           area: "/",
           group: "Manage",
           entry: { to: "/teams", label: "Teams" },
-          icon: { name: "UsersRoundIcon", from: "lucide-react" },
+          import: { name: "UsersRoundIcon", from: "lucide-react" },
         },
       ])
     );

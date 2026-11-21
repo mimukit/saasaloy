@@ -67,13 +67,13 @@ A new collection needs no migration, because every collection shares `cms_entrie
 
    ```ts
    export const cms = defineCms({
-     collections: [blogCollection(), changelogCollection()],
+     collections: [...cmsCollections, changelogCollection()],
    });
    ```
 
-   Keep that line in the shape `export const cms = defineCms({ collections: [...] })`. It is the `plugin-array` patch point. A module that ships a collection registers it the way this module registers `blog`: a `plugin-array` patch on `packages/cms/src/index.ts` with `exportName: "cms"`, `arrayProp: "collections"` and the factory as `call`.
+   Add your collection after the spread, never in `packages/cms/src/collections.generated.ts`: the CLI overwrites that file on every run, and `saasaloy update` refuses when it was edited. A module that ships a collection registers it the way this module registers `blog`: a row of the `cms.collections` table, `{ "table": "cms.collections", "call": "blogCollection", "import": { "name": "blogCollection", "from": "./collections/blog" } }`.
 
-3. Add the nav row by hand in the "Content" group of `NAV_AREAS` in `apps/admin/src/components/nav.ts`: `{ to: "/cms/changelog", label: "Changelog", icon: ScrollTextIcon }`. A module adds it with a `nav-entry` patch (`area: "/"`, `group: "Content"`).
+3. Add the nav row by hand in the "Content" group of `NAV_AREAS` in `apps/admin/src/components/nav.ts`: `{ to: "/cms/changelog", label: "Changelog", icon: ScrollTextIcon }`. A module adds it with an `admin.nav` row (`area: "/"`, `group: "Content"`).
 
 The list and editor screens at `/cms/changelog` then work with no screen code, and the public routes answer at `/cms/changelog/entries`. No `apps/web` page reads the new collection until you write one (see "Read content on the web").
 
@@ -233,7 +233,7 @@ Override a key in `packages/config/src/project.ts`. The module declares no env v
 
 ## Removal
 
-`saasaloy remove cms` deletes the files it wrote and reverses its patches: the collection registration, the config section, the `/cms` route, the `@repo/cms` dependencies, the nav rows, the navbar Blog link, the `run_worker_first` entries and the `cms:rerender` script. It leaves these:
+`saasaloy remove cms` deletes the files it wrote and takes out its table rows and patches: the collection registration, the config section, the `/cms` route, the `@repo/cms` dependencies, the nav rows, the navbar Blog link, the `run_worker_first` entries and the `cms:rerender` script. It leaves these:
 
 - The `cms_entries`, `cms_revisions` and `cms_redirects` tables, and every post in them. Run `pnpm --filter @repo/db db:generate`, read the drop migration, then apply it with your driver's command.
 - The uploaded images. They are `file-uploads` rows in `storage_objects` with objects in the bucket, and they stay while `file-uploads` is installed. Delete them from the Files screen if nothing else uses them.

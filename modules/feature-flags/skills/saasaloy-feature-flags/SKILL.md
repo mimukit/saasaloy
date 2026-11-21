@@ -102,9 +102,9 @@ Every write route writes the row, then republishes. The republish is queued with
 
 ## Admin routes and their audit rows
 
-The `chained-route` patch mounts `apps/api/src/routes/feature-flags.ts` at `/admin/flags`, so the admin app calls it as `api.admin.flags`. It sits under `/admin/` so the `admin` module's gate test and audit coverage test see every route.
+The module's `api.routes` row mounts `apps/api/src/routes/feature-flags.ts` at `/admin/flags`, so the admin app calls it as `api.admin.flags`. It sits under `/admin/` so the `admin` module's gate test and audit coverage test see every route.
 
-A project made before the move to `/admin/flags` keeps the old `.route("/flags", featureFlags)` link after `saasaloy update`, because update never reverses a patch the new revision dropped. The update note `feature-flags/0001-admin-flags-mount` tells you to delete that line. Until you do, both paths serve the same handlers, and the gate and coverage tests cannot see the `/flags` copy.
+A project that took the move to `/admin/flags` with a CLI before 0.10.0 may still hold the old `.route("/flags", featureFlags)` link, because the old engine never took out a patch the new revision dropped. The update note `feature-flags/0001-admin-flags-mount` tells you to delete that line. Until you do, both paths serve the same handlers, and the gate and coverage tests cannot see the `/flags` copy.
 
 | Route | Audit action | Label |
 | --- | --- | --- |
@@ -114,7 +114,7 @@ A project made before the move to `/admin/flags` keeps the old `.route("/flags",
 | `PUT /admin/flags/:key/tenants/:tenantId` | `flag.tenant.set` | `<key> · tenant <tenantId>` |
 | `DELETE /admin/flags/:key/tenants/:tenantId` | `flag.tenant.clear` | `<key> · tenant <tenantId>` |
 
-Each write runs through `adminWrite` from `apps/api/src/lib/admin-write.ts`. The area is `flags`, the target type is `flag`, and the target id is the flag key, so a filter by target finds the global value and every tenant override of one flag. A row records `before` and `after` for `enabled` and `percentage`. A first write has no `before`. Clearing an override that does not exist changes nothing and writes no row. The actions live in `apps/api/src/audit/feature-flags.ts`, which this module's `plugin-array` patch registers in `apps/api/src/lib/audit-actions.ts`. A new write route here needs an entry there, or the audit coverage test fails.
+Each write runs through `adminWrite` from `apps/api/src/lib/admin-write.ts`. The area is `flags`, the target type is `flag`, and the target id is the flag key, so a filter by target finds the global value and every tenant override of one flag. A row records `before` and `after` for `enabled` and `percentage`. A first write has no `before`. Clearing an override that does not exist changes nothing and writes no row. The actions live in `apps/api/src/audit/feature-flags.ts`, which this module's `audit.actions` row registers in `apps/api/src/lib/audit-actions.generated.ts`. A new write route here needs an entry there, or the audit coverage test fails.
 
 ## Percentage rollouts
 
@@ -192,7 +192,7 @@ The kv settings apply too: `KV_PROVIDER` selects the store and `KV_KEY_PREFIX` p
 
 This module used to name its tables `feature_flag` and `feature_flag_override`. It now names them `feature_flags` and `feature_flag_overrides`. A project that installed the old names upgrades them with one migration:
 
-1. Run `saasaloy update feature-flags` to take the new schema file.
+1. Run `saasaloy update` to take the new schema file.
 2. Run `pnpm --filter @repo/db db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `feature_flag` → `feature_flags`, and `feature_flag_override` → `feature_flag_overrides`.
 4. Read the generated SQL before you apply it. It must rename the tables and the `feature_flag_override_key_tenant_idx` index (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
@@ -207,7 +207,7 @@ If you wired `maintenance()` into `apps/api/src/index.ts` by hand, remove that l
 
 ## Wire-up
 
-`add feature-flags` writes the block and the screen that renders it, so no page needs a manual import. The block lands at `packages/ui/src/blocks/admin/feature-flags.tsx`, the route at `apps/admin/src/routes/flags.tsx`, and a `nav-entry` patch adds Flags to `NAV_AREAS` in `apps/admin/src/components/nav.ts`.
+`add feature-flags` writes the block and the screen that renders it, so no page needs a manual import. The block lands at `packages/ui/src/blocks/admin/feature-flags.tsx`, the route at `apps/admin/src/routes/flags.tsx`, and an `admin.nav` row adds Flags to `NAV_AREAS` through `apps/admin/src/components/nav.generated.ts`.
 
 1. Run `pnpm db:generate` and apply the migration with your driver's command, so the two flag tables exist.
 2. Run `pnpm dev`, sign in to `admin` as an admin, and open `/flags`. The router plugin regenerates `routeTree.gen.ts` on the first start.

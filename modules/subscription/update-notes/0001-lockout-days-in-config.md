@@ -10,7 +10,7 @@ Nothing reads the `SUBSCRIPTION_LOCKOUT_DAYS` env var any more. The module no lo
 
 `setSubscriptionConfig`, `subscriptionConfig()`, `readLockoutDays` and `DEFAULT_LOCKOUT_DAYS` are gone. The lockout job and `apps/api/src/subscription-store.ts`, which computes the date the `payment-failed` email names, import the leaf from `@repo/config`. `update` deletes `packages/subscription/src/config.ts` when you never edited it.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/subscription-store.ts`, if you edited it. Keep your edits, drop the `setSubscriptionConfig({ lockoutDays: readLockoutDays(...) })` call, and take `config.subscription.lockoutDays` in the `payment-failed` date.
 - `packages/subscription/src/config.ts`, if you edited it. `update` keeps an edited copy. Delete it once nothing imports it.
@@ -21,7 +21,7 @@ Nothing reads the `SUBSCRIPTION_LOCKOUT_DAYS` env var any more. The module no lo
 1. Run the update:
 
    ```sh
-   saasaloy update subscription
+   saasaloy update
    ```
 
 2. If a `.env` sets `SUBSCRIPTION_LOCKOUT_DAYS` to a value other than 14, set the same number in `packages/config/src/project.ts`:

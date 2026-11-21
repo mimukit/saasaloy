@@ -6,7 +6,7 @@
   "stage": "scale",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.10.0"
   },
   "dependsOn": ["api", "auth", "admin", "database", "storage", "validators"],
   "dependencies": [],
@@ -30,28 +30,6 @@
   ],
   "patches": [
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
-      "call": "fileUploadsEnv",
-      "import": {
-        "name": "fileUploadsEnv",
-        "from": "@repo/file-uploads/env-preset"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/files",
-      "call": "files",
-      "import": {
-        "name": "files",
-        "from": "./routes/files"
-      }
-    },
-    {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -64,12 +42,28 @@
       "section": "dependencies",
       "name": "@repo/file-uploads",
       "range": "workspace:*"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.envPresets",
+      "call": "fileUploadsEnv",
+      "import": {
+        "name": "fileUploadsEnv",
+        "from": "@repo/file-uploads/env-preset"
+      }
     },
     {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "jobs",
+      "table": "api.routes",
+      "path": "/files",
+      "call": "files",
+      "import": {
+        "name": "files",
+        "from": "./routes/files"
+      }
+    },
+    {
+      "table": "queue.jobs",
       "call": "storageSweepJob",
       "import": {
         "name": "storageSweepJob",
@@ -77,10 +71,7 @@
       }
     },
     {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "schedules",
+      "table": "queue.schedules",
       "call": "storageSweepSchedule",
       "import": {
         "name": "storageSweepSchedule",

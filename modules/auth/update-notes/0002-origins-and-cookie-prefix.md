@@ -12,7 +12,7 @@ A new optional key, `AUTH_COOKIE_PREFIX`, goes in front of both session cookie n
 
 `cookiePrefixes(env)` in `packages/auth/src/env.ts` holds the rule, and `sharedOptions` in `packages/auth/src/auth.ts` reads it. `AUTH_COOKIE_PREFIX` joins `packages/auth/src/env-preset.ts` and `packages/env/.env.example`, marked blank on purpose.
 
-## What the merge plan gets
+## What update merges
 
 `packages/auth/src/auth.ts`, if you edited it. Keep your edits, delete `DEV_ORIGINS`, make `trustedOrigins()` return the `CORS_ORIGINS` list alone, and set `cookiePrefix: cookiePrefix[group]` from `const cookiePrefix = cookiePrefixes(authEnv)`. If you added an origin to `DEV_ORIGINS` by hand, put it in `CORS_ORIGINS` instead.
 

@@ -13,7 +13,7 @@ A payment provider on bKash Tokenized Checkout: a hosted bKash page, settled by 
 | Tier | provider |
 | Stage | money |
 | Needs | `vendor-account` |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`payment`](payment.md), [`kv`](kv.md), [`queue`](queue.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -39,12 +39,21 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/payment/src/index.ts` | `plugin-array` |
-| `packages/payment/src/env-preset.ts` | `plugin-array` |
 | `packages/payment/package.json` | `package-json-dependency` |
 | `packages/queue/package.json` | `package-json-dependency` |
-| `packages/queue/src/index.ts` | `plugin-array` |
-| `packages/queue/src/index.ts` | `plugin-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `payment.providers` | 1 |
+| `payment.envPresets` | 1 |
+| `queue.jobs` | 1 |
+| `queue.schedules` | 1 |
 
 ## See the rest
 
@@ -56,7 +65,7 @@ Skill source: `modules/payment-bkash/skills/saasaloy-payment-bkash/SKILL.md`
 
 ### payment-bkash: bKash Tokenized Checkout, with the token on a schedule
 
-`saasaloy add payment-bkash` puts `packages/payment/src/providers/bkash.ts` and `packages/payment/src/env/bkash.ts` into the project, appends `bkash()` to the `providers` array and `bkashEnv()` to the payment env preset, appends `bkashTokenJob()` and `bkashTokenSchedule()` to `packages/queue`'s tables, adds `@repo/kv` to `packages/payment/package.json`, and adds `@repo/payment` to `packages/queue/package.json`. List `bkash` in `PAYMENT_PROVIDER` and `createPayment(env).create({ method: "bkash", ... })` answers a redirect to bKash's hosted page. The admin Payments page, the refund route and the listeners work against it with no change.
+`saasaloy add payment-bkash` puts `packages/payment/src/providers/bkash.ts` and `packages/payment/src/env/bkash.ts` into the project, adds `bkash()` to the `payment.providers` table and `bkashEnv()` to the `payment.envPresets` table, adds `bkashTokenJob()` and `bkashTokenSchedule()` to the `queue.jobs` and `queue.schedules` tables, adds `@repo/kv` to `packages/payment/package.json`, and adds `@repo/payment` to `packages/queue/package.json`. List `bkash` in `PAYMENT_PROVIDER` and `createPayment(env).create({ method: "bkash", ... })` answers a redirect to bKash's hosted page. The admin Payments page, the refund route and the listeners work against it with no change.
 
 Read `modules/payment/skills/saasaloy-payment/` first. This file covers only what differs.
 

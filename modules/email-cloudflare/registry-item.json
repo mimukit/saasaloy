@@ -5,7 +5,7 @@
   "description": "An email provider on Cloudflare Email Sending, which needs a paid Workers plan and an onboarded domain.",
   "stage": "mvp",
   "needs": ["cloudflare-paid", "domain"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["email"],
   "dependencies": [],
   "envVars": {},
@@ -21,22 +21,21 @@
       "matchOn": "name"
     },
     {
-      "file": "packages/email/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "email",
-      "arrayProp": "providers",
-      "call": "cloudflare",
-      "import": {
-        "name": "cloudflare",
-        "from": "./providers/cloudflare"
-      }
-    },
-    {
       "file": "packages/email/package.json",
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "@cloudflare/workers-types",
       "range": "5.20261001.1"
+    }
+  ],
+  "entries": [
+    {
+      "table": "email.providers",
+      "call": "cloudflare",
+      "import": {
+        "name": "cloudflare",
+        "from": "./providers/cloudflare"
+      }
     }
   ],
   "files": [

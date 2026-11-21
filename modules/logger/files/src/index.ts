@@ -1,5 +1,6 @@
 import { defineLogger } from "./define";
 import type { LoggerEnv } from "./provider";
+import { loggerProviders } from "./providers.generated";
 
 export { defineLogger } from "./define";
 export type {
@@ -17,15 +18,12 @@ export type {
   SerializedError,
 } from "./provider";
 
-// The provider registry, and the patch point every `logger-<provider>` module writes
-// into. `saasaloy add logger-console` adds its import and appends `consoleLogger()`
-// here — idempotently, so re-running it changes nothing.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with a real array literal. The codemod behind the `plugin-array` patch kind
-// (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into otherwise, and a
-// provider install fails silently. Never omit `providers`, even while it's empty.
-export const logger = defineLogger({ providers: [] });
+// The provider registry. Every `logger-<provider>` module adds a row to the
+// `logger.providers` table, and the CLI writes `./providers.generated.ts` from those rows
+// on every run: `saasaloy add logger-console` adds `consoleLogger()`, and `saasaloy remove`
+// takes it back out. A provider of your own goes after the spread, never in the generated
+// file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
+export const logger = defineLogger({ providers: [...loggerProviders] });
 
 /**
  * Get a logger for this request's environment. Mirrors `createEmail(env)`, except nothing

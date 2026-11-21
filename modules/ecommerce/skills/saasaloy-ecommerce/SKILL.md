@@ -205,11 +205,11 @@ The MVP keeps each later capability's seam in one place, so a module adds files 
 
 ## Removal
 
-`saasaloy remove ecommerce` takes the files and the reversible patches back. Its warnings say what stays:
+`saasaloy remove ecommerce` takes the files and the patches back. Its warnings say what stays:
 
 - The 17 tables and the `order_numbers` sequence stay deployed. Orders, order items and order events are the only record of what the shop sold, so export them, then run `pnpm --filter @repo/db db:generate` and review the drop migration before you apply it.
 - The shop's payments stay in `payments`, and product images stay in `storage_objects`. Settle the open COD payments first: once the module is gone, no listener moves an order.
-- `@repo/ecommerce` stays in `packages/payment/package.json` and the other workspaces' `package.json`, because a `package-json-dependency` patch has no inverse. Drop those lines by hand and run `pnpm install`. Check that `packages/payment/src/index.ts` no longer imports `orderPaymentListener`, and delete it by hand if the remover refused.
+- The same run takes `@repo/ecommerce` out of `packages/payment/package.json` and the other workspaces' `package.json`, so run `pnpm install` afterwards. Check that `packages/payment/src/index.ts` no longer imports `orderPaymentListener`. If you edited that file, the merge may leave conflict markers there instead.
 
 ## Next
 

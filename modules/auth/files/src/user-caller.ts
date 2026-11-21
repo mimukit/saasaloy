@@ -3,6 +3,7 @@ import { demandDenial } from "./user-caller-rules";
 import type { ScopeDemand, UserCaller } from "./user-caller-rules";
 import { getSession, requireSession } from "./server";
 import type { AuthRequestContext } from "./server";
+import { userCallerResolvers } from "./user-caller.generated";
 
 export type {
   CallerStatements,
@@ -49,15 +50,17 @@ export interface UserResolver {
   resolve(c: AuthRequestContext): Promise<UserCaller>;
 }
 
-/** Identity, so `userResolvers` keeps the call shape the `plugin-array` codemod reads. */
+/** Identity, so `userResolvers` reads as a registry call like every other table. */
 function defineUserResolvers(config: { resolvers: UserResolver[] }) {
   return config;
 }
 
-// The patch point. A credential module appends its factory call to `resolvers` with a
-// `plugin-array` patch (`exportName: "userResolvers"`, `arrayProp: "resolvers"`). Keep
-// the line in this exact shape and never omit `resolvers`, even while it is empty.
-export const userResolvers = defineUserResolvers({ resolvers: [] });
+// The resolver table. A credential module adds its factory call as a row of the
+// `userCaller.resolvers` table, which the CLI writes into `./user-caller.generated.ts`.
+// A resolver of your own goes after the spread, never in the generated file.
+export const userResolvers = defineUserResolvers({
+  resolvers: [...userCallerResolvers],
+});
 
 /** The session's caller. `activeOrganizationId` exists only with the organization plugin. */
 async function sessionCaller(c: AuthRequestContext): Promise<UserCaller> {

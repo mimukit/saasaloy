@@ -15,6 +15,7 @@ import { authDb, provider } from "./db-provider";
 import { cookiePrefixes, deriveCookieDomain, requireAuthSecret } from "./env";
 import type { AuthEnv } from "./env";
 import { audience } from "./plugins/audience";
+import { adminAuthPlugins, authPlugins } from "./plugins.generated";
 import { clientAdminGuard } from "./plugins/client-admin-guard";
 import { rankGuard } from "./plugins/rank-guard";
 import { scopeSessionsTo } from "./scoped-adapter";
@@ -82,13 +83,13 @@ const secret = requireAuthSecret(authEnv);
 // spreads it and then says what differs: the base path, sign-up, and its own `plugins`.
 //
 // Top-level singletons, not a per-request `c.env`-scoped factory (the convention every
-// other capability follows). This is deliberate: the Better Auth plugin-array patch point
-// (`{ exportName: "auth" | "adminAuth", arrayProp: "plugins" }` — see
-// packages/cli/src/lib/patch/ts-module.ts) must be a module-scope `export const` for
-// `subscription`/`teams` to patch `plugins: [...]` with zero codemod changes. Workers'
+// other capability follows). This is deliberate: each instance is one module-scope
+// `export const` whose `plugins: [...]` spreads a generated table (`auth.plugins` or
+// `adminAuth.plugins`, from `./plugins.generated.ts`), so `subscription`/`teams` add a
+// plugin with no edit to this file. Workers'
 // `cloudflare:workers` importable-env makes the string config and the secret above
 // available at module scope, which is what makes this shape possible. A feature module
-// patches both arrays, so both groups get the feature.
+// adds a row to both tables, so both groups get the feature.
 //
 // The database is the one thing that is NOT module-scope, and the split is load-bearing.
 // A Workers isolate outlives the request that created it while an open socket does not,
@@ -148,8 +149,8 @@ function sharedOptions(group: Audience) {
       // expected set grows with the plugin array, so `subscription-stripe` pushing `stripe()`
       // would need the `subscription` model in that object too, and every later plugin
       // another table. A capability module would then have to patch this file to add a
-      // table name, which is exactly the coupling the plugin-array patch point exists to
-      // avoid.
+      // table name, which is exactly the coupling the generated `auth.plugins` table exists
+      // to avoid.
       //
       // Nothing is lost that the project does not already have. The tables come from
       // `@db/schema/auth.ts`, which this module ships and `saasaloy` owns, and drizzle-kit
@@ -206,14 +207,19 @@ export const auth = betterAuth({
     // No `sendResetPassword` here. With `email` installed, `resetPasswordMail()` in the
     // array below sets it; without `email`, a reset request answers 400.
   },
-  // The patch point for feature capabilities (`subscription` pushing `stripe()`, `teams` pushing
-  // `organization()`, `email` bringing `resetPasswordMail()`). Keep this an array literal
-  // (never omit it, never hoist it to a named const) — `insertIntoPluginArray` needs a
-  // real array to push into. A feature module patches `adminAuth`'s array below as well.
+  // The plugins this module ships, then `authPlugins` from `./plugins.generated.ts`, which
+  // the CLI writes on every run: `teams` adds `organizationPlugin()`, `auth-phone` adds
+  // `phoneNumberPlugin()`. A plugin of your own goes after the spread. A feature module
+  // adds its plugin to `adminAuthPlugins` below as well.
   //
   // `audience(...)` comes first, so the session it writes carries its name before any other
   // plugin reads the row.
-  plugins: [audience(CLIENT_AUDIENCE), siteRoles(), clientAdminGuard()],
+  plugins: [
+    audience(CLIENT_AUDIENCE),
+    siteRoles(),
+    clientAdminGuard(),
+    ...authPlugins,
+  ],
 });
 
 // The admin instance: the admin group signs in here, at `/admin/auth`, from `apps/admin`.
@@ -229,11 +235,12 @@ export const adminAuth = betterAuth({
     minPasswordLength: MIN_PASSWORD_LENGTH,
     requireEmailVerification: false,
   },
-  // The second patch point, with the same rules as `auth`'s. A feature module that adds a
-  // Better Auth plugin patches both arrays.
+  // The same rules as `auth`'s: the shipped plugins, then `adminAuthPlugins` from
+  // `./plugins.generated.ts`, then your own.
   plugins: [
     audience(ADMIN_AUDIENCE, { roles: ADMIN_APP_ROLES }),
     siteRoles(),
     rankGuard(),
+    ...adminAuthPlugins,
   ],
 });

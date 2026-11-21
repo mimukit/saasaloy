@@ -19,7 +19,7 @@ Apply this note before you run `saasaloy add` or `saasaloy update` for `api`, `a
 
 The api and auth halves of this change are in `api/0002-cors-origins-required` and `auth/0002-origins-and-cookie-prefix`. The dev configs of the modules are in `admin/0004-dev-port`, `app/0002-dev-port`, `api/0004-dev-port`, `email-react/0002-dev-wrapper` and `e2e/0001-devports-record`.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/env/src/services.ts`, if you edited it. Keep your rows, add the `devPort?: number` field to `Service`, add `devPort: 3000` to the `web` row, and add `{ name: "dev-ports", environment: "dev", omit: [] }` to `SERVICES`.
 - `packages/env/package.json`, if you edited it. Take the `./dev-port` and `./dev-ports` entries in `exports`.

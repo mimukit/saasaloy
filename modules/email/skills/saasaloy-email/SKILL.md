@@ -161,9 +161,7 @@ idiom) is the **`saasaloy-email-react`** skill, which that module installs.
 | `email-plunk` | `plunk` | a [Plunk](https://www.useplunk.com) account and its `sk_` secret key | `PLUNK_API_KEY`, optional `PLUNK_API_URL` |
 | `email-console` | `console` | nothing | nothing — logs the rendered message |
 
-Installing another provider is the same command again (`saasaloy add email-console`); the codemod
-appends to the `providers` array idempotently, so both can be registered at once and
-`EMAIL_PROVIDER` picks between them per environment.
+Installing another provider is the same command again (`saasaloy add email-console`). Each provider adds its own row to the `email.providers` table, so both can be registered at once and `EMAIL_PROVIDER` picks between them per environment.
 
 ### Cloudflare Email Sending: the dashboard runbook
 
@@ -353,8 +351,8 @@ Then register it by hand in `src/index.ts`:
 // Add the import; `defineEmail` is already imported at the top of this file.
 import { postmark } from "./providers/postmark";
 
-// Then add the call to the existing array literal — don't replace the line's shape.
-export const email = defineEmail({ providers: [postmark()] });
+// Then add the call after the spread of the generated rows.
+export const email = defineEmail({ providers: [...emailProviders, postmark()] });
 ```
 
 Contract notes:
@@ -439,9 +437,9 @@ Then set `requireEmailVerification: true` in `auth`'s `emailAndPassword`. `packa
 
 Remove the providers first. `email-console`, `email-cloudflare`, `email-plunk` and `email-react` each depend on `email`, so `remove email` refuses while any of them is installed. `subscription` depends on `email` too, so remove `subscription` first or keep `email`. `--force` overrides the refusal, and it leaves the dependents broken.
 
-`saasaloy remove email-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. A provider that wrote a secret reader (`email-plunk` ships `env.ts`) loses that file too.
+`saasaloy remove email-<provider>` deletes the provider file, and the render without the module drops its row from `providers.generated.ts`. A provider that wrote a secret reader (`email-plunk` ships `env.ts`) loses that file too.
 
-`saasaloy remove email` then deletes the `packages/email` workspace (`index.ts`, `define.ts`, `provider.ts`, `render.ts`, `templates/welcome.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the email preset to `apps/api/src/env.ts`. The `@repo/email` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `EMAIL_PROVIDER` and `EMAIL_FROM` lines by hand.
+`saasaloy remove email` then deletes the `packages/email` workspace (`index.ts`, `define.ts`, `provider.ts`, `render.ts`, `templates/welcome.ts`, `env-preset.ts`) and drops the `api.envPresets` row that adds the email preset to `apps/api/src/env.generated.ts`. The same run takes the `@repo/email` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `EMAIL_PROVIDER` and `EMAIL_FROM` lines by hand.
 
 Every route or job that imports `@repo/email` stops compiling. Search for the import before you remove, and delete or replace each call site.
 
@@ -458,9 +456,7 @@ Every route or job that imports `@repo/email` stops compiling. Search for the im
 
 ## Boundaries to honor
 
-- **`export const email = defineEmail({ providers: [] })` stays in exactly that shape** — a real
-  array literal, never omitted. It is the patch point every provider module appends to; without it
-  a provider install fails silently.
+- **`export const email = defineEmail({ providers: [...emailProviders] })` keeps its spread.** `emailProviders` comes from `./providers.generated.ts`, which the CLI writes from every `email.providers` row on every run. A provider of your own goes after the spread, never in the generated file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
 - **Only `packages/email` talks to a provider's SDK or binding.** Everything else imports
   `@repo/email` (ADR 0020).
 - **`EMAIL_PROVIDER` never gets a default**, in code or in an example.

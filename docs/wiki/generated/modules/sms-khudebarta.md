@@ -13,7 +13,7 @@ An sms provider on the Khudebarta gateway for Bangladeshi numbers; needs a Khude
 | Tier | provider |
 | Stage | scale |
 | Needs | `vendor-account` |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`sms`](sms.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -35,10 +35,18 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/sms/src/index.ts` | `plugin-array` |
-| `packages/sms/src/env-preset.ts` | `plugin-array` |
+| `sms.providers` | 1 |
+| `sms.envPresets` | 1 |
 
 ## See the rest
 

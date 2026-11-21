@@ -8,7 +8,7 @@ This note is one half of a pair. `payment/0003-method-account` adds the field it
 
 `packages/payment/src/providers/manual.ts` sets `account` on the `bkash`, `nagad`, `rocket` and `bank` entries of `methods()` when that method is configured: the label ("bKash personal", the bank name), the number, the kind and the holder's name. It is the same value `create` puts in the instructions, built by the same helper. `cod` and `card` carry none.
 
-## What the merge plan gets
+## What update merges
 
 `packages/payment/src/providers/manual.ts`, if you edited it. Keep your edits and take the `walletAccount`, `bankAccount` and `publicAccount` helpers and the `...publicAccount(...)` line on each method.
 

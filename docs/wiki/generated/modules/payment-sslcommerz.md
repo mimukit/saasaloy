@@ -13,7 +13,7 @@ A payment provider on the SSLCOMMERZ hosted checkout for cards and wallets in Ba
 | Tier | provider |
 | Stage | money |
 | Needs | `vendor-account` |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`payment`](payment.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -36,10 +36,18 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/payment/src/index.ts` | `plugin-array` |
-| `packages/payment/src/env-preset.ts` | `plugin-array` |
+| `payment.providers` | 1 |
+| `payment.envPresets` | 1 |
 
 ## See the rest
 

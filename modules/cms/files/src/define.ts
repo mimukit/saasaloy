@@ -124,9 +124,9 @@ export interface CmsRegistry<C extends readonly Collection[]> {
 }
 
 /**
- * Build the registry. `collections` is a patch point: `saasaloy add cms` appends
- * `blogCollection()` to the array in `src/index.ts` with a `plugin-array` patch, and a
- * project adds its own collection the same way.
+ * Build the registry. `collections` holds the `cms.collections` table: `saasaloy add cms`
+ * adds a `blogCollection()` row, the CLI writes it into `src/collections.generated.ts`,
+ * and a project adds its own collection after the spread in `src/index.ts`.
  */
 export function defineCms<const C extends readonly Collection[]>(
   config: CmsConfig<C>

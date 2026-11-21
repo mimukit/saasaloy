@@ -5,25 +5,22 @@
   "description": "An email provider that logs each message instead of sending it, with no plan, domain or key.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["email"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
+    { "path": "files/console.ts", "target": "@email/providers/console.ts" }
+  ],
+  "entries": [
     {
-      "file": "packages/email/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "email",
-      "arrayProp": "providers",
+      "table": "email.providers",
       "call": "consoleEmail",
       "import": {
         "name": "consoleEmail",
         "from": "./providers/console"
       }
     }
-  ],
-  "files": [
-    { "path": "files/console.ts", "target": "@email/providers/console.ts" }
   ],
   "scaffolds": []
 }

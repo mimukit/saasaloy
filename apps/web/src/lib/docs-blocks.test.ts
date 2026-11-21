@@ -10,7 +10,7 @@ import {
 } from "./docs-blocks-data.ts";
 import type { BlockDescriptor } from "./docs-blocks-data.ts";
 
-const providers = { kind: "plugin-array", arrayProp: "providers" };
+const providers = { table: "email.providers" };
 
 const REGISTRY: BlockDescriptor[] = [
   { name: "api", type: "saasaloy:capability", stage: "validate" },
@@ -28,7 +28,7 @@ const REGISTRY: BlockDescriptor[] = [
     stage: "mvp",
     description: "Plunk.",
     dependsOn: ["email"],
-    patches: [providers],
+    entries: [providers],
   },
   {
     name: "email-console",
@@ -36,7 +36,7 @@ const REGISTRY: BlockDescriptor[] = [
     stage: "mvp",
     description: "Console.",
     dependsOn: ["email"],
-    patches: [providers],
+    entries: [providers],
   },
   {
     name: "teams",

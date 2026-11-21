@@ -6,7 +6,7 @@
 // docs/plans/0091-plan-public-site-and-brand-2026-10-26.md:
 //   1. a module with a non-empty `conflictsWith` is a driver (exactly one installed,
 //      chosen at `add` time; ADR 0026);
-//   2. a module with a `plugin-array` patch into a `providers` array is a provider;
+//   2. a module that adds a row to a `<capability>.providers` table is a provider;
 //   3. every other module takes its registry `type`.
 // The driver check runs first, so a module that met both tests would read as a driver:
 // the conflict is the stronger fact, because it limits what a project can install.
@@ -50,7 +50,7 @@ export interface RegistryDescriptor {
   stage?: string;
   dependsOn?: string[];
   conflictsWith?: string[];
-  patches?: { kind: string; arrayProp?: string }[];
+  entries?: { table: string }[];
 }
 
 /** A provider or a driver, shown as a chip on its parent's tile. */
@@ -82,8 +82,8 @@ export function moduleTier(descriptor: RegistryDescriptor): CatalogTier {
   if ((descriptor.conflictsWith ?? []).length > 0) {
     return "driver";
   }
-  const registersProvider = (descriptor.patches ?? []).some(
-    (patch) => patch.kind === "plugin-array" && patch.arrayProp === "providers"
+  const registersProvider = (descriptor.entries ?? []).some((row) =>
+    row.table.endsWith(".providers")
   );
   if (registersProvider) {
     return "provider";

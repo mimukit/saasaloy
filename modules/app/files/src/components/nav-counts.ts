@@ -1,3 +1,5 @@
+import { appNavCounts } from "./nav-counts.generated";
+
 // The live counts on the sidebar's rows. app-shell.tsx reads this list, asks the api for
 // each entry's number, and the sidebar shows it at the right of the row whose `to` matches.
 //
@@ -5,8 +7,8 @@
 // NAV_AREAS (./nav.ts). `path` is an api path, joined to the api origin, that answers
 // `{ count: number }` behind the signed-in user's session.
 //
-// A module adds its entry with a `const-array` patch keyed on `to`, so the seed ships the
-// list empty and needs no edit. The shell fetches every entry on load, again on window
+// A module adds its entry as a row of the generated table, so the seed ships the list
+// empty and needs no edit. The shell fetches every entry on load, again on window
 // focus, on a back-forward cache restore, and every 60 s while the tab is visible, under
 // the query key `["nav-count", to]`. A page whose action changes a count invalidates that
 // key, so the badge follows at once.
@@ -24,11 +26,6 @@ export interface NavCountSource {
   readonly path: string;
 }
 
-// Keep this declaration in exactly this shape: `export const NAV_COUNTS = [...]` with a
-// real array literal, the closing bracket on its own line. The codemod behind the
-// `const-array` patch kind has nothing to push into otherwise. The comment inside keeps
-// the empty list on several lines, so a patched entry lands on a line of its own and the
-// file stays formatted.
-export const NAV_COUNTS: readonly NavCountSource[] = [
-  // A module's `const-array` patch appends its `{ to, path }` entry below.
-];
+// The entries of the installed modules come from `./nav-counts.generated.ts`, which the CLI
+// writes on every run. An entry of your own goes after the spread.
+export const NAV_COUNTS: readonly NavCountSource[] = [...appNavCounts];

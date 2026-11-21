@@ -41,8 +41,8 @@ import { errors } from "@repo/ui/content/errors";
 import { api } from "@admin/lib/api";
 
 // The subscription screen at `/subscription`, shipped by `modules/subscription` and reachable the moment
-// the file lands: the router plugin wires it from the path, and the module's `const-array`
-// patch adds the sidebar entry.
+// the file lands: the router plugin wires it from the path, and the module's `admin.nav`
+// row adds the sidebar entry.
 //
 // It follows the convention `src/routes/index.tsx` sets out — `queryOptions`, prefetch in
 // the loader, read with `useQuery`, invalidate by key — and it names no payment provider.

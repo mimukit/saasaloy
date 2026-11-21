@@ -8,7 +8,7 @@ title: adminWrite takes the roles its gate admits
 
 No route of this module changes. No row changes.
 
-## What the merge plan gets
+## What update merges
 
 `apps/api/src/lib/admin-write.ts`, if you edited it. Keep your edits, import `requireRole` and the `RoleDemand` type from `@repo/auth/server`, add the `options` parameter to `adminWrite` and `actorOf`, and call `requireRole(c, roles)` in `actorOf` when `roles` is set.
 

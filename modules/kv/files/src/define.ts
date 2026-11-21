@@ -91,9 +91,9 @@ export function definePolicy(policy: Policy): Policy {
 }
 
 /**
- * Build the provider registry and the policy table. Both arrays are patch points: every
- * `kv-<provider>` module appends to `providers`, and `ratelimit` appends to `policies`.
- * See `src/index.ts`.
+ * Build the provider registry and the policy table. Both arrays hold a generated table:
+ * every `kv-<provider>` module adds a row to `providers`, and `ratelimit` adds rows to
+ * `policies`. See `src/index.ts`.
  */
 export function defineKv(config: KvConfig): KvRegistry {
   const { policies, providers } = config;

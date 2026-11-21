@@ -51,9 +51,12 @@ import type { ShellExtension } from "@repo/ui/lib/shell/extensions";
 // the shell chrome reads through `useShortcutHints`, and the header trigger. An app mounts
 // it through its shell extension list:
 //
-//   export const shellExtensions = defineShellExtensions({ extensions: [commandExtension()] });
+//   export const shellExtensions = defineShellExtensions({
+//     extensions: [...appShellExtensions],
+//   });
 //
-// which the app's descriptor writes with a `plugin-array` patch when `command` is installed.
+// where the app's descriptor adds a `commandExtension()` row to the generated table when
+// `command` is installed.
 
 // Vite replaces `process.env.NODE_ENV` in client code at dev and build time. The
 // declaration types it without pulling Node's types into a browser package.
@@ -345,8 +348,9 @@ function CommandTrigger(): React.ReactElement | null {
 }
 
 /**
- * The `command` module's shell extension. An app appends a bare `commandExtension()` call
- * to its `shellExtensions` list; the descriptor's `plugin-array` patch writes it.
+ * The `command` module's shell extension. An app spreads a bare `commandExtension()` call
+ * into its `shellExtensions` list; the app descriptor's `<app>.shellExtensions` row adds
+ * it.
  */
 export function commandExtension(): ShellExtension {
   return { id: "command", Provider: CommandProvider, header: CommandTrigger };

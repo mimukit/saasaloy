@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
-import { health } from "./routes/health";
+import { apiBaseRoutes, apiRoutes } from "./routes.generated";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
 // (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` and the two logger
@@ -63,10 +63,11 @@ function errorFor(status: number, message: string): ErrorBody {
 // `AppType`. Routes that a client must see go on the chain below instead.
 //
 // Both middlewares below are links in this chain rather than `base.use(...)` statements,
-// and that is load-bearing. A `chained-route` patch targeting `base` appends to this
-// initializer, so a statement form would leave the untyped mount registered *before*
-// the middleware — Hono runs matched handlers in registration order, and the mounted
-// handler answers first, so neither CORS nor the request logger would reach it.
+// and that is load-bearing. `apiBaseRoutes` (from `./routes.generated.ts`) mounts the
+// untyped routes of the `api.baseRoutes` table after the whole chain, so a statement form
+// would leave those mounts registered *before* the middleware. Hono runs matched handlers
+// in registration order, and the mounted handler answers first, so neither CORS nor the
+// request logger would reach it.
 //
 // Credentialed CORS lives in api's spine — every cross-origin caller (the admin SPA,
 // the waitlist form on the marketing site, auth's cookie-based session) shares the
@@ -90,85 +91,89 @@ function errorFor(status: number, message: string): ErrorBody {
 // real request's id. A gateway that must propagate one should overwrite the header
 // upstream, not have this Worker believe it.
 export const base: Hono<{ Bindings: Bindings; Variables: Variables }> =
-  new Hono<{
-    Bindings: Bindings;
-    Variables: Variables;
-  }>()
-    .use(
-      "*",
-      cors({
-        credentials: true,
-        // A browser hides every response header outside the CORS safelist from a
-        // cross-origin caller. A 429 names its wait in `Retry-After`, and a screen on
-        // another origin needs it to say how long.
-        exposeHeaders: ["Retry-After"],
-        // The browser keeps a preflight answer this many seconds (two hours, Chromium's
-        // cap). Without it every credentialed call from the admin paid an OPTIONS round trip.
-        maxAge: 7200,
-        origin: (
-          origin,
-          c: Context<{ Bindings: Bindings; Variables: Variables }>
-        ) => {
-          const allowed =
-            c.env.CORS_ORIGINS?.split(",")
-              .map((o: string) => o.trim())
-              .filter(Boolean) ?? [];
-          return origin && allowed.includes(origin) ? origin : null;
-        },
+  apiBaseRoutes(
+    new Hono<{
+      Bindings: Bindings;
+      Variables: Variables;
+    }>()
+      .use(
+        "*",
+        cors({
+          credentials: true,
+          // A browser hides every response header outside the CORS safelist from a
+          // cross-origin caller. A 429 names its wait in `Retry-After`, and a screen on
+          // another origin needs it to say how long.
+          exposeHeaders: ["Retry-After"],
+          // The browser keeps a preflight answer this many seconds (two hours, Chromium's
+          // cap). Without it every credentialed call from the admin paid an OPTIONS round trip.
+          maxAge: 7200,
+          origin: (
+            origin,
+            c: Context<{ Bindings: Bindings; Variables: Variables }>
+          ) => {
+            const allowed =
+              c.env.CORS_ORIGINS?.split(",")
+                .map((o: string) => o.trim())
+                .filter(Boolean) ?? [];
+            return origin && allowed.includes(origin) ? origin : null;
+          },
+        })
+      )
+      .use("*", async (c, next) => {
+        const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
+        c.set("log", createLogger(c.env).child({ requestId }));
+        // `next` is Hono's downstream continuation, not a Node error-first callback; returning
+        // it would end the middleware before the response phase.
+        // oxlint-disable-next-line node/callback-return
+        await next();
       })
-    )
-    .use("*", async (c, next) => {
-      const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
-      c.set("log", createLogger(c.env).child({ requestId }));
-      // `next` is Hono's downstream continuation, not a Node error-first callback; returning
-      // it would end the middleware before the response phase.
-      // oxlint-disable-next-line node/callback-return
-      await next();
-    })
-    // Every thrown error leaves as the envelope, because some 4xx are thrown rather than
-    // returned and would otherwise ship a different body than the route's own type says.
-    // The malformed-JSON case is the one that bites: Hono's json validator throws
-    // `HTTPException(400, "Malformed JSON in request body")` *before* a `zValidator`
-    // failure hook runs, so without this handler a route that publishes an envelope on
-    // 400 answers that path with plain text, and `hc`'s type lies.
-    //
-    // `onError` is a single slot rather than an ordered middleware, so it rides the same
-    // chain for consistency and a patch that lands after it still gets the handler.
-    //
-    // A sub-app mounted with `.route()` inherits this handler as long as it sets no
-    // `onError` of its own, so route modules need no error plumbing.
-    .onError((err, c) => {
-      if (err instanceof HTTPException) {
-        return c.json(errorFor(err.status, err.message), err.status);
-      }
-      // An unexpected throw is logged in full and answered with a fixed message: the real
-      // one can carry a binding value, a query, or a stack. `onError` can fire before the
-      // correlation middleware ran (a throw from CORS), so fall back to an uncorrelated
-      // logger rather than assuming `log` is set.
-      const log = c.get("log") ?? createLogger(c.env);
-      log.error("unhandled error", { err });
-      return c.json(errorFor(500, "internal error"), 500);
-    })
-    // Hono's built-in miss answers plain text `404 Not Found`, which would be the one
-    // response in this Worker that is not the envelope above. This makes it the same
-    // shape, so a caller parses one body for every failure.
-    //
-    // A wrong method on a real path lands here too, and answers 404 rather than 405.
-    // That is Hono's model — a route is a (method, path) pair, so `POST /health` matches
-    // nothing — and it is the decision: 405 would mean tracking which methods each path
-    // registers, and it tells an unauthenticated caller that the path exists.
-    //
-    // Like `onError`, `notFound` is a single slot on the chain rather than ordered
-    // middleware, so a `chained-route` patch that lands after it still inherits it, and
-    // so does a sub-app mounted with `.route()` that sets none of its own.
-    .notFound((c) => c.json(errorFor(404, "not found"), 404));
+      // Every thrown error leaves as the envelope, because some 4xx are thrown rather than
+      // returned and would otherwise ship a different body than the route's own type says.
+      // The malformed-JSON case is the one that bites: Hono's json validator throws
+      // `HTTPException(400, "Malformed JSON in request body")` *before* a `zValidator`
+      // failure hook runs, so without this handler a route that publishes an envelope on
+      // 400 answers that path with plain text, and `hc`'s type lies.
+      //
+      // `onError` is a single slot rather than an ordered middleware, so it rides the same
+      // chain for consistency and a route mounted after it still gets the handler.
+      //
+      // A sub-app mounted with `.route()` inherits this handler as long as it sets no
+      // `onError` of its own, so route modules need no error plumbing.
+      .onError((err, c) => {
+        if (err instanceof HTTPException) {
+          return c.json(errorFor(err.status, err.message), err.status);
+        }
+        // An unexpected throw is logged in full and answered with a fixed message: the real
+        // one can carry a binding value, a query, or a stack. `onError` can fire before the
+        // correlation middleware ran (a throw from CORS), so fall back to an uncorrelated
+        // logger rather than assuming `log` is set.
+        const log = c.get("log") ?? createLogger(c.env);
+        log.error("unhandled error", { err });
+        return c.json(errorFor(500, "internal error"), 500);
+      })
+      // Hono's built-in miss answers plain text `404 Not Found`, which would be the one
+      // response in this Worker that is not the envelope above. This makes it the same
+      // shape, so a caller parses one body for every failure.
+      //
+      // A wrong method on a real path lands here too, and answers 404 rather than 405.
+      // That is Hono's model — a route is a (method, path) pair, so `POST /health` matches
+      // nothing — and it is the decision: 405 would mean tracking which methods each path
+      // registers, and it tells an unauthenticated caller that the path exists.
+      //
+      // Like `onError`, `notFound` is a single slot on the chain rather than ordered
+      // middleware, so a route `apiBaseRoutes` mounts after it still inherits it, and so
+      // does a sub-app mounted with `.route()` that sets none of its own.
+      .notFound((c) => c.json(errorFor(404, "not found"), 404))
+  );
 
 // The typed route chain. Every mounted route is one `.route()` link in a single
 // expression, so `typeof app` carries each path, its input, and its response shape —
-// that is what `hc<AppType>` reads. A module registers itself by patching one link in
-// here (the `chained-route` patch kind), not by dropping a file into a scanned folder:
-// a glob gives the chain no type to carry.
-const app = base.route("/health", health);
+// that is what `hc<AppType>` reads. A module registers its routes as rows of the
+// `api.routes` table, and `apiRoutes` (from `./routes.generated.ts`, which the CLI writes
+// on every run) chains each one onto `base`, `/health` first. A glob would give the chain
+// no type to carry. A route of your own goes after the generated ones:
+// `apiRoutes(base).route("/reports", reports)`.
+const app = apiRoutes(base);
 
 // The contract consumers import. `@repo/api/client` re-exports this type and nothing
 // else, so a browser bundle gets the routes without pulling the Worker entry in.

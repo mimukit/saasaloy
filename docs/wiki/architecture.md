@@ -6,7 +6,7 @@ Saasaloy is a copy-in tool, not a framework. Nothing it installs is imported fro
 Saasaloy package at runtime; the CLI writes source files into your repo and then gets out
 of the way. That single choice explains most of what follows.
 
-Terms used here — module, capability, feature, provider, applier, coordinate — are
+Terms used here — module, capability, feature, provider, render, file class, coordinate — are
 defined once in [`CONTEXT.md`](../../CONTEXT.md). The decisions behind the design are in
 [`docs/adr/`](../adr/), one per file, linked below where they apply.
 
@@ -23,19 +23,24 @@ never merge. The tool repo does not run its own modules on itself
 `cli.ts`, which dispatches against the command registry in `commands/index.ts` and prints
 help for anything else. The registry holds eleven commands, in the order help and the picker
 render them: `init`, `add`, `env`, `testing`, `outdated`, `update`, `remove`, `list`,
-`new`, `doctor`, `skill`. The work lives in `commands/`, and the reusable machinery under `lib/`, split
+`new`, `doctor`, `skill`. The work lives in `commands/`. The engine that writes a project lives in `engine/`, and the rest of the reusable machinery under `lib/`, split
 into seams:
 
 | Seam | File | Responsibility |
 |---|---|---|
 | Registry | `lib/registry.ts` | the only place that knows *where* descriptors live |
 | Resolution | `lib/resolve.ts` | depth-first `dependsOn` walk, topologically ordered, cycle-detecting |
-| Applier | `lib/applier.ts` | plan file writes, classify each against the manifest, execute the safe ones |
-| Remover | `lib/remover.ts` | the same plan/execute split, in reverse, offline |
+| Payload | `engine/payload.ts` | load the base template and every module of a set at one ref, from the user cache, the registry or a local checkout |
+| Render | `engine/render.ts` | turn a set of modules into a map from path to bytes and class; reads no disk and no network |
+| Classes | `engine/classes.ts` | the one rule that gives each rendered path its class: `generated`, `merged` or `once` |
+| Apply | `engine/apply.ts` | compare the old render, the new render and the disk, and leave, write, delete, merge or report each path |
+| Merge | `engine/merge.ts`, `engine/json-merge.ts` | the three-way text merge through `git merge-file`, and the merge by key for JSON files |
+| Conversion | `engine/convert.ts` | turn a version 1 manifest and lock into version 2, finding each file's base by its hash |
+| Backup | `lib/backup.ts` | copy each file before a run changes it, for `--abort` |
 | Conflicts | `lib/conflicts.ts` | the `conflictsWith` check, read from descriptors and the lock |
 | Requirements | `lib/requires.ts` | the `requiresOneOf` check — a capability naming the drivers one of which must be present |
 | Design | `lib/design.ts` | detect a plan that writes `packages/ui/`, so `add` can flag the design contract |
-| Patch engine | `lib/patch/` | structural edits to JSONC, `package.json` and TypeScript modules |
+| Patch engine | `lib/patch/` | structural edits to JSONC, `package.json` and TypeScript modules, run by the render as transforms in memory |
 | Schemas | `lib/schema.ts` | ajv validation of every descriptor and state file |
 
 The CLI ships as one binary with the base template and the JSON schemas bundled inside it
@@ -51,8 +56,7 @@ intermediate package registry and no publish step
 A remote install resolves in this order:
 
 1. **Ref to SHA, once.** The requested ref is resolved to a concrete commit SHA. With no ref, the default registry resolves the tag `v<version>` of the CLI that runs ([ADR 0062](../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)) and a third-party repo resolves its default branch. Every module in one install pins to that same SHA.
-2. **Fetch the subtree.** `modules/<name>/` is downloaded at that SHA into a temp
-   directory.
+2. **Fetch the payload.** The registry at that SHA, `modules/` and the base template, is downloaded into the user cache, `$XDG_CACHE_HOME/saasaloy/payload/<source>@<ref>/` or `~/.cache/saasaloy/payload/<source>@<ref>/`. A later run at the same ref reads the cache and needs no network.
 3. **Validate.** The descriptor is checked against `registry-item.schema.json`, and its
    `name` must match its folder.
 4. **Recurse.** Each `dependsOn` name resolves as a sibling in the same source, at the same
@@ -66,7 +70,7 @@ Setting `SAASALOY_REGISTRY_DIR` swaps the remote source for a local `modules/` d
 It wins over any `owner/repo` coordinate, and both `add` and `list` warn when you supply
 one anyway.
 
-## What the applier does to your project
+## What the engine does to your project
 
 A generated project keeps three state files, and every command derives its behaviour from
 them:
@@ -74,26 +78,25 @@ them:
 | File | Holds |
 |---|---|
 | `saasaloy.json` | the alias map plus the list of installed modules. Also the marker that identifies the project root. |
-| `saasaloy-lock.json` | per module, the source, the requested ref, and the resolved commit SHA; plus a `base` object with the CLI version and template hash the base was rendered or adopted at. |
-| `.saasaloy/manifest.json` | every file and skill link a module applied, by owning module and content hash, plus the config patches it applied. |
+| `saasaloy-lock.json` | `requested`, the modules you asked for; per installed module the source, the requested ref and the resolved commit SHA; plus a `base` object with the CLI version and template hash the base was rendered at. |
+| `.saasaloy/manifest.json` | version 2: per file its owning module, its source path, its class, the sha256 of its raw render and the release that wrote it; plus `pendingMerges`, `pendingNotes` and `doneNotes`. |
+
+**One operation writes every project.** `init`, `add`, `remove`, `update` and `testing <mode>` all call `apply(oldLock, newLock)` ([ADR 0066](../adr/0066-adr-one-render-and-a-three-way-merge-replace-the-add-update-and-remove-engines-2026-11-20.md)). `add X` puts X in `requested`, `remove X` takes it out, `update` moves the release, and `init` applies from nothing. The run renders both locks in memory, compares each path with the disk, and picks one action: leave, write, delete, merge or report. The result depends only on the set of modules, so two install orders give the same tree, and `add` then `remove` gives back the starting tree.
 
 **Aliases decouple a module from your layout.** A descriptor targets
 `@api/routes/waitlist.ts`; `saasaloy.json` maps `@api` to a real directory. A capability
 that scaffolds a new workspace registers the alias, and the features that build on it
 never learn the path.
 
-**Content hashes are how the tool knows what is yours.** Before writing, the applier
-compares each target against the manifest hash and classifies it: `create`, `overwrite`
-(tracked and unmodified), `unchanged`, `drift` (tracked but hand-edited) or `conflict`
-(exists and never ours). Only the first three are written. Drift and conflict are held
-back and reported
-([ADR 0006](../adr/0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md)).
+**A file class decides what a run may do with a path** ([ADR 0067](../adr/0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md)). A `generated` file is written in full every run, and an owner edit refuses the run. A `merged` file you edited merges three ways, by line for text and by key for `package.json`, `wrangler.jsonc`, `tsconfig.json`, `turbo.json` and `saasaloy.json`. A `once` file is written when the path is new and then left alone; the base's `seedFiles` and `ownedFiles` and a module's `seed` entries are `once`.
 
-**The lock is the reproducibility anchor.** A repeat `add` of a module already in the lock
-reuses its recorded SHA instead of resolving `main` again, so the same install produces the
-same bytes. The reuse is narrow: the add must name the module, carry no explicit `@ref`,
-and target the same `owner/repo` the lock entry recorded, with `SAASALOY_REGISTRY_DIR`
-unset. Everything else resolves the ref afresh.
+**A hash proves what the CLI wrote.** The manifest records the sha256 of the raw render, before Prettier. A file whose disk bytes match it was never edited, so the run may write over it. For an edited file, the base of the merge is the render of the old lock, accepted only when its hash matches, else the render at the release the record names. With no match, the merge writes two-way markers ([ADR 0068](../adr/0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)). The engine never deletes or overwrites a file whose bytes differ from what it wrote, except a `generated` file under `--force` ([ADR 0034](../adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)).
+
+**A conflict does not stop the run.** The file gets markers, the lock and the manifest move, the path goes into `pendingMerges`, and the run exits 3. The next `add`, `remove` or `update` refuses until no marker line remains.
+
+**A run can be undone.** Before it writes, the run copies each file it will change through `lib/backup.ts` and writes `.saasaloy/journal.json`. It writes the project first and the manifest and the lock last, then removes the journal. A journal left behind makes every later run refuse until `--abort` restores the files.
+
+**The lock is the reproducibility anchor.** The default registry moves as one release: every default module stands at the tag of the CLI that last updated the project, and `add` refuses when the running CLI is another release. A third-party module keeps the commit SHA its lock entry recorded until `update` moves it to the tip of its ref.
 
 ## Two tiers of module
 
@@ -105,19 +108,15 @@ brings its vendor SDK with it and encapsulates it, so nothing else in the projec
 that SDK directly
 ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
 
-The descriptor still knows two types, `saasaloy:capability` and `saasaloy:feature`, but a capability with more than one possible implementation splits its second half into a [provider module](../../CONTEXT.md#provider-module) or a [driver module](../../CONTEXT.md#driver-module), both typed `saasaloy:feature`. A provider adds one file to the capability's `providers/` folder and registers it with a `plugin-array` patch; several coexist, and the runtime env var `<CAP>_PROVIDER` picks one, with no default in either direction ([ADR 0033](../adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `email`, `sms`, `logger`, `queue`, `kv`, `storage`, `payment` and `subscription` are on that side. A provider that needs a non-`fetch` Worker entry point registers a [handler set](../../CONTEXT.md#handler-set) through the `handlers` table in `apps/api/src/worker.ts`, never through the deploy tooling.
+The descriptor still knows two types, `saasaloy:capability` and `saasaloy:feature`, but a capability with more than one possible implementation splits its second half into a [provider module](../../CONTEXT.md#provider-module) or a [driver module](../../CONTEXT.md#driver-module), both typed `saasaloy:feature`. A provider adds one file to the capability's `providers/` folder and registers it with a row in the capability's `<cap>.providers` [registration table](../../CONTEXT.md#registration-table); several coexist, and the runtime env var `<CAP>_PROVIDER` picks one, with no default in either direction ([ADR 0033](../adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `email`, `sms`, `logger`, `queue`, `kv`, `storage`, `payment` and `subscription` are on that side. A provider that needs a non-`fetch` Worker entry point registers a [handler set](../../CONTEXT.md#handler-set) as a row of the `worker.handlers` table, which `apps/api/src/worker.ts` spreads, never through the deploy tooling.
 
 A driver instead **replaces** files the capability would own, so exactly one is ever installed: `database-d1` and `database-postgres` name each other in `conflictsWith`, and `database` names both in `requiresOneOf` ([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)). Which side a capability lands on is a three-question test, and the deciding question is replace-files versus add-one-file ([ADR 0037](../adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md)).
 
-Convention-based file drops cover most of what a module needs. The rest is **config
-patches**: structural edits to a file some other module owns, such as adding a Worker
-binding to `wrangler.jsonc` or registering a provider in an exported array. Those run
-through AST-aware codemods rather than string replacement
-([ADR 0010](../adr/0010-adr-config-patch-magicast-jsonc-parser-2026-07-22.md)), and are
-recorded flat in the manifest
-([ADR 0019](../adr/0019-adr-module-patches-applied-flat-array-2026-07-24.md)).
+Convention-based file drops cover most of what a module needs. A list that other modules add to, such as a capability's providers, the api route chain or the admin nav, is a [registration table](../../CONTEXT.md#registration-table). The module that owns it declares it under `tables` in its descriptor, and every module that adds to it declares a [table row](../../CONTEXT.md#table-row) under `entries`. The render writes each table in full as a `<name>.generated.ts` file beside the file that uses it, sorted by each row's `order` and then by module name. The file the owner keeps imports the export and spreads it, so an owner's own entry goes after the spread, and a remove drops the row with no edit to an owned file.
 
-The asymmetry to know about: the engine applies nine kinds forward, and seven of them have an inverse `remove` can run (`chained-route`, `const-array`, `const-property`, `drizzle-column`, `nav-entry`, `plugin-array`, `wrangler-binding`). The two `package.json` kinds have none, and are dropped from the manifest with a warning. See [Known limitations](reference.md#known-limitations).
+The rest is **config patches**: structural edits to a file some other module owns, such as adding a Worker binding to `wrangler.jsonc`, a dependency to a `package.json` or a column to a Drizzle table. Those run through AST-aware codemods rather than string replacement ([ADR 0010](../adr/0010-adr-config-patch-magicast-jsonc-parser-2026-07-22.md)), and are declared as a flat array in the descriptor ([ADR 0019](../adr/0019-adr-module-patches-applied-flat-array-2026-07-24.md)). The render applies each patch to the file in memory, in dependency order and then by module name, so the result never depends on install history.
+
+No patch has an inverse, and none needs one. `remove` renders the project without the module, so its patches are simply absent from the new render, and the three-way merge takes their lines out of each file you edited.
 
 ### The dependency graph
 
@@ -153,7 +152,6 @@ module that ships an agent skill installs it into `.agents/skills/` with a
 `.claude/skills/` symlink pointing at it
 ([ADR 0007](../adr/0007-adr-agent-native-static-agents-md-copied-skills-2026-07-22.md),
 [ADR 0015](../adr/0015-adr-module-skills-agents-canonical-claude-symlink-2026-07-24.md)).
-Those links are tracked in the manifest, so unlike config patches they are removed when the
-module is.
+After each run the engine links every folder in `.agents/skills/` and drops each `.claude/skills/` link whose folder is gone, so a removed module's link goes with its skill.
 
 _Verified against `main`@`9e0a34d8` on 2026-11-20._

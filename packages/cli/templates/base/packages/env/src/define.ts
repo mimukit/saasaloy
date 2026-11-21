@@ -63,8 +63,8 @@ export function definePreset<
 >(preset: {
   module: string;
   /**
-   * Keep this an array literal. A provider module appends its own preset here with a
-   * `plugin-array` patch, beside the one that appends its provider.
+   * A capability spreads its `<cap>.envPresets` table here, which the CLI generates from
+   * the row each provider module adds beside its provider row.
    */
   extends?: EnvPreset[];
   server?: Server;
@@ -120,9 +120,8 @@ export interface CreateEnvOptions<
   Shared extends SchemaRecord,
 > {
   /**
-   * The capability presets this service installed. Keep this an array literal: the
-   * codemod behind the `plugin-array` patch kind has nothing to push into otherwise, and
-   * `saasaloy add` fails silently.
+   * The capability presets this service installed. A service spreads its generated
+   * presets table here, and a preset of your own goes after the spread.
    */
   extends?: EnvPreset[];
   server?: Server;

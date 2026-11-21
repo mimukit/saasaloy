@@ -7,8 +7,8 @@
 //   `kill.<integration>`  drives `assertEnabled("<integration>")`
 //
 // Each export is a factory, not a plain object, because a project registers a flag by
-// appending a bare `killPayments()` call to the array in `src/index.ts` (the `plugin-array`
-// patch kind writes a call with no arguments). Your own flags belong beside them in a file
+// appending a bare `killPayments()` call to the array in `src/index.ts`, the call shape
+// every registry table uses. Your own flags belong beside them in a file
 // of your own; this one is the module's, and `saasaloy update` may rewrite it.
 
 import { defineFlag, KILL_PREFIX, MAINTENANCE_KEY } from "../define";

@@ -5,16 +5,22 @@
   "description": "Opt-in JSX email templates on React Email in a packages/email-react workspace, with a preview server.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["email"],
   "dependencies": [],
   "envVars": {},
   "patches": [
     {
-      "file": "packages/env/src/services.ts",
-      "kind": "const-array",
-      "constName": "SERVICES",
-      "key": "name",
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/email-react",
+      "range": "workspace:*"
+    }
+  ],
+  "entries": [
+    {
+      "table": "env.services",
       "entry": {
         "name": "email-react",
         "file": "packages/email-react/.env",
@@ -22,13 +28,6 @@
         "omit": [],
         "devPort": 3003
       }
-    },
-    {
-      "file": "apps/api/package.json",
-      "kind": "package-json-dependency",
-      "section": "dependencies",
-      "name": "@repo/email-react",
-      "range": "workspace:*"
     }
   ],
   "files": [],

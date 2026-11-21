@@ -20,17 +20,12 @@ A module the graph pulled in as a prerequisite reports the same errors with
 
 Not everyone is, and the difference decides how loud you have to be.
 
-**Protected.** A consumer running `saasaloy add <name>` where `<name>` already has an entry
-in that project's `saasaloy-lock.json`, for the same `owner/repo`, with no explicit `@ref`
-on the command line. That install rewrites the coordinate to the SHA the lock recorded and
-never sees `main`'s tip.
-
-**Also protected.** A plain `saasaloy add <name>` or `saasaloy list` with a released CLI. It reads the tag of its own version, and a tag never moves, so a break on `main` does not reach it. A break inside a released tag is not fixed by a revert: it needs a new patch release.
+**Protected.** A plain `saasaloy add <name>`, `saasaloy update` or `saasaloy list` with a released CLI. It reads the tag of its own version, and a tag never moves, so a break on `main` does not reach it. A break inside a released tag is not fixed by a revert: it needs a new patch release.
 
 **Not protected.** Everything that reads `main`:
 
-- any add or list carrying `@main`, or an explicit `@ref` that names a branch. An explicit ref skips the lock pin entirely.
-- `saasaloy update <name> --ref main`.
+- `saasaloy list @main`. `add` refuses a `@ref` on the default registry, because the default registry moves as one release.
+- a development build that reads a checkout of `main` through `SAASALOY_REGISTRY_DIR`.
 
 One more thing to know before you rely on `list` to detect this: `list` builds its names
 from the repo's git tree and reads no descriptors, so **a broken module still appears in

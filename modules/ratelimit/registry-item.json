@@ -5,45 +5,10 @@
   "description": "Per-route rate limit middleware with named policies and a 429 carrying Retry-After, on kv.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "kv"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
-    {
-      "file": "packages/kv/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "kv",
-      "arrayProp": "policies",
-      "call": "strictPolicy",
-      "import": {
-        "name": "strictPolicy",
-        "from": "./policies/ratelimit"
-      }
-    },
-    {
-      "file": "packages/kv/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "kv",
-      "arrayProp": "policies",
-      "call": "defaultPolicy",
-      "import": {
-        "name": "defaultPolicy",
-        "from": "./policies/ratelimit"
-      }
-    },
-    {
-      "file": "packages/kv/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "kv",
-      "arrayProp": "policies",
-      "call": "loosePolicy",
-      "import": {
-        "name": "loosePolicy",
-        "from": "./policies/ratelimit"
-      }
-    }
-  ],
   "files": [
     {
       "path": "files/kv/policies/ratelimit.ts",
@@ -52,6 +17,32 @@
     {
       "path": "files/api/middleware/ratelimit.ts",
       "target": "@api/middleware/ratelimit.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "kv.policies",
+      "call": "strictPolicy",
+      "import": {
+        "name": "strictPolicy",
+        "from": "./policies/ratelimit"
+      }
+    },
+    {
+      "table": "kv.policies",
+      "call": "defaultPolicy",
+      "import": {
+        "name": "defaultPolicy",
+        "from": "./policies/ratelimit"
+      }
+    },
+    {
+      "table": "kv.policies",
+      "call": "loosePolicy",
+      "import": {
+        "name": "loosePolicy",
+        "from": "./policies/ratelimit"
+      }
     }
   ],
   "scaffolds": [],

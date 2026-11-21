@@ -13,7 +13,7 @@ An in-house shop on Postgres: products with variants, stock holds, carts, orders
 | Tier | feature |
 | Stage | money |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.9.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md), [`database-postgres`](database-postgres.md), [`validators`](validators.md), [`auth`](auth.md), [`auth-phone`](auth-phone.md), [`admin`](admin.md), [`file-uploads`](file-uploads.md), [`payment`](payment.md), [`cms`](cms.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -136,27 +136,31 @@ Files:
 
 | File | Kind |
 |---|---|
-| `packages/config/src/sections.ts` | `plugin-array` |
 | `packages/db/package.json` | `package-json-dependency` |
 | `apps/api/package.json` | `package-json-dependency` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/api/src/index.ts` | `chained-route` |
-| `apps/api/src/lib/audit-actions.ts` | `plugin-array` |
 | `packages/payment/package.json` | `package-json-dependency` |
-| `packages/payment/src/index.ts` | `plugin-array` |
-| `apps/admin/src/components/nav-counts.ts` | `const-array` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
 | `apps/admin/package.json` | `package-json-dependency` |
 | `apps/web/package.json` | `package-json-dependency` |
 | `apps/web/package.json` | `package-json-dependency` |
 | `apps/web/package.json` | `package-json-dependency` |
 | `apps/web/wrangler.jsonc` | `wrangler-binding` |
 | `apps/web/wrangler.jsonc` | `wrangler-binding` |
-| `packages/ui/src/blocks/navbar.tsx` | `const-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `config.sections` | 1 |
+| `api.routes` | 2 |
+| `audit.actions` | 1 |
+| `payment.listeners` | 1 |
+| `admin.navCounts` | 1 |
+| `admin.nav` | 5 |
+| `ui.pageLinks` | 1 |
 
 ## See the rest
 
@@ -368,11 +372,11 @@ The MVP keeps each later capability's seam in one place, so a module adds files 
 
 #### Removal
 
-`saasaloy remove ecommerce` takes the files and the reversible patches back. Its warnings say what stays:
+`saasaloy remove ecommerce` takes the files and the patches back. Its warnings say what stays:
 
 - The 17 tables and the `order_numbers` sequence stay deployed. Orders, order items and order events are the only record of what the shop sold, so export them, then run `pnpm --filter @repo/db db:generate` and review the drop migration before you apply it.
 - The shop's payments stay in `payments`, and product images stay in `storage_objects`. Settle the open COD payments first: once the module is gone, no listener moves an order.
-- `@repo/ecommerce` stays in `packages/payment/package.json` and the other workspaces' `package.json`, because a `package-json-dependency` patch has no inverse. Drop those lines by hand and run `pnpm install`. Check that `packages/payment/src/index.ts` no longer imports `orderPaymentListener`, and delete it by hand if the remover refused.
+- The same run takes `@repo/ecommerce` out of `packages/payment/package.json` and the other workspaces' `package.json`, so run `pnpm install` afterwards. Check that `packages/payment/src/index.ts` no longer imports `orderPaymentListener`. If you edited that file, the merge may leave conflict markers there instead.
 
 #### Next
 

@@ -1,8 +1,8 @@
 import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
 
-// The environment keys the Upstash provider reads. `saasaloy add kv-upstash` appends this
-// preset to `packages/kv/src/env-preset.ts`, beside the patch that appends the provider
+// The environment keys the Upstash provider reads. `saasaloy add kv-upstash` adds this
+// preset as a `kv.envPresets` row, beside the `kv.providers` row for the provider
 // itself, so installing the provider is what makes its keys required.
 //
 // `KV_KEY_PREFIX` is optional in the kv preset, because `kv-cloudflare` and `kv-memory` do

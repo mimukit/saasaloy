@@ -1,10 +1,10 @@
-// The array-literal half of the TS codemods: find a module-scope const array, read an
-// entry's identity, splice one in or out, and render an object literal to insert.
+// The literal-reading half of the TS codemods: find a module-scope const and its array or
+// object, read an entry's identity, and render a JSON value as TypeScript source.
+// `const-property` splices with these, and `doctor` reads the deploy targets with them.
 //
 // It is byte-level rather than magicast's reprint-the-program route, and deliberately so.
-// These patches land on files a user owns and keeps editing, so every byte the patch does
-// not mean to change has to stay as it was. `const-array` built this first; `nav-entry`
-// needs the same splices one level deeper, which is why they live here rather than twice.
+// A patch lands on a file a user owns and keeps editing, so every byte the patch does not
+// mean to change has to stay as it was.
 
 /** A module-scope `const <name> = [...]`, `as const` and friends unwrapped. */
 export function findConstArray(
@@ -61,23 +61,6 @@ export function asArray(node: AstNode): ArrayExpression | undefined {
     : undefined;
 }
 
-/** The first element object whose `key` property holds `wanted`. */
-export function findElement(
-  array: ArrayExpression,
-  key: string,
-  wanted: unknown
-): ObjectExpression | undefined {
-  for (const element of array.elements) {
-    if (
-      element?.type === "ObjectExpression" &&
-      entryValue(element, key) === wanted
-    ) {
-      return element as ObjectExpression;
-    }
-  }
-  return undefined;
-}
-
 /** The value node of a non-computed property, for walking one level deeper. */
 export function propertyValue(
   object: ObjectExpression,
@@ -92,74 +75,6 @@ export function propertyValue(
     }
   }
   return undefined;
-}
-
-/**
- * Splice `entry` in as the array's last element.
- *
- * Matches what is already there rather than imposing a house style: a one-line array gets
- * `, entry`, a multi-line one gets its own line at the existing indent, and a last element
- * without a trailing comma gains one. Prettier runs in the generated project, so anything
- * else comes back as a diff the user did not ask for.
- */
-export function appendEntry(
-  source: string,
-  array: ArrayExpression,
-  entry: string
-): string {
-  const close = array.end - 1;
-  const closeLineStart = source.lastIndexOf("\n", close - 1) + 1;
-  const closeIndent = source.slice(closeLineStart, close);
-  const isMultiline = closeIndent.trim() === "" && closeLineStart > array.start;
-  if (!isMultiline) {
-    const separator = array.elements.length === 0 ? "" : ", ";
-    return `${source.slice(0, close)}${separator}${entry}${source.slice(close)}`;
-  }
-
-  let before = source.slice(0, closeLineStart);
-  const last = array.elements.at(-1);
-  if (last && !source.slice(last.end, close).includes(",")) {
-    before = `${source.slice(0, last.end)},${source.slice(last.end, closeLineStart)}`;
-  }
-  const itemIndent = `${closeIndent}  `;
-  return `${before}${itemIndent}${entry},\n${source.slice(closeLineStart)}`;
-}
-
-/** Splice the element at `index` back out, taking its line or its separator with it. */
-export function removeEntry(
-  source: string,
-  array: ArrayExpression,
-  index: number
-): string {
-  const element = array.elements[index];
-  if (!element) {
-    return source;
-  }
-  const lineStart = source.lastIndexOf("\n", element.start - 1) + 1;
-  const lineEnd = source.indexOf("\n", element.end);
-  const ownLine = source.slice(lineStart, element.start).trim() === "";
-  if (ownLine && lineEnd !== -1) {
-    return `${source.slice(0, lineStart)}${source.slice(lineEnd + 1)}`;
-  }
-
-  const next = array.elements[index + 1];
-  if (next) {
-    return `${source.slice(0, element.start)}${source.slice(next.start)}`;
-  }
-  const previous = array.elements[index - 1];
-  const start = previous
-    ? source.lastIndexOf(",", element.start - 1)
-    : element.start;
-  return `${source.slice(0, start)}${source.slice(element.end)}`;
-}
-
-/** Whether any element already carries `wanted` under its `key` property. */
-export function hasEntry(
-  array: ArrayExpression,
-  key: string,
-  wanted: unknown
-): boolean {
-  return array.elements.some((element) => entryValue(element, key) === wanted);
 }
 
 /** The literal value an element holds under `key`, or `undefined`. */

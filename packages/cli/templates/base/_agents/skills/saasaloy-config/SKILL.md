@@ -69,8 +69,7 @@ literals in this repo, so a wrong one is a review problem rather than a runtime 
 
 ## Adding a section
 
-A capability contributes one section, keyed by the module name. The module ships one file
-into `packages/config/src/sections/<key>.ts` and registers it with a `plugin-array` patch:
+A capability contributes one section, keyed by the module name. The module ships one file into `packages/config/src/sections/<key>.ts` and registers it with a row of the `config.sections` table. The CLI writes the row into `packages/config/src/sections.generated.ts` on every run, and `sections.ts` spreads it. A section of your own goes after the spread, never in the generated file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
 
 ```ts
 // packages/config/src/sections/shop.ts
@@ -85,12 +84,9 @@ export function shopConfig() {
 ```
 
 ```jsonc
-// the module's registry-item.json
+// the module's registry-item.json, under "entries"
 {
-  "file": "packages/config/src/sections.ts",
-  "kind": "plugin-array",
-  "exportName": "sections",
-  "arrayProp": "sections",
+  "table": "config.sections",
   "call": "shopConfig",
   "import": { "name": "shopConfig", "from": "./sections/shop" }
 }

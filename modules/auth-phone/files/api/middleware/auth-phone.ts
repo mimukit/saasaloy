@@ -24,7 +24,7 @@ import {
 } from "./auth-phone-rules";
 import { CLIENT_IP_HEADER, RATE_LIMIT_NAMESPACE, rateLimit } from "./ratelimit";
 
-// `auth-phone`'s guards on `/auth`. This module's two `plugin-array` patches add
+// `auth-phone`'s guards on `/auth`. This module's two `auth.routeGuards` rows add
 // `phoneSendGuard()` and `phoneSignInGuard()` to `authGuards` in `../routes/auth.ts`, so
 // both run ahead of Better Auth, inside `withAuthScope`. Each owns a few POST paths and
 // calls `next()` on every other one.

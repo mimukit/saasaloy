@@ -131,12 +131,25 @@ export async function writeDeps(
   if (added.length === 0 && devAdded.length === 0) {
     return;
   }
+  const file = join(root, "package.json");
+  await writeFile(file, mergeDeps(pkg, added, devAdded), "utf-8");
+}
+
+/**
+ * The planned additions merged into `pkg`, each bucket kept sorted, as the bytes
+ * `writeDeps` writes. Pure: it mutates `pkg` the way `writeDeps` always did and touches no
+ * disk, so the render engine can produce the same `package.json` in memory.
+ */
+export function mergeDeps(
+  pkg: PackageJson,
+  added: DepChange[],
+  devAdded: DepChange[] = []
+): string {
   if (added.length > 0) {
     pkg.dependencies = mergeSorted(pkg.dependencies, added);
   }
   if (devAdded.length > 0) {
     pkg.devDependencies = mergeSorted(pkg.devDependencies, devAdded);
   }
-  const file = join(root, "package.json");
-  await writeFile(file, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8");
+  return `${JSON.stringify(pkg, null, 2)}\n`;
 }

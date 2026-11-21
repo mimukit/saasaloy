@@ -5,7 +5,7 @@
   "description": "A storage provider on Cloudflare R2, with the BUCKET binding and signed URLs.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["storage"],
   "dependencies": [],
   "envVars": {
@@ -42,10 +42,16 @@
       "range": "1.0.20"
     },
     {
-      "file": "packages/storage/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "storage",
-      "arrayProp": "providers",
+      "file": "packages/storage/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "@cloudflare/workers-types",
+      "range": "5.20261001.1"
+    }
+  ],
+  "entries": [
+    {
+      "table": "storage.providers",
       "call": "cloudflare",
       "import": {
         "name": "cloudflare",
@@ -53,22 +59,12 @@
       }
     },
     {
-      "file": "packages/storage/src/env-preset.ts",
-      "kind": "plugin-array",
-      "exportName": "storagePreset",
-      "arrayProp": "extends",
+      "table": "storage.envPresets",
       "call": "r2Env",
       "import": {
         "name": "r2Env",
         "from": "./env/r2"
       }
-    },
-    {
-      "file": "packages/storage/package.json",
-      "kind": "package-json-dependency",
-      "section": "devDependencies",
-      "name": "@cloudflare/workers-types",
-      "range": "5.20261001.1"
     }
   ],
   "files": [

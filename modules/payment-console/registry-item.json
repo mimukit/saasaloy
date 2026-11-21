@@ -5,25 +5,22 @@
   "description": "A payment provider with a fake hosted checkout page for development, with no network and no secret.",
   "stage": "money",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["payment"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
+    { "path": "files/console.ts", "target": "@payment/providers/console.ts" }
+  ],
+  "entries": [
     {
-      "file": "packages/payment/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "payment",
-      "arrayProp": "providers",
+      "table": "payment.providers",
       "call": "consolePayment",
       "import": {
         "name": "consolePayment",
         "from": "./providers/console"
       }
     }
-  ],
-  "files": [
-    { "path": "files/console.ts", "target": "@payment/providers/console.ts" }
   ],
   "scaffolds": []
 }

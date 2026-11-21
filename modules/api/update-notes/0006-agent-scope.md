@@ -12,7 +12,7 @@ This note needs `api/0005-route-contract`. Apply it first.
 
 The `saasaloy-api` skill shows the field and says the statement names the scope while the route's gate enforces it.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/contract.ts`, if you edited it. Keep your edits and take the `scope: string | null` member of the callable branch.
 

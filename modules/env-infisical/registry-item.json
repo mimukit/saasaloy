@@ -5,27 +5,24 @@
   "description": "Infisical as a value source for pnpm env:setup and pnpm deploy:production; needs an Infisical account.",
   "stage": "scale",
   "needs": ["vendor-account"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": [],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
     {
-      "file": "packages/env/src/sources.ts",
-      "kind": "plugin-array",
-      "exportName": "sources",
-      "arrayProp": "sources",
+      "path": "files/infisical.ts",
+      "target": "@env/providers/infisical.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "env.sources",
       "call": "infisical",
       "import": {
         "name": "infisical",
         "from": "./providers/infisical.ts"
       }
-    }
-  ],
-  "files": [
-    {
-      "path": "files/infisical.ts",
-      "target": "@env/providers/infisical.ts"
     }
   ],
   "scaffolds": [],

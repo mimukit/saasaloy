@@ -1,10 +1,10 @@
 import { apiKeyClient } from "@better-auth/api-key/client";
 
-// The client half of `./api-key.ts`, and the reason it exists is the shape of the patch.
+// The client half of `./api-key.ts`, and the reason it exists is the shape of the row.
 //
-// The descriptor's `plugin-array` patch appends a zero-argument call to
-// `authClientPlugins` in `packages/auth/src/client.ts`, and the patch engine records and
-// reverses that exact shape. Wrapping the plugin here keeps that true even though
+// The descriptor's `client.plugins` row adds a zero-argument call to
+// `authClientPlugins` in `packages/auth/src/client.ts`, and a table row can name only
+// that shape. Wrapping the plugin here keeps that true even though
 // `apiKeyClient()` happens to take no options today, and it gives the client half one
 // file to grow into if it ever does — the same arrangement `organizationClientPlugin`
 // uses in `./organization-client.ts`.

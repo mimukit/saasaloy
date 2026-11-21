@@ -10,7 +10,7 @@ The React Email preview server moves from port 3002 to port 3003, because the `a
 "dev": "email dev --dir src/templates --port 3003"
 ```
 
-## What the merge plan gets
+## What update merges
 
 `packages/email-react/package.json`, only if you edited it. Keep your edits and take `--port 3003` in the `dev` script.
 

@@ -2,7 +2,12 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatFiles, formatReport, prettierBin } from "./format.js";
+import {
+  formatFiles,
+  formatReport,
+  formatSource,
+  prettierBin,
+} from "./format.js";
 import type { Runner } from "./format.js";
 
 // The runner is injected, so these tests never start a real Prettier. What they pin is
@@ -127,4 +132,25 @@ describe(formatReport, () => {
     expect(failed?.message).toContain("pnpm format");
     expect(failed?.message).toContain("boom");
   });
+});
+
+describe(formatSource, () => {
+  it("keeps the raw text when the project has no Prettier", async () => {
+    await expect(formatSource(root, "a.ts", "x")).resolves.toBeUndefined();
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "pipes the text through the project's Prettier as if it sat at the path",
+    async () => {
+      const bin = prettierBin(root);
+      await mkdir(dirname(bin), { recursive: true });
+      // A stand-in Prettier: echoes its `--stdin-filepath` and upper-cases stdin.
+      await writeFile(bin, '#!/bin/sh\necho "$2"\ntr a-z A-Z\n', {
+        mode: 0o755,
+      });
+      await expect(
+        formatSource(root, "src/a.ts", "const a = 1;\n")
+      ).resolves.toBe("src/a.ts\nCONST A = 1;\n");
+    }
+  );
 });

@@ -6,7 +6,6 @@ import {
   moduleUpdateNotesDir,
 } from "./update-notes.js";
 import type { UpdateNote } from "./update-notes.js";
-import type { ModuleUpdateInput, UpdatePlan } from "./updater.js";
 import { whenHolds } from "./when.js";
 import type { WhenContext } from "./when.js";
 
@@ -34,13 +33,6 @@ export interface BaseNoteRange {
   recorded: string;
   /** The running CLI, from `readVersion()`. */
   running: string;
-  /**
-   * The CLI version the base was adopted at, set only on the first update after the
-   * adoption. Notes up to it cannot be placed, so without `from` they go under may apply.
-   */
-  adoptedAt?: string;
-  /** `update --from <version>`: the lower bound the user names for an adopted base. */
-  from?: string;
 }
 
 /** One module's two `update-notes/` folders, as the run fetched them. */
@@ -94,7 +86,7 @@ export function selectBaseNotes(
     return { notes: [], mayApply: [] };
   }
   const sorted = all.toSorted(byVersion);
-  const lower = parseVersion(range.from ?? range.recorded);
+  const lower = parseVersion(range.recorded);
   if (!lower) {
     // A recorded label that is not semver says nothing about where the project stands.
     return {
@@ -102,15 +94,10 @@ export function selectBaseNotes(
       mayApply: sorted.filter((n) => inRange(n, undefined, running)),
     };
   }
-  const notes = sorted.filter((n) => inRange(n, lower, running));
-  const adoptedAt =
-    range.from === undefined && range.adoptedAt !== undefined
-      ? parseVersion(range.adoptedAt)
-      : undefined;
-  const mayApply = adoptedAt
-    ? sorted.filter((n) => inRange(n, undefined, adoptedAt))
-    : [];
-  return { notes, mayApply };
+  return {
+    notes: sorted.filter((n) => inRange(n, lower, running)),
+    mayApply: [],
+  };
 }
 
 /**
@@ -126,60 +113,6 @@ export function selectModuleNotes(
   }
   const seen = new Set(base.map((n) => n.id));
   return { notes: theirs.filter((n) => !seen.has(n.id)), mayApply: [] };
-}
-
-/**
- * Why `update --from <version>` is refused, or `undefined` when it may run. `--from` only
- * means something on the first update after an adoption: on any other run the lock's
- * `base.cliVersion` already says where the project stands.
- */
-export function fromRefusal(
-  from: string | undefined,
-  firstAfterAdoption: boolean
-): string | undefined {
-  if (from === undefined) {
-    return undefined;
-  }
-  if (!parseVersion(from)) {
-    return `\`--from ${from}\` is not a version. Name the CLI version this project was made with, for example \`--from 0.7.0\`. Nothing was written.`;
-  }
-  if (!firstAfterAdoption) {
-    return "`--from` works only on the first update after `saasaloy update` adopted the base. The lock range is already exact on this project, so run `saasaloy update` without it. Nothing was written.";
-  }
-  return undefined;
-}
-
-/**
- * The module folders a plan reads notes from, in plan order. A new prerequisite comes
- * just ahead of the module that pulled it in, the order `executeUpdatePlan` installs them.
- * The base template is left out: its notes ship with the CLI and go by version.
- */
-export function moduleNoteSources(
-  inputs: readonly ModuleUpdateInput[],
-  plan: Pick<UpdatePlan, "modules">
-): ModuleNoteSource[] {
-  const byName = new Map(
-    inputs.map((input) => [input.theirs.item.name, input])
-  );
-  const sources: ModuleNoteSource[] = [];
-  for (const mod of plan.modules) {
-    const input = byName.get(mod.name);
-    if (!input || input.baseRecord) {
-      continue;
-    }
-    for (const name of mod.prereqNames) {
-      const prereq = input.prereqs?.modules.get(name);
-      if (prereq) {
-        sources.push({ name, theirsDir: prereq.dir, fresh: true });
-      }
-    }
-    sources.push({
-      name: mod.name,
-      theirsDir: input.theirs.dir,
-      ...(input.base ? { baseDir: input.base.dir } : {}),
-    });
-  }
-  return sources;
 }
 
 /** Read, select and filter every note this run shows. */

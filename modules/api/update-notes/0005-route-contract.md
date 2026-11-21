@@ -16,7 +16,7 @@ The `saasaloy-api` and `saasaloy-validators` skills now show a route with its `d
 
 `apps/api/package.json` gets one new dependency, `hono-openapi` pinned at `1.6.0`. Nothing converts a schema until a document is built: `describeRoute` and `resolver()` only keep the schema, and nothing calls `generateSpecs` until the `agent` module is installed.
 
-## What the merge plan gets
+## What update merges
 
 `apps/api/package.json`, if you edited it. Keep your edits and add `"hono-openapi": "1.6.0"` to `dependencies`. `contract.ts` is a new file. Each module that ships api routes has its own note for its route files, such as `notification/0001-agent-statements`.
 

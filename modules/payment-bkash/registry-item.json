@@ -5,7 +5,7 @@
   "description": "A payment provider on bKash Tokenized Checkout: a hosted bKash page, settled by a status re-read, with refunds. Needs a bKash merchant account.",
   "stage": "money",
   "needs": ["vendor-account"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["payment", "kv", "queue"],
   "dependencies": [],
   "envVars": {
@@ -27,28 +27,6 @@
   ],
   "patches": [
     {
-      "file": "packages/payment/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "payment",
-      "arrayProp": "providers",
-      "call": "bkash",
-      "import": {
-        "name": "bkash",
-        "from": "./providers/bkash"
-      }
-    },
-    {
-      "file": "packages/payment/src/env-preset.ts",
-      "kind": "plugin-array",
-      "exportName": "paymentPreset",
-      "arrayProp": "extends",
-      "call": "bkashEnv",
-      "import": {
-        "name": "bkashEnv",
-        "from": "./env/bkash"
-      }
-    },
-    {
       "file": "packages/payment/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -61,12 +39,27 @@
       "section": "dependencies",
       "name": "@repo/payment",
       "range": "workspace:*"
+    }
+  ],
+  "entries": [
+    {
+      "table": "payment.providers",
+      "call": "bkash",
+      "import": {
+        "name": "bkash",
+        "from": "./providers/bkash"
+      }
     },
     {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "jobs",
+      "table": "payment.envPresets",
+      "call": "bkashEnv",
+      "import": {
+        "name": "bkashEnv",
+        "from": "./env/bkash"
+      }
+    },
+    {
+      "table": "queue.jobs",
       "call": "bkashTokenJob",
       "import": {
         "name": "bkashTokenJob",
@@ -74,10 +67,7 @@
       }
     },
     {
-      "file": "packages/queue/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "queue",
-      "arrayProp": "schedules",
+      "table": "queue.schedules",
       "call": "bkashTokenSchedule",
       "import": {
         "name": "bkashTokenSchedule",

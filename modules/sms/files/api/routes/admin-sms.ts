@@ -10,7 +10,7 @@ import { Hono } from "hono";
 import { declare } from "../contract";
 
 // The admin api behind the SMS screen: the message log, newest first, 50 rows a page.
-// Read only. This module's `chained-route` patch mounts it at `/admin/sms`, so
+// Read only. This module's `api.routes` row mounts it at `/admin/sms`, so
 // `get("/")` serves `GET /admin/sms`, and `hc<AppType>` types it.
 //
 // The log stores no body, but a provider's error text can echo the message it refused,
@@ -49,7 +49,7 @@ export const adminSms = new Hono<{ Bindings: AuthDbBindings }>().get(
     }
 
     // `withDb`, not `authDb`: the route then needs no `auth` newer than the one a project
-    // already has, so `saasaloy update sms` alone still typechecks.
+    // already has, so the route typechecks against an older `auth`.
     const { rows, total } = await withDb(c, (db) =>
       listSmsMessages(db, { page, status })
     );

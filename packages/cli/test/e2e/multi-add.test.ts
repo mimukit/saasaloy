@@ -79,7 +79,7 @@ describe("e2e — several modules in one add run (#233)", () => {
     const doc = JSON.parse(run.stdout) as Record<string, unknown>;
     expect(doc).toMatchObject({
       requested: ["waitlist", "teams"],
-      schemaVersion: 2,
+      schemaVersion: 3,
     });
     expect(doc.install).toStrictEqual(
       expect.arrayContaining(["waitlist", "teams", "database-d1"])

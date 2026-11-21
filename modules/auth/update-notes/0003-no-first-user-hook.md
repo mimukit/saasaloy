@@ -12,7 +12,7 @@ Now every sign-up gets the `admin()` plugin's default role, `user`, the first on
 - On Postgres in production, `pnpm db:prod:superadmin --email <address>` creates or promotes it. The `database-postgres` module ships the script when `auth` is installed.
 - On D1 in production, you sign up, then promote the account with one SQL statement.
 
-## What the merge plan gets
+## What update merges
 
 `packages/auth/src/auth.ts`, if you edited it. Keep your edits and delete three things:
 
@@ -22,7 +22,7 @@ Now every sign-up gets the `admin()` plugin's default role, `user`, the first on
 
 ## What you do
 
-1. Run `saasaloy update auth`, and apply the merge plan to `packages/auth/src/auth.ts`.
+1. Run `saasaloy update`. If the report lists `packages/auth/src/auth.ts` with conflict markers, resolve them as the section above says.
 
 2. Check that each deployed database already has a superadmin:
 

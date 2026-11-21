@@ -1,5 +1,6 @@
 import { createAuthClient } from "better-auth/client";
 import { adminClient } from "better-auth/client/plugins";
+import { adminClientPlugins, clientPlugins } from "./client-plugins.generated";
 
 // Framework-agnostic client (`@auth/client`) — no new npm dep, `createAuthClient`
 // ships inside `better-auth` itself. There are no React bindings and none are planned:
@@ -27,17 +28,16 @@ function definePlugins<T>(config: T): T {
   return config;
 }
 
-// Module-scope patch points, not values to move into the factories. The `plugin-array`
-// codemod needs this exact `export const <name> = <fn>({ plugins: [...] })` shape so
-// feature modules can add their client plugins. Keep each array literal here, and never
-// omit one, even when no client plugin ships by default. A feature module that ships a
-// client plugin patches both.
+// The client plugins of each client: the ones this module ships, then the ones from
+// `./client-plugins.generated.ts`, which the CLI writes on every run. A feature module
+// that ships a client plugin adds it to both generated lists. A plugin of your own goes
+// after the spread.
 export const authClientPlugins = definePlugins({
-  plugins: [],
+  plugins: [...clientPlugins],
 });
 
 export const adminAuthClientPlugins = definePlugins({
-  plugins: [adminClient()],
+  plugins: [adminClient(), ...adminClientPlugins],
 });
 
 /** The client-group client, for every app a customer signs in to. */

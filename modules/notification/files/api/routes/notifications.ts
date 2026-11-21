@@ -35,7 +35,7 @@ import type { NotificationRow } from "@repo/db/repositories/notifications";
 //
 // Route module contract: export a Hono sub-app under a NAMED export matching the file,
 // built as ONE chained expression. Splitting the chain into statements empties the routes
-// out of `AppType`. This module's `chained-route` patch mounts it at `/notifications`, so
+// out of `AppType`. This module's `api.routes` row mounts it at `/notifications`, so
 // `get("/")` serves `GET /notifications`.
 //
 // No CORS and no `onError`: `modules/api`'s spine applies the credentialed `CORS_ORIGINS`

@@ -11,7 +11,7 @@ import { declare } from "../contract";
 
 // The admin api behind the login codes screen: every code the api sent in the last 30
 // minutes, newest first, with its state and the tries left. Read only. This module's
-// `chained-route` patch mounts it at `/admin/login-codes`, so `get("/")` serves
+// `api.routes` row mounts it at `/admin/login-codes`, so `get("/")` serves
 // `GET /admin/login-codes`, and `hc<AppType>` types it.
 //
 // The answer never holds a code. The repository reads the tries from the stored value and

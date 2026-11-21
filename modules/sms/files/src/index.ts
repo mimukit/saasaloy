@@ -1,5 +1,6 @@
 import { defineSms } from "./define";
 import type { SmsEnv } from "./provider";
+import { smsProviders } from "./providers.generated";
 
 export { defineSms } from "./define";
 export type { SmsClient, SmsConfig, SmsRegistry } from "./define";
@@ -18,15 +19,12 @@ export type {
 export { countSegments, measureSegments } from "./segments";
 export type { SmsEncoding, SmsSegmentation } from "./segments";
 
-// The provider registry, and the patch point every `sms-<provider>` module writes into.
-// `saasaloy add sms-console` adds its import and appends `consoleSms()` here —
-// idempotently, so re-running it changes nothing.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with a real array literal. The codemod behind the `plugin-array` patch kind
-// (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into otherwise, and a
-// provider install fails silently. Never omit `providers`, even while it's empty.
-export const sms = defineSms({ providers: [] });
+// The provider registry. Every `sms-<provider>` module adds a row to the `sms.providers`
+// table, and the CLI writes `./providers.generated.ts` from those rows on every run:
+// `saasaloy add sms-console` adds `consoleSms()`, and `saasaloy remove` takes it back out.
+// A provider of your own goes after the spread, never in the generated file: the CLI
+// overwrites it, and `saasaloy update` refuses when it was edited.
+export const sms = defineSms({ providers: [...smsProviders] });
 
 /**
  * Get a sender for this request's environment. Mirrors `getDb(c.env.DB)`, except it takes

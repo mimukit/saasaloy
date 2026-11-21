@@ -3,29 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RefusalError } from "./exit.js";
-import {
-  addDoneNotes,
-  doneNotesOf,
-  dropModulePendingNotes,
-  emptyManifest,
-  loadManifest,
-  pendingNotesOf,
-  recordLink,
-  recordManagedFile,
-  recordPatch,
-  saveManifest,
-  setPendingNotes,
-  untrackLink,
-  untrackManagedFile,
-  untrackPatch,
-} from "./manifest.js";
-import type { ManifestPatch } from "./manifest.js";
-import { PATCH_KINDS } from "./patch/index.js";
+import { loadManifest } from "./manifest.js";
 
-// #98 Phase 5. `.saasaloy/manifest.json` decides whether a file is safe to overwrite, so
-// a corrupted one is the difference between a clean update and a clobbered hand edit.
-// `loadManifest` used to trust whatever JSON it found; it now runs the same validator the
-// schema already shipped and refuses with the validator's own error text.
+// A version 1 `.saasaloy/manifest.json` is read only by the conversion the first `update`
+// runs (plan 0116, Phase 5). It still runs the schema's validator and refuses with its
+// error text (#98), so a corrupted file never reaches the conversion as a typed object.
 
 const HASH = "a".repeat(64);
 
@@ -48,20 +30,18 @@ async function writeManifest(data: unknown): Promise<void> {
   );
 }
 
-describe("loadManifest — validation on load", () => {
+describe("loadManifest — a version 1 manifest", () => {
   it("returns an empty manifest when the file is missing", async () => {
     const missing = await mkdtemp(join(tmpdir(), "saasaloy-manifest-none-"));
     try {
-      await expect(loadManifest(missing)).resolves.toStrictEqual(
-        emptyManifest()
-      );
+      await expect(loadManifest(missing)).resolves.toStrictEqual({
+        managed: {},
+      });
     } finally {
       await rm(missing, { recursive: true, force: true });
     }
   });
 
-  // A half-written file parses as nothing at all. Left to `JSON.parse`, the SyntaxError
-  // reaches `exitCodeFor` as a plain failure (1) and never names the file.
   it("refuses a manifest that isn't valid JSON, as a refusal", async () => {
     await writeFile(
       join(root, ".saasaloy", "manifest.json"),
@@ -81,484 +61,36 @@ describe("loadManifest — validation on load", () => {
     await expect(loadManifest(root)).rejects.toThrow(/"hash"/);
   });
 
-  it("refuses a hash that isn't a sha256 digest", async () => {
-    await writeManifest({
-      managed: { "apps/api/src/x.ts": { module: "email", hash: "nope" } },
-    });
-    await expect(loadManifest(root)).rejects.toThrow(
-      /manifest\.json is invalid/
-    );
-  });
-
   it("refuses a property the schema doesn't know", async () => {
     await writeManifest({ managed: {}, surprise: true });
     await expect(loadManifest(root)).rejects.toThrow(/"surprise"/);
   });
 
-  it("round-trips a valid manifest", async () => {
-    const manifest = emptyManifest();
-    manifest.managed["apps/api/src/x.ts"] = {
-      module: "email",
-      hash: HASH,
-      from: "files/x.ts",
-    };
-    await saveManifest(root, manifest);
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-  });
-
-  it("loads an old manifest with an empty removal warning map", async () => {
-    await writeManifest({ managed: {}, links: {}, patches: [] });
-    await expect(loadManifest(root)).resolves.toMatchObject({
-      removeWarnings: {},
-    });
-  });
-
-  it("round-trips stored removal warnings", async () => {
-    const manifest = emptyManifest();
-    manifest.removeWarnings.teams = [
-      "The organization tables survive removal.",
-    ];
-    await saveManifest(root, manifest);
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-  });
-
-  // The applier records whatever kind a descriptor authored. Until the fix round the
-  // manifest schema listed two of the five, so the first `add` that applied a
-  // `package-json-dependency` wrote a file the next `add`/`remove`/`update` refused.
-  // Every kind now survives save → load (#98).
-  it.each(PATCH_KINDS)("round-trips a recorded %s patch", async (kind) => {
-    const manifest = emptyManifest();
-    manifest.patches.push({
-      module: "database",
-      file: "apps/api/package.json",
-      patch: { file: "apps/api/package.json", kind } as ManifestPatch["patch"],
-    });
-    await saveManifest(root, manifest);
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-  });
-});
-
-// #150. The record half. Seven sites used to build these entries inline, in four shapes;
-// `applier` wrote a managed entry without `adopted` while `base` wrote one with it, and
-// the patch dedupe was copied into `applier` and `updater` word for word. These tests own
-// the shapes now, so a new write site inherits them instead of re-deriving them.
-
-function patchEntry(module: string, file: string): ManifestPatch {
-  return {
-    file,
-    module,
-    patch: { file, kind: "package-json-dependency" } as ManifestPatch["patch"],
-  };
-}
-
-describe(recordManagedFile, () => {
-  it("writes module, hash and from", () => {
-    const manifest = emptyManifest();
-
-    recordManagedFile(manifest, {
-      from: "files/x.ts",
-      hash: HASH,
-      module: "email",
-      target: "apps/api/src/x.ts",
-    });
-
-    expect(manifest.managed["apps/api/src/x.ts"]).toStrictEqual({
-      from: "files/x.ts",
-      hash: HASH,
-      module: "email",
-    });
-  });
-
-  // The drop rule from the `ManagedEntry` comment, made structural: `adopted` exists only
-  // where it is passed `true`, so a real write cannot carry it forward by accident.
-  it("keeps adopted only when it is true", () => {
-    const manifest = emptyManifest();
-
-    recordManagedFile(manifest, {
-      adopted: true,
-      hash: HASH,
-      module: "base",
-      target: "apps/web/astro.config.mjs",
-    });
-
-    expect(manifest.managed["apps/web/astro.config.mjs"]).toStrictEqual({
-      adopted: true,
-      hash: HASH,
-      module: "base",
-    });
-  });
-
-  it.each([undefined, false])("drops adopted when it is %s", (adopted) => {
-    const manifest = emptyManifest();
-
-    recordManagedFile(manifest, {
-      adopted,
-      hash: HASH,
-      module: "base",
-      target: "apps/web/astro.config.mjs",
-    });
-
-    expect(manifest.managed["apps/web/astro.config.mjs"]).not.toHaveProperty(
-      "adopted"
-    );
-  });
-
-  // The tool writes the file it once adopted, so the recorded hash finally describes
-  // template output and the entry earns the `overwrite` verdict again.
-  it("drops adopted when a real write replaces an adopted entry", () => {
-    const manifest = emptyManifest();
-    const target = "apps/web/astro.config.mjs";
-    recordManagedFile(manifest, {
-      adopted: true,
-      hash: HASH,
-      module: "base",
-      target,
-    });
-
-    recordManagedFile(manifest, {
-      hash: "b".repeat(64),
-      module: "base",
-      target,
-    });
-
-    expect(manifest.managed[target]).toStrictEqual({
-      hash: "b".repeat(64),
-      module: "base",
-    });
-  });
-
-  it("omits from rather than storing undefined", () => {
-    const manifest = emptyManifest();
-
-    recordManagedFile(manifest, {
-      hash: HASH,
-      module: "email",
-      target: "apps/api/src/x.ts",
-    });
-
-    expect(manifest.managed["apps/api/src/x.ts"]).not.toHaveProperty("from");
-  });
-});
-
-describe("tombstones (#312)", () => {
-  it("records deleted only when asked, and a later write drops it", () => {
-    const manifest = emptyManifest();
-    const target = "packages/ui/src/blocks/showcase.tsx";
-    recordManagedFile(manifest, { hash: HASH, module: "base", target });
-    expect(manifest.managed[target]).not.toHaveProperty("deleted");
-
-    recordManagedFile(manifest, {
-      deleted: true,
-      from: target,
-      hash: HASH,
-      module: "base",
-      target,
-    });
-    expect(manifest.managed[target]?.deleted).toBeTruthy();
-
-    recordManagedFile(manifest, { hash: HASH, module: "base", target });
-    expect(manifest.managed[target]).not.toHaveProperty("deleted");
-  });
-
-  it("round-trips a tombstone through the schema, and refuses a non-boolean one", async () => {
-    const manifest = emptyManifest();
-    manifest.managed["packages/ui/src/blocks/showcase.tsx"] = {
-      deleted: true,
-      from: "packages/ui/src/blocks/showcase.tsx",
-      hash: HASH,
-      module: "base",
-    };
-    await saveManifest(root, manifest);
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-
+  it("reads the managed files and the notes", async () => {
+    const note = { body: "Do it.\n", id: "base/0001-x", title: "X" };
     await writeManifest({
-      managed: { "a.ts": { module: "base", hash: HASH, deleted: "yes" } },
-    });
-    await expect(loadManifest(root)).rejects.toThrow(/deleted/);
-  });
-});
-
-describe(untrackManagedFile, () => {
-  it("drops the entry and leaves the others alone", () => {
-    const manifest = emptyManifest();
-    recordManagedFile(manifest, {
-      hash: HASH,
-      module: "email",
-      target: "a.ts",
-    });
-    recordManagedFile(manifest, {
-      hash: HASH,
-      module: "email",
-      target: "b.ts",
-    });
-
-    untrackManagedFile(manifest, "a.ts");
-
-    expect(Object.keys(manifest.managed)).toStrictEqual(["b.ts"]);
-  });
-
-  it("is a no-op for an entry that was never tracked", () => {
-    const manifest = emptyManifest();
-
-    untrackManagedFile(manifest, "gone.ts");
-
-    expect(manifest.managed).toStrictEqual({});
-  });
-});
-
-describe(recordPatch, () => {
-  it("appends the entry", () => {
-    const manifest = emptyManifest();
-
-    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
-
-    expect(manifest.patches).toHaveLength(1);
-  });
-
-  // A `--force` re-apply lands the same op again. Recorded twice, `remove` would reverse
-  // it twice — the dedupe is what keeps the record one-to-one with disk.
-  it("dedupes a structurally equal entry", () => {
-    const manifest = emptyManifest();
-
-    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
-    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
-
-    expect(manifest.patches).toHaveLength(1);
-  });
-
-  it("keeps two entries that differ by module", () => {
-    const manifest = emptyManifest();
-
-    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
-    recordPatch(manifest, patchEntry("email", "apps/api/package.json"));
-
-    expect(manifest.patches.map((patch) => patch.module)).toStrictEqual([
-      "database",
-      "email",
-    ]);
-  });
-});
-
-describe(untrackPatch, () => {
-  it("drops the structurally equal entry only", () => {
-    const manifest = emptyManifest();
-    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
-    recordPatch(manifest, patchEntry("email", "apps/api/package.json"));
-
-    untrackPatch(manifest, patchEntry("database", "apps/api/package.json"));
-
-    expect(manifest.patches.map((patch) => patch.module)).toStrictEqual([
-      "email",
-    ]);
-  });
-
-  // `remove` walks a plan loaded separately from the manifest it edits, so the two sides
-  // are never the same object. Structural equality is the whole point.
-  it("matches a separately built equal entry, not reference identity", () => {
-    const manifest = emptyManifest();
-    manifest.patches.push(patchEntry("database", "apps/api/package.json"));
-
-    untrackPatch(manifest, patchEntry("database", "apps/api/package.json"));
-
-    expect(manifest.patches).toStrictEqual([]);
-  });
-});
-
-describe("recordLink and untrackLink", () => {
-  it("records source to link, then drops it", () => {
-    const manifest = emptyManifest();
-
-    recordLink(manifest, ".agents/skills/email", ".claude/skills/email");
-    expect(manifest.links).toStrictEqual({
-      ".agents/skills/email": ".claude/skills/email",
-    });
-
-    untrackLink(manifest, ".agents/skills/email");
-    expect(manifest.links).toStrictEqual({});
-  });
-});
-
-// #242 Phase 2. A gated entry records the `when` it was written under, so `remove` can
-// find another module's entries that only shipped because the removed module was there.
-describe("the recorded when (#242)", () => {
-  it("records a file's when and round-trips it through the schema", async () => {
-    const manifest = emptyManifest();
-
-    recordManagedFile(manifest, {
-      from: "files/api/routes/auth.vitest.ts",
-      hash: HASH,
-      module: "auth",
-      target: "apps/api/src/routes/auth.test.ts",
-      when: { testing: true },
-    });
-    await saveManifest(root, manifest);
-
-    expect(
-      manifest.managed["apps/api/src/routes/auth.test.ts"]?.when
-    ).toStrictEqual({
-      testing: true,
-    });
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-  });
-
-  it("omits when for an unconditional file", () => {
-    const manifest = emptyManifest();
-
-    recordManagedFile(manifest, { hash: HASH, module: "auth", target: "x.ts" });
-
-    expect(manifest.managed["x.ts"]).not.toHaveProperty("when");
-  });
-
-  it("repeats a patch op's when at the top level, keeping the op as authored", async () => {
-    const manifest = emptyManifest();
-    const patch = {
-      file: "package.json",
-      kind: "package-json-script",
-      name: "e2e",
-      value: "playwright test",
-      when: { installed: ["e2e"] },
-    } as ManifestPatch["patch"];
-
-    recordPatch(manifest, { file: "package.json", module: "auth", patch });
-    await saveManifest(root, manifest);
-
-    expect(manifest.patches[0]).toStrictEqual({
-      file: "package.json",
-      module: "auth",
-      patch,
-      when: { installed: ["e2e"] },
-    });
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-  });
-
-  it("refuses a recorded when with an unknown key", async () => {
-    await writeManifest({
+      doneNotes: ["base/0002-y"],
+      links: {},
       managed: {
-        "x.ts": { hash: HASH, module: "auth", when: { always: true } },
+        "apps/api/src/x.ts": {
+          from: "files/x.ts",
+          hash: HASH,
+          module: "email",
+        },
       },
+      patches: [],
+      pendingNotes: [note],
     });
-
-    await expect(loadManifest(root)).rejects.toThrow(/"always"/);
-  });
-});
-
-// #298 Phase 4. A note an applied `update` showed stays here until `update --done <id>`
-// clears it. The body is stored, so a later merge plan repeats the note without the
-// registry revision it came from.
-describe("pendingNotes (#298)", () => {
-  const NOTE = {
-    id: "email-react/0001-preview-port",
-    title: "The preview moves",
-    body: "## What you do\n\nMove it.\n",
-  };
-
-  it("reads an older manifest with no field as no pending notes", async () => {
-    await writeManifest({ managed: {}, links: {}, patches: [] });
-    const manifest = await loadManifest(root);
-    expect(manifest.pendingNotes).toBeUndefined();
-    expect(pendingNotesOf(manifest)).toStrictEqual([]);
-  });
-
-  it("round-trips a pending note, may apply included", async () => {
-    const manifest = emptyManifest();
-    setPendingNotes(manifest, [
-      NOTE,
-      { ...NOTE, id: "base/0001-brand-css", mayApply: true },
-    ]);
-    await saveManifest(root, manifest);
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-  });
-
-  it("drops the field when the last note is cleared", () => {
-    const manifest = emptyManifest();
-    setPendingNotes(manifest, [NOTE]);
-    setPendingNotes(manifest, []);
-    expect("pendingNotes" in manifest).toBeFalsy();
-  });
-
-  it("refuses a pending note with no body", async () => {
-    await writeManifest({
-      managed: {},
-      pendingNotes: [{ id: NOTE.id, title: NOTE.title }],
+    await expect(loadManifest(root)).resolves.toStrictEqual({
+      doneNotes: ["base/0002-y"],
+      managed: {
+        "apps/api/src/x.ts": {
+          from: "files/x.ts",
+          hash: HASH,
+          module: "email",
+        },
+      },
+      pendingNotes: [note],
     });
-    await expect(loadManifest(root)).rejects.toThrow(/body/);
-  });
-
-  it("refuses a pending note whose id is not an update note id", async () => {
-    await writeManifest({
-      managed: {},
-      pendingNotes: [{ ...NOTE, id: "no-slash" }],
-    });
-    await expect(loadManifest(root)).rejects.toThrow(/pendingNotes/);
-  });
-
-  it("drops one module's notes by id prefix and names them", () => {
-    const manifest = emptyManifest();
-    setPendingNotes(manifest, [
-      NOTE,
-      { ...NOTE, id: "email-react/0002-other" },
-      { ...NOTE, id: "email/0001-kept" },
-      { ...NOTE, id: "base/0001-brand-css" },
-    ]);
-    expect(dropModulePendingNotes(manifest, "email-react")).toStrictEqual([
-      "email-react/0001-preview-port",
-      "email-react/0002-other",
-    ]);
-    expect(pendingNotesOf(manifest).map((n) => n.id)).toStrictEqual([
-      "email/0001-kept",
-      "base/0001-brand-css",
-    ]);
-  });
-});
-
-// #298 Phase 4. `update --done <id>` moves the id here, and selection skips it, so a note
-// a run selects again (an adopted base, a module with no merge base) never returns.
-describe("doneNotes (#298)", () => {
-  it("reads an older manifest with no field as no done notes", async () => {
-    await writeManifest({ managed: {}, links: {}, patches: [] });
-    const manifest = await loadManifest(root);
-    expect(manifest.doneNotes).toBeUndefined();
-    expect(doneNotesOf(manifest)).toStrictEqual([]);
-  });
-
-  it("adds ids sorted, once each, and round-trips them", async () => {
-    const manifest = emptyManifest();
-    addDoneNotes(manifest, ["email/0002-b", "base/0001-brand-css"]);
-    addDoneNotes(manifest, ["email/0002-b", "api/0001-a"]);
-    expect(manifest.doneNotes).toStrictEqual([
-      "api/0001-a",
-      "base/0001-brand-css",
-      "email/0002-b",
-    ]);
-    await saveManifest(root, manifest);
-    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
-  });
-
-  it("leaves the field out when nothing is added", () => {
-    const manifest = emptyManifest();
-    addDoneNotes(manifest, []);
-    expect("doneNotes" in manifest).toBeFalsy();
-  });
-
-  it("refuses a done entry that is not a string", async () => {
-    await writeManifest({ managed: {}, doneNotes: [42] });
-    await expect(loadManifest(root)).rejects.toThrow(/doneNotes/);
-  });
-
-  it("refuses a done entry that is not an update note id", async () => {
-    await writeManifest({ managed: {}, doneNotes: ["no-slash"] });
-    await expect(loadManifest(root)).rejects.toThrow(/doneNotes/);
-  });
-
-  it("drops one module's done ids with its pending notes", () => {
-    const manifest = emptyManifest();
-    addDoneNotes(manifest, [
-      "email-react/0001-preview-port",
-      "email/0001-kept",
-    ]);
-    dropModulePendingNotes(manifest, "email-react");
-    expect(manifest.doneNotes).toStrictEqual(["email/0001-kept"]);
-    dropModulePendingNotes(manifest, "email");
-    expect("doneNotes" in manifest).toBeFalsy();
   });
 });

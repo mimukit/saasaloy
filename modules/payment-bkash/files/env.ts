@@ -1,9 +1,9 @@
 import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
 
-// The environment keys the bKash provider reads. `saasaloy add payment-bkash` appends this
-// preset to `packages/payment/src/env-preset.ts`, so installing the provider is what makes
-// its keys required.
+// The environment keys the bKash provider reads. `saasaloy add payment-bkash` adds this
+// preset as a row of `packages/payment/src/env-preset.generated.ts`, so installing the
+// provider is what makes its keys required.
 
 export const bkashEnvPreset = definePreset({
   module: "payment-bkash",

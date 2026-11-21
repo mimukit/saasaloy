@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { catalogCounts, catalogRows, moduleTier } from "./module-catalog.ts";
 import type { RegistryDescriptor } from "./module-catalog.ts";
 
-const providersPatch = { kind: "plugin-array", arrayProp: "providers" };
+const providersRow = { table: "email.providers" };
 
 function descriptor(fields: Partial<RegistryDescriptor>): RegistryDescriptor {
   return { name: "x", type: "saasaloy:feature", stage: "mvp", ...fields };
@@ -20,18 +20,18 @@ describe("moduleTier", () => {
     );
   });
 
-  it("reads a module that registers into a providers array as a provider", () => {
+  it("reads a module that adds a row to a providers table as a provider", () => {
     assert.equal(
-      moduleTier(descriptor({ patches: [providersPatch] })),
+      moduleTier(descriptor({ entries: [providersRow] })),
       "provider"
     );
   });
 
-  it("does not read a plugin-array patch into another array as a provider", () => {
+  it("does not read a row of another table as a provider", () => {
     assert.equal(
       moduleTier(
         descriptor({
-          patches: [{ kind: "plugin-array", arrayProp: "plugins" }],
+          entries: [{ table: "auth.plugins" }],
         })
       ),
       "feature"
@@ -55,7 +55,7 @@ describe("moduleTier", () => {
   it("reads a module that is both a driver and a provider as a driver", () => {
     assert.equal(
       moduleTier(
-        descriptor({ conflictsWith: ["other"], patches: [providersPatch] })
+        descriptor({ conflictsWith: ["other"], entries: [providersRow] })
       ),
       "driver"
     );
@@ -91,12 +91,12 @@ describe("catalogRows", () => {
       descriptor({
         name: "email-plunk",
         dependsOn: ["email"],
-        patches: [providersPatch],
+        entries: [providersRow],
       }),
       descriptor({
         name: "email-console",
         dependsOn: ["email"],
-        patches: [providersPatch],
+        entries: [providersRow],
       }),
       descriptor({ name: "keys" }),
       descriptor({
@@ -134,7 +134,7 @@ describe("catalogRows", () => {
       descriptor({
         name: "logger-console",
         dependsOn: ["logger"],
-        patches: [providersPatch],
+        entries: [providersRow],
       }),
       descriptor({ name: "database", type: "saasaloy:capability" }),
       descriptor({
@@ -172,7 +172,7 @@ describe("catalogRows", () => {
         descriptor({
           name: "mail-plunk",
           dependsOn: ["email"],
-          patches: [providersPatch],
+          entries: [providersRow],
         }),
       ])
     );
@@ -184,7 +184,7 @@ describe("catalogRows", () => {
         descriptor({
           name: "email-plunk",
           dependsOn: ["email"],
-          patches: [providersPatch],
+          entries: [providersRow],
         }),
       ])
     );
@@ -202,7 +202,7 @@ describe("catalogCounts", () => {
       descriptor({
         name: "email-plunk",
         dependsOn: ["email"],
-        patches: [providersPatch],
+        entries: [providersRow],
       }),
       descriptor({ name: "teams" }),
     ]);

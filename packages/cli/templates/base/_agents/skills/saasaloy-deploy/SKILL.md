@@ -315,7 +315,7 @@ A failure after the gates:
 - `migrations`: the git pathspec for migration files.
 - `release`: what `pnpm release` writes. `tagPrefix` (default `v`; change it only before the first release), `githubRelease` (default `true`), `preMajor` (default `true`), `changelogSections`, the `conventionalcommits` preset's `types` list (unset keeps the preset's sections), and `include` (default `[]`), the untracked paths the release commit also carries. `["docs/release/"]` turns on the release walkthrough and the stakeholder summary. A key left out falls back to its default.
 
-`targets.ts` holds two arrays. Keep each in the shape `export const NAME: Type[] = [...]`, because `saasaloy add` appends its rows there with a `const-array` patch, and `saasaloy remove` takes them out again.
+`targets.ts` holds two arrays. Each spreads a generated table from `targets.generated.ts`: `saasaloy add` writes a module's `tooling.deployTargets` and `tooling.smokeChecks` rows there, and `saasaloy remove` takes them out again. A row of your own goes after the spread, never in the generated file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
 
 - `DEPLOY_TARGETS`: `{ service, order }`. `service` is the directory under `apps/`. The base adds `web` (30), the api module `api` (10) and the admin module `admin` (20). A new Worker needs its own row, or the deploy stops and names it.
 - `SMOKE_CHECKS`: `{ id, service, path, status, body? }`. `body` is text the response body must contain. The `id` stays unique.
@@ -384,14 +384,14 @@ When the run failed, report the step that failed, the error lines, what is live 
 
 ## A project made before the gated deploy
 
-`saasaloy update` adds `packages/tooling` and this skill. It lists the root `package.json`, `turbo.json` and `AGENTS.md` in the merge plan when you edited them. Finish by hand:
+`saasaloy update` adds `packages/tooling` and this skill. It merges the root `package.json`, `turbo.json` and `AGENTS.md` when you edited them, and its report lists each one that got conflict markers. Finish by hand:
 
 1. Merge the root `package.json` scripts: `deploy:production` is `node packages/tooling/src/deploy-production.ts`, `prepare` is `husky && node packages/tooling/src/link-skills.ts`, `skills:link` is `node packages/tooling/src/link-skills.ts`, and `lint:types` and `lint:fix` include `packages/tooling/src`.
 2. Merge `turbo.json`: remove `^db:migrate:prod` from the `deploy` task's `dependsOn`, and remove the `db:migrate:prod` task.
 3. With `database-d1`, check `packages/db/package.json`. It needs `db:prod:migrate` and `db:prod:dump`, and the old `db:migrate:prod` script goes: rename it to `db:prod:migrate` if the update did not add that one. A D1 deploy no longer migrates on its own. Run `pnpm deploy:production --migrate` when the migration gate asks for it.
 4. Run `saasaloy doctor`. Its Deploy warnings name a `turbo.json` that still has `db:migrate:prod`, and each deploying workspace with no `DEPLOY_TARGETS` row. Each warning prints its fix.
 5. Add a `custom_domain` route to each Worker that has a production host, so its smoke checks run.
-6. Copy `docs/runbook-deploy.md` from a new project if you want the runbook. `saasaloy update` does not create seed files.
+6. Read `docs/runbook-deploy.md`. `saasaloy update` writes it when the project has none, and it is then the project's to edit.
 
 ## A project made before the release step
 
@@ -401,4 +401,4 @@ When the run failed, report the step that failed, the error lines, what is live 
 2. Delete an older `.release-it.json`, and any `release-it` or `@release-it/conventional-changelog` in the root `package.json`. `release.ts` reads neither. Move a changelog choice into the `release` block of `deploy.config.ts`.
 3. Keep `CHANGELOG.md` and the `v*` tags. The next release reads the newest tag and adds its entry above the old ones.
 
-The root `package.json` `version` belongs to the project. `saasaloy update` compares the file as if it held the template's version and keeps yours when it writes, so a release alone never puts the file in a merge plan.
+The root `package.json` `version` belongs to the project. `saasaloy update` merges `package.json` by key and the template never changes `version`, so your value stays and a release alone never gives the file a conflict.

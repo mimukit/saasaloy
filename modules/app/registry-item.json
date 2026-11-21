@@ -5,7 +5,7 @@
   "description": "An apps/app TanStack Router SPA on port 3002 for every signed-in user: the shell frame with the web brand, sign-in and sign-up, and a home screen.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.8.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api", "auth", "shell"],
   "dependencies": [],
   "envVars": {
@@ -14,12 +14,41 @@
   "envServices": {
     "default": ["app"]
   },
-  "patches": [
+  "files": [
     {
-      "file": "packages/env/src/services.ts",
-      "kind": "const-array",
-      "constName": "SERVICES",
-      "key": "name",
+      "path": "files/ui/styles/app.css",
+      "target": "@ui/styles/app.css"
+    }
+  ],
+  "tables": [
+    {
+      "id": "app.navCounts",
+      "file": "@app/components/nav-counts.generated.ts",
+      "shape": "objects",
+      "type": {
+        "from": "./nav-counts",
+        "name": "NavCountSource"
+      }
+    },
+    {
+      "id": "app.nav",
+      "file": "@app/components/nav.generated.ts",
+      "shape": "nav"
+    },
+    {
+      "id": "app.shellExtensions",
+      "file": "@app/components/shell-extensions.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "app.authScreens",
+      "file": "@app/lib/redirect.generated.ts",
+      "shape": "objects"
+    }
+  ],
+  "entries": [
+    {
+      "table": "env.services",
       "entry": {
         "name": "app",
         "file": "apps/app/.env",
@@ -29,20 +58,15 @@
       }
     },
     {
-      "file": "packages/tooling/src/targets.ts",
-      "kind": "const-array",
-      "constName": "DEPLOY_TARGETS",
-      "key": "service",
+      "table": "tooling.deployTargets",
       "entry": {
         "service": "app",
         "order": 25
-      }
+      },
+      "order": 25
     },
     {
-      "file": "packages/tooling/src/targets.ts",
-      "kind": "const-array",
-      "constName": "SMOKE_CHECKS",
-      "key": "id",
+      "table": "tooling.smokeChecks",
       "entry": {
         "id": "app-home",
         "service": "app",
@@ -51,10 +75,7 @@
       }
     },
     {
-      "file": "apps/app/src/components/shell-extensions.ts",
-      "kind": "plugin-array",
-      "exportName": "shellExtensions",
-      "arrayProp": "extensions",
+      "table": "app.shellExtensions",
       "call": "commandExtension",
       "import": {
         "name": "commandExtension",
@@ -63,12 +84,6 @@
       "when": {
         "installed": ["command"]
       }
-    }
-  ],
-  "files": [
-    {
-      "path": "files/ui/styles/app.css",
-      "target": "@ui/styles/app.css"
     }
   ],
   "scaffolds": [

@@ -140,38 +140,32 @@ describe("e2e — env --from-file and --set (#223)", () => {
   });
 });
 
-describe("e2e — update --resolved (#223)", () => {
-  it("stops offering a merged file, and the next update exits 0", async () => {
+describe("e2e — update with flags only (#223, #365)", () => {
+  it("keeps an edited file the release did not change, and exits 0", async () => {
     const route = join(project, ...WAITLIST_ROUTE.split("/"));
-    const merged = `${await readFile(route, "utf-8")}\n// merged by hand\n`;
-    await writeFile(route, merged, "utf-8");
+    const edited = `${await readFile(route, "utf-8")}\n// edited by hand\n`;
+    await writeFile(route, edited, "utf-8");
 
     // `--force`: the project's files are all uncommitted, which `update` refuses.
-    const first = await cli([
-      "update",
-      "waitlist",
-      "--yes",
-      "--force",
-      "--out",
-      join(workspace, "merge-plan.md"),
-    ]);
-    expect(first.code).toBe(3);
-    await expect(
-      readFile(join(workspace, "merge-plan.md"), "utf-8")
-    ).resolves.toContain(`--resolved ${WAITLIST_ROUTE}`);
+    const run = await cli(["update", "--yes", "--force"]);
+    expect(run.code).toBe(0);
+    await expect(readFile(route, "utf-8")).resolves.toBe(edited);
+  });
 
-    const second = await cli([
+  it("refuses a module name, because one update moves every module", async () => {
+    const run = await cli(["update", "waitlist", "--yes", "--force"]);
+    expect(run.code).toBe(2);
+    expect(run.output).toContain("update takes no module name");
+  });
+
+  it("refuses the flags of the old engine", async () => {
+    const run = await cli([
       "update",
-      "waitlist",
       "--resolved",
       WAITLIST_ROUTE,
       "--yes",
       "--force",
     ]);
-    expect(second.code).toBe(0);
-
-    const third = await cli(["update", "waitlist", "--yes", "--force"]);
-    expect(third.code).toBe(0);
-    await expect(readFile(route, "utf-8")).resolves.toBe(merged);
+    expect(run.code).toBe(2);
   });
 });

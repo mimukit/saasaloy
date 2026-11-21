@@ -18,6 +18,7 @@ import {
   unknownOrganizationDenial,
 } from "./tenant-rules";
 import type { Principal, Tenant, TenantResolver } from "./tenant-rules";
+import { multitenantResolvers } from "./tenant.generated";
 
 // Kept for an `api-keys` plugin from saasaloy 0.5.2, which imports `loadStatements` from
 // here. Remove it once no supported release imports it from `./tenant`.
@@ -27,7 +28,7 @@ export { loadStatements } from "./statements";
 // file makes; here it reads the session, runs the one role query, and throws.
 //
 // A throwing helper rather than Hono middleware, for the reason `requireAdmin` gives: the
-// `chained-route` patch kind registers routes, not `.use()` links (ADR 0028), and
+// `api.routes` table registers routes, not `.use()` links (ADR 0028), and
 // `apps/api` cannot import `@repo/auth` at its spine. A throw reuses api's `onError`
 // envelope, so a refusal from here renders as the same `{ error: { code, message } }`
 // body every other refusal does.
@@ -65,11 +66,11 @@ interface TenantResolverTable {
 
 /**
  * Identity, like `definePlugins` in `./client.ts`. It exists to give the array below a
- * name and a type without wrapping it in anything the codemod would have to understand.
+ * name and a type, and it does nothing else.
  *
  * Not generic, unlike `definePlugins`. The parameter's declared type is what makes
  * `resolvers: []` infer as `TenantResolver[]` rather than `never[]`, so the table
- * type-checks while it is still empty and a patched-in resolver needs no annotation.
+ * type-checks while it is still empty and a generated resolver needs no annotation.
  */
 function defineTenantResolvers(
   config: TenantResolverTable
@@ -80,18 +81,17 @@ function defineTenantResolvers(
 /**
  * The credential resolver table.
  *
- * Module-scope patch point, not a value to move inside `resolveTenant`. The
- * `plugin-array` codemod needs this exact `export const <name> = <fn>({ resolvers: [...]
- * })` shape, the same one `authClientPlugins` uses, so a credential module can register
- * itself with one patch. Keep the array literal here, and never omit it, even though no
- * resolver ships by default.
+ * Module-scope, not a value to move inside `resolveTenant`. It spreads the generated
+ * `multitenant.resolvers` table from `./tenant.generated.ts`, the same way
+ * `authClientPlugins` spreads its table, so a credential module registers itself with
+ * one row. A resolver of your own goes after the spread. None ships by default.
  *
  * `api-keys-organization` adds `apiKeyTenant` to it. Order is precedence: the first
  * resolver whose `claims` returns true owns the request, and the session path never runs
  * for it.
  */
 export const tenantResolvers = defineTenantResolvers({
-  resolvers: [],
+  resolvers: [...multitenantResolvers],
 });
 
 function denialError(denial: Denial): HTTPException {

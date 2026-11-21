@@ -5,7 +5,7 @@
   "description": "File storage in a packages/storage workspace: the provider interface, signed links and an api proxy route.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -19,28 +19,6 @@
   "envOptional": ["STORAGE_PROXY_URL"],
   "patches": [
     {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "storageConfig",
-      "import": {
-        "name": "storageConfig",
-        "from": "./sections/storage"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/storage",
-      "call": "storage",
-      "import": {
-        "name": "storage",
-        "from": "./routes/storage"
-      }
-    },
-    {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -53,12 +31,40 @@
       "section": "dependencies",
       "name": "react-dropzone",
       "range": "20.1.4"
+    }
+  ],
+  "tables": [
+    {
+      "id": "storage.providers",
+      "file": "@storage/providers.generated.ts",
+      "shape": "calls"
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "id": "storage.envPresets",
+      "file": "@storage/env-preset.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "config.sections",
+      "call": "storageConfig",
+      "import": {
+        "name": "storageConfig",
+        "from": "./sections/storage"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/storage",
+      "call": "storage",
+      "import": {
+        "name": "storage",
+        "from": "./routes/storage"
+      }
+    },
+    {
+      "table": "api.envPresets",
       "call": "storageEnv",
       "import": {
         "name": "storageEnv",

@@ -13,7 +13,7 @@ A subscription provider that runs the whole checkout flow with no network and no
 | Tier | provider |
 | Stage | money |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`subscription`](subscription.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -30,9 +30,17 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/subscription/src/index.ts` | `plugin-array` |
+| `subscription.providers` | 1 |
 
 ## See the rest
 

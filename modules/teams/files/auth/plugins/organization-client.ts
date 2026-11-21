@@ -3,10 +3,10 @@ import { ac, roles } from "../access";
 
 // The client half of `./organization.ts`, and the reason it exists is the argument.
 //
-// The descriptor's `plugin-array` patch appends a zero-argument call to
-// `authClientPlugins` in `packages/auth/src/client.ts`, and the patch engine records and
-// reverses that exact shape. `organizationClient({ ac, roles })` is not that shape, so
-// the options live in a wrapper here and the patch stays a bare
+// The descriptor's `client.plugins` row adds a zero-argument call to
+// `authClientPlugins` in `packages/auth/src/client.ts`, and a table row can name only
+// that shape. `organizationClient({ ac, roles })` is not that shape, so
+// the options live in a wrapper here and the row stays a bare
 // `organizationClientPlugin()`.
 //
 // `ac` and `roles` must be the same two values the server plugin gets. Passing them here

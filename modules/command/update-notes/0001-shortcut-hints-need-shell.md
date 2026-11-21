@@ -11,7 +11,7 @@ when:
 
 An update that moves `command` and not `shell` leaves `packages/ui/src/containers/command/command-root.tsx` importing a name the old `commands.ts` does not export.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/ui/src/lib/shell/commands.ts`, `packages/ui/src/containers/shell/shell-sidebar.tsx` and `packages/ui/src/containers/shell/shell-nav.tsx`, if you edited them.
 - `packages/ui/src/containers/command/command-root.tsx`, `packages/ui/src/lib/command/engine.ts` and `packages/ui/src/lib/command/registry.ts`, if you edited them.
@@ -24,8 +24,6 @@ An update that moves `command` and not `shell` leaves `packages/ui/src/container
    ```sh
    saasaloy update
    ```
-
-   If you ran `saasaloy update command` alone, run `saasaloy update shell` next.
 
 3. If a nav row in `apps/<app>/src/components/nav.ts` has no `shortcut`, its command has no key either, and the sidebar shows no hint for it. Nothing else changes in your code.
 

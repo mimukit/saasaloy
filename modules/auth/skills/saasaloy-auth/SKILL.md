@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, making the first superadmin (the seed, pnpm db:prod:superadmin on Postgres, or SQL on D1; no sign-up is promoted) or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (subscription/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, making the first superadmin (the seed, pnpm db:prod:superadmin on Postgres, or SQL on D1; no sign-up is promoted) or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, adding a row to the plugin tables (subscription/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -28,7 +28,7 @@ Everything the two share (the adapter, the secret, `trustedOrigins`, `advanced`)
 
 **The admin forward closes the same endpoints over HTTP.** `adminAuthRoute` in `apps/api/src/routes/auth.ts` answers 404 on every `/admin/auth/admin/*` path, reads and impersonation included, before it forwards to `adminAuth.handler`. It decodes the path and folds case and repeated slashes, so an encoded path gets the same 404. No browser code calls these endpoints, and an open `set-role` or `ban-user` would be a staff write with no audit row, under `/admin/auth/*` where the `admin` module's audit coverage test cannot see it (issue #310). Server code still reaches them: an api route under `/admin/` calls `adminAuth.api.*` with the caller's headers inside `withAuthScope`, and `adminAuthWrite` from the `admin` module when it changes something. That call runs the admin session check and the rank guard below.
 
-**`/admin/auth/*` is reserved.** The `auth` module mounts `adminAuthRoute` at `/admin/auth` with a second `chained-route` patch on `base`, beside `authRoute` at `/auth`. The path sits under `/admin` so one edge rule (WAF, Access, a log filter) covers the whole admin group on the api. A middleware a project adds on `/admin/*` must skip `/admin/auth/*`, or the sign-in endpoint itself demands a session. A project without the `admin` module still has the `/admin/auth` route; nothing calls it.
+**`/admin/auth/*` is reserved.** The `auth` module mounts `adminAuthRoute` at `/admin/auth` with a second `api.baseRoutes` row on `base`, beside `authRoute` at `/auth`. The path sits under `/admin` so one edge rule (WAF, Access, a log filter) covers the whole admin group on the api. A middleware a project adds on `/admin/*` must skip `/admin/auth/*`, or the sign-in endpoint itself demands a session. A project without the `admin` module still has the `/admin/auth` route; nothing calls it.
 
 ## Either database driver
 
@@ -93,13 +93,15 @@ switched to Postgres. The cost on D1 is one property lookup per call. See ADR 00
 
 ## `authGuards`: middleware ahead of Better Auth on `/auth`
 
-`apps/api/src/routes/auth.ts` exports a third patch point, `export const authGuards = defineGuards({ guards: [] })`. Each entry is a Hono `MiddlewareHandler`. `authRoute` runs them in order after it opens `withAuthScope` and before `auth.handler`. `adminAuthRoute` has no guards. Use a guard for a check that must answer before Better Auth does: a send limit on a code endpoint, a clearer refusal than the plugin gives, a log line per refusal. A second route on `/auth` cannot do this, because a `chained-route` patch appends after `auth`'s catch-all.
+`apps/api/src/routes/auth.ts` exports a third table, `export const authGuards = defineGuards({ guards: [...authRouteGuards] })`, where `authRouteGuards` comes from `./auth-guards.generated.ts`. Each entry is a Hono `MiddlewareHandler`. `authRoute` runs them in order after it opens `withAuthScope` and before `auth.handler`. `adminAuthRoute` has no guards. Use a guard for a check that must answer before Better Auth does: a send limit on a code endpoint, a clearer refusal than the plugin gives, a log line per refusal. A second route on `/auth` cannot do this, because its `api.routes` row mounts after `auth`'s catch-all.
 
-A feature module registers a factory call with a `plugin-array` patch:
+A feature module registers a factory call with a row of the `auth.routeGuards` table, under `entries` in its `registry-item.json`. The CLI writes the row into `apps/api/src/routes/auth-guards.generated.ts` on every run, and `saasaloy remove` takes it out:
 
 ```json
-{ "file": "apps/api/src/routes/auth.ts", "kind": "plugin-array", "exportName": "authGuards", "arrayProp": "guards", "call": "phoneGuard", "import": { "name": "phoneGuard", "from": "../middleware/phone-guard" } }
+{ "table": "auth.routeGuards", "call": "phoneGuard", "import": { "name": "phoneGuard", "from": "../middleware/phone-guard" } }
 ```
+
+A guard of your own goes after the spread in `apps/api/src/routes/auth.ts`, never in the generated file. The CLI overwrites that file, and `saasaloy update` refuses when it was edited.
 
 The factory returns the middleware. A guard owns a few paths and calls `next()` on every other one. The path it sees includes the `/auth` prefix.
 
@@ -124,40 +126,40 @@ export function phoneGuard(): MiddlewareHandler {
 
 The array is read once, when the route module loads. A test cannot push a guard into it after import, so test a guard through the route with the guard installed by its module.
 
-## The plugin-array patch points (read this before adding subscription/teams)
+## The plugin tables (read this before adding subscription/teams)
 
-`packages/auth/src/auth.ts` exports two **module-scope singletons**, each with its own literal plugin array:
+`packages/auth/src/auth.ts` exports two **module-scope singletons**. Each plugin array lists the plugins `auth` ships, then spreads a generated table from `./plugins.generated.ts`:
 
 ```ts
 export const auth = betterAuth({
   ...sharedOptions(CLIENT_AUDIENCE),
   basePath: "/auth",
   // ...
-  plugins: [audience(CLIENT_AUDIENCE), siteRoles(), clientAdminGuard()],
+  plugins: [audience(CLIENT_AUDIENCE), siteRoles(), clientAdminGuard(), ...authPlugins],
 });
 
 export const adminAuth = betterAuth({
   ...sharedOptions(ADMIN_AUDIENCE),
   basePath: "/admin/auth",
   // ...
-  plugins: [audience(ADMIN_AUDIENCE, { roles: ADMIN_APP_ROLES }), siteRoles(), rankGuard()],
+  plugins: [audience(ADMIN_AUDIENCE, { roles: ADMIN_APP_ROLES }), siteRoles(), rankGuard(), ...adminAuthPlugins],
 });
 ```
 
-This is deliberately a top-level `export const`, not a per-request `c.env`-scoped factory (every other capability's convention): the plugin arrays must exist at module scope for the codemod to patch. Keep `audience(...)` first in each array, so the session row carries its audience before any other plugin reads it.
+This is deliberately a top-level `export const`, not a per-request `c.env`-scoped factory (every other capability's convention): a feature adds a plugin with a table row and no edit to this file. Keep `audience(...)` first in each array, so the session row carries its audience before any other plugin reads it.
 
-**A feature module that adds a Better Auth plugin patches both instances.** The admin app hosts every self-service screen (teams, roles, keys, subscription), so the admin session needs the same feature plugins as the client session. `teams`, `api-keys` and `subscription-stripe` each declare one `plugin-array` patch with `"exportName": "auth"` and a second with `"exportName": "adminAuth"`:
+**A feature module that adds a Better Auth plugin adds a row for both instances.** The admin app hosts every self-service screen (teams, roles, keys, subscription), so the admin session needs the same feature plugins as the client session. `teams`, `api-keys` and `subscription-stripe` each declare one row in the `auth.plugins` table and a second in the `adminAuth.plugins` table:
 
 ```json
-"patches": [
-  { "file": "packages/auth/src/auth.ts", "kind": "plugin-array", "exportName": "auth", "arrayProp": "plugins", "call": "stripe", "import": { "name": "stripe", "from": "@better-auth/stripe" } },
-  { "file": "packages/auth/src/auth.ts", "kind": "plugin-array", "exportName": "adminAuth", "arrayProp": "plugins", "call": "stripe", "import": { "name": "stripe", "from": "@better-auth/stripe" } }
+"entries": [
+  { "table": "auth.plugins", "call": "stripeAuthPlugin", "import": { "name": "stripeAuthPlugin", "from": "@repo/subscription/providers/stripe" } },
+  { "table": "adminAuth.plugins", "call": "stripeAuthPlugin", "import": { "name": "stripeAuthPlugin", "from": "@repo/subscription/providers/stripe" } }
 ]
 ```
 
-A module that ships a client plugin does the same in `packages/auth/src/client.ts`, once for `authClientPlugins` and once for `adminAuthClientPlugins`.
+A module that ships a client plugin does the same with the `client.plugins` and `adminClient.plugins` tables, which `packages/auth/src/client.ts` spreads into `authClientPlugins` and `adminAuthClientPlugins`.
 
-The existing codemod (`packages/cli/src/lib/patch/ts-module.ts`) inserts the call into each array and adds the import once. It is idempotent and formatting-preserving, and it finds `plugins` next to the `...sharedOptions(...)` spread. When the named export does not exist (a project whose `auth.ts` predates `adminAuth`), the patch is a refusal, not a silent no-op: `saasaloy add` and `saasaloy update` print a warning that names the missing export, and `update` keeps the module's lock entry so a later `update` retries it. See "Upgrading a project made before the client/admin split" below.
+The CLI writes `packages/auth/src/plugins.generated.ts` and `client-plugins.generated.ts` in full on every run. It imports each call once and prints it with no arguments, so a plugin with options ships a zero-argument wrapper. Rows sort by `order` (default 1000), then by module name. A plugin of your own goes after the spread in `auth.ts` or `client.ts`, never in a generated file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
 
 The plugin's own vendor dep (`@better-auth/stripe`) merges into `packages/auth/package.json` (ADR 0020: vendor plugin deps land in the capability that owns the vendor package), never into the feature's own files.
 
@@ -277,7 +279,7 @@ If you do hand-write a deny, write the body out rather than importing a helper: 
 
 Every helper wraps `getSession({ headers })` on the instance it reads, so both httpOnly cookies ride along on `c.req.raw` automatically and the instance reads only its own. No route imports `better-auth` (ADR 0020); everything goes through `@repo/auth/server`.
 
-Note the route shape: one named `export const`, one chained expression, an explicit status on every `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0028). `modules/admin`'s `GET /admin/users` is the worked example of a gated route registered that way: it lists `adminGate` before its query validator, so a signed-out caller with a bad `?limit=` gets 401, not 400.
+Note the route shape: one named `export const`, one chained expression, an explicit status on every `c.json`. That is what `hc<AppType>` reads. Register it with an `api.routes` row, which puts it on the typed chain, never by dropping the file and hoping (ADR 0028). `modules/admin`'s `GET /admin/users` is the worked example of a gated route registered that way: it lists `adminGate` before its query validator, so a signed-out caller with a bad `?limit=` gets 401, not 400.
 
 **The gate is the api's, not the browser's.** `apps/admin` also refuses an account outside `ADMIN_APP_ROLES`, in `beforeLoad`. That guard stops the SPA from asking; it cannot stop `curl`. A route that skips `requireAdmin` because the admin app already checks is open to anyone holding any session cookie.
 
@@ -371,7 +373,7 @@ update users set role = 'superadmin' where email = 'you@example.com';
 
 **How you run it is the driver's business**, so read the skill for the driver this project installed (`saasaloy-database-d1` or `saasaloy-database-postgres`) for the console it hands you. On Postgres in production, prefer `pnpm db:prod:superadmin --keep-password`, which promotes without SQL. Swap `update` for `select email, role from users where role = 'superadmin'` to check it landed. The plural table name needs no quotes: Postgres reserves `user`, not `users`.
 
-An older project's `auth.ts` may still promote the first sign-up to superadmin. `saasaloy update auth` shows the update note "The first sign-up no longer becomes the superadmin", with the steps to delete that `databaseHooks` block.
+An older project's `auth.ts` may still promote the first sign-up to superadmin. `saasaloy update` shows the update note "The first sign-up no longer becomes the superadmin", with the steps to delete that `databaseHooks` block.
 
 The change takes effect on the next `getSession` call, because sessions are DB-backed and the role is read off the user row, and `cookieCache` is off (see the last boundary below). An account that is already signed in on the admin session needs no re-login. An account promoted from `user` has no admin session yet: it signs in on the admin app, because `adminAuth` refused it before the promotion. Demoting an account works the other way: its admin session stays in the table, but every role gate and the admin app's guard refuse it from the next request, and the admin app shows the refusal page.
 
@@ -445,11 +447,11 @@ await client.signIn.email({ email, password });
 
 `fetchOptions: { credentials: "include" }` is baked into both. The calling origin must be in `CORS_ORIGINS` (api's spine) for the cookie to be set and sent cross-origin.
 
-`adminClient()` rides on the admin client only, mirroring the server's `admin()`. That is what types `session.user.role`. It also puts `auth.admin.*` on the admin app's client, but the api's forward answers 404 to every `/admin/auth/admin/*` path, so no browser code calls those methods. A staff screen calls an api route under `/admin/` instead, which writes the audit row. A feature module that ships a client plugin patches both arrays. Keep each array literal and never delete one, even when it is empty.
+`adminClient()` rides on the admin client only, mirroring the server's `admin()`. That is what types `session.user.role`. It also puts `auth.admin.*` on the admin app's client, but the api's forward answers 404 to every `/admin/auth/admin/*` path, so no browser code calls those methods. A staff screen calls an api route under `/admin/` instead, which writes the audit row. A feature module that ships a client plugin adds a row to both the `client.plugins` and the `adminClient.plugins` table. Keep the spread of each generated list, even when it is empty.
 
 ## Wire-up: the sign-in and sign-up blocks
 
-`auth` ships two blocks into `@repo/ui`, with the frame they share. Each entry carries `when: { installed: ["shell"] }`, because the blocks render the `shell` primitives. A project with no signed-in app gets none of them. `saasaloy add admin` or `saasaloy add app` brings `shell`, and the same run writes the blocks (the backfill).
+`auth` ships two blocks into `@repo/ui`, with the frame they share. Each entry carries `when: { installed: ["shell"] }`, because the blocks render the `shell` primitives. A project with no signed-in app gets none of them. `saasaloy add admin` or `saasaloy add app` brings `shell`, and the same run writes the blocks, because the render writes every entry whose `when` holds.
 
 | File | Exports |
 |---|---|
@@ -522,7 +524,7 @@ The flag holds no name and no id, so a shared device shows nothing about the use
 
 ## Password rules
 
-Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/auth/src/auth.ts`). Better Auth applies it on sign-up, on a password reset and on a password change, and answers `400` with `code: "PASSWORD_TOO_SHORT"`. It never applies it on sign-in, so an account made before the rule, with a shorter password, still signs in. Keep the number and the sign-up form's hint in step. A project made before this rule gets it through `saasaloy update auth`.
+Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/auth/src/auth.ts`). Better Auth applies it on sign-up, on a password reset and on a password change, and answers `400` with `code: "PASSWORD_TOO_SHORT"`. It never applies it on sign-in, so an account made before the rule, with a shorter password, still signs in. Keep the number and the sign-up form's hint in step. A project made before this rule gets it through `saasaloy update`.
 
 ## Password reset mail
 
@@ -531,12 +533,12 @@ Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/a
 | Entry | What it does |
 |---|---|
 | `packages/auth/src/plugins/reset-password-mail.ts` | A Better Auth plugin whose `init()` sets `emailAndPassword.sendResetPassword`. It sends through `createEmail(env)`, with `env` from `cloudflare:workers`. |
-| `resetPasswordMail()` in `auth`'s `plugins` array | A `plugin-array` patch. Only the client instance sends the mail: `adminAuth` reads the same `accounts` table, so a new password counts there too. |
+| `resetPasswordMail()` in `auth`'s `plugins` array | An `auth.plugins` row. Only the client instance sends the mail: `adminAuth` reads the same `accounts` table, so a new password counts there too. |
 | `@repo/email` in `packages/auth/package.json` | A `package-json-dependency` patch. |
 | `packages/email/src/templates/reset-password.ts` | The template, in the `email` module's convention. Edit it like `welcome.ts`. |
 | `apps/api/src/routes/reset-password.test.ts` | The route test, only when testing is on too. It replaces `createEmail` with a sender that keeps each message. |
 
-`saasaloy add email` in a project that already has `auth` writes all of them in the same run (the backfill). `saasaloy add auth` in a project with `email` writes them at once.
+`saasaloy add email` in a project that already has `auth` writes all of them in the same run, because the render writes every entry whose `when` holds. `saasaloy add auth` in a project with `email` writes them at once.
 
 **Use it.** The client calls Better Auth's endpoint, and the mail goes to the address if it has an account:
 
@@ -559,9 +561,9 @@ curl -X POST http://localhost:4000/auth/request-password-reset \
 
 **Failure modes.**
 
-- The request answers `400` with `code: "RESET_PASSWORD_DISABLED"`: `email` is not installed, or the `resetPasswordMail()` line is missing from `auth`'s `plugins`. Run `saasaloy add email`, or put the line back.
+- The request answers `400` with `code: "RESET_PASSWORD_DISABLED"`: `email` is not installed, or the `resetPasswordMail()` row is missing from `packages/auth/src/plugins.generated.ts`. Run `saasaloy add email`, which writes the row again.
 - The request answers `200` but no mail arrives: the sender threw. Better Auth logs the error and answers as usual, on purpose. Read the api log. The usual causes are an unset `EMAIL_PROVIDER` or `EMAIL_FROM`, and a `BETTER_AUTH_URL` that is not `https` outside localhost, which `safeUrl` refuses.
-- After `saasaloy remove email`, `pnpm install` fails on `@repo/email`: `remove` deletes the reset files and reverts the `plugins` line, but it does not reverse a `package-json-dependency` patch. Delete `"@repo/email"` from `packages/auth/package.json` by hand.
+- After `saasaloy remove email`, `pnpm install` fails on `@repo/email`: `remove` deletes the reset files and the `plugins` row, but it does not reverse a `package-json-dependency` patch. Delete `"@repo/email"` from `packages/auth/package.json` by hand.
 
 ## Enabling social OAuth / email verification (not wired)
 
@@ -601,7 +603,7 @@ after the edit.
 
 A project that installed auth before the tables became plural has `user`, `session`, `account` and `verification` in its database. Move them to the new names like this:
 
-1. Run `saasaloy update auth`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. Update auth before `teams`, `api-keys` and `subscription`.
+1. Run `saasaloy update`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. The same run updates `teams`, `api-keys` and `subscription`.
 2. Run `pnpm db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `user` → `users`, `session` → `sessions`, `account` → `accounts`, `verification` → `verifications`.
 4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `session_user_id_idx` → `sessions_user_id_idx`, `account_user_id_idx` → `accounts_user_id_idx`, `verification_identifier_idx` → `verifications_identifier_idx`). It must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
@@ -612,12 +614,10 @@ A project that installed auth before the tables became plural has `user`, `sessi
 
 A project made before the split has one instance and one `better-auth.session_token` cookie. Move it to two instances in this order:
 
-1. Run `saasaloy update auth admin`.
-2. Resolve the merge plan for `packages/auth/src/auth.ts`, `packages/auth/src/client.ts`, `packages/auth/src/server.ts` and `@db/schema/auth.ts`. Take the new `adminAuth` export, `adminAuthClientPlugins`, `createAdminClient` and the `audience` column. Carry over any plugin or option you added by hand to both instances.
+1. Run `saasaloy update`.
+2. Resolve the conflict markers in `packages/auth/src/auth.ts`, `packages/auth/src/client.ts`, `packages/auth/src/server.ts` and `@db/schema/auth.ts`. Take the new `adminAuth` export, `adminAuthClientPlugins`, `createAdminClient` and the `audience` column. Carry over any plugin or option you added by hand to both instances.
 3. Run `pnpm db:generate`. It writes one migration that adds `sessions.audience` with default `'client'`. Read it, then apply it with `pnpm db:migrate:local`, or the production migrate command from the installed driver's skill.
-4. Run `saasaloy update` for each installed module that patches auth: `teams`, `api-keys` and `subscription-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
-
-Run step 4 after step 2. Before the merge, `auth.ts` has no `adminAuth` export, and the patch prints a warning that names the missing export. That warning means "merge `auth.ts` first", and the module's lock entry stays where it was, so running `saasaloy update <module>` again after the merge applies the patch.
+4. Check each installed module that adds a plugin to auth: `teams`, `api-keys` and `subscription-stripe`. The same update run writes their rows into `plugins.generated.ts` and `client-plugins.generated.ts`, so each plugin is in `adminAuth` and in `adminAuthClientPlugins` as well. A plugin you added by hand goes after the spread.
 
 Every existing session ends, because the cookie names change from `better-auth.session_token` to `client.session_token` and `admin.session_token`. Old session rows read as client rows through the column default, but no browser holds a cookie that names them. Tell your users they must sign in again. A route of your own that calls `auth.api.*` reads only the client session after the update; switch it to `authFor(c).api.*` if the admin app calls it. A middleware of your own on `/admin/*` must now skip `/admin/auth/*`.
 
@@ -625,7 +625,7 @@ Every existing session ends, because the cookie names change from `better-auth.s
 
 - **Only `packages/auth` imports `better-auth`.** Every other workspace goes through
   `@repo/auth/server` / `@repo/auth/client` (ADR 0020).
-- **`auth` and `adminAuth` stay module-scope singletons** in `packages/auth/src/auth.ts`. Don't refactor them into a per-request factory; that would break the plugin-array patch points every future capability relies on. The database behind it stays request-scoped for the opposite reason (ADR 0029);
+- **`auth` and `adminAuth` stay module-scope singletons** in `packages/auth/src/auth.ts`. Don't refactor them into a per-request factory; every feature module's plugin row lands in these two exports, and code such as `subscription-stripe` reads the instance at module scope. The database behind it stays request-scoped for the opposite reason (ADR 0029);
   don't collapse the two by binding a client at module scope.
 - **Every `api.*` and `handler` call on either instance runs inside `withAuthScope`.** Don't add a fallback
   that opens a client when the scope is empty: that path has no `executionCtx` to close the socket

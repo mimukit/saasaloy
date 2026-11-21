@@ -1,182 +1,104 @@
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
-import {
-  basename,
-  dirname,
-  isAbsolute,
-  join,
-  relative,
-  resolve,
-  sep,
-} from "node:path";
-import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { cancel, intro, log, outro } from "@clack/prompts";
 import pc from "picocolors";
+import { apply, checkCleanTree } from "../engine/apply.js";
+import type { ApplyReport } from "../engine/apply.js";
 import {
-  detectCliMismatches,
-  formatCliMismatches,
-  upgradeCommand,
-} from "../lib/cli-requires.js";
+  candidateLoader,
+  convertProject,
+  searchedReleases,
+} from "../engine/convert.js";
+import type { Conversion } from "../engine/convert.js";
+import { readManifestState } from "../engine/manifest.js";
+import type { Payload } from "../engine/payload.js";
 import {
-  adoptBase,
-  BASE_MODULE,
-  baseAdoptedAt,
-  baseUpdateInput,
-  isBaseTracked,
-  isFirstUpdateAfterAdoption,
-  missingBaseTargets,
-  templateAliases,
-  templateHash,
-} from "../lib/base.js";
-import { restoreLatestBackup, writeBackup } from "../lib/backup.js";
-import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
-import { lineDiff } from "../lib/diff.js";
-import { formatPatchedFiles } from "../lib/format.js";
+  assertReadyToRun,
+  isLocalRegistry,
+  loadBaseSides,
+  loadSide,
+  readProjectState,
+} from "../engine/project.js";
+import type { LoadedSide, ModuleCoordinate } from "../engine/project.js";
+import { closure, fixedOrder } from "../engine/render.js";
+import { upgradeCommand } from "../lib/cli-requires.js";
 import {
   EXIT_FAILURE,
-  EXIT_WORK_PENDING,
   EXIT_OK,
   EXIT_REFUSED,
-  exitCodeFor,
+  EXIT_WORK_PENDING,
   formatFailure,
-  REPORT_HINT,
+  RefusalError,
 } from "../lib/exit.js";
 import { pathExists, resolveWithinRoot } from "../lib/fs-utils.js";
-import { workingTreeState } from "../lib/git-state.js";
-import { resolveProjectName } from "../lib/project-name.js";
-import {
-  backfillTargets,
-  isEmptyBackfill,
-  planBackfill,
-  runBackfill,
-} from "../lib/backfill.js";
-import type { BackfillPlan } from "../lib/backfill.js";
-import { persistLedger } from "../lib/ledger.js";
-import { LOCK_FILE, loadLock } from "../lib/lock.js";
-import type { Lockfile } from "../lib/lock.js";
-import {
-  loadManifest,
-  MANIFEST_FILE,
-  addDoneNotes,
-  doneNotesOf,
-  pendingNotesOf,
-  setPendingNotes,
-} from "../lib/manifest.js";
+import type { TuiOptions } from "../lib/json-output.js";
+import { loadLock } from "../lib/lock.js";
 import type { PendingNote } from "../lib/manifest.js";
-import { PROJECT_RUNBOOK, renderMergePlan } from "../lib/merge-plan.js";
-import type { RunbookLine } from "../lib/merge-plan.js";
-import {
-  matchDone,
-  mergePendingNotes,
-  pendingLabel,
-} from "../lib/pending-notes.js";
-import type { PendingMerge } from "../lib/pending-notes.js";
-import { readRootPackageJson } from "../lib/pkg-json.js";
-import { confirm } from "../lib/prompts.js";
+import { matchDone, mergePendingNotes } from "../lib/pending-notes.js";
 import { findProjectRoot } from "../lib/project.js";
-import {
-  detectMissingRequirements,
-  formatUpdateRequirements,
-} from "../lib/requires.js";
-import {
-  createRegistrySource,
-  REGISTRY_ENV,
-  releaseTag,
-  RemoteRegistrySource,
-} from "../lib/registry.js";
-import type { LoadedModule, RegistrySource } from "../lib/registry.js";
-import type { Graph } from "../lib/resolve.js";
-import { resolveGraph } from "../lib/resolve.js";
-import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
-import { readTestingMode, suggestsTestingMode } from "../lib/testing.js";
-import { baseTemplateDir, templateVars } from "../lib/scaffold.js";
-import { linkAgentSkills } from "../lib/skill-links.js";
-import {
-  fromRefusal,
-  moduleNoteSources,
-  selectUpdateNotes,
-} from "../lib/update-note-select.js";
-import type { BaseNoteRange } from "../lib/update-note-select.js";
-import { baseUpdateNotesDir } from "../lib/update-notes.js";
-import type { WhenContext } from "../lib/when.js";
+import { RemoteRegistrySource } from "../lib/registry.js";
+import { listLabel } from "../lib/requested.js";
 import { compareVersions, parseVersion } from "../lib/semver.js";
-import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
+import { TUI_ON_STDERR } from "../lib/tui.js";
+import { selectUpdateNotes } from "../lib/update-note-select.js";
+import type { ModuleNoteSource } from "../lib/update-note-select.js";
+import { baseUpdateNotesDir, UPDATE_NOTES_DIR } from "../lib/update-notes.js";
+import type { UpdateNoteText } from "../lib/update-notes.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
-import { previewBackfill, reportBackfill } from "./backfill-report.js";
-import { DESCRIPTIONS } from "./descriptions.js";
-import { renderBundledSkill } from "./skill.js";
 import {
-  buildUpdatePlan,
-  compareBase,
-  compareInstalled,
-  executeUpdatePlan,
-  markResolved,
-  markRestored,
-  mergeTargets,
-  recordRefRewrites,
-  VERIFY_COMMAND,
-} from "../lib/updater.js";
-import type {
-  ModuleComparison,
-  ModuleUpdateInput,
-  ModuleUpdatePlan,
-  PlannedUpdateFile,
-  UpdateFileAction,
-  UpdatePlan,
-  UpdateResult,
-} from "../lib/updater.js";
+  abortRun,
+  confirmApply,
+  matchPaths,
+  NO_TERMINAL_TO_CONFIRM,
+  printDiffs,
+  printSteps,
+  sideSpec,
+  summarize,
+} from "./apply-run.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 
-// `saasaloy update [<module>]` — re-resolve each installed module's ref, apply what can
-// be applied deterministically, and emit an agent-consumable merge plan for everything
-// that can't (issue #48). The copy-in tool's answer to "you own the code, so you can
-// never update it": clean files are overwritten, hand-edited files are never touched,
-// and the difference between the two is written down in enough detail for an agent to
-// resolve it.
+// `saasaloy update`: one apply that moves the project to the running CLI's release (plan
+// 0116). Every default-registry module moves with it, and a third-party module moves to
+// the tip of the ref its lock entry records. There is no update of one module: a staged
+// update runs an older CLI, `pnpm dlx saasaloy@<version> update`.
 //
-// stdout belongs to the merge plan and nothing else, so the whole clack TUI goes to
-// stderr (`TUI_ON_STDERR`) and `saasaloy update email | claude` works with no flag.
+// The run renders the lock at its release (the base of each merge, accepted only by its
+// hash) and at the new release, writes each file nobody edited, merges each file with
+// local edits three ways, and leaves a file written once alone. A conflict does not stop
+// it: the file gets markers, the lock and the manifest move, and the run exits 3. Its
+// report goes to stdout as Markdown, and the TUI goes to stderr.
 //
-// The base template rides the same engine (#120, ADR 0032). A bare run considers the base
-// and every module; `update base` considers the base alone. The bundled template is
-// rendered for this project and classified three-way against the template at the
-// recorded release, fetched from its tag (#312, ADR 0059); with no snapshot it is
-// classified like a module with no merge base, the reason on its header. A project
-// with no base record is *adopted* first — its base files are recorded as they stand at
-// the running CLI — and the run stops there, so the next run is a real update. This is
-// the only command that writes that record; `outdated` and `doctor` report `untracked`.
+// The first run in a version 1 project converts its manifest and its lock (plan 0116,
+// Phase 5). `update` refuses a dirty tree, so the conversion is one reviewable diff, and
+// `--abort` restores the version 1 files.
 
-interface Options {
-  name?: string;
-  /** `--ref <branch|tag|sha>`: the explicit unpin. Requires a named module. */
-  ref?: string;
-  /** `--out <path>`: write the merge plan here instead of stdout. */
-  out?: string;
-  dryRun: boolean;
-  diff: boolean;
-  yes: boolean;
-  /** `--force`: apply even though the git working tree has uncommitted changes. */
-  force: boolean;
-  /** `--abort`: restore the newest pre-update backup and exit. */
-  abort: boolean;
-  /** `--resolved <path>`, repeatable: files whose merge is done (#223). As typed. */
-  resolved: string[];
-  /** `--restore <path>`, repeatable: tombstoned files to bring back (#312). As typed. */
-  restore: string[];
-  /**
-   * `--from <version>`: the CLI version an adopted project was really made with, the
-   * lower bound for its base update notes (#298). First update after adoption only.
-   */
-  from?: string;
-  /**
-   * `--done <id>`, repeatable: update notes whose work is finished (#298). Each must name
-   * a pending note. Rides a normal run, as `--resolved` does.
-   */
-  done: string[];
-  /** Flags we don't know and extra positionals — reported, never silently ignored. */
-  unknown: string[];
-}
+const USAGE =
+  "saasaloy update [--restore <path>]... [--merge <path>]... [--done <id>]... [--dry-run] [--diff] [--force] [--yes] | saasaloy update --abort";
+const HELP: CommandHelp = {
+  describe: DESCRIPTIONS.update,
+  flags: {
+    "--abort":
+      "put back the files the last add, remove, update or testing run changed",
+    "--diff": "show a per-file diff and write nothing",
+    "--done <id>":
+      "record an update note whose work is finished, so the report stops listing it (repeatable)",
+    "--dry-run": "show the report and write nothing",
+    "--force":
+      "apply even with uncommitted changes in the working tree, and overwrite edited generated files",
+    "--merge <path>":
+      "merge a file written once with its upstream change, three ways (repeatable)",
+    "--restore <path>":
+      "write a tracked file the project deleted again, from the current upstream (repeatable)",
+    "-y, --yes": "skip the confirmation prompt",
+  },
+  name: "update",
+  usage: USAGE,
+};
 
-const KNOWN_FLAGS = new Set([
+const UPDATE_FLAGS = new Set([
   "--dry-run",
   "--diff",
   "--yes",
@@ -186,1883 +108,590 @@ const KNOWN_FLAGS = new Set([
   "--help",
   "-h",
 ]);
-const VALUE_FLAGS = new Set([
-  "--ref",
-  "--out",
-  "--resolved",
-  "--restore",
-  "--done",
-  "--from",
-]);
-const USAGE =
-  "saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--restore <path>]... [--done <id>]... [--from <version>] [--dry-run] [--diff] [--force] [--yes] | saasaloy update --abort";
-const HELP: CommandHelp = {
-  name: "update",
-  describe: DESCRIPTIONS.update,
-  usage: USAGE,
-  flags: {
-    "--ref <ref>":
-      "update one module to this branch, tag, or SHA instead of this CLI's release tag (not the base)",
-    "--out <path>": "write the merge plan to a file instead of stdout",
-    "--resolved <path>":
-      "record a file you merged as it stands now, or keep a file you deleted deleted, so the next update stops offering it (repeatable)",
-    "--restore <path>":
-      "bring back a file kept deleted: write the current upstream file and stop keeping it deleted (repeatable)",
-    "--done <id>":
-      "record an update note whose work is finished, so the merge plan stops listing it (repeatable)",
-    "--from <version>":
-      "on the first update after adoption, the CLI version the project was made with, so its base update notes apply",
-    "--dry-run": "show the plan and write nothing",
-    "--diff": "show a per-file diff and write nothing",
-    "--force": "apply even with uncommitted changes in the working tree",
-    "--abort": "put back the files the last update replaced",
-    "-y, --yes": "skip the confirmation prompt",
-  },
+const UPDATE_VALUE_FLAGS = new Set(["--restore", "--merge", "--done"]);
+/** Old-engine flags, refused with a reason rather than as unknown. */
+const UPDATE_GONE_FLAGS: Record<string, string> = {
+  "--from": "the render engine has no adopted base",
+  "--out": "the report goes to stdout; redirect it",
+  "--ref": "the default registry moves as one release",
+  "--resolved": "a merge clears when its conflict markers are gone",
 };
 
-function parseArgs(argv: string[]): Options {
-  const positional: string[] = [];
-  const unknown: string[] = [];
-  const values: Record<string, string> = {};
-  const resolved: string[] = [];
-  const restore: string[] = [];
-  const done: string[] = [];
+export interface UpdateOptions {
+  dryRun: boolean;
+  diff: boolean;
+  yes: boolean;
+  force: boolean;
+  abort: boolean;
+  restore: string[];
+  merge: string[];
+  done: string[];
+  /** Flags we don't know, positionals, and the old engine's flags. */
+  unknown: string[];
+}
 
+export function parseUpdateArgs(argv: string[]): UpdateOptions {
+  const values: Record<string, string[]> = {
+    "--done": [],
+    "--merge": [],
+    "--restore": [],
+  };
+  const unknown: string[] = [];
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
-    if (!arg.startsWith("-")) {
-      positional.push(arg);
-      continue;
-    }
-    // Accept both `--ref v2` and `--ref=v2`; a value flag with nothing after it is a
-    // usage error, not a silently-empty ref. In the space-separated form the next token
-    // must not itself be a flag, or `--ref --dry-run` pins the ref to "--dry-run" and
-    // reaches the registry with it instead of reporting the usage error.
+    const arg = argv[i] ?? "";
     const eq = arg.indexOf("=");
     const flag = eq === -1 ? arg : arg.slice(0, eq);
-    if (VALUE_FLAGS.has(flag)) {
-      const next = eq === -1 ? argv[i + 1] : arg.slice(eq + 1);
-      if (!next || (eq === -1 && next.startsWith("-"))) {
+    if (!arg.startsWith("-")) {
+      unknown.push(
+        `${arg} (update takes no module name: one update moves every module)`
+      );
+    } else if (UPDATE_VALUE_FLAGS.has(flag)) {
+      const value = eq === -1 ? argv[i + 1] : arg.slice(eq + 1);
+      if (!value || (eq === -1 && value.startsWith("-"))) {
         unknown.push(`${flag} (missing value)`);
         continue;
       }
       if (eq === -1) {
         i++;
       }
-      if (flag === "--resolved") {
-        resolved.push(next);
-      } else if (flag === "--restore") {
-        restore.push(next);
-      } else if (flag === "--done") {
-        done.push(next);
-      } else {
-        values[flag] = next;
+      values[flag]?.push(value);
+    } else if (UPDATE_GONE_FLAGS[flag] !== undefined) {
+      unknown.push(`${flag} (${UPDATE_GONE_FLAGS[flag]})`);
+      if (
+        eq === -1 &&
+        argv[i + 1] !== undefined &&
+        !argv[i + 1]?.startsWith("-")
+      ) {
+        i++;
       }
-      continue;
-    }
-    if (!KNOWN_FLAGS.has(arg)) {
+    } else if (!UPDATE_FLAGS.has(arg)) {
       unknown.push(arg);
     }
   }
-  unknown.push(...positional.slice(1));
-
   return {
-    name: positional[0],
-    ref: values["--ref"],
-    out: values["--out"],
-    from: values["--from"],
-    dryRun: argv.includes("--dry-run"),
-    diff: argv.includes("--diff"),
-    yes: argv.includes("--yes") || argv.includes("-y"),
-    force: argv.includes("--force"),
     abort: argv.includes("--abort"),
-    resolved,
-    restore,
-    done,
+    diff: argv.includes("--diff"),
+    done: values["--done"] ?? [],
+    dryRun: argv.includes("--dry-run"),
+    force: argv.includes("--force"),
+    merge: values["--merge"] ?? [],
+    restore: values["--restore"] ?? [],
     unknown,
+    yes: argv.includes("--yes") || argv.includes("-y"),
   };
-}
-
-const ACTION_LABEL: Record<UpdateFileAction, string> = {
-  skip: pc.dim("unchanged upstream"),
-  create: pc.green("create"),
-  overwrite: pc.cyan("update"),
-  restore: pc.green("restore"),
-  deleted: pc.yellow("deleted locally → merge"),
-  "kept-deleted": pc.dim("kept deleted"),
-  unchanged: pc.dim("unchanged"),
-  drift: pc.yellow("drift → merge"),
-  conflict: pc.yellow("conflict → merge"),
-  delete: pc.red("delete"),
-  "delete-drift": pc.yellow("dropped → kept"),
-  "delete-missing": pc.dim("untrack"),
-  resolved: pc.green("merged → record"),
-};
-
-// Actions worth a line in the summary — `skip`/`unchanged` are counted, not listed, so
-// a big module doesn't bury the handful of paths that actually move.
-const QUIET: ReadonlySet<UpdateFileAction> = new Set<UpdateFileAction>([
-  "skip",
-  "unchanged",
-]);
-
-// Cap a single file's diff so a big generated file can't flood the terminal (same cap as `add`).
-const MAX_DIFF_LINES = 60;
-
-function renderDiff(file: PlannedUpdateFile): string {
-  const lines = lineDiff(file.mine ?? "", file.theirs ?? "");
-  const shown = lines.slice(0, MAX_DIFF_LINES).map((line) => {
-    switch (line.kind) {
-      case "add": {
-        return pc.green(`+ ${line.text}`);
-      }
-      case "del": {
-        return pc.red(`- ${line.text}`);
-      }
-      default: {
-        return pc.dim(`  ${line.text}`);
-      }
-    }
-  });
-  if (lines.length > MAX_DIFF_LINES) {
-    shown.push(pc.dim(`  … ${lines.length - MAX_DIFF_LINES} more lines`));
-  }
-  return shown.join("\n");
-}
-
-function short(sha: string): string {
-  return /^[0-9a-f]{40}$/i.test(sha) ? sha.slice(0, 7) : sha;
-}
-
-/**
- * One module's summary lines. `shownPrereqs` holds the prerequisites an earlier module's
- * lines already named: the run installs each one once (#312), so it is printed once.
- */
-function summarizeModule(
-  mod: ModuleUpdatePlan,
-  shownPrereqs: Set<string>
-): string[] {
-  const lines = [
-    `${pc.cyan(mod.name)} ${pc.dim(`${short(mod.comparison.current)} → ${short(mod.comparison.latest)} (${mod.comparison.ref})`)}`,
-  ];
-  if (mod.noMergeBase) {
-    lines.push(pc.dim(`  no merge base — ${mod.noMergeBase}`));
-  }
-  for (const name of mod.prereqNames) {
-    if (shownPrereqs.has(name)) {
-      continue;
-    }
-    shownPrereqs.add(name);
-    lines.push(
-      `  ${pc.green("install")}  ${pc.cyan(name)} ${pc.dim("(new prerequisite)")}`
-    );
-  }
-  for (const file of [...mod.files, ...mod.removals]) {
-    if (QUIET.has(file.action)) {
-      continue;
-    }
-    lines.push(
-      file.action === "kept-deleted"
-        ? `  ${ACTION_LABEL[file.action]}  ${file.target}  ${pc.dim("(upstream changed it)")}`
-        : `  ${ACTION_LABEL[file.action]}  ${file.target}`
-    );
-  }
-  const quiet = [...mod.files, ...mod.removals].filter((f) =>
-    QUIET.has(f.action)
-  ).length;
-  if (quiet > 0) {
-    lines.push(pc.dim(`  ${quiet} file(s) already up to date`));
-  }
-  for (const bump of mod.depBumps) {
-    lines.push(
-      `  ${pc.cyan("bump")}  ${bump.name} ${pc.dim(`${bump.from} → ${bump.to}`)}`
-    );
-  }
-  for (const dep of [...mod.depAdds, ...mod.devDepAdds]) {
-    lines.push(`  ${pc.green("dep")}  ${dep.name}@${dep.version}`);
-  }
-  return lines;
-}
-
-function summarizePlan(plan: UpdatePlan): void {
-  const lines: string[] = [];
-  // Aliases first (#312): they land before any file, and a target may resolve under one.
-  for (const add of plan.aliasAdds) {
-    lines.push(
-      `${pc.green("alias")}  ${pc.cyan(add.alias)} ${pc.dim(`→ ${add.value}`)}`
-    );
-  }
-  if (plan.aliasAdds.length > 0) {
-    lines.push("");
-  }
-  const shownPrereqs = new Set<string>();
-  for (const mod of plan.modules) {
-    lines.push(...summarizeModule(mod, shownPrereqs), "");
-  }
-  const merging = plan.modules.reduce(
-    (n, m) =>
-      n +
-      m.files.filter(
-        (f) =>
-          f.action === "drift" ||
-          f.action === "conflict" ||
-          f.action === "deleted"
-      ).length +
-      m.removals.filter((f) => f.action === "delete-drift").length,
-    0
-  );
-  const writing = plan.modules.reduce(
-    (n, m) =>
-      n +
-      m.files.filter(
-        (f) =>
-          !QUIET.has(f.action) &&
-          f.action !== "drift" &&
-          f.action !== "conflict" &&
-          f.action !== "deleted" &&
-          f.action !== "kept-deleted" &&
-          f.action !== "resolved"
-      ).length,
-    0
-  );
-  lines.push(
-    pc.dim(
-      `${writing} file(s) to apply, ${merging} needing merge${noteCountLabel(plan)}`
-    )
-  );
-  note(wrapForNote(lines.join("\n")), "Plan", TUI_ON_STDERR);
-
-  // One line per alias the project holds with another value (#312). The project value
-  // stays, so a target under it resolves where the project put it.
-  for (const kept of plan.aliasKept) {
-    log.warn(
-      `Alias ${pc.cyan(kept.alias)} stays ${kept.project} ${pc.dim(`(the update declares ${kept.template})`)}.`,
-      TUI_ON_STDERR
-    );
-  }
-
-  // A module with no lock entry already arrives here as an `unresolvable` comparison
-  // carrying that reason, so `plan.missingLockEntries` isn't reported a second time.
-  for (const comparison of plan.skipped) {
-    log.info(
-      `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const mod of plan.modules) {
-    for (const conflict of mod.depConflicts) {
-      log.warn(`Dependency version conflict — ${conflict}.`, TUI_ON_STDERR);
-    }
-    for (const patch of mod.patches) {
-      if (patch.action === "missing") {
-        log.warn(
-          `Config patch target ${pc.cyan(patch.file)} is missing — ${patch.patch.kind} not applied.`,
-          TUI_ON_STDERR
-        );
-      }
-    }
-  }
-  // Named before the confirmation, in their own box, because a secret the new version
-  // started requiring is the one thing that breaks the project after a clean update and
-  // the one thing the file list can't tell you (#98).
-  const envVars = new Map<string, string>();
-  for (const mod of plan.modules) {
-    for (const [key, description] of Object.entries(mod.newEnvVars)) {
-      envVars.set(key, description);
-    }
-  }
-  if (envVars.size > 0) {
-    const envLines = [...envVars].map(
-      ([key, description]) => `${pc.cyan(key)} ${pc.dim(`— ${description}`)}`
-    );
-    note(wrapForNote(envLines.join("\n")), "Env vars to set", TUI_ON_STDERR);
-  }
-  if (plan.migrationCommand) {
-    note(
-      wrapForNote(
-        `${pc.cyan(plan.migrationCommand)}\n\n${pc.dim("The update changed the database schema — run this to regenerate migrations.")}`
-      ),
-      "Migrations",
-      TUI_ON_STDERR
-    );
-  }
-  note(
-    wrapForNote(
-      `${pc.cyan(plan.verifyCommand)}\n\n${pc.dim("Named, not run — an update usually precedes `pnpm install`.")}`
-    ),
-    "Verify with",
-    TUI_ON_STDERR
-  );
-}
-
-/** `, 3 update notes (1 may apply)` for the plan box, or `""` with no note (#298). */
-function noteCountLabel(
-  plan: Pick<UpdatePlan, "notes" | "mayApplyNotes">
-): string {
-  const total = plan.notes.length + plan.mayApplyNotes.length;
-  if (total === 0) {
-    return "";
-  }
-  const may =
-    plan.mayApplyNotes.length > 0
-      ? ` (${plan.mayApplyNotes.length} may apply)`
-      : "";
-  return `, ${total} update note${total === 1 ? "" : "s"}${may}`;
-}
-
-/**
- * The plan an up-to-date run renders when update notes still apply (#298): no module
- * moved, so the notes are the whole document.
- */
-function notesOnlyPlan(
-  selection: Pick<PendingMerge, "notes" | "mayApply">,
-  skipped: ModuleComparison[]
-): UpdatePlan {
-  return {
-    modules: [],
-    skipped,
-    missingLockEntries: [],
-    aliasAdds: [],
-    aliasKept: [],
-    verifyCommand: VERIFY_COMMAND,
-    needsMerge: false,
-    notes: selection.notes,
-    mayApplyNotes: selection.mayApply,
-  };
-}
-
-function skipReason(comparison: ModuleComparison, preview = false): string {
-  switch (comparison.status) {
-    case "current": {
-      const at = `already at ${short(comparison.current)}`;
-      if (!comparison.refRewrite) {
-        return at;
-      }
-      // The SHA didn't move but the ref did — say so, or "already at <sha7>" would read
-      // as though `--ref` had been ignored.
-      return preview
-        ? `${at} — \`--ref\` would move the lock onto \`${comparison.ref}\``
-        : `${at} — now tracking \`${comparison.ref}\``;
-    }
-    default: {
-      return comparison.detail ?? comparison.status;
-    }
-  }
-}
-
-// The three files Saasaloy owns. `--out` writes after the ledger saves, so a path
-// pointing at one of these replaces real state with merge-plan prose and breaks the
-// next command. Refuse the path up front rather than at the write.
-const STATE_FILES = [CONFIG_FILE, LOCK_FILE, MANIFEST_FILE];
-
-/** Why `--out <path>` is refused, or `undefined` when the path is safe to write. */
-async function stateFileRefusal(
-  root: string,
-  out: string | undefined
-): Promise<undefined | string> {
-  if (!out) {
-    return undefined;
-  }
-  const target = await canonicalPath(resolvePlanOut(out));
-  for (const file of STATE_FILES) {
-    if ((await canonicalPath(resolve(root, file))) === target) {
-      return `Refusing to write the merge plan to ${pc.cyan(out)} — that is Saasaloy's own ${pc.cyan(file)}. Pick another path.`;
-    }
-  }
-  return undefined;
-}
-
-// Compare through realpath, not lexically: `/var/…` is a symlink to `/private/var/…` on
-// macOS, so two absolute paths naming the same file can differ character for character
-// and a lexical check would wave the state file through. A path that isn't on disk yet
-// still has a real parent, and one that has neither is already lexically resolved.
-async function canonicalPath(path: string): Promise<string> {
-  try {
-    return await realpath(path);
-  } catch {
-    try {
-      return join(await realpath(dirname(path)), basename(path));
-    } catch {
-      return path;
-    }
-  }
-}
-
-/** `--out <path>` resolved against the working directory, the one place that mapping lives. */
-function resolvePlanOut(out: string): string {
-  return isAbsolute(out) ? out : resolve(process.cwd(), out);
-}
-
-/** Emit the merge plan: `--out <path>` when given, otherwise stdout — and nothing else ever. */
-async function emitMergePlan(
-  document: string,
-  out: string | undefined
-): Promise<void> {
-  if (!out) {
-    process.stdout.write(document);
-    return;
-  }
-  const target = resolvePlanOut(out);
-  await mkdir(dirname(target), { recursive: true });
-  await writeFile(target, document, "utf-8");
-  log.success(`Merge plan written to ${pc.cyan(out)}`, TUI_ON_STDERR);
-}
-
-/**
- * Every project-relative path the plan may write or delete — what the backup copies. A
- * file the plan will create has nothing to copy; `writeBackup` records it as absent so
- * `--abort` deletes it again.
- */
-function backupTargets(plan: UpdatePlan): string[] {
-  const targets = new Set<string>();
-  for (const mod of plan.modules) {
-    for (const file of [...mod.files, ...mod.removals]) {
-      if (!QUIET.has(file.action) && file.action !== "kept-deleted") {
-        targets.add(file.target);
-      }
-    }
-    for (const patch of mod.patches) {
-      targets.add(patch.file);
-    }
-  }
-  return [...targets].toSorted();
-}
-
-/**
- * The plan's merge targets that `--resolved <path>` names (#223), or the paths that name
- * none. A path is read two ways, the cwd-relative one first: as typed from where the
- * command runs, and as the project-relative path the merge plan prints. Either form may
- * be absolute. A path outside the project names nothing.
- */
-export function matchResolved(
-  root: string,
-  cwd: string,
-  paths: string[],
-  targets: readonly string[]
-): { matched: Set<string>; unmatched: string[] } {
-  const available = new Set(targets);
-  const matched = new Set<string>();
-  const unmatched: string[] = [];
-  for (const path of paths) {
-    const candidates = [resolve(cwd, path), resolve(root, path)].map((abs) =>
-      relative(root, abs).split(sep).join("/")
-    );
-    const hit = candidates.find(
-      (candidate) =>
-        candidate !== "" &&
-        !candidate.startsWith("../") &&
-        candidate !== ".." &&
-        available.has(candidate)
-    );
-    if (hit === undefined) {
-      unmatched.push(path);
-    } else {
-      matched.add(hit);
-    }
-  }
-  return { matched, unmatched };
-}
-
-/** The refusal for `--resolved` paths the plan sends to no merge (#223). */
-function formatUnmatchedResolved(
-  unmatched: string[],
-  targets: readonly string[]
-): string {
-  const named = unmatched.map((path) => pc.cyan(path)).join(", ");
-  const waiting =
-    targets.length === 0
-      ? "Nothing in this update is waiting on a merge."
-      : `Waiting on a merge: ${targets.join(", ")}.`;
-  return `\`--resolved\` names ${named}, which this update does not send to a merge. ${waiting} Nothing was written.`;
-}
-
-/**
- * The refusal for `--restore` paths that name no tombstone (#312): a file `update` keeps
- * deleted is the only thing `--restore` brings back.
- */
-function formatUnmatchedRestore(
-  unmatched: string[],
-  tombstones: readonly string[]
-): string {
-  const named = unmatched.map((path) => pc.cyan(path)).join(", ");
-  const kept =
-    tombstones.length === 0
-      ? "No file is kept deleted."
-      : `Kept deleted: ${tombstones.join(", ")}.`;
-  return `\`--restore\` names ${named}, which is not a file kept deleted. ${kept} Nothing was written.`;
-}
-
-/**
- * The refusal for a tombstone `--restore` named that the run could not plan (#312): its
- * module did not resolve, or its new version no longer ships the file.
- */
-function formatUnplannedRestore(targets: readonly string[]): string {
-  const named = targets.map((path) => pc.cyan(path)).join(", ");
-  return (
-    `\`--restore\` names ${named}, and this update has no upstream file to write there: ` +
-    "its module could not be read, or the new version no longer ships it. Nothing was written."
-  );
-}
-
-/** Targets the manifest keeps deleted and that are still absent: what `--restore` may name (#312). */
-async function tombstonedTargets(
-  root: string,
-  manifest: Awaited<ReturnType<typeof loadManifest>>
-): Promise<{ target: string; module: string }[]> {
-  const out: { target: string; module: string }[] = [];
-  for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (!entry.deleted) {
-      continue;
-    }
-    if (!(await pathExists(resolveWithinRoot(root, target)))) {
-      out.push({ target, module: entry.module });
-    }
-  }
-  return out.toSorted((a, b) => (a.target < b.target ? -1 : 1));
-}
-
-/** The refusal for `--done` ids that name no pending update note (#298). */
-function formatUnmatchedDone(
-  unmatched: string[],
-  pending: readonly PendingNote[]
-): string {
-  const named = unmatched.map((id) => pc.cyan(id)).join(", ");
-  const waiting =
-    pending.length === 0
-      ? "No update note is pending."
-      : `Pending: ${pending.map((entry) => entry.id).join(", ")}.`;
-  return `\`--done\` names ${named}, which is not a pending update note. ${waiting} Nothing was written.`;
-}
-
-/** `owner/repo` → the two halves, or undefined when the lock's source isn't a remote slug. */
-function splitSlug(slug: string): [string, string] | undefined {
-  const [owner, repo, ...rest] = slug.split("/");
-  if (!owner || !repo || rest.length > 0) {
-    return undefined;
-  }
-  return [owner, repo];
 }
 
 export async function runUpdate(argv: string[]): Promise<number> {
-  // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
-  const opts = parseArgs(argv);
+  const opts = parseUpdateArgs(argv);
   if (opts.unknown.length === 0 && wantsHelp(argv)) {
     printCommandHelp(HELP);
     return EXIT_OK;
   }
-
-  intro(pc.bgCyan(pc.black(" saasaloy update ")), TUI_ON_STDERR);
-
-  if (opts.unknown.length > 0) {
-    cancel(
-      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
-      TUI_ON_STDERR
-    );
-    return EXIT_REFUSED;
-  }
-  // A bare `update --ref v2` would silently move every module onto one ref, which is
-  // never what someone means — the unpin is per module by construction (decision 10).
-  if (opts.ref && !opts.name) {
-    cancel(
-      `\`--ref\` needs an explicit module — usage: \`${USAGE}\`.`,
-      TUI_ON_STDERR
-    );
-    return EXIT_REFUSED;
-  }
-
-  // `--from` sets where the base update notes start (#298), so a run that names one
-  // module, and so never reads the base, has no use for it.
-  if (opts.from !== undefined && opts.name && opts.name !== BASE_MODULE) {
-    cancel(
-      `\`--from\` sets where the base update notes start, and \`update ${opts.name}\` does not read the base. ` +
-        "Run `saasaloy update --from <version>` with no module. Nothing was written.",
-      TUI_ON_STDERR
-    );
-    return EXIT_REFUSED;
-  }
-
-  let root: string;
-  let config: Awaited<ReturnType<typeof loadConfig>>;
-  try {
-    root = await findProjectRoot();
-    config = await loadConfig(root);
-  } catch (error) {
-    cancel(formatFailure(error), TUI_ON_STDERR);
-    return exitCodeFor(error);
-  }
-
-  // `--abort` is the whole command when it is given: it reads no registry, builds no
-  // plan, and only puts back what the last run replaced.
-  if (opts.abort) {
-    try {
-      const restored = await restoreLatestBackup(root);
-      for (const target of restored.restored) {
-        log.step(`${pc.green("restore")}  ${target}`, TUI_ON_STDERR);
-      }
-      for (const target of restored.removed) {
-        log.step(
-          `${pc.red("remove")}  ${target} ${pc.dim("(the update created it)")}`,
-          TUI_ON_STDERR
-        );
-      }
-      outro(
-        pc.green(
-          `Restored ${restored.restored.length} file${restored.restored.length === 1 ? "" : "s"} from ${restored.from}.`
-        ),
-        TUI_ON_STDERR
-      );
-      return EXIT_OK;
-    } catch (error) {
-      cancel(formatFailure(error), TUI_ON_STDERR);
-      return exitCodeFor(error);
-    }
-  }
-
-  const outRefusal = await stateFileRefusal(root, opts.out);
-  if (outRefusal) {
-    cancel(outRefusal, TUI_ON_STDERR);
-    return EXIT_REFUSED;
-  }
-
-  // The merge plan goes to stdout, so `saasaloy update email | claude` is the designed
-  // pipeline and a redirected stdout says nothing about who is watching. This command
-  // used to read it as "a script is driving me" and set `--yes` for itself, which made
-  // `saasaloy update | tee log` overwrite every clean file unconfirmed (#98). stdin is
-  // the stream the confirmation actually reads: no terminal there means the prompt can
-  // never be answered, so refuse and name the two ways forward. A preview writes nothing,
-  // so it is exempt.
-  const preview = opts.dryRun || opts.diff;
-
-  // Uncommitted work plus an update that writes files leaves nothing to compare the
-  // result against. A preview writes nothing, so it is exempt; `--force` says the user
-  // has read this and means it.
-  if (!preview && !opts.force && (await workingTreeState(root)) === "dirty") {
-    cancel(
-      "The working tree has uncommitted changes. Commit or stash them first, so `git diff` " +
-        "shows what this update did — or re-run with `--force`. Nothing was written.",
-      TUI_ON_STDERR
-    );
-    return EXIT_REFUSED;
-  }
-
-  if (!opts.yes && !preview && !process.stdin.isTTY) {
-    cancel(
-      "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview.",
-      TUI_ON_STDERR
-    );
-    // Refused by design, like every other bad-usage exit here (#98's 0/1/2 scheme).
-    return EXIT_REFUSED;
-  }
-
-  const sources: RegistrySource[] = [];
-  // Temp renders of the bundled template, dropped with the sources.
-  const cleanups: (() => Promise<void>)[] = [];
-  // Set once the run starts to write its plan (#359). A failure from then on is one the
-  // owner cannot fix by changing the input, so the catch adds the report hint.
-  let applying = false;
-  try {
-    // `update base` names the template, which ships with the CLI and has no ref to move.
-    const wantsBase = !opts.name || opts.name === BASE_MODULE;
-    const wantsModules = opts.name !== BASE_MODULE;
-    if (!wantsModules && opts.ref) {
-      cancel(
-        `\`--ref\` moves a module's ref; the base template ships with the CLI — usage: \`${USAGE}\`.`,
-        TUI_ON_STDERR
-      );
-      return EXIT_REFUSED;
-    }
-    if (wantsModules && opts.name && !config.installed.includes(opts.name)) {
-      cancel(
-        `${pc.cyan(opts.name)} isn't installed — nothing to update.`,
-        TUI_ON_STDERR
-      );
-      return EXIT_REFUSED;
-    }
-    const targets = wantsModules
-      ? opts.name
-        ? [opts.name]
-        : config.installed
-      : [];
-
-    const manifest = await loadManifest(root);
-    const lock = await loadLock(root);
-    const registryOverride = !!process.env[REGISTRY_ENV];
-
-    // `--done` (#298) names notes an earlier applied run showed. One that is not pending
-    // refuses the run before anything is read or written.
-    const pendingBefore = pendingNotesOf(manifest);
-    const done = matchDone(opts.done, pendingBefore);
-    if (done.unmatched.length > 0) {
-      cancel(formatUnmatchedDone(done.unmatched, pendingBefore), TUI_ON_STDERR);
-      return EXIT_REFUSED;
-    }
-    // Selection skips a note cleared on an earlier run and one this run clears, in both
-    // groups: an adopted base at the running CLI, or a module with no merge base, selects
-    // the same notes on every run, and a cleared one must not come back (#298).
-    const skipNotes = new Set([...doneNotesOf(manifest), ...done.matched]);
-
-    // `--restore` (#312) names files the manifest keeps deleted. Anything else, and a
-    // tombstone this run does not read, refuses before anything is read or written.
-    const tombstones = await tombstonedTargets(root, manifest);
-    const restoreMatch = matchResolved(
-      root,
-      process.cwd(),
-      opts.restore,
-      tombstones.map((entry) => entry.target)
-    );
-    if (restoreMatch.unmatched.length > 0) {
-      cancel(
-        formatUnmatchedRestore(
-          restoreMatch.unmatched,
-          tombstones.map((entry) => entry.target)
-        ),
-        TUI_ON_STDERR
-      );
-      return EXIT_REFUSED;
-    }
-    const restoreTargets = restoreMatch.matched;
-    const restoreOwners = new Set(
-      tombstones
-        .filter((entry) => restoreTargets.has(entry.target))
-        .map((entry) => entry.module)
-    );
-    const restoreBase = tombstones
-      .filter(
-        (entry) =>
-          entry.module === BASE_MODULE && restoreTargets.has(entry.target)
-      )
-      .map((entry) => entry.target);
-    for (const owner of restoreOwners) {
-      const inRun = owner === BASE_MODULE ? wantsBase : targets.includes(owner);
-      if (!inRun) {
-        cancel(
-          `\`--restore\` names a file ${pc.cyan(owner)} keeps deleted, and this run does not read ${pc.cyan(owner)}. ` +
-            `Run \`saasaloy update ${owner === BASE_MODULE ? "" : `${owner} `}--restore <path>\`. Nothing was written.`,
-          TUI_ON_STDERR
-        );
-        return EXIT_REFUSED;
-      }
-    }
-
-    // A project made before `testing.mode` existed reads as `off`, yet may already hold a
-    // module's test file (#242). One line names the switch; a project with the key, at any
-    // value, has chosen and hears nothing.
-    if (suggestsTestingMode(config, manifest)) {
-      log.info(
-        `This project holds module tests and no testing mode in ${CONFIG_FILE} — run ` +
-          `${pc.cyan("saasaloy testing tests-after")} to turn module tests on.`,
-        TUI_ON_STDERR
-      );
-    }
-
-    // Backfill (#242 A4): an entry whose `when` turned true since its module landed. It is
-    // planned at the run's decision point, against the disk the confirmation describes,
-    // and listed with the rest of the plan. It is written only once the run has passed
-    // its refusals, its confirmation and its backup, so one approval covers it and
-    // `--abort` takes it back. `update base` reads no module, so it leaves this to a run
-    // that does.
-    // `aliasAdds` are the aliases the update plan adds (#312). The backfill resolves every
-    // installed module's targets, so a project that lacks `@config` would refuse here on
-    // `auth`'s `@config/sections/auth.ts` before the apply writes the alias.
-    const planUpdateBackfill = async (
-      aliasAdds: readonly { alias: string; value: string }[] = []
-    ): Promise<BackfillPlan | undefined> => {
-      if (!wantsModules) {
-        return undefined;
-      }
-      const aliases = { ...config.aliases };
-      for (const add of aliasAdds) {
-        aliases[add.alias] ??= add.value;
-      }
-      const planned = await planBackfill({
-        config: { ...config, aliases },
-        lock,
-        manifest,
-        root,
-      });
-      cleanups.push(planned.cleanup);
-      previewBackfill(planned.plan, planned.skipped, TUI_ON_STDERR);
-      return isEmptyBackfill(planned.plan) ? undefined : planned;
-    };
-    // After the apply, re-planned against the disk the update left, and held to the
-    // targets the user saw and the backup copied. The skips were reported at plan time.
-    const writeUpdateBackfill = async (
-      planned: BackfillPlan
-    ): Promise<void> => {
-      const outcome = await runBackfill({
-        config,
-        lock,
-        manifest,
-        root,
-        within: new Set(backfillTargets(planned.plan)),
-      });
-      await reportBackfill(root, { ...outcome, skipped: [] }, TUI_ON_STDERR);
-    };
-    const cliVersion = await readVersion();
-
-    // The base first (#120): adopt an unrecorded project and stop, refuse a downgrade,
-    // then compare the recorded template hash against the one this CLI ships.
-    let baseComparison: ModuleComparison | undefined;
-    let templateDir: string | undefined;
-    // The version range base update notes are selected over (#298); unset when the run
-    // does not read the base.
-    let baseNotes: (BaseNoteRange & { dir: string }) | undefined;
-    // What `baseAdoptedAt` read before anything ran, written explicitly when the record's
-    // `cliVersion` moves, so a legacy record cannot reread as adopted at the new version.
-    let adoptedBefore: string | undefined;
-    // The name every `{{PROJECT_NAME}}` in the template renders to. Read from the project,
-    // never from the directory: a worktree or a CI checkout path is not a rename (#144).
-    const project = await resolveProjectName(root, config);
-    if (wantsBase) {
-      templateDir = await baseTemplateDir();
-      if (project.source === "directory") {
-        log.warn(
-          `No \`name\` in ${CONFIG_FILE} and no root package.json name — falling back to the directory ` +
-            `name ${pc.cyan(project.name)}. Set \`name\` in ${CONFIG_FILE} if that isn't this project's name.`,
-          TUI_ON_STDERR
-        );
-      }
-      // `--from` (#298) names where an adopted base really started, so it means nothing
-      // on the run that adopts it and nothing once an update has moved the record.
-      if (opts.from !== undefined && !isBaseTracked(lock, manifest)) {
-        cancel(
-          "`--from` works on the first update after adoption, and this run adopts the base. " +
-            "Run `saasaloy update` without it first, then `saasaloy update --from <version>`. Nothing was written.",
-          TUI_ON_STDERR
-        );
-        return EXIT_REFUSED;
-      }
-      const fromRefused = fromRefusal(
-        opts.from,
-        isFirstUpdateAfterAdoption(lock, manifest)
-      );
-      if (fromRefused) {
-        cancel(fromRefused, TUI_ON_STDERR);
-        return EXIT_REFUSED;
-      }
-      if (!isBaseTracked(lock, manifest)) {
-        const adoption = await adoptBase({
-          root,
-          cliVersion,
-          projectName: project.name,
-          testingMode: readTestingMode(config),
-          manifest,
-          lock,
-          templateDir,
-          dryRun: preview,
-        });
-        const count = adoption.adopted.length;
-        const lines = [
-          `${preview ? "Would adopt" : "Adopted"} ${count} base file${count === 1 ? "" : "s"} at CLI ${pc.cyan(cliVersion)}, ` +
-            `each at the hash it has on disk. Those bytes may be yours, so the next update treats ` +
-            `every one of them as edited and offers a merge rather than a write.`,
-        ];
-        if (adoption.absent.length > 0) {
-          lines.push(
-            "",
-            `${adoption.absent.length} template file${adoption.absent.length === 1 ? " is" : "s are"} not on disk and ${preview ? "would not be" : "were not"} recorded, so a later base update creates ${adoption.absent.length === 1 ? "it" : "them"} as new:`,
-            ...adoption.absent.map((target) => `  ${pc.dim(target)}`)
-          );
-        }
-        lines.push(
-          "",
-          pc.dim(
-            "Nothing else was applied. Run `saasaloy update` again to update the base."
-          )
-        );
-        note(wrapForNote(lines.join("\n")), "Base adopted", TUI_ON_STDERR);
-        outro(
-          preview
-            ? pc.dim("dry run — nothing recorded")
-            : pc.green(`Recorded the base at CLI ${cliVersion}.`),
-          TUI_ON_STDERR
-        );
-        return EXIT_OK;
-      }
-
-      const recorded = lock.base!.cliVersion;
-      const recordedVersion = parseVersion(recorded);
-      const runningVersion = parseVersion(cliVersion);
-      if (
-        recordedVersion &&
-        runningVersion &&
-        compareVersions(recordedVersion, runningVersion) > 0
-      ) {
-        cancel(
-          `This project's base was recorded by saasaloy ${recorded}, and ${cliVersion} is running — ` +
-            `updating would move the base backwards. Upgrade with \`${upgradeCommand(`>=${recorded}`)}\`. Nothing was written.`,
-          TUI_ON_STDERR
-        );
-        return EXIT_REFUSED;
-      }
-      if (recorded !== cliVersion) {
-        log.info(
-          `Base recorded at CLI ${pc.cyan(recorded)}; ${pc.cyan(cliVersion)} is running.`,
-          TUI_ON_STDERR
-        );
-      }
-      baseComparison = compareBase({
-        lock,
-        manifest,
-        runningHash: await templateHash(templateDir),
-        runningVersion: cliVersion,
-        // A tombstone `--restore` names plans the base too (#312), even at an unmoved hash.
-        missingTargets: [
-          ...(await missingBaseTargets(root, manifest, templateDir)),
-          ...restoreBase,
-        ],
-      });
-      // Read before anything runs: a clean base update moves `lock.base` (#298).
-      adoptedBefore = baseAdoptedAt(lock, manifest);
-      const adoptedAt = isFirstUpdateAfterAdoption(lock, manifest)
-        ? baseAdoptedAt(lock, manifest)
-        : undefined;
-      baseNotes = {
-        dir: await baseUpdateNotesDir(),
-        recorded,
-        running: cliVersion,
-        ...(adoptedAt === undefined ? {} : { adoptedAt }),
-        ...(opts.from === undefined ? {} : { from: opts.from }),
-      };
-    }
-
-    // `when` on an update note reads the project as the update leaves it (#298): what it
-    // holds, plus any prerequisite the plan installs.
-    const noteContext = (extra: Iterable<string> = []): WhenContext => ({
-      testingMode: readTestingMode(config),
-      installed: new Set([
-        ...config.installed,
-        ...Object.keys(lock.modules),
-        ...extra,
-      ]),
-    });
-
-    // An applied run that read the base records the running CLI as the base's version
-    // (#298), so the base notes it showed fall out of the next run's range. A clean base
-    // update has already moved the record; a current base, or one still waiting on a
-    // merge, moves only its label here. The hash still decides whether the base is current.
-    const advanceBaseRange = (): void => {
-      if (!baseNotes || !lock.base || lock.base.cliVersion === cliVersion) {
-        return;
-      }
-      // The hash still describes the old template, so the release it came from is kept
-      // for the next run's three-way snapshot (#312).
-      //
-      // A run that merged against `--from` records that version, not the adopting one.
-      // `--from` is refused on every later run, so the adopting release would become the
-      // merge base there, and each file the template changed only before it would read
-      // `base === theirs` and leave the merge plan with its merge still waiting. The
-      // `--from` snapshot does not hash to `templateHash`, so the next run goes two-way,
-      // which keeps every waiting file in the plan.
-      lock.base = {
-        ...lock.base,
-        cliVersion,
-        templateVersion:
-          opts.from ?? lock.base.templateVersion ?? lock.base.cliVersion,
-        ...(adoptedBefore === undefined ? {} : { adoptedAt: adoptedBefore }),
-      };
-    };
-    // Record what an applied run shows: every note it shows becomes pending, and each id
-    // `--done` cleared moves to `doneNotes`, which selection skips from now on (#298).
-    const recordNotes = (merged: PendingMerge): void => {
-      setPendingNotes(manifest, merged.pending);
-      addDoneNotes(manifest, done.matched);
-      advanceBaseRange();
-    };
-    const reportDone = (): void => {
-      for (const id of done.matched) {
-        log.step(
-          `${pc.green("done")}  ${id} ${pc.dim("(update note cleared)")}`,
-          TUI_ON_STDERR
-        );
-      }
-    };
-
-    if (targets.length === 0 && !baseComparison) {
-      note("Nothing installed.", "Nothing to do", TUI_ON_STDERR);
-      outro(pc.dim("0 modules"), TUI_ON_STDERR);
-      return EXIT_OK;
-    }
-
-    // Cache one source per (repo, ref) so a bare `update` resolves each ref once.
-    const resolvers = new Map<string, RemoteRegistrySource>();
-    const remote = (slug: string, ref: string): RemoteRegistrySource => {
-      const key = `${slug}@${ref}`;
-      const cached = resolvers.get(key);
-      if (cached) {
-        return cached;
-      }
-      const parts = splitSlug(slug);
-      if (!parts) {
-        throw new Error(
-          `Lock entry source "${slug}" isn't an owner/repo coordinate.`
-        );
-      }
-      const source = new RemoteRegistrySource(parts[0], parts[1], ref);
-      resolvers.set(key, source);
-      sources.push(source);
-      return source;
-    };
-
-    if (registryOverride) {
-      const fromRemote = targets.filter((name) => {
-        const entry = lock.modules[name];
-        return entry && entry.source !== "local";
-      });
-      if (fromRemote.length > 0) {
-        log.warn(
-          `${REGISTRY_ENV} is set, so ${fromRemote.join(", ")} will be updated from that working ` +
-            `copy rather than ${pc.cyan(lock.modules[fromRemote[0]!]?.source ?? "the registry")} — ` +
-            `${pc.dim("there is no merge base for a working copy")}.`,
-          TUI_ON_STDERR
-        );
-      }
-    }
-
-    // A module that keeps a file `--restore` names is planned even when its lock is
-    // current (#312): at its recorded SHA both revisions match, so the restore is the one
-    // write, and the lock does not move.
-    const moduleComparisons = (
-      targets.length > 0
-        ? await compareInstalled({
-            installed: targets,
-            lock,
-            overrideRef: opts.ref,
-            registryOverride,
-            // A default-registry module follows the CLI that runs (ADR 0062).
-            releaseRef: releaseTag(cliVersion),
-            resolveRef: (_name, entry, ref) =>
-              remote(entry.source, ref).resolveSha(),
-          })
-        : []
-    ).map((comparison): ModuleComparison =>
-      restoreOwners.has(comparison.name) &&
-      (comparison.status === "current" || comparison.status === "pinned")
-        ? { ...comparison, status: "outdated" }
-        : comparison
-    );
-    const comparisons = baseComparison
-      ? [baseComparison, ...moduleComparisons]
-      : moduleComparisons;
-
-    const outdated = comparisons.filter((c) => c.status === "outdated");
-    const skipped = comparisons.filter((c) => c.status !== "outdated");
-    if (outdated.length === 0 && opts.resolved.length > 0) {
-      cancel(formatUnmatchedResolved(opts.resolved, []), TUI_ON_STDERR);
-      return EXIT_REFUSED;
-    }
-    if (outdated.length === 0 && restoreTargets.size > 0) {
-      cancel(formatUnplannedRestore([...restoreTargets]), TUI_ON_STDERR);
-      return EXIT_REFUSED;
-    }
-    if (outdated.length === 0) {
-      const backfill = await planUpdateBackfill();
-      for (const comparison of skipped) {
-        log.info(
-          `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison, preview)}`)}`,
-          TUI_ON_STDERR
-        );
-      }
-      // No module moved, yet a base note can still apply: the record sits below the
-      // running CLI, or the base was adopted (#298). The notes are then the whole plan.
-      // Pending notes from earlier runs print with them until `--done` clears each.
-      const merged = mergePendingNotes(
-        pendingBefore,
-        await selectUpdateNotes({
-          ...(baseNotes ? { base: baseNotes } : {}),
-          modules: [],
-          when: noteContext(),
-        }),
-        skipNotes
-      );
-      const notesPlan = notesOnlyPlan(merged, skipped);
-      const notesDocument = renderMergePlan(
-        notesPlan,
-        await runbookFor(root, project.name, cliVersion)
-      );
-      if (!preview) {
-        const declined = await finishUpToDate({
-          backfill,
-          backUp: (paths) => backUp(root, paths, cliVersion),
-          comparisons,
-          confirm: () => confirmProceed(opts.yes),
-          lock,
-          persist: async () => {
-            const failed = (
-              await persistLedger({ config, lock, manifest, root })
-            )[0];
-            if (failed) {
-              throw failed.error;
-            }
-          },
-          writeBackfill: writeUpdateBackfill,
-        });
-        if (declined !== undefined) {
-          return declined;
-        }
-        const before = JSON.stringify([
-          manifest.pendingNotes,
-          manifest.doneNotes,
-          lock.base,
-        ]);
-        recordNotes(merged);
-        if (
-          JSON.stringify([
-            manifest.pendingNotes,
-            manifest.doneNotes,
-            lock.base,
-          ]) !== before
-        ) {
-          const failed = (
-            await persistLedger({ config, lock, manifest, root })
-          )[0];
-          if (failed) {
-            throw failed.error;
-          }
-        }
-        reportDone();
-      }
-      if (notesDocument) {
-        if (preview) {
-          process.stdout.write(notesDocument);
-        } else {
-          await emitMergePlan(notesDocument, opts.out);
-        }
-        const where = `see the merge plan${preview || !opts.out ? " on stdout" : ""}`;
-        if (preview) {
-          outro(
-            pc.yellow(
-              `No file to update, but ${noteCountLabel(notesPlan).slice(2)} — ${where}.`
-            ),
-            TUI_ON_STDERR
-          );
-          return EXIT_OK;
-        }
-        // Every note shown is now pending, so the run is unfinished until each is done.
-        outro(
-          pc.yellow(
-            `No file to update, but ${pendingLabel(merged.pending.length)} — ${where}. ` +
-              "Record each with `saasaloy update --done <id>` once its work is done."
-          ),
-          TUI_ON_STDERR
-        );
-        return EXIT_WORK_PENDING;
-      }
-      outro(pc.green("Everything is up to date."), TUI_ON_STDERR);
-      return EXIT_OK;
-    }
-
-    // Fetch each outdated module twice — at the new SHA (theirs) and at the SHA the lock
-    // records (base). Refetching base is what makes a real three-way merge possible; a
-    // base we can't reach degrades the document rather than failing the update.
-    const inputs: ModuleUpdateInput[] = [];
-    // Mutually exclusive modules, checked the way `add` checks them (#98). A new version
-    // can introduce a `dependsOn` on a second driver, and `update` installs a new
-    // prerequisite as part of the same plan — so without this the command lands the exact
-    // pair `add` refuses. Collected across every module and reported once, before
-    // anything is written: `executeUpdatePlan` applies the whole plan under one
-    // confirmation, so a refusal here has to stop the run, not one module of it.
-    const conflictRefusals: string[] = [];
-    // The same shape for `requires.saasaloy` (#50): a module's *new* version can declare
-    // a CLI floor its installed version never had, and that is exactly the case the field
-    // exists for. Collected across the run and refused before any plan is built.
-    const cliRefusals: string[] = [];
-    const missingLockEntries = new Set<string>();
-    // Every graph that resolved, kept for the combined check below.
-    const resolvedGraphs: Graph[] = [];
-    if (baseComparison?.status === "outdated" && templateDir) {
-      const handle = await baseUpdateInput({
-        root,
-        manifest,
-        lock,
-        templateDir,
-        cliVersion,
-        projectName: project.name,
-        testingMode: readTestingMode(config),
-        comparison: baseComparison,
-        // The merge base's version too (#312): an adopted project's real start.
-        ...(opts.from === undefined ? {} : { from: opts.from }),
-      });
-      cleanups.push(handle.cleanup);
-      inputs.push(handle.input);
-    }
-    for (const comparison of outdated) {
-      if (comparison.name === BASE_MODULE) {
-        continue;
-      }
-      // One module's fetch failing is that module's problem: a dead tarball, a renamed
-      // dependency, a network blip. It is reported and skipped, never fatal, so a bare
-      // `update` still lands every other module (criterion 17).
-      try {
-        const theirsSource = registryOverride
-          ? createRegistrySource({})
-          : remote(comparison.source, comparison.latest);
-        if (registryOverride) {
-          sources.push(theirsSource);
-        }
-
-        const graph = await resolveGraph(theirsSource, comparison.name);
-        const theirs = graph.modules.get(comparison.name);
-        if (!theirs) {
-          throw new Error(
-            `${comparison.name} isn't in the registry at ${short(comparison.latest)}.`
-          );
-        }
-
-        resolvedGraphs.push(graph);
-        const cliMismatches = detectCliMismatches({ cliVersion, graph });
-        if (cliMismatches.length > 0) {
-          cliRefusals.push(
-            formatCliMismatches(cliMismatches, comparison.name, cliVersion)
-          );
-          continue;
-        }
-        const report = detectConflicts({ graph, config, lock });
-        for (const name of report.missingLockEntries) {
-          missingLockEntries.add(name);
-        }
-        if (report.conflicts.length > 0) {
-          conflictRefusals.push(
-            formatConflicts(report.conflicts, comparison.name, "update")
-          );
-          continue;
-        }
-
-        let base: LoadedModule | undefined;
-        let noMergeBase: string | undefined;
-        if (registryOverride || comparison.current === "local") {
-          noMergeBase = "local install";
-        } else {
-          try {
-            base = await remote(
-              comparison.source,
-              comparison.current
-            ).readModule(comparison.name);
-          } catch (error) {
-            // A force-pushed branch, a deleted tag, a repo gone private — the clean path
-            // has already been decided, so refusing here would leave the user worse off.
-            noMergeBase =
-              error instanceof Error ? error.message : String(error);
-          }
-        }
-
-        const intent =
-          base && !registryOverride
-            ? await theirsSource.commitSubjects(
-                `modules/${comparison.name}`,
-                comparison.current,
-                comparison.latest
-              )
-            : [];
-
-        inputs.push({
-          comparison,
-          theirs,
-          ...(base ? { base } : {}),
-          ...(noMergeBase ? { noMergeBase } : {}),
-          intent,
-          prereqs: {
-            order: graph.order.filter((n) => n !== comparison.name),
-            modules: graph.modules,
-          },
-        });
-      } catch (error) {
-        skipped.push({
-          ...comparison,
-          status: "unresolvable",
-          detail: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
-
-    // The per-module pass above cannot see a pair that arrives across two graphs: one
-    // outdated module's new version pulls in one driver, another's pulls in the other,
-    // and neither graph alone holds both. Union every resolved graph and check once more,
-    // before any plan is built or written (#98).
-    const merged: Graph = { order: [], modules: new Map() };
-    for (const graph of resolvedGraphs) {
-      for (const [name, mod] of graph.modules) {
-        if (!merged.modules.has(name)) {
-          merged.modules.set(name, mod);
-          merged.order.push(name);
-        }
-      }
-    }
-    if (conflictRefusals.length === 0 && resolvedGraphs.length > 1) {
-      const report = detectConflicts({ graph: merged, config, lock });
-      for (const name of report.missingLockEntries) {
-        missingLockEntries.add(name);
-      }
-      if (report.conflicts.length > 0) {
-        conflictRefusals.push(
-          formatConflicts(
-            report.conflicts,
-            outdated.map((c) => c.name).join(", "),
-            "update"
-          )
-        );
-      }
-    }
-
-    if (missingLockEntries.size > 0) {
-      log.warn(
-        `No lock entry for ${[...missingLockEntries].map((m) => pc.cyan(m)).join(", ")} — ` +
-          `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`,
-        TUI_ON_STDERR
-      );
-    }
-    // A CLI too old for one of the incoming descriptors stops the whole run, ahead of the
-    // conflict report: there is no point resolving a driver choice with an applier that
-    // cannot read the module it would resolve it for.
-    if (cliRefusals.length > 0) {
-      cancel(cliRefusals.join("\n"), TUI_ON_STDERR);
-      return EXIT_REFUSED;
-    }
-    if (conflictRefusals.length > 0) {
-      cancel(conflictRefusals.join("\n"), TUI_ON_STDERR);
-      return EXIT_REFUSED;
-    }
-    // `requiresOneOf` on a new version (#229). A module split leaves the core needing an
-    // owner the project never picked, and the new core no longer lists the files that
-    // owner now ships — so `executeUpdatePlan` would delete each unchanged one. Checked
-    // over every resolved graph at once, so an owner arriving through another module's
-    // update still counts, and refused before any plan, and so any delete, exists.
-    const unmet = detectMissingRequirements({ graph: merged, config });
-    if (unmet.length > 0) {
-      cancel(formatUpdateRequirements(unmet), TUI_ON_STDERR);
-      return EXIT_REFUSED;
-    }
-
-    // Everything outdated failed to fetch — there is no plan to summarize or confirm.
-    if (inputs.length === 0) {
-      if (opts.resolved.length > 0) {
-        cancel(formatUnmatchedResolved(opts.resolved, []), TUI_ON_STDERR);
-        return EXIT_REFUSED;
-      }
-      if (restoreTargets.size > 0) {
-        cancel(formatUnplannedRestore([...restoreTargets]), TUI_ON_STDERR);
-        return EXIT_REFUSED;
-      }
-      for (const comparison of skipped) {
-        // Only a fetch failure is a warning here — a `current` module is just news.
-        const line = `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`;
-        if (comparison.status === "unresolvable") {
-          log.warn(line, TUI_ON_STDERR);
-        } else {
-          log.info(line, TUI_ON_STDERR);
-        }
-      }
-      // Every candidate failed to fetch — a failure, not a refusal: a retry may work.
-      outro(pc.yellow("Nothing could be updated."), TUI_ON_STDERR);
-      return EXIT_FAILURE;
-    }
-
-    const pkg = await readRootPackageJson(root);
-    if (!pkg) {
-      log.warn(
-        "No package.json at the project root — dependency pins won't be updated.",
-        TUI_ON_STDERR
-      );
-    }
-    const plan = await buildUpdatePlan({
-      root,
-      config,
-      manifest,
-      lock,
-      inputs,
-      considered: targets,
-      skipped,
-      pkg,
-      vars: templateVars(project.name),
-      // Read even when the base is not in the run (#312): `update <module>` still places
-      // a file under an alias the template added after this project was made.
-      baseAliases: await templateAliases(
-        templateDir ?? (await baseTemplateDir())
-      ),
-    });
-
-    // `--resolved` (#223): the named files leave the merge plan before it is summarized,
-    // so the summary, the confirmation and the exit code all describe what is left. A path
-    // the plan sends to no merge refuses the run here, before anything is written.
-    if (opts.resolved.length > 0) {
-      const waiting = mergeTargets(plan);
-      const { matched, unmatched } = matchResolved(
-        root,
-        process.cwd(),
-        opts.resolved,
-        waiting
-      );
-      if (unmatched.length > 0) {
-        cancel(formatUnmatchedResolved(unmatched, waiting), TUI_ON_STDERR);
-        return EXIT_REFUSED;
-      }
-      markResolved(plan, matched);
-    }
-    // `--restore` (#312): each named tombstone becomes a `restore`, written with the rest.
-    if (restoreTargets.size > 0) {
-      const unplanned = markRestored(plan, restoreTargets);
-      if (unplanned.length > 0) {
-        cancel(formatUnplannedRestore(unplanned), TUI_ON_STDERR);
-        return EXIT_REFUSED;
-      }
-    }
-
-    // Update notes (#298): read while every fetched revision is still on disk, and carried
-    // on the plan so the summary and the merge plan both see them.
-    const selection = await selectUpdateNotes({
-      ...(baseNotes ? { base: baseNotes } : {}),
-      modules: moduleNoteSources(inputs, plan),
-      when: noteContext(plan.modules.flatMap((mod) => mod.prereqNames)),
-    });
-    // Notes still pending from earlier runs print with this run's, once each (#298).
-    const shown = mergePendingNotes(pendingBefore, selection, skipNotes);
-    plan.notes = shown.notes;
-    plan.mayApplyNotes = shown.mayApply;
-
-    summarizePlan(plan);
-    const backfill = await planUpdateBackfill(plan.aliasAdds);
-
-    if (opts.diff) {
-      for (const file of [
-        ...plan.modules.flatMap((m) => m.files),
-        ...plan.modules.flatMap((m) => m.removals),
-      ]) {
-        if (QUIET.has(file.action)) {
-          continue;
-        }
-        note(
-          renderDiff(file),
-          `${ACTION_LABEL[file.action]}  ${file.target}`,
-          TUI_ON_STDERR
-        );
-      }
-    }
-
-    // Compare the runbook before anything applies (#359). The agent read the project's
-    // copy before it ran `update`, and the base may replace that copy in this run, so a
-    // compare after the apply would hide the very difference the line reports.
-    const runbook = await runbookFor(root, project.name, cliVersion);
-
-    // --dry-run and --diff both preview only: nothing is written anywhere, including
-    // `--out`. The merge plan still renders to stdout so the preview is complete.
-    if (preview) {
-      const document = renderMergePlan(plan, runbook);
-      if (document) {
-        process.stdout.write(document);
-      }
-      outro(
-        pc.dim(
-          opts.diff
-            ? "diff only — nothing applied"
-            : "dry run — nothing applied"
-        ),
-        TUI_ON_STDERR
-      );
-      return EXIT_OK;
-    }
-
-    const declined = await confirmProceed(opts.yes);
-    if (declined !== undefined) {
-      return declined;
-    }
-    applying = true;
-
-    // Copy everything the plan will touch, the backfill's targets and the state files,
-    // before a byte moves. `saasaloy update --abort` puts this back.
-    await backUp(
-      root,
-      [
-        ...backupTargets(plan),
-        ...(backfill ? backfillTargets(backfill.plan) : []),
-      ],
-      cliVersion
-    );
-
-    // Capture the outcome rather than letting it throw, so the ledger writes below
-    // still run on the failure path and the original error still wins afterwards.
-    const outcome = await executeUpdatePlan(plan, {
-      root,
-      config,
-      manifest,
-      lock,
-      pkg,
-    }).then(
-      (value) => ({ ok: true as const, value }),
-      (error: unknown) => ({ ok: false as const, error })
-    );
-
-    // The notes this run shows are recorded only once the plan applied: a run that threw
-    // emits no merge plan, so it showed nothing (#298).
-    if (outcome.ok) {
-      recordNotes(shown);
-    }
-
-    // Record whatever actually landed even if a mid-plan write failed — the ledger must
-    // describe the real on-disk state (`add`'s invariant; #49 owns real transactionality
-    // for both commands). `persistLedger` runs all three even when one fails, so a failed
-    // manifest save never skips the config and the lock (#150).
-    const failures = await persistLedger({ config, lock, manifest, root });
-    if (!outcome.ok) {
-      throw outcome.error;
-    }
-    const failedSave = failures[0];
-    if (failedSave) {
-      throw failedSave.error;
-    }
-    const result: UpdateResult = outcome.value;
-
-    reportResult(result);
-    reportDone();
-    await linkProjectSkills(root, result);
-    await formatPatchedFiles(
-      root,
-      result.patched.map((p) => p.file),
-      TUI_ON_STDERR
-    );
-
-    // Phase 4: the merge plan is emitted only after the clean path has run, so it
-    // describes what is actually left to do rather than what might have been.
-    const document = renderMergePlan(plan, runbook);
-    if (document) {
-      await emitMergePlan(document, opts.out);
-      note(
-        wrapForNote(
-          pc.dim(
-            opts.out
-              ? "Hand that file to an agent — your edits were left untouched."
-              : "That merge plan is on stdout — pipe it to an agent. Your edits were left untouched."
-          )
-        ),
-        plan.needsMerge ? "Needs merge" : "Update notes",
-        TUI_ON_STDERR
-      );
-    }
-
-    // The backfill comes last, once the update's files, report and merge plan are out.
-    // The update has landed by now, so a backfill that stops is a warning: the run keeps
-    // the update's exit code, and the next `update` writes what is left (#242).
-    if (backfill) {
-      try {
-        await writeUpdateBackfill(backfill);
-      } catch (error) {
-        log.warn(
-          `Backfill stopped — ${formatFailure(error)}. Run ${pc.cyan("saasaloy update")} to finish it.`,
-          TUI_ON_STDERR
-        );
-      }
-    }
-
-    // Drift routing to a merge plan is the designed outcome, not a failure — but the run
-    // is unfinished, and a CI job that reads only the exit code has to be able to see
-    // that. 3 says "applied what it could, and files wait on a merge or notes wait on
-    // `--done`" (#298); 0 still means there is nothing left to do.
-    outro(summarizeOutcome(plan, result, shown.pending.length), TUI_ON_STDERR);
-    return plan.needsMerge || shown.pending.length > 0
-      ? EXIT_WORK_PENDING
-      : EXIT_OK;
-  } catch (error) {
-    cancel(formatFailure(error), TUI_ON_STDERR);
-    const code = exitCodeFor(error);
-    if (applying && code === EXIT_FAILURE) {
-      process.stderr.write(`${REPORT_HINT}\n`);
-    }
+  // stdout carries the report and nothing else, so the TUI goes to stderr.
+  const tui = TUI_ON_STDERR;
+  const refuse = (message: string, code: number): number => {
+    cancel(message, tui);
     return code;
-  } finally {
-    // Each remote source extracted its modules to a temp dir; drop them all.
-    for (const source of sources) {
-      await source.cleanup?.();
+  };
+  intro(pc.bgCyan(pc.black(" saasaloy update ")), tui);
+  if (opts.unknown.length > 0) {
+    return refuse(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      EXIT_REFUSED
+    );
+  }
+  try {
+    const root = await findProjectRoot();
+    if (opts.abort) {
+      return await abortRun(root, tui);
     }
-    for (const cleanup of cleanups) {
-      await cleanup();
-    }
+    return await updateProject(root, opts, refuse);
+  } catch (error) {
+    return refuse(
+      formatFailure(error),
+      error instanceof RefusalError ? EXIT_REFUSED : EXIT_FAILURE
+    );
   }
 }
 
-/** What {@link finishUpToDate} writes with; each step is injected so a test can watch the order. */
-export interface UpToDateSteps {
-  /** The backfill owed, or `undefined` when there is none. */
-  backfill: BackfillPlan | undefined;
-  backUp: (targets: string[]) => Promise<void>;
-  comparisons: ModuleComparison[];
-  /** `undefined` to go on, or the exit code to stop with. */
-  confirm: () => Promise<number | undefined>;
-  lock: Lockfile;
-  /** Write the ledger; throws on a failed save. */
-  persist: () => Promise<void>;
-  writeBackfill: (planned: BackfillPlan) => Promise<void>;
+/** Write each module's `update-notes/` out of a payload, for `selectUpdateNotes`. */
+async function writeNoteDirs(
+  payload: Payload,
+  names: Iterable<string>,
+  dir: string
+): Promise<Map<string, string>> {
+  const dirs = new Map<string, string>();
+  for (const name of names) {
+    const mod = payload.modules.get(name);
+    if (mod === undefined) {
+      continue;
+    }
+    const moduleDir = join(dir, name);
+    await mkdir(moduleDir, { recursive: true });
+    for (const [rel, content] of mod.files) {
+      if (rel.startsWith(`${UPDATE_NOTES_DIR}/`)) {
+        const file = join(moduleDir, ...rel.split("/"));
+        await mkdir(dirname(file), { recursive: true });
+        await writeFile(file, content, "utf-8");
+      }
+    }
+    dirs.set(name, moduleDir);
+  }
+  return dirs;
+}
+
+/** The update report: what the run left for an agent. Plain Markdown on stdout. */
+export function updateReport(args: {
+  report: ApplyReport;
+  from: string | undefined;
+  to: string;
+  notes: readonly UpdateNoteText[];
+  mayApply: readonly UpdateNoteText[];
+}): string {
+  const { report } = args;
+  const lines: string[] = [
+    `# saasaloy update ${args.from === undefined ? "" : `${args.from} → `}${args.to}`,
+    "",
+  ];
+  const section = (title: string, items: string[]): void => {
+    if (items.length > 0) {
+      lines.push(`## ${title}`, "", ...items, "");
+    }
+  };
+  section(
+    "Files with conflict markers",
+    report.results
+      .filter((result) => (result.conflicts ?? 0) > 0)
+      .map(
+        (result) =>
+          `- \`${result.path}\`: ${String(result.conflicts)} conflict${result.conflicts === 1 ? "" : "s"}${result.kind === "conflict" ? "" : " (no base: two-way markers)"}`
+      )
+  );
+  section(
+    "Written once, changed upstream",
+    report.onceChanged.map(
+      (path) => `- \`${path}\`: \`saasaloy update --merge ${path}\` merges it`
+    )
+  );
+  section(
+    "Left deleted",
+    report.keptDeleted.map(
+      (path) =>
+        `- \`${path}\`: \`saasaloy update --restore ${path}\` writes it again`
+    )
+  );
+  section(
+    "Kept, no longer tracked",
+    report.keptEdited.map(
+      (path) => `- \`${path}\`: upstream removed it and the project changed it`
+    )
+  );
+  section(
+    "Warnings",
+    report.warnings.map((warning) => `- ${warning}`)
+  );
+  // A note's own headings nest under its heading, so a note's `## What you do` never
+  // ends the report's `## Update notes` section (#298).
+  const noteBlock = (entry: UpdateNoteText, level: number): string[] => [
+    `${"#".repeat(level)} ${entry.id}: ${entry.title}`,
+    "",
+    demoteHeadings(entry.body, level + 1).trimEnd(),
+    "",
+  ];
+  if (args.notes.length > 0 || args.mayApply.length > 0) {
+    lines.push("## Update notes", "");
+    for (const entry of args.notes) {
+      lines.push(...noteBlock(entry, 3));
+    }
+    if (args.mayApply.length > 0) {
+      lines.push("### Notes that may apply", "");
+      for (const entry of args.mayApply) {
+        lines.push(...noteBlock(entry, 4));
+      }
+    }
+    lines.push(
+      "### When a note is done",
+      "",
+      "```sh",
+      `saasaloy update ${[...args.notes, ...args.mayApply].map((entry) => `--done ${entry.id}`).join(" ")} --yes`,
+      "```",
+      ""
+    );
+  }
+  lines.push(
+    "Run `pnpm install`, then `pnpm check`, to typecheck and test the result."
+  );
+  return `${lines.join("\n")}\n`;
 }
 
 /**
- * The writes of a real run that found nothing outdated. Returns the exit code to stop
- * with when the user declined, or `undefined` once done.
- *
- * `--ref` onto a tag that already points at the SHA the lock records moves no files, but
- * it is still the explicit unpin, so it is recorded here or the module stays pinned
- * forever. Only the lock changes, but the write still goes through the ledger: `update`
- * writes state through one door (#150). With no backfill owed that is the whole job, and
- * it needs no confirmation.
- *
- * A backfill owed here is how a partial one gets finished (#242). It takes the update's
- * confirmation and backup, and the ref rewrite moves behind them too, so a declined run
- * writes nothing at all and `--abort` puts the lock back.
+ * Shift every ATX heading outside a fenced block so the body's highest heading lands at
+ * `top`, capped at `######`. A fenced block's lines are content, never headings.
+ * Exported for its own test.
  */
-export async function finishUpToDate(
-  steps: UpToDateSteps
-): Promise<number | undefined> {
-  const { backfill } = steps;
-  if (backfill === undefined) {
-    if (recordRefRewrites(steps.lock, steps.comparisons).length > 0) {
-      await steps.persist();
+export function demoteHeadings(body: string, top: number): string {
+  const lines = body.split("\n");
+  const headings: (number | undefined)[] = [];
+  let fence: string | undefined;
+  for (const line of lines) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) {
+        fence = marker;
+      } else if (
+        marker.startsWith(fence.charAt(0)) &&
+        marker.length >= fence.length
+      ) {
+        fence = undefined;
+      }
+      headings.push(undefined);
+      continue;
     }
+    headings.push(
+      fence === undefined ? /^(#{1,6})[ \t]/.exec(line)?.[1]?.length : undefined
+    );
+  }
+  const levels = headings.filter((h): h is number => h !== undefined);
+  if (levels.length === 0) {
+    return body;
+  }
+  const shift = Math.max(0, top - Math.min(...levels));
+  return lines
+    .map((line, index) => {
+      const level = headings[index];
+      return level === undefined
+        ? line
+        : `${"#".repeat(Math.min(6, level + shift))}${line.slice(level)}`;
+    })
+    .join("\n");
+}
+
+/**
+ * The first run of the render engine in a version 1 project converts its manifest and its
+ * lock (plan 0116, "Migration and rollback"). The result stays in memory: the run writes
+ * it with everything else, after the backup, so `--abort` restores the version 1 files.
+ */
+async function convertIfVersion1(
+  root: string,
+  cliVersion: string,
+  tui: TuiOptions
+): Promise<Conversion | undefined> {
+  if ((await readManifestState(root)).kind !== "v1") {
     return undefined;
   }
-  const declined = await steps.confirm();
+  const conversion = await convertProject({
+    load: candidateLoader(await loadLock(root), { cliVersion }),
+    releases: searchedReleases(cliVersion),
+    root,
+  });
+  const found = conversion.files.filter(
+    (file) => file.version !== undefined
+  ).length;
+  const bothSides = conversion.files.filter(
+    (file) => file.record === undefined
+  ).length;
+  const rest =
+    bothSides > 0
+      ? `; ${String(bothSides)} with no base merge as files on both sides.`
+      : ".";
+  log.info(
+    `Converting a version 1 project: found the base of ${String(found)} of ${String(conversion.files.length)} tracked files${rest}`,
+    tui
+  );
+  return conversion;
+}
+
+async function updateProject(
+  root: string,
+  opts: UpdateOptions,
+  refuse: (message: string, code: number) => number
+): Promise<number> {
+  const tui = TUI_ON_STDERR;
+  const cliVersion = await readVersion();
+  const conversion = await convertIfVersion1(root, cliVersion, tui);
+  await assertReadyToRun(root, conversion?.manifest);
+  const state = await readProjectState(
+    root,
+    conversion === undefined
+      ? undefined
+      : { lock: conversion.lock, manifest: conversion.manifest }
+  );
+  const preview = opts.dryRun || opts.diff;
+
+  // A CLI older than the lock would move the project backwards.
+  const recorded = state.version;
+  const recordedVersion = parseVersion(recorded ?? "");
+  const runningVersion = parseVersion(cliVersion);
+  if (
+    recorded !== undefined &&
+    recordedVersion !== undefined &&
+    runningVersion !== undefined &&
+    compareVersions(recordedVersion, runningVersion) > 0
+  ) {
+    return refuse(
+      `This project was rendered by saasaloy ${recorded}, and ${cliVersion} is running — updating would move it backwards. ` +
+        `Upgrade with \`${upgradeCommand(`>=${recorded}`)}\`. Nothing was written.`,
+      EXIT_REFUSED
+    );
+  }
+  if (!preview && !opts.force) {
+    await checkCleanTree(root, "whole", []);
+  }
+  if (!opts.yes && !preview && !process.stdin.isTTY) {
+    return refuse(NO_TERMINAL_TO_CONFIRM, EXIT_REFUSED);
+  }
+
+  const done = matchDone(opts.done, state.manifest.pendingNotes);
+  if (done.unmatched.length > 0) {
+    const known = state.manifest.pendingNotes.map((entry) => `  ${entry.id}`);
+    return refuse(
+      [
+        `\`--done\` names no pending update note: ${done.unmatched.join(", ")}.`,
+        ...(known.length > 0
+          ? ["Pending:", ...known]
+          : ["No update note is pending."]),
+        "Nothing was written.",
+      ].join("\n"),
+      EXIT_REFUSED
+    );
+  }
+  const records = state.manifest.files;
+  const missing = new Set<string>();
+  for (const path of Object.keys(records)) {
+    if (!(await pathExists(resolveWithinRoot(root, path)))) {
+      missing.add(path);
+    }
+  }
+  const restore = matchPaths(root, opts.restore, missing);
+  if (restore.unmatched.length > 0) {
+    return refuse(
+      `\`--restore\` names no tracked file the project deleted: ${restore.unmatched.join(", ")}. Nothing was written.`,
+      EXIT_REFUSED
+    );
+  }
+  const onceFiles = new Set(
+    Object.entries(records)
+      .filter(([path, record]) => record.class === "once" && !missing.has(path))
+      .map(([path]) => path)
+  );
+  const merge = matchPaths(root, opts.merge, onceFiles);
+  if (merge.unmatched.length > 0) {
+    return refuse(
+      `\`--merge\` names no file written once that is on disk: ${merge.unmatched.join(", ")}. Nothing was written.`,
+      EXIT_REFUSED
+    );
+  }
+
+  // The old side renders the lock at its release; the new side moves every default module
+  // to the running CLI's release and each third-party module to the tip of its ref.
+  const previousVersion = recorded ?? cliVersion;
+  let previous: LoadedSide;
+  try {
+    previous = await loadSide(
+      { ...sideSpec(state, state.requested, previousVersion), partial: true },
+      { cliVersion }
+    );
+  } catch (error) {
+    if (error instanceof RefusalError) {
+      throw error;
+    }
+    throw new RefusalError(
+      `Could not load saasaloy ${previousVersion}, the base of this update's merges: ${formatFailure(error)}`,
+      { cause: error }
+    );
+  }
+  const coordinates = new Map<string, ModuleCoordinate>();
+  if (!isLocalRegistry()) {
+    for (const [name, coordinate] of state.coordinates) {
+      const [owner = "", repo = ""] = coordinate.source.split("/");
+      const remote = new RemoteRegistrySource(owner, repo, coordinate.ref);
+      await remote.resolveSha();
+      coordinates.set(name, remote.provenance());
+    }
+  }
+  const next = await loadSide(
+    sideSpec(state, state.requested, cliVersion, coordinates),
+    { cliVersion }
+  );
+  // Each record finds its base in the render of the release that wrote it.
+  const bases = isLocalRegistry()
+    ? undefined
+    : await loadBaseSides(state, previousVersion, { cliVersion });
+  for (const warning of bases?.warnings ?? []) {
+    log.warn(warning, tui);
+  }
+
+  // `--merge` on a file an older release wrote needs that release's render as its base.
+  // When it cannot be loaded, the merge falls back to two-way markers.
+  let mergeBase: LoadedSide | undefined;
+  const mergeVersions = [
+    ...new Set(merge.matched.map((path) => records[path]?.version ?? "")),
+  ];
+  if (mergeVersions.length > 1) {
+    return refuse(
+      `\`--merge\` names files written by different releases (${mergeVersions.join(", ")}). Merge them in separate runs. Nothing was written.`,
+      EXIT_REFUSED
+    );
+  }
+  const mergeVersion = mergeVersions[0];
+  if (
+    mergeVersion !== undefined &&
+    mergeVersion !== previousVersion &&
+    !isLocalRegistry()
+  ) {
+    try {
+      mergeBase = await loadSide(
+        sideSpec(state, state.requested, mergeVersion),
+        {
+          cliVersion,
+        }
+      );
+    } catch (error) {
+      log.warn(
+        `Could not load saasaloy ${mergeVersion}, the release that wrote ${listLabel(merge.matched)}: ${formatFailure(error)}. The merge writes two-way markers.`,
+        tui
+      );
+    }
+  }
+
+  // Update notes (ADR 0058): base notes by release range, module notes by folder.
+  const scratch = await mkdtemp(join(tmpdir(), "saasaloy-notes-"));
+  let notes: {
+    notes: UpdateNoteText[];
+    mayApply: UpdateNoteText[];
+    pending: PendingNote[];
+  };
+  try {
+    const nextSet = closure(next.side.payload, state.requested);
+    const previousSet = closure(previous.side.payload, state.requested);
+    const theirsDirs = await writeNoteDirs(
+      next.side.payload,
+      nextSet,
+      join(scratch, "theirs")
+    );
+    const baseDirs = await writeNoteDirs(
+      previous.side.payload,
+      previousSet,
+      join(scratch, "base")
+    );
+    const modules: ModuleNoteSource[] = fixedOrder(
+      next.side.payload.modules,
+      nextSet
+    ).map((name) => {
+      const baseDir = baseDirs.get(name);
+      return {
+        name,
+        theirsDir: theirsDirs.get(name) ?? "",
+        ...(baseDir === undefined ? { fresh: true } : { baseDir }),
+      };
+    });
+    const selection = await selectUpdateNotes({
+      ...(recorded === undefined
+        ? {}
+        : {
+            base: {
+              dir: await baseUpdateNotesDir(),
+              recorded,
+              running: cliVersion,
+            },
+          }),
+      modules,
+      when: {
+        installed: nextSet,
+        testingMode: state.options.testingMode ?? "off",
+      },
+    });
+    notes = mergePendingNotes(
+      state.manifest.pendingNotes,
+      selection,
+      new Set([...state.manifest.doneNotes, ...done.matched])
+    );
+  } finally {
+    await rm(scratch, { force: true, recursive: true });
+  }
+
+  const run = (dryRun: boolean): Promise<ApplyReport> =>
+    apply({
+      cleanTree: dryRun ? "none" : "whole",
+      doneNotes: [...new Set([...state.manifest.doneNotes, ...done.matched])],
+      dryRun,
+      force: opts.force,
+      merge: merge.matched,
+      ...(mergeBase === undefined ? {} : { mergeBase: mergeBase.side }),
+      ...(bases === undefined || bases.sides.size === 0
+        ? {}
+        : { bases: bases.sides }),
+      ...(conversion === undefined
+        ? {}
+        : {
+            state: { lock: conversion.lock, manifest: conversion.manifest },
+          }),
+      next: next.side,
+      pendingNotes: notes.pending,
+      previous: previous.side,
+      provenance: next.provenance,
+      restore: restore.matched,
+      root,
+      version: cliVersion,
+    });
+
+  if (recorded !== undefined && recorded !== cliVersion) {
+    log.info(
+      `Project rendered at ${pc.cyan(recorded)}; ${pc.cyan(cliVersion)} is running.`,
+      tui
+    );
+  }
+  const plan = await run(true);
+  summarize(plan, "Plan", tui);
+  if (opts.diff) {
+    printDiffs(plan, tui);
+  }
+  const document = (report: ApplyReport): string =>
+    updateReport({
+      from: recorded === cliVersion ? undefined : recorded,
+      mayApply: notes.mayApply,
+      notes: notes.notes,
+      report,
+      to: cliVersion,
+    });
+  if (preview) {
+    process.stdout.write(document(plan));
+    outro(
+      pc.dim(
+        opts.diff ? "diff only — nothing applied" : "dry run — nothing applied"
+      ),
+      tui
+    );
+    return EXIT_OK;
+  }
+  const declined = await confirmApply(opts.yes, "update", tui);
   if (declined !== undefined) {
     return declined;
   }
-  await steps.backUp(backfillTargets(backfill.plan));
-  if (recordRefRewrites(steps.lock, steps.comparisons).length > 0) {
-    await steps.persist();
-  }
-  await steps.writeBackfill(backfill);
-  return undefined;
-}
-
-/**
- * The merge plan's line about the runbook (#359): the running CLI's version, and whether
- * the project's `saasaloy-update` skill has other bytes than the one this CLI bundles,
- * rendered the way `init` and `saasaloy skill` render it. A project with no copy is not
- * flagged: there is nothing on disk for the agent to have read instead.
- */
-export async function runbookFor(
-  root: string,
-  projectName: string,
-  cliVersion: string
-): Promise<RunbookLine> {
-  const copy = join(root, PROJECT_RUNBOOK);
-  if (!(await pathExists(copy))) {
-    return { cliVersion, differs: false };
-  }
-  // The line is advice. A copy that cannot be read must not fail an update
-  // that has already applied, so it reads as "not flagged".
-  try {
-    const [mine, bundled] = await Promise.all([
-      readFile(copy),
-      renderBundledSkill("saasaloy-update", projectName),
-    ]);
-    return { cliVersion, differs: !mine.equals(Buffer.from(bundled, "utf-8")) };
-  } catch {
-    return { cliVersion, differs: false };
-  }
-}
-
-/**
- * Ask "Proceed?" unless `--yes` answered it. Returns the exit code to stop with, or
- * `undefined` to go on.
- */
-async function confirmProceed(yes: boolean): Promise<number | undefined> {
-  if (yes) {
-    return undefined;
-  }
-  const proceed = await confirm({
-    answeredBy: "`--yes` to apply, or `--dry-run` to preview",
-    message: "Proceed?",
-    ...TUI_ON_STDERR,
-  });
-  if (isCancel(proceed)) {
-    cancel("update cancelled", TUI_ON_STDERR);
-    return EXIT_FAILURE;
-  }
-  if (!proceed) {
-    outro(pc.dim("aborted — nothing applied"), TUI_ON_STDERR);
-    return EXIT_OK;
-  }
-  return undefined;
-}
-
-/**
- * Copy `targets` and the state files before a byte moves, and name the directory.
- * `saasaloy update --abort` puts this back — the undo this command shipped without.
- */
-async function backUp(
-  root: string,
-  targets: string[],
-  cliVersion: string
-): Promise<void> {
-  const backupDir = await writeBackup({ root, targets, cliVersion });
-  log.info(
-    `Pre-update copies in ${pc.cyan(backupDir)} ${pc.dim("— `saasaloy update --abort` restores them")}`,
-    TUI_ON_STDERR
+  const report = await run(false);
+  printSteps(report, tui);
+  process.stdout.write(document(report));
+  const pendingNotes = notes.pending.length;
+  const exitCode =
+    report.exitCode === EXIT_WORK_PENDING || pendingNotes > 0
+      ? EXIT_WORK_PENDING
+      : EXIT_OK;
+  outro(
+    exitCode === EXIT_OK
+      ? pc.green(`Updated to ${cliVersion}.`)
+      : pc.yellow(
+          `Updated to ${cliVersion}; ${[
+            report.pendingMerges.length > 0
+              ? `${String(report.pendingMerges.length)} file${report.pendingMerges.length === 1 ? "" : "s"} with conflict markers`
+              : "",
+            pendingNotes > 0
+              ? `${String(pendingNotes)} update note${pendingNotes === 1 ? "" : "s"} pending`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" and ")} — see the report.`
+        ),
+    tui
   );
-}
-
-/**
- * The closing line: what landed, what is still waiting on a merge, and how many update
- * notes wait on `--done` (#298). Merges and notes are named apart.
- */
-function summarizeOutcome(
-  plan: UpdatePlan,
-  result: UpdateResult,
-  pendingNotes: number
-): string {
-  const line = mergeOutcome(plan, result);
-  if (pendingNotes === 0) {
-    return line;
-  }
-  return `${line} ${pc.yellow(`${pendingLabel(pendingNotes)} — record each with \`saasaloy update --done <id>\` once its work is done.`)}`;
-}
-
-function mergeOutcome(plan: UpdatePlan, result: UpdateResult): string {
-  const changed = result.written.length + result.deleted.length;
-  const merging = plan.modules.filter((m) => m.needsMerge).map((m) => m.name);
-  const applied =
-    changed > 0
-      ? `Updated ${[
-          ...new Set(
-            [...result.written, ...result.deleted].map((f) => f.module)
-          ),
-        ]
-          .map((n) => pc.bold(n))
-          .join(
-            ", "
-          )} ${pc.dim(`(${result.written.length} written, ${result.deleted.length} removed)`)}`
-      : "";
-
-  if (merging.length === 0) {
-    return pc.green(applied || "Already up to date.");
-  }
-  const names = merging.map((n) => pc.bold(n)).join(", ");
-  const verb = merging.length === 1 ? "needs" : "need";
-  const merge = pc.yellow(
-    applied
-      ? `${names} still ${verb} a merge — see the plan above.`
-      : `${names} ${verb} a merge — see the plan above.`
-  );
-  return applied ? `${pc.green(applied)} ${merge}` : merge;
-}
-
-/**
- * Link every folder in `.agents/skills/` after the apply, not only the skills a module
- * names: a project's own skill and a skill a base update just wrote need the link too
- * (ADR 0015). A module's own link conflict was already reported by `reportResult`.
- */
-async function linkProjectSkills(
-  root: string,
-  result: UpdateResult
-): Promise<void> {
-  const reported = new Set(
-    result.linkConflicts.map((link) => basename(link.path))
-  );
-  const skills = await linkAgentSkills(root);
-  for (const name of skills.created) {
-    log.step(
-      `${pc.green("link")}  .claude/skills/${name} ${pc.dim(`→ .agents/skills/${name}`)}`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const name of skills.conflicts) {
-    if (!reported.has(name)) {
-      log.warn(
-        `Skill link ${pc.cyan(`.claude/skills/${name}`)} left untouched — not ours to replace.`,
-        TUI_ON_STDERR
-      );
-    }
-  }
-  for (const failure of [
-    ...skills.failures,
-    ...(skills.unreadable === undefined
-      ? []
-      : [{ name: ".agents/skills", message: skills.unreadable }]),
-  ]) {
-    log.warn(
-      `Couldn't link skill ${pc.cyan(failure.name)}: ${failure.message} ${pc.dim("(the skill files are still in `.agents/skills/`)")}.`,
-      TUI_ON_STDERR
-    );
-  }
-}
-
-function reportResult(result: UpdateResult): void {
-  for (const add of result.aliasesAdded) {
-    log.step(
-      `${pc.green("alias")}  ${pc.cyan(add.alias)} ${pc.dim(`→ ${add.value}`)}`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const name of result.prereqsInstalled) {
-    log.step(
-      `${pc.green("install")}  ${pc.cyan(name)} ${pc.dim("(new prerequisite)")}`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const file of result.written) {
-    log.step(`${ACTION_LABEL[file.action]}  ${file.target}`, TUI_ON_STDERR);
-  }
-  for (const file of result.deleted) {
-    log.step(`${pc.red("delete")}  ${file.target}`, TUI_ON_STDERR);
-  }
-  for (const file of result.resolved) {
-    log.step(
-      `${pc.green("record")}  ${file.target} ${pc.dim("(merged — recorded as it stands)")}`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const file of result.tombstoned) {
-    log.step(
-      `${pc.dim("keep deleted")}  ${file.target} ${pc.dim("(recorded — `saasaloy update --restore` brings it back)")}`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const file of result.untracked) {
-    log.step(
-      `${pc.dim("untrack")}  ${file.target} ${pc.dim("(already gone)")}`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const patch of result.patched) {
-    log.step(
-      `${pc.green("patch")}  ${patch.file} ${pc.dim(`— ${patch.patch.kind}`)}`,
-      TUI_ON_STDERR
-    );
-  }
-  // A refused patch did not land, and the module's lock entry stayed where it was, so a
-  // later `update` of the same module tries it again. Say which file and why.
-  for (const r of result.patchRefusals) {
-    log.warn(
-      `Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}.`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const link of result.linkConflicts) {
-    log.warn(
-      `Skill link ${pc.cyan(link.path)} left untouched — not ours to replace.`,
-      TUI_ON_STDERR
-    );
-  }
-  for (const dep of result.depsWritten) {
-    log.step(`${pc.cyan("dep")}  ${dep.name}@${dep.version}`, TUI_ON_STDERR);
-  }
-  if (result.lateDrift.length > 0) {
-    const lines = result.lateDrift
-      .map((f) => `  ${pc.yellow("kept")}  ${f.target}`)
-      .join("\n");
-    note(
-      wrapForNote(
-        `${lines}\n\n${pc.dim("Edited while the plan was open — left alone rather than overwritten.")}`
-      ),
-      "Changed under us",
-      TUI_ON_STDERR
-    );
-  }
-  if (result.driftSurvivors.length > 0) {
-    const lines = result.driftSurvivors
-      .map((f) => `  ${pc.yellow("kept")}  ${f.target}`)
-      .join("\n");
-    note(
-      wrapForNote(
-        `${lines}\n\n${pc.dim("Hand-edited — left on disk, now untracked.")}`
-      ),
-      "Drift survivors",
-      TUI_ON_STDERR
-    );
-  }
+  return exitCode;
 }

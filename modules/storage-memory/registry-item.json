@@ -5,25 +5,22 @@
   "description": "A storage provider that keeps objects in memory, for local development and tests.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["storage"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
+    { "path": "files/memory.ts", "target": "@storage/providers/memory.ts" }
+  ],
+  "entries": [
     {
-      "file": "packages/storage/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "storage",
-      "arrayProp": "providers",
+      "table": "storage.providers",
       "call": "memory",
       "import": {
         "name": "memory",
         "from": "./providers/memory"
       }
     }
-  ],
-  "files": [
-    { "path": "files/memory.ts", "target": "@storage/providers/memory.ts" }
   ],
   "scaffolds": []
 }

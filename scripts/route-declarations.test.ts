@@ -120,8 +120,8 @@ describe("the route reader", () => {
 
 describe("every shipped api route states whether agents may call it", () => {
   it("finds the mounted route files", () => {
-    // 22 chained-route patches in 16 modules: the 21 of plan 0110 phase 3 and the agent
-    // module's own surface, plus api's own /health.
+    // 23 route-table rows in 17 modules: the 21 of plan 0110 phase 3, the agent module's
+    // own surface, and api's own /health.
     assert.equal(chains.length, 23);
     assert.equal(new Set(chains.map((c) => c.module)).size, 17);
     assert.ok(routes.length > 100, `only ${String(routes.length)} routes read`);

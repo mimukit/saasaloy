@@ -5,7 +5,7 @@ A project that builds on a module has had two choices for its own code in a modu
 A `files[]` or `scaffolds[].files[]` entry may now carry `"seed": true`. `add` and backfill write it once and record it in the manifest with its owning module and `"seed": true`. `update` never overwrites or merges a recorded seed, whatever its bytes or the new revision hold, and writes it again only when it is missing from disk, because a managed file imports from it. `remove` deletes a seed whose hash still matches the record, and keeps one the project changed without a prompt, untracks it and warns with its path. The extension point lives at `apps/admin/src/extend/<name>.ts(x)` or `apps/api/src/extend/<name>.ts`: a managed file imports from the seed, so the project changes the seed and the managed file stays clean.
 
 ## Status
-accepted
+accepted. **Amended by [ADR 0067](0067-adr-a-rendered-file-is-generated-merged-or-written-once-2026-11-20.md) (2026-11-20):** a module seed is a `once` file, and the base's `seedFiles` and `ownedFiles` map to the same class. A missing seed is no longer written again by itself: it stays deleted like any tracked file, and `update --restore <path>` writes it. Backfill is gone, and the render writes a seed whose entry applies.
 
 ## Considered Options
 - Reuse the base's `ignoreTargets` path for module seeds: the base excludes a seed from the plan entirely, so a deleted seed never comes back. A module seed is imported by a managed file, and a missing one breaks the build, so it has to be restored.

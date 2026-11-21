@@ -1,7 +1,7 @@
 import type { AuditActionMap } from "../lib/audit-actions";
 
 // The payment module's audit actions, one per staff decision. The descriptor's
-// `plugin-array` patch appends `paymentAuditActions()` into `AUDIT_ACTIONS` in
+// `audit.actions` row adds `paymentAuditActions()` to `AUDIT_ACTIONS` in
 // `../lib/audit-actions.ts`, so `saasaloy remove payment` takes these with it.
 //
 // A review route carries two actions, because confirm and reject are two decisions on one

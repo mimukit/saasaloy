@@ -9,7 +9,7 @@ import { createPaymentStore, withPaymentStore } from "../payment-store";
 import { declare } from "../contract";
 
 // The public half of the payment capability, mounted at `/payment` by this module's
-// `chained-route` patch: the provider callback surface `/payment/callback/:provider/*`.
+// `api.routes` row: the provider callback surface `/payment/callback/:provider/*`.
 //
 // No session guard here, on purpose. A gateway's notification carries no session and
 // arrives while nobody is signed in, and a hosted checkout returns a browser that may not

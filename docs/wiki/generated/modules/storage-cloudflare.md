@@ -13,7 +13,7 @@ A storage provider on Cloudflare R2, with the BUCKET binding and signed URLs.
 | Tier | provider |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`storage`](storage.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -41,9 +41,18 @@ Files:
 |---|---|
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
 | `packages/storage/package.json` | `package-json-dependency` |
-| `packages/storage/src/index.ts` | `plugin-array` |
-| `packages/storage/src/env-preset.ts` | `plugin-array` |
 | `packages/storage/package.json` | `package-json-dependency` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `storage.providers` | 1 |
+| `storage.envPresets` | 1 |
 
 ## See the rest
 

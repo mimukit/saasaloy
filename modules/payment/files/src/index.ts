@@ -1,5 +1,7 @@
 import { definePayment } from "./define";
 import type { PaymentEnv } from "./provider";
+import { paymentListeners } from "./listeners.generated";
+import { paymentProviders } from "./providers.generated";
 
 export {
   checkReturnUrl,
@@ -63,21 +65,18 @@ export type {
   PaymentStoreRunner,
 } from "./store";
 
-// The registration table, and the patch point for two kinds of module. Every
-// `payment-<provider>` module appends its factory call to `providers`; a capability that
-// reacts to a payment (a subscription renewal) appends a listener to `listeners`. The
-// `plugin-array` patch is idempotent, and `saasaloy remove` takes the same line back out.
+// The registration table, for two kinds of module. Every `payment-<provider>` module adds
+// a row to `payment.providers`; a capability that reacts to a payment (a subscription
+// renewal) adds a listener row to `payment.listeners`. The CLI writes
+// `./providers.generated.ts` and `./listeners.generated.ts` from those rows on every run,
+// and `saasaloy remove` takes a row back out.
 //
-// An app adds its own listener here by hand, e.g. the rejection notice in the
-// `saasaloy-payment` skill.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with a real array literal for each property. The codemod behind the `plugin-array` patch
-// kind has nothing to push into otherwise, and an install fails silently. Never omit an
-// array, even while it is empty.
+// An app adds its own listener here by hand, after the spread, e.g. the rejection notice
+// in the `saasaloy-payment` skill. Never edit a generated file: the CLI overwrites it, and
+// `saasaloy update` refuses when it was edited.
 export const payment = definePayment({
-  providers: [],
-  listeners: [],
+  providers: [...paymentProviders],
+  listeners: [...paymentListeners],
 });
 
 /**

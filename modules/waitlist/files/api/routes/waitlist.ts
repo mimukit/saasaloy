@@ -9,11 +9,11 @@ import { Hono } from "hono";
 // Route module contract: export a Hono sub-app under a NAMED export matching the file,
 // built as ONE chained expression. The chain carries the sub-app's types — split it into
 // separate `waitlist.post(...)` statements and the exported type forgets the route, which
-// empties it out of `AppType`. The name has to be an `export const`: the `chained-route`
-// codemod writes `import { waitlist } from "./routes/waitlist"` and refuses to wire a
-// binding that resolves to a default import.
+// empties it out of `AppType`. The name has to be an `export const`: the generated
+// `routes.generated.ts` imports it by name, as
+// `import { waitlist } from "./routes/waitlist"`.
 //
-// `modules/waitlist`'s `chained-route` patch mounts this at `/waitlist`, so `post("/")`
+// `modules/waitlist`'s `api.routes` row mounts this at `/waitlist`, so `post("/")`
 // serves `POST /waitlist`. Paths here are relative to that mount.
 //
 // No CORS here. web and api are separate origins in dev (:3000 vs :4000) and in prod,

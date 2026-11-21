@@ -179,10 +179,7 @@ never reaches Workers Logs at all — it is a source-side control, not a dashboa
 |---|---|---|---|
 | `logger-console` | `console` | nothing | `console.warn` / `console.error` / `console.log` by level — the Workers Logs pipeline |
 
-`logger-console` arrives automatically: `api` declares `dependsOn: ["logger", "logger-console"]`, so
-`saasaloy add api` installs all three. Installing another provider later is the same command again;
-the codemod appends to the `providers` array idempotently, so several can be registered at once and
-`LOGGER_PROVIDER` picks between them per environment.
+`logger-console` arrives automatically: `api` declares `dependsOn: ["logger", "logger-console"]`, so `saasaloy add api` installs all three. Installing another provider later is the same command again. Each provider adds its own row to the `logger.providers` table, so several can be registered at once and `LOGGER_PROVIDER` picks between them per environment.
 
 ## Redaction: what it catches, and what it does not
 
@@ -209,7 +206,7 @@ rather than replacing it:
 
 ```ts
 export const logger = defineLogger({
-  providers: [],
+  providers: [...loggerProviders],
   redact: ["apiKey", "access_token", "refresh_token", "session"],
 });
 ```
@@ -253,8 +250,8 @@ Then register it by hand in `src/index.ts`:
 // Add the import; `defineLogger` is already imported at the top of this file.
 import { axiom } from "./providers/axiom";
 
-// Then add the call to the existing array literal — don't replace the line's shape.
-export const logger = defineLogger({ providers: [axiom()] });
+// Then add the call after the spread of the generated rows.
+export const logger = defineLogger({ providers: [...loggerProviders, axiom()] });
 ```
 
 Contract notes:
@@ -282,11 +279,11 @@ Contract notes:
 
 ## Removal
 
-You cannot remove `logger` from a normal project. The `api` module declares `dependsOn: ["logger", "logger-console"]`, so `remove logger` and `remove logger-console` both refuse while `api` is installed. Only `--force` overrides the refusal, and then `apps/api` stops compiling.
+You cannot remove `logger` from a normal project. The `api` module declares `dependsOn: ["logger", "logger-console"]`, so `remove logger` and `remove logger-console` both refuse while `api` is installed. `--force` does not override the refusal, because a module cannot render without its prerequisite.
 
-A second provider is a different case. `saasaloy remove logger-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. Point `LOGGER_PROVIDER` at a provider that is still installed first, or unset it.
+A second provider is a different case. `saasaloy remove logger-<provider>` deletes the provider file, and the render without the module drops its row from `providers.generated.ts`. Point `LOGGER_PROVIDER` at a provider that is still installed first, or unset it.
 
-If you do force `remove logger`, it deletes the `packages/logger` workspace (`index.ts`, `define.ts`, `provider.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the logger preset to `apps/api/src/env.ts`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `LOGGER_PROVIDER` and `LOG_LEVEL` lines by hand. Every file that imports `@repo/logger` stops compiling, and `apps/api` is one of them.
+In a project with no module that depends on it, `remove logger` deletes the `packages/logger` workspace (`index.ts`, `define.ts`, `provider.ts`, `env-preset.ts`) and drops the `api.envPresets` row that adds the logger preset to `apps/api/src/env.generated.ts`. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `LOGGER_PROVIDER` and `LOG_LEVEL` lines by hand. Every file of your own that imports `@repo/logger` stops compiling.
 
 ## Failure modes
 
@@ -297,9 +294,7 @@ If you do force `remove logger`, it deletes the `packages/logger` workspace (`in
 
 ## Boundaries to honor
 
-- **`export const logger = defineLogger({ providers: [] })` stays in exactly that shape** — a real
-  array literal, never omitted. It is the patch point every provider module appends to; without it
-  a provider install fails silently.
+- **`export const logger = defineLogger({ providers: [...loggerProviders] })` keeps its spread.** `loggerProviders` comes from `./providers.generated.ts`, which the CLI writes from every `logger.providers` row on every run. A provider of your own goes after the spread, never in the generated file: the CLI overwrites it, and `saasaloy update` refuses when it was edited.
 - **`c.get("log")` in a route, never `console.log`.** A bare console call is unlevelled,
   uncorrelated, and skips redaction.
 - **Message first, values in `fields`.** Interpolated values can't be queried.

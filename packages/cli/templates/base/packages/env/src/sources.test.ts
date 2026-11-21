@@ -7,8 +7,8 @@ import { SERVICES } from "./services.ts";
 import { defineSources, EnvError, local } from "./sources.ts";
 import type { EnvSource } from "./sources.ts";
 
-// The base seeds `web` alone; `saasaloy add api` appends this row with a `const-array`
-// patch. Adding it here lets a `# @services api` section resolve.
+// The base seeds `web` alone; `saasaloy add api` adds this row to the `env.services`
+// table. Adding it here lets a `# @services api` section resolve.
 if (!SERVICES.some((row) => row.name === "api")) {
   SERVICES.push({
     name: "api",

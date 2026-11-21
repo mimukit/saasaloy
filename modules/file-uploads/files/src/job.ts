@@ -3,18 +3,20 @@ import { sweep } from "./sweep";
 // The sweep, as the `queue` capability's `jobs` and `schedules` tables register it.
 //
 // The file lives in this package rather than in `packages/queue/src/jobs/`, and both
-// reasons matter. A file entry targeting `@queue/...` cannot be shipped conditionally: the
-// applier resolves the alias before it applies `onlyWith`, so a project with no `queue`
-// capability would fail `saasaloy add file-uploads` on an unknown alias. And a job file in
+// reasons matter. A file entry targeting `@queue/...` could not be shipped conditionally
+// when this was written: the old engine resolved the alias before it applied `onlyWith`,
+// so a project with no `queue` capability failed `saasaloy add file-uploads` on an
+// unknown alias. And a job file in
 // `packages/queue` that reached the database would pull the schema barrel's
 // `import.meta.glob` into a workspace that does not compile with Vite's types.
 //
-// So the job ships here unconditionally and goes nowhere until the two `plugin-array`
-// patches register it, exactly as `packages/subscription` registers its own. In a project
-// without `queue` those patches are skipped with a warning and this file is dead code.
+// So the job ships here unconditionally and goes nowhere until the `queue.jobs` and
+// `queue.schedules` rows register it, exactly as `packages/subscription` registers its own.
+// In a project without `queue` those rows are skipped with a warning and this file is dead
+// code.
 //
 // Factories, not bare constants, because the tables register a *call* — that is what the
-// patch appends and what `saasaloy remove` takes back out.
+// row names and what `saasaloy remove` takes back out.
 
 /** The job's name, as the schedule below and a `jobs` table trace both spell it. */
 export const STORAGE_SWEEP_JOB = "file-uploads.storage-sweep";

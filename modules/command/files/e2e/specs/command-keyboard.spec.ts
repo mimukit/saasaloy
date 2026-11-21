@@ -11,7 +11,7 @@ import { SEED_ADMIN, SEED_MEMBER, URLS } from "../lib/project.ts";
 // J and K, opens a row with Enter and closes it with Escape.
 //
 // The nav rows are read from the sidebar at run time, not written out here. Other modules
-// add rows through `nav-entry` patches, and a fixed list would go stale with the next one.
+// add rows through `<app>.nav` table rows, and a fixed list would go stale with the next.
 // A row's `G` sequence is optional (plan 0084), so a row without one is checked through the
 // palette only; a run that finds no `G` row at all fails, so the check cannot pass empty.
 

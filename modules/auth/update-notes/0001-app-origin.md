@@ -18,7 +18,7 @@ const DEV_ORIGINS = [
 
 Auth reads the same `CORS_ORIGINS` variable as the api, and a set value replaces this list. Until this update lands, a sign-in from `:3002` fails in development.
 
-## What the merge plan gets
+## What update merges
 
 `packages/auth/src/auth.ts`, if you edited it. Keep your edits and add `"http://localhost:3002"` to `DEV_ORIGINS`.
 

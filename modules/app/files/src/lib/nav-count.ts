@@ -22,7 +22,7 @@ export const NAV_COUNT_INTERVAL_MS = 60_000;
  * One live nav count.
  *
  * Plain `fetch` rather than the typed `api` client: a NAV_COUNTS `path` is data a module's
- * patch wrote, so there is no route type to call it through. The origin and the cookie
+ * table row wrote, so there is no route type to call it through. The origin and the cookie
  * are the same two `src/lib/api.ts` uses, for the same reasons.
  *
  * Every failure (network, a non-OK status, a body that is not `{ count: number }`) throws,

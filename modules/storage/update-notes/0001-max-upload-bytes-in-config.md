@@ -10,7 +10,7 @@ Nothing reads the `STORAGE_MAX_UPLOAD_BYTES` env var any more. The module no lon
 
 `update` adds the `storageConfig()` entry to `packages/config/src/sections.ts`. `client.maxUploadBytes` stays on the storage client, so a caller that reads it needs no change. `DEFAULT_MAX_UPLOAD_BYTES` is no longer exported, and `defineStorage` takes an optional `maxUploadBytes`, which defaults to the leaf.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/storage/src/define.ts`, if you edited it. Keep your edits, and take the cap from `config.storage.maxUploadBytes` in `defineStorage`.
 - `packages/storage/src/env-preset.ts`, if you edited it. Keep your edits and drop the `STORAGE_MAX_UPLOAD_BYTES` entry.
@@ -20,7 +20,7 @@ Nothing reads the `STORAGE_MAX_UPLOAD_BYTES` env var any more. The module no lon
 1. Run the update:
 
    ```sh
-   saasaloy update storage
+   saasaloy update
    ```
 
 2. If a `.env` sets `STORAGE_MAX_UPLOAD_BYTES` to a value other than 104857600, set the same number in `packages/config/src/project.ts`:

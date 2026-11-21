@@ -5,37 +5,13 @@
   "description": "User-owned API keys with their own scopes and rules, for a project with no organizations.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api-keys", "auth"],
   "conflictsWith": ["api-keys-organization"],
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
     "The deployed api_keys table survives this removal. Run db:generate and review the resulting drop migration before you apply it. Every key in it stops working the moment requireCaller goes, so tell the machine callers before you remove this module, not after. Every route that imports @repo/auth/caller stops compiling."
-  ],
-  "patches": [
-    {
-      "file": "packages/auth/src/user-caller.ts",
-      "kind": "plugin-array",
-      "exportName": "userResolvers",
-      "arrayProp": "resolvers",
-      "call": "apiKeyUser",
-      "import": {
-        "name": "apiKeyUser",
-        "from": "./caller"
-      }
-    },
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuth",
-      "arrayProp": "plugins",
-      "call": "apiKeyAdminGuard",
-      "import": {
-        "name": "apiKeyAdminGuard",
-        "from": "./plugins/api-key"
-      }
-    }
   ],
   "files": [
     {
@@ -71,6 +47,24 @@
     {
       "path": "files/db/column-classes/api-keys.ts",
       "target": "@db/column-classes/api-keys.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "userCaller.resolvers",
+      "call": "apiKeyUser",
+      "import": {
+        "name": "apiKeyUser",
+        "from": "./caller"
+      }
+    },
+    {
+      "table": "adminAuth.plugins",
+      "call": "apiKeyAdminGuard",
+      "import": {
+        "name": "apiKeyAdminGuard",
+        "from": "./plugins/api-key"
+      }
     }
   ]
 }

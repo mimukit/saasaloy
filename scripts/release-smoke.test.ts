@@ -14,8 +14,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  baseTwoWayLines,
   checkPlanNotes,
+  conversionCounts,
   compareSemver,
   expectedNoteIds,
   FULL_SCAFFOLD_CHECKS,
@@ -24,11 +24,11 @@ import {
   findWorkspaceDeps,
   fullScaffolds,
   installedAfterUpdate,
-  listsDeletedLocally,
   localEnvValue,
   missingEnvKeys,
   parseArgs,
   parsePlanNotes,
+  reportPaths,
   previousVersion,
   readNoteFrontmatter,
 } from "./release-smoke.ts";
@@ -337,7 +337,7 @@ describe("fullScaffolds", () => {
 });
 
 // Issue #298. The upgrade step scaffolds with the release before the packed one, and
-// checks the merge plan's update notes against a table read from the notes on disk.
+// checks the update report's update notes against a table read from the notes on disk.
 describe("compareSemver", () => {
   it("orders by major, minor and patch as numbers", () => {
     assert.ok(compareSemver("0.10.0", "0.9.1") > 0);
@@ -462,6 +462,7 @@ describe("expectedNoteIds", () => {
     { id: "shell/0003-tests", when: { installed: [], testing: true } },
   ];
   const installed = new Set(["api", "admin", "shell"]);
+  const fresh = { installed: new Set<string>(), noteIds: new Set<string>() };
 
   it("takes base notes in (previous, packed] and the notes of installed modules", () => {
     assert.deepEqual(
@@ -469,7 +470,8 @@ describe("expectedNoteIds", () => {
         notes,
         { packed: "0.8.0", previous: "0.7.0" },
         installed,
-        "off"
+        "off",
+        fresh
       ),
       [
         "api/0001-app-origin",
@@ -485,15 +487,33 @@ describe("expectedNoteIds", () => {
         notes,
         { packed: "0.8.0", previous: "0.7.0" },
         installed,
-        "tdd"
+        "tdd",
+        fresh
       ).includes("shell/0003-tests")
     );
+  });
+
+  // Plan 0116: a module the project held before the update owes only the notes its old
+  // release did not ship; a module the update installs owes every note.
+  it("drops a module note the previous release already shipped to an installed module", () => {
+    const ids = expectedNoteIds(
+      notes,
+      { packed: "0.8.0", previous: "0.7.0" },
+      installed,
+      "off",
+      {
+        installed: new Set(["api"]),
+        noteIds: new Set(["api/0001-app-origin", "shell/0001-admin-kit-move"]),
+      }
+    );
+    assert.ok(!ids.includes("api/0001-app-origin"));
+    assert.ok(ids.includes("shell/0001-admin-kit-move"));
   });
 });
 
 describe("parsePlanNotes", () => {
   const plan = [
-    "# Saasaloy merge plan",
+    "# saasaloy update 0.7.0 → 0.8.0",
     "",
     "## Update notes",
     "",
@@ -532,10 +552,13 @@ describe("parsePlanNotes", () => {
   });
 
   it("finds nothing in a plan with no notes section", () => {
-    assert.deepEqual(parsePlanNotes("# Saasaloy merge plan\n\n## api\n"), {
-      mayApply: [],
-      placed: [],
-    });
+    assert.deepEqual(
+      parsePlanNotes("# saasaloy update 0.7.0 → 0.8.0\n\n## Warnings\n"),
+      {
+        mayApply: [],
+        placed: [],
+      }
+    );
   });
 });
 
@@ -571,71 +594,47 @@ describe("checkPlanNotes", () => {
   });
 });
 
-describe("baseTwoWayLines", () => {
-  const header =
-    "- **no merge base — the template at v0.5.0 could not be fetched**: the original file can't be refetched, so the diffs below are two-way.";
-
-  it("finds the no-merge-base header and a two-way file diff in the base section", () => {
-    const plan = [
-      "## base",
-      "",
-      header,
-      "",
-      "**theirs → mine** (no base available — two-way):",
-      "## api",
-    ].join("\n");
-    assert.deepEqual(baseTwoWayLines(plan), [
-      header,
-      "**theirs → mine** (no base available — two-way):",
-    ]);
+describe("conversionCounts", () => {
+  it("reads the counts of the conversion line", () => {
+    assert.deepEqual(
+      conversionCounts(
+        "◇  Converting a version 1 project: found the base of 41 of 42 tracked files."
+      ),
+      { found: 41, tracked: 42 }
+    );
   });
 
-  it("ignores a module section's two-way header", () => {
-    const plan = [
-      "## base",
-      "",
-      "**base → theirs** (what the template changed):",
-      "## api",
-      "",
-      "- **no merge base — local install**: the diffs below are two-way.",
-    ].join("\n");
-    assert.deepEqual(baseTwoWayLines(plan), []);
-  });
-
-  it("ignores the marker inside a fenced diff", () => {
-    const plan = [
-      "## base",
-      "```diff",
-      "+- **no merge base — quoted**",
-      "```",
-    ].join("\n");
-    assert.deepEqual(baseTwoWayLines(plan), []);
+  it("is undefined when no conversion ran", () => {
+    assert.equal(conversionCounts("Updated to 0.10.0."), undefined);
   });
 });
 
-describe("listsDeletedLocally", () => {
-  const target = "packages/ui/src/blocks/faq.tsx";
+describe("reportPaths", () => {
+  const report = [
+    "# saasaloy update 0.5.0 → 0.10.0",
+    "",
+    "## Files with conflict markers",
+    "",
+    "- `AGENTS.md`: 2 conflicts",
+    "",
+    "## Left deleted",
+    "",
+    "- `packages/ui/src/blocks/faq.tsx`: `saasaloy update --restore packages/ui/src/blocks/faq.tsx` writes it again",
+    "",
+    "Run `pnpm install`, then `pnpm check`, to typecheck and test the result.",
+  ].join("\n");
 
-  it("finds the file heading and its deleted-locally source line", () => {
-    const plan = [
-      `#### \`${target}\``,
-      "",
-      `Source in the template: \`${target}\` — deleted locally.`,
-    ].join("\n");
-    assert.equal(listsDeletedLocally(plan, target), true);
+  it("lists the paths under one section and no other", () => {
+    assert.deepEqual(reportPaths(report, "Left deleted"), [
+      "packages/ui/src/blocks/faq.tsx",
+    ]);
+    assert.deepEqual(reportPaths(report, "Files with conflict markers"), [
+      "AGENTS.md",
+    ]);
   });
 
-  it("is false for a file merged, not deleted", () => {
-    const plan = [
-      `#### \`${target}\``,
-      "",
-      `Source in the template: \`${target}\``,
-    ].join("\n");
-    assert.equal(listsDeletedLocally(plan, target), false);
-  });
-
-  it("is false when the plan does not name the file", () => {
-    assert.equal(listsDeletedLocally("## base\n", target), false);
+  it("is empty for a section the report leaves out", () => {
+    assert.deepEqual(reportPaths(report, "Kept, no longer tracked"), []);
   });
 });
 

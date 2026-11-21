@@ -2,7 +2,7 @@ import { organization } from "better-auth/plugins/organization";
 import { ac, roles } from "../access";
 
 // This wrapper keeps the organization options in project code while the descriptor's
-// plugin-array patch only has to append a zero-argument function call.
+// `auth.plugins` row only has to name a zero-argument function call.
 export function organizationPlugin() {
   return organization({
     // The product calls organizations "teams". Better Auth's nested teams feature is

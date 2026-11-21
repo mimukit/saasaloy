@@ -3,8 +3,8 @@ import type { EmailTemplate } from "../provider";
 
 // The password reset mail. `auth` ships this file, and only when `email` is installed:
 // `@auth/plugins/reset-password-mail.ts` renders it from Better Auth's `sendResetPassword`.
-// It is yours to edit like `welcome.ts`. `saasaloy update` sends an edited copy to the
-// merge plan rather than overwriting it.
+// It is yours to edit like `welcome.ts`. `saasaloy update` merges an edited copy three
+// ways rather than overwriting it.
 
 export interface ResetPasswordProps {
   /** Display name of the account holder. Escaped by the `html` tag. */

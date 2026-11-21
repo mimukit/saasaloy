@@ -2,7 +2,7 @@ import { findNodeAtLocation, getNodeValue, parseTree } from "jsonc-parser";
 import { parseModule } from "magicast";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
-import { BASE_MODULE, baseEntries, isBaseTracked } from "./base.js";
+import { BASE_MODULE } from "./base.js";
 import { ENV_EXAMPLE } from "./env-example.js";
 import {
   hashContent,
@@ -13,7 +13,7 @@ import {
   resolveWithinRoot,
 } from "./fs-utils.js";
 import type { LockBase, Lockfile } from "./lock.js";
-import type { Manifest } from "./manifest.js";
+import type { ManifestV2 } from "../engine/manifest.js";
 import { entryValue, findConstArray } from "./patch/ts-array.js";
 import type { Program } from "./patch/ts-array.js";
 import type { ModuleImports } from "./patch/ts-ast.js";
@@ -512,7 +512,7 @@ async function missingModulePath(
 
 export interface ProjectCheckArgs {
   config: SaasaloyConfig;
-  manifest: Manifest;
+  manifest: Pick<ManifestV2, "files">;
 }
 
 /**
@@ -529,10 +529,8 @@ export interface ProjectCheckArgs {
 export function checkProject(args: ProjectCheckArgs): Finding[] {
   const { config, manifest } = args;
   const owners = new Set(
-    Object.values(manifest.managed).map((entry) => entry.module)
+    Object.values(manifest.files).map((record) => record.module)
   );
-  // `managed` is the file ledger, and the criterion is about files. A module owning a
-  // patch or a link but no file is still a module that owns no files.
   return config.installed
     .filter((name) => !owners.has(name))
     .map((name) =>
@@ -548,8 +546,12 @@ export function checkProject(args: ProjectCheckArgs): Finding[] {
 // The rate limit policy rule (#129).
 // ---------------------------------------------------------------------------
 
-/** Where `kv` keeps its registry, and the file the `plugin-array` patches write into. */
+/** Where `kv` keeps its registry: the owner's own policies sit after the generated ones. */
 export const KV_INDEX_FILE = "packages/kv/src/index.ts";
+/** The generated `kv.policies` table: the policies the installed modules register. */
+export const KV_POLICIES_FILE = "packages/kv/src/policies.generated.ts";
+/** The export of `KV_POLICIES_FILE`, the camelCase of the table id. */
+const KV_POLICIES_EXPORT = "kvPolicies";
 /** The Worker config `kv-cloudflare` puts its `ratelimits` entries in. */
 export const WRANGLER_FILE = "apps/api/wrangler.jsonc";
 /** The provider whose limiter needs a binding per policy. Without it there is nothing to check. */
@@ -558,7 +560,9 @@ const CLOUDFLARE_KV_MODULE = "kv-cloudflare";
 export interface PolicyBindingArgs {
   /** The source of `packages/kv/src/index.ts`. */
   index: string;
-  /** Import specifier, exactly as `index.ts` writes it, → that module's source. */
+  /** The source of `packages/kv/src/policies.generated.ts`, when the project has one. */
+  generated?: string;
+  /** Import specifier, exactly as `index.ts` or the generated file writes it, → source. */
   policySources: Record<string, string>;
   /** The source of `apps/api/wrangler.jsonc`. */
   wrangler: string;
@@ -577,8 +581,9 @@ export interface PolicyBindingArgs {
  * binding is different — `consume` throws `not_supported` on the first request through
  * the route, which is a broken deploy rather than a preference.
  *
- * The policy array is read the same way the `plugin-array` patch writes it: through
- * magicast, off `export const kv = defineKv({ policies: [...] })`. Two element shapes
+ * The policies are read through magicast: first the generated table, `export const
+ * kvPolicies = [...]`, then every element of `export const kv = defineKv({ policies:
+ * [...] })` in `index.ts` except the spread of that table. Two element shapes
  * carry a name. An inline `definePolicy({ name: "burst", ... })` holds it in its own
  * first argument. A bare factory call holds it in the `definePolicy({ name })` literal in
  * the file that call is imported from — there the callee is not the name
@@ -654,30 +659,50 @@ interface RegisteredPolicy {
   name: string | undefined;
 }
 
-/** Every element of the `policies` array, in registration order. */
+/** Every registered policy, in registration order: the generated table, then the owner's. */
 function registeredPolicies(args: PolicyBindingArgs): RegisteredPolicy[] {
-  let mod;
-  try {
-    mod = parseModule(args.index);
-  } catch {
-    return [];
-  } // unparseable — `add` would have refused it, and this rule is not the place to say so
-
-  const callArg = mod.exports.kv?.$args?.[0];
-  const array: unknown = callArg?.policies;
-  if (!Array.isArray(array)) {
-    return [];
-  }
-
-  const imports = mod.imports as unknown as ModuleImports;
   const policies: RegisteredPolicy[] = [];
-  // Indexed, not for-of: magicast's array proxy hands raw AST nodes to an iterator and
-  // the wrapped proxy (with `$callee`) only to an index read. ts-module.ts does the same.
-  // oxlint-disable-next-line typescript/prefer-for-of
-  for (let i = 0; i < array.length; i++) {
-    const element: unknown = array[i];
-    policies.push({ index: i, name: policyNameOf(element, args, imports) });
-  }
+  const read = (
+    source: string | undefined,
+    pick: (exports: Record<string, unknown>) => unknown
+  ): void => {
+    if (source === undefined) {
+      return;
+    }
+    let mod;
+    try {
+      mod = parseModule(source);
+    } catch {
+      return;
+    } // unparseable: the project's typecheck says so, and this rule is not the place to
+    const array: unknown = pick(mod.exports);
+    if (!Array.isArray(array)) {
+      return;
+    }
+    const elements = (array as { $ast?: { elements?: { type?: string }[] } })
+      .$ast?.elements;
+    const imports = mod.imports as unknown as ModuleImports;
+    // Indexed, not for-of: magicast's array proxy hands raw AST nodes to an iterator and
+    // the wrapped proxy (with `$callee`) only to an index read.
+    // oxlint-disable-next-line typescript/prefer-for-of
+    for (let i = 0; i < array.length; i++) {
+      if (elements?.[i]?.type === "SpreadElement") {
+        continue; // `...kvPolicies`: read from the generated file itself
+      }
+      const element: unknown = array[i];
+      policies.push({
+        index: policies.length,
+        name: policyNameOf(element, args, imports),
+      });
+    }
+  };
+  read(args.generated, (exports) => exports[KV_POLICIES_EXPORT]);
+  read(
+    args.index,
+    (exports) =>
+      (exports.kv as { $args?: { policies?: unknown }[] } | undefined)
+        ?.$args?.[0]?.policies
+  );
   return policies;
 }
 
@@ -825,9 +850,16 @@ export async function readPolicyState(
   if (index === undefined || wrangler === undefined) {
     return undefined;
   }
+  const generated = await readIfPresent(
+    resolveWithinRoot(root, KV_POLICIES_FILE)
+  );
 
   const policySources: Record<string, string> = {};
-  for (const specifier of relativeImportsIn(index)) {
+  const specifiers = new Set([
+    ...relativeImportsIn(index),
+    ...(generated === undefined ? [] : relativeImportsIn(generated)),
+  ]);
+  for (const specifier of specifiers) {
     const source = await readIfPresent(
       resolveWithinRoot(
         root,
@@ -838,10 +870,15 @@ export async function readPolicyState(
       policySources[specifier] = source;
     }
   }
-  return { index, policySources, wrangler };
+  return {
+    index,
+    policySources,
+    wrangler,
+    ...(generated === undefined ? {} : { generated }),
+  };
 }
 
-/** Every relative specifier `index.ts` imports from — the candidates a policy can live in. */
+/** Every relative specifier a file imports from — the candidates a policy can live in. */
 function relativeImportsIn(index: string): string[] {
   let mod;
   try {
@@ -879,8 +916,8 @@ export async function resolveDoctorTarget(path: string): Promise<DoctorTarget> {
 }
 
 export interface ProjectState {
-  /** The project's `.saasaloy/manifest.json`, as `loadManifest` returns it. */
-  manifest: Manifest;
+  /** The project's `.saasaloy/manifest.json`, version 2. */
+  manifest: Pick<ManifestV2, "files">;
   /** `saasaloy.json`'s `installed` list. */
   installed: string[];
 }
@@ -889,22 +926,15 @@ export interface ProjectState {
  * The inverse of `checkProject`'s rule (#49): a module the manifest tracks work for,
  * absent from `installed`, is a partial install.
  *
- * `add` leaves that state on purpose. It never rolls back, so a run that failed mid-apply
- * — or one whose file drifted between the plan and the write — keeps the files it wrote
- * and withholds the install. The bookkeeping is honest and the project is unfinished, and
- * only a re-run finishes it, which is what this says out loud. Two files, or twenty, are
- * one finding: the module is the unit the user acts on.
+ * The engine writes the manifest and `saasaloy.json` from one render, so only a hand
+ * edit of `installed` reaches this state. Two files, or twenty, are one finding: the
+ * module is the unit the user acts on.
  */
 export function checkPartialInstalls(state: ProjectState): Finding[] {
   const installed = new Set(state.installed);
   const tracked = new Set<string>();
-  for (const entry of Object.values(state.manifest.managed)) {
-    tracked.add(entry.module);
-  }
-  // A patch counts as tracked work too. A module whose files all held as conflicts can
-  // still have landed a dependency in a package.json, and that is on disk either way.
-  for (const patch of state.manifest.patches) {
-    tracked.add(patch.module);
+  for (const record of Object.values(state.manifest.files)) {
+    tracked.add(record.module);
   }
   // The base records its files under a reserved name and is never in `installed` (#120).
   return [...tracked]
@@ -1002,6 +1032,9 @@ export function hasRetiredInfra(root: string): Promise<boolean> {
 
 /** The owned file whose `DEPLOY_TARGETS` rows order `pnpm deploy:production`. */
 export const DEPLOY_TARGETS_FILE = "packages/tooling/src/targets.ts";
+/** The generated `tooling.deployTargets` table: the rows the installed modules add. */
+export const GENERATED_TARGETS_FILE =
+  "packages/tooling/src/targets.generated.ts";
 
 /** The production migration task name the base and `database-d1` retired. */
 const RETIRED_MIGRATE_TASK = "db:migrate:prod";
@@ -1020,6 +1053,8 @@ export interface DeployCheckArgs {
   deployable: string[];
   /** The text of `packages/tooling/src/targets.ts`, or `undefined` when it is missing. */
   targets: string | undefined;
+  /** The text of `packages/tooling/src/targets.generated.ts`, when the project has one. */
+  generatedTargets?: string;
   /** Whether `packages/tooling/src/release.ts` exists. */
   releaseWrapper?: boolean;
   /** Whether the root `package.json` has a `release` script. */
@@ -1073,7 +1108,7 @@ export function checkDeploy(args: DeployCheckArgs): Finding[] {
     );
     return findings;
   }
-  const services = targetServices(args.targets);
+  const services = targetServices(args.targets, args.generatedTargets);
   if (typeof services === "string") {
     findings.push(finding("deploy", where, services));
     return findings;
@@ -1084,7 +1119,7 @@ export function checkDeploy(args: DeployCheckArgs): Finding[] {
         finding(
           "deploy",
           where,
-          `apps/${service} deploys and has no DEPLOY_TARGETS row, so pnpm deploy:production stops before it builds anything. Add { service: "${service}", order: <number> } to ${DEPLOY_TARGETS_FILE}. A lower order deploys first.`
+          `apps/${service} deploys and has no DEPLOY_TARGETS row, so pnpm deploy:production stops before it builds anything. Add { service: "${service}", order: <number> } to DEPLOY_TARGETS in ${DEPLOY_TARGETS_FILE}, after the spread. A lower order deploys first.`
         )
       );
     }
@@ -1092,8 +1127,14 @@ export function checkDeploy(args: DeployCheckArgs): Finding[] {
   return findings;
 }
 
-/** The `service` of every `DEPLOY_TARGETS` row, or a message saying why there is none. */
-function targetServices(source: string): string[] | string {
+/**
+ * The `service` of every `DEPLOY_TARGETS` row, or a message saying why there is none:
+ * the rows written in `targets.ts`, and the rows of the generated table it spreads.
+ */
+function targetServices(
+  source: string,
+  generated: string | undefined
+): string[] | string {
   let program: Program;
   try {
     program = parseModule(source).$ast as unknown as Program;
@@ -1102,12 +1143,27 @@ function targetServices(source: string): string[] | string {
   }
   const array = findConstArray(program, "DEPLOY_TARGETS");
   if (!array) {
-    return `${DEPLOY_TARGETS_FILE} has no DEPLOY_TARGETS array literal. Keep it as export const DEPLOY_TARGETS: DeployTarget[] = [...], so saasaloy add can append a module's row.`;
+    return `${DEPLOY_TARGETS_FILE} has no DEPLOY_TARGETS array literal. Keep it as export const DEPLOY_TARGETS: DeployTarget[] = [...], with the spread of the generated rows in it.`;
   }
-  return array.elements
+  const elements = [...array.elements];
+  if (generated !== undefined) {
+    try {
+      const table = findConstArray(
+        parseModule(generated).$ast as unknown as Program,
+        GENERATED_TARGETS_EXPORT
+      );
+      elements.push(...(table?.elements ?? []));
+    } catch {
+      return `${GENERATED_TARGETS_FILE} could not be parsed. Run \`saasaloy update --restore ${GENERATED_TARGETS_FILE}\` to write it again.`;
+    }
+  }
+  return elements
     .map((element) => entryValue(element, "service"))
     .filter((service): service is string => typeof service === "string");
 }
+
+/** The export of `GENERATED_TARGETS_FILE`, the camelCase of the table id. */
+const GENERATED_TARGETS_EXPORT = "toolingDeployTargets";
 
 /** Read what `checkDeploy` needs off a project on disk. */
 export async function readDeployState(root: string): Promise<DeployCheckArgs> {
@@ -1154,6 +1210,7 @@ export async function readDeployState(root: string): Promise<DeployCheckArgs> {
     turbo: await readIfPresent(resolveWithinRoot(root, "turbo.json")),
     deployable,
     targets: await readIfPresent(resolveWithinRoot(root, DEPLOY_TARGETS_FILE)),
+    ...(await generatedTargets(root)),
     releaseWrapper: await pathExists(resolveWithinRoot(root, RELEASE_WRAPPER)),
     releaseScript,
   };
@@ -1234,9 +1291,7 @@ export async function checkTarget(
 export interface BaseCheckArgs {
   root: string;
   lock: Lockfile;
-  manifest: Manifest;
-  /** The seed paths the running template declares — listed, never hashed. */
-  seedFiles: string[];
+  manifest: Pick<ManifestV2, "files">;
   /**
    * The root `package.json` `version` the running template ships. A file that matches
    * its record once its version is set to this one is not drifted, because a release
@@ -1246,57 +1301,48 @@ export interface BaseCheckArgs {
 }
 
 export interface BaseReport {
-  /** `untracked` when the project carries no usable record; `update` writes one. */
+  /** `untracked` when the lock has no base record; `update` writes one. */
   status: "tracked" | "untracked";
   record?: LockBase;
-  /** Managed base files whose bytes no longer match their recorded hash. */
+  /** Base files whose bytes no longer match their recorded hash. */
   drifted: string[];
-  /** Managed base files the record names that are not on disk. */
-  missing: string[];
-  /** How many managed base files still match their recorded hash. */
+  /** How many base files still match their recorded hash. */
   matching: number;
-  /** Seed files — declared by the template, or recorded as such — reported but not checked. */
+  /** Base files written once: the project's, reported but not checked. */
   seed: string[];
 }
 
 /**
  * The base half of `doctor <project>` (#120): is there a record, which CLI wrote it, and
- * which managed base files moved since. A drifted file is information, not a problem —
- * the owner is meant to edit the base — so this never contributes a `Finding`, and it
- * never writes: an untracked base is reported and left for `update` to adopt.
+ * which base files moved since. A drifted file is information, not a problem — the owner
+ * is meant to edit the base — so this never contributes a `Finding`, and it never writes.
+ * A base file missing from disk is left deleted, and `checkKeptDeleted` lists it.
  */
 export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
   const { root, lock, manifest } = args;
-  const seedSet = new Set(args.seedFiles);
-  if (!isBaseTracked(lock, manifest) || !lock.base) {
-    return {
-      status: "untracked",
-      drifted: [],
-      missing: [],
-      matching: 0,
-      seed: args.seedFiles.toSorted(),
-    };
+  if (!lock.base) {
+    return { status: "untracked", drifted: [], matching: 0, seed: [] };
   }
   const drifted: string[] = [];
-  const missing: string[] = [];
   const seed: string[] = [];
   let matching = 0;
-  for (const [target, entry] of Object.entries(baseEntries(manifest))) {
-    if (seedSet.has(target)) {
+  for (const [target, record] of Object.entries(manifest.files)) {
+    if (record.module !== BASE_MODULE) {
+      continue;
+    }
+    if (record.class === "once") {
       seed.push(target);
       continue;
     }
     const mine = await readIfPresent(resolveWithinRoot(root, target));
-    if (mine === undefined && entry.deleted) {
-      // Kept deleted on purpose (#312): `checkKeptDeleted` lists it, never as missing.
+    if (mine === undefined) {
       continue;
-    } else if (mine === undefined) {
-      missing.push(target);
     } else if (
-      hashContent(mine) === entry.hash ||
+      hashContent(mine) === record.hash ||
       (target === ROOT_MANIFEST &&
         args.templateVersion !== undefined &&
-        hashContent(withRootVersion(mine, args.templateVersion)) === entry.hash)
+        hashContent(withRootVersion(mine, args.templateVersion)) ===
+          record.hash)
     ) {
       matching++;
     } else {
@@ -1307,35 +1353,30 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
     status: "tracked",
     record: lock.base,
     drifted: drifted.toSorted(),
-    missing: missing.toSorted(),
     matching,
     seed: seed.toSorted(),
   };
 }
 
-/** A tombstoned file (#312): tracked, kept deleted on purpose, and still absent. */
+/** A tracked file the project deleted, which the engine leaves deleted (ADR 0059). */
 export interface KeptDeletedFile {
   target: string;
   module: string;
 }
 
 /**
- * Every file the manifest keeps deleted and that is still absent (#312, ADR 0059). Like
- * base drift it is information, never a finding: the owner chose it with `update
- * --resolved`, and `update --restore <path>` undoes it. A tombstone found back on disk is
- * not listed; the next `update` reads it as restored by hand.
+ * Every tracked file that is absent from disk. Like base drift it is information, never a
+ * finding: the engine leaves a file the owner deleted deleted, and `update --restore
+ * <path>` writes it again.
  */
 export async function checkKeptDeleted(
   root: string,
-  manifest: Manifest
+  manifest: Pick<ManifestV2, "files">
 ): Promise<KeptDeletedFile[]> {
   const out: KeptDeletedFile[] = [];
-  for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (
-      entry.deleted &&
-      (await readIfPresent(resolveWithinRoot(root, target))) === undefined
-    ) {
-      out.push({ target, module: entry.module });
+  for (const [target, record] of Object.entries(manifest.files)) {
+    if ((await readIfPresent(resolveWithinRoot(root, target))) === undefined) {
+      out.push({ target, module: record.module });
     }
   }
   return out.toSorted((a, b) => (a.target < b.target ? -1 : 1));
@@ -1480,4 +1521,13 @@ export async function readConfigState(root: string): Promise<ConfigCheckArgs> {
   return {
     envFiles: await readEnvFiles(root),
   };
+}
+
+async function generatedTargets(
+  root: string
+): Promise<{ generatedTargets?: string }> {
+  const text = await readIfPresent(
+    resolveWithinRoot(root, GENERATED_TARGETS_FILE)
+  );
+  return text === undefined ? {} : { generatedTargets: text };
 }

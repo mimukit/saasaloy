@@ -75,7 +75,7 @@ The guard stays in the app's root `beforeLoad`. The shell renders whatever the a
 
 The nav data lives in the app, in `src/components/nav.ts`, as `NAV_AREAS` with `as const`. The shell reads it through the structural types in `containers/shell/shell-nav.tsx`, where `to` is a plain string, because `@repo/ui` imports no router.
 
-- **A row** is one `{ to, label, icon, count?, shortcut? }` in a group's `items`. A module adds it with a `nav-entry` patch on `apps/<app>/src/components/nav.ts`. When the area has no group with the patch's `group` label, the patch adds that group after the last one, and removing the group's last row removes the group too.
+- **A row** is one `{ to, label, icon, count?, shortcut? }` in a group's `items`. A module adds it with a row of the `<app>.nav` table (`area`, `group`, `entry` and the icon `import`), which the CLI writes into `apps/<app>/src/components/nav.generated.ts`. When the area has no group with the row's `group` label, `nav.ts` adds that group after the last one, and removing the group's last row removes the group too. A row of your own goes in `nav.ts`, never in the generated file.
 - **`shortcut`** is the row's key sequence, the same string as its "Go to …" command's `shortcut` (`"G U"`). The sidebar matches a hint to a row by that string, so a row whose `shortcut` differs from its command's gets no hint, and the command shows in the "Also" panel instead. See [Key hints in the sidebar](#key-hints-in-the-sidebar).
 - **A group** is one `{ label, items }` in an area's `groups`.
 - **An area** is one entry in `NAV_AREAS`. The header's page path starts with its label.
@@ -238,10 +238,10 @@ Before you bind a key, read the reserved key table in the `saasaloy-command` ski
 A module adds itself to every shell app through `defineShellExtensions` from `@repo/ui/lib/shell/extensions`, not by editing the shell. Each app holds its list in `src/components/shell-extensions.ts` and passes it to `ShellLayout` as `extensions`:
 
 ```ts
-export const shellExtensions = defineShellExtensions({ extensions: [] });
+export const shellExtensions = defineShellExtensions({ extensions: [...appShellExtensions] });
 ```
 
-An extension is `{ id, Provider, header? }`. `Provider` wraps the whole layout, the first entry outermost. `header` renders at the right of the header, after the page path. A module ships a factory such as `commandExtension()`, and the app's descriptor appends a bare call to it with a `plugin-array` patch, gated on the module being installed. Keep the `extensions` property even while the array is empty, or the patch has nothing to append into. Two entries with one `id` throw at load. With an empty list, `ShellLayout` renders exactly what it rendered before the prop existed.
+An extension is `{ id, Provider, header? }`. `Provider` wraps the whole layout, the first entry outermost. `header` renders at the right of the header, after the page path. A module ships a factory such as `commandExtension()`, and the app's descriptor adds a bare call to it as a row of the `<app>.shellExtensions` table, gated on the module being installed. The CLI writes the row into `shell-extensions.generated.ts`, and an extension of your own goes after the spread in `shell-extensions.ts`. Two entries with one `id` throw at load. With an empty list, `ShellLayout` renders exactly what it rendered before the prop existed.
 
 ## Tokens and motion
 
@@ -271,9 +271,9 @@ After `saasaloy add shell`:
 
 Before `shell`, the `admin` module wrote this kit under `@repo/ui/*/admin`. Move a project across in one pass:
 
-1. Commit or stash your work, so the update's merge plan is the only change in the tree.
-2. Update every installed module in one run: `saasaloy update`. The new `admin` depends on `shell`, so the plan installs `shell`, removes each unchanged file under `components/admin/`, `blocks/admin/`, `containers/admin/` and `lib/admin/`, and writes the new imports into `admin` and every module with an admin screen (`teams`, `subscription`, `payment`, `feature-flags`, `multitenant`, `file-uploads`, `api-keys-organization`).
-3. Resolve the merge plan. A shell file you edited under the old path stays there, and the update lists it. Move your edit into the file at the new path, delete the old file, then run `saasaloy update --resolved <path>` for a file the plan marks as a conflict. A replaced logo is the common case: the mark is now a light and dark pair, so make your old `packages/ui/src/assets/brand-mark.svg` into `assets/shell/brand-mark-light.svg` and `brand-mark-dark.svg` as the `shell/0002-brand-pair-and-new-blocks` update note says, then delete the old file.
+1. Commit or stash your work, so the update's changes are the only change in the tree.
+2. Update every installed module in one run: `saasaloy update`. The new `admin` depends on `shell`, so the run installs `shell`, removes each unchanged file under `components/admin/`, `blocks/admin/`, `containers/admin/` and `lib/admin/`, and writes the new imports into `admin` and every module with an admin screen (`teams`, `subscription`, `payment`, `feature-flags`, `multitenant`, `file-uploads`, `api-keys-organization`).
+3. Work the update report. A shell file you edited under the old path stays there, no longer tracked, and the report lists it. Move your edit into the file at the new path and delete the old file. Resolve the conflict markers in each file the report lists, and delete every marker line. A replaced logo is the common case: the mark is now a light and dark pair, so make your old `packages/ui/src/assets/brand-mark.svg` into `assets/shell/brand-mark-light.svg` and `brand-mark-dark.svg` as the `shell/0002-brand-pair-and-new-blocks` update note says, then delete the old file.
 4. Change the imports in your own files. The pattern skips `blocks/admin/feature-flags`, the one admin-only block, which the update already points at the right place:
 
    ```sh

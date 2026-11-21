@@ -16,7 +16,7 @@ import { declare } from "../contract";
 //
 // Route module contract, from `modules/admin/files/api/routes/admin-users.ts`: a NAMED
 // export built as ONE chained expression, or the exported type forgets the route and it
-// empties out of `AppType`. This module's `chained-route` patch mounts it at `/tenant`,
+// empties out of `AppType`. This module's `api.routes` row mounts it at `/tenant`,
 // so `get("/")` serves `GET /tenant`.
 
 export const tenantRoute = new Hono<{ Bindings: AuthDbBindings }>().get(

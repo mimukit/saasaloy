@@ -13,7 +13,7 @@ Makes the product usable by AI agents: an OpenAPI document, an MCP server with k
 | Tier | capability |
 | Stage | mvp |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.9` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md), [`validators`](validators.md), [`auth`](auth.md), [`app`](app.md), [`api-keys`](api-keys.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -46,13 +46,26 @@ Files:
 
 | File | Kind |
 |---|---|
-| `apps/api/src/index.ts` | `chained-route` |
 | `apps/api/package.json` | `package-json-dependency` |
 | `apps/api/package.json` | `package-json-dependency` |
-| `packages/config/src/sections.ts` | `plugin-array` |
-| `apps/api/src/agent/guards.ts` | `plugin-array` |
-| `apps/web/src/lib/agent-entries.ts` | `plugin-array` |
-| `apps/app/src/components/nav.ts` | `nav-entry` |
+
+## Tables it owns
+
+The CLI writes each table in full on every run, from the rows of the installed modules.
+
+| Table | Generated file | Shape |
+|---|---|---|
+| `agent.routeGuards` | `@api/agent/guards.generated.ts` | `calls` |
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.baseRoutes` | 1 |
+| `config.sections` | 1 |
+| `agent.routeGuards` | 1 |
+| `web.agentEntries` | 1 |
+| `app.nav` | 1 |
 
 ## See the rest
 
@@ -218,14 +231,14 @@ With testing `off`, neither file ships, so nothing fails on a route with no stat
 
 No manual page edit is needed. With `api-keys-user` installed, the module's own route `apps/app/src/routes/agents.tsx` renders the `AgentKeys` block from `@ui/blocks/agent/agent-keys.tsx`. `saasaloy add` still prints "Manual wire-up needed ... on no page yet" for that block target, because it flags every block target. For this module that line is wrong. Ignore it.
 
-The patches did the wiring:
+The table rows did the wiring. The CLI writes each row into the `.generated.ts` file beside the file that holds the table:
 
-| Patch | File | Effect |
+| Table | Generated file | Effect |
 |---|---|---|
-| `chained-route` | `apps/api/src/index.ts` | mounts `agent` at `/`, which serves `/mcp`, `/openapi.json`, `/llms.txt` and the Server Card |
-| `nav-entry` | `apps/app/src/components/nav.ts` | adds Agents (`BotIcon`, shortcut `G A`) to the Workspace group of the `/` area in `NAV_AREAS`, only with `api-keys-user` |
-| `plugin-array` | `packages/config/src/sections.ts` | adds `agentConfig()` to `sections` |
-| `plugin-array` | `apps/web/src/lib/agent-entries.ts` | adds the "API for agents" section to the site's `/llms.txt` |
+| `api.baseRoutes` | `apps/api/src/routes.generated.ts` | mounts `agent` at `/` on `base`, which serves `/mcp`, `/openapi.json`, `/llms.txt` and the Server Card |
+| `app.nav` | `apps/app/src/components/nav.generated.ts` | adds Agents (`BotIcon`, shortcut `G A`) to the Workspace group of the `/` area in `NAV_AREAS`, only with `api-keys-user` |
+| `config.sections` | `packages/config/src/sections.generated.ts` | adds `agentConfig()` to `sections` |
+| `web.agentEntries` | `apps/web/src/lib/agent-entries.generated.ts` | adds the "API for agents" section to the site's `/llms.txt` |
 
 #### What `remove` leaves behind
 

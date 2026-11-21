@@ -13,7 +13,7 @@ A kv provider on Workers KV, with the KV namespace and ratelimits bindings.
 | Tier | provider |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`kv`](kv.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -36,8 +36,17 @@ Files:
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
-| `packages/kv/src/index.ts` | `plugin-array` |
 | `packages/kv/package.json` | `package-json-dependency` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `kv.providers` | 1 |
 
 ## See the rest
 

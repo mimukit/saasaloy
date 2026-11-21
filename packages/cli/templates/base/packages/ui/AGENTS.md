@@ -112,7 +112,7 @@ Two places to get an item from:
 
 Neither is special: the mechanism is the `registry:style` shape, so any URL that serves one works.
 
-**This edits a file the project owns.** `brand.css` is an owned base file: `saasaloy update` never overwrites it, and a later template change to it reaches you only through the merge plan. A swapped theme is yours to maintain, including re-applying anything you had customised in `brand.css` that the preset overwrote. Diff the file after running the command rather than assuming.
+**This edits a file the project owns.** `brand.css` is a base file written once: `saasaloy update` never overwrites it. A later template change to it reaches you only when you run `saasaloy update --merge packages/ui/src/styles/brand.css`. A swapped theme is yours to maintain, including re-applying anything you had customised in `brand.css` that the preset overwrote. Diff the file after running the command rather than assuming.
 
 A preset swap invalidates `apps/web/DESIGN.md`, which records the token values the old theme had. The `saasaloy-design` skill's `theme` flow runs the command above for you and re-derives the contract from the merged result, so prefer it over running the command by hand. Pick one or the other — running both applies the preset twice.
 

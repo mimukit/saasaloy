@@ -1,20 +1,14 @@
 import { createHash } from "node:crypto";
-import {
-  chmodSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import {
   chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
   readlink,
   rm,
-  symlink,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, posix, relative, sep } from "node:path";
@@ -22,22 +16,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { assertCliBuilt, fixture, runCli } from "../support/cli.js";
 import type { CliRun } from "../support/cli.js";
 
-// `add` has no rollback by design (ADR 0031): whatever landed before a failure stays, and
-// the manifest, config and lock are written to describe it. These cases drive the two
-// ways a run can end short — a write the kernel refuses, and a file that appears between
-// the plan and the write — then re-run to complete the module.
-//
-// Both faults are real filesystem state, never a hook in `packages/cli/src`: a test hook
-// would prove the hook works, not the engine. The failing write is denied by a read-only
-// parent directory. The mid-apply drift comes from a symlink that dangles while the plan
-// is built and resolves once an earlier file in the same plan lands.
+// A run that stops short leaves a journal, and the next run refuses until `--abort`
+// restores the files it changed (ADR 0066, which replaced the re-run recovery of ADR
+// 0031). The fault is real filesystem state, never a hook in `packages/cli/src`: a
+// read-only directory refuses the write of beta's skill file.
 
 const REGISTRY = fixture("registry-clean");
-// Both convergence projects carry this name: `init` writes it into the root package.json,
-// so a different name would be the one difference the comparison found.
+// Both projects carry this name: `init` writes it into the root package.json, so a
+// different name would be the one difference the comparison found.
 const PROJECT = "e2e-partial";
-// beta's skill file — the last of the three writes `add beta` plans. Taking the write bit
-// off its parent lets the two ahead of it land, so the failure is genuinely mid-apply.
 const SKILL_DIR = join(".agents", "skills", "saasaloy-beta");
 
 /**
@@ -63,55 +50,6 @@ function readOnlyDirsBite(): boolean {
 }
 
 const DENIES_WRITES = readOnlyDirsBite();
-
-/**
- * Whether a file symlink can be created here. Windows needs developer mode or an
- * elevated shell for one, so the drift fault would throw in `beforeAll` and fail the
- * file rather than skip it.
- */
-function symlinksWork(): boolean {
-  const probe = mkdtempSync(join(tmpdir(), "saasaloy-link-probe-"));
-  try {
-    writeFileSync(join(probe, "target.txt"), "probe", "utf-8");
-    symlinkSync("target.txt", join(probe, "link.txt"));
-    return true;
-  } catch {
-    return false;
-  } finally {
-    rmSync(probe, { force: true, recursive: true });
-  }
-}
-
-const SYMLINKS_WORK = symlinksWork();
-
-interface Config {
-  aliases: Record<string, string>;
-  installed: string[];
-}
-interface Manifest {
-  links: Record<string, string>;
-  managed: Record<string, { from?: string; hash: string; module: string }>;
-}
-interface Lock {
-  lockfileVersion: number;
-  modules: Record<string, { resolved: string; source: string }>;
-}
-
-async function json<T>(path: string): Promise<T> {
-  return JSON.parse(await readFile(path, "utf-8")) as T;
-}
-
-function config(project: string): Promise<Config> {
-  return json<Config>(join(project, "saasaloy.json"));
-}
-
-function manifest(project: string): Promise<Manifest> {
-  return json<Manifest>(join(project, ".saasaloy", "manifest.json"));
-}
-
-function lock(project: string): Promise<Lock> {
-  return json<Lock>(join(project, "saasaloy-lock.json"));
-}
 
 function add(project: string, args: string[]): Promise<CliRun> {
   return runCli(["add", ...args], {
@@ -145,6 +83,10 @@ async function snapshot(
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const abs = join(dir, entry.name);
     const rel = relative(root, abs).split(sep).join(posix.sep);
+    // A backup folder is named by the time of its run, so two projects never share it.
+    if (rel === ".saasaloy/backups") {
+      continue;
+    }
     if (entry.isSymbolicLink()) {
       out[rel] = `-> ${(await readlink(abs)).split(sep).join(posix.sep)}`;
     } else if (entry.isDirectory()) {
@@ -161,8 +103,17 @@ async function snapshot(
 let workspace: string;
 let partialProject: string;
 let lockedDir: string;
-let packageJsonBefore: string;
+let before: Record<string, string>;
 let failed: CliRun;
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await lstat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 beforeAll(async () => {
   await assertCliBuilt();
@@ -172,10 +123,7 @@ beforeAll(async () => {
 
   lockedDir = join(partialProject, SKILL_DIR);
   await mkdir(lockedDir, { recursive: true });
-  packageJsonBefore = await readFile(
-    join(partialProject, "package.json"),
-    "utf-8"
-  );
+  before = await snapshot(partialProject);
   if (DENIES_WRITES) {
     await chmod(lockedDir, 0o555);
   }
@@ -197,60 +145,40 @@ afterAll(async () => {
 });
 
 describe.skipIf(!DENIES_WRITES)(
-  "e2e — a refused write leaves bookkeeping that describes disk",
+  "e2e — a refused write leaves a journal, and --abort restores the tree",
   () => {
     it("fails the run rather than reporting a success it did not have", () => {
-      expect(failed.code).not.toBe(0);
       expect(failed.code).toBe(1);
+      expect(failed.output).toContain("EACCES");
     });
 
-    it("states that the apply was partial and names the re-run that completes it", () => {
-      expect(failed.output).toContain("Partial apply");
-      expect(failed.output).toContain("saasaloy add beta");
-    });
-
-    it("really did write the files ahead of the failure", async () => {
-      // Without this the case would pass on a run that never started applying, and the
-      // assertions below would all be about an untouched project.
+    it("leaves the journal that marks the unfinished run", async () => {
       await expect(
-        readFile(join(partialProject, "apps", "api", "src", "beta.ts"), "utf-8")
-      ).resolves.toContain("beta");
+        exists(join(partialProject, ".saasaloy", "journal.json"))
+      ).resolves.toBeTruthy();
     });
 
-    it("tracks exactly the files that landed, and no file that did not", async () => {
-      const tracked = Object.keys((await manifest(partialProject)).managed);
+    it("refuses the next run until --abort, and names the flag", async () => {
+      const run = await add(partialProject, ["beta", "--yes"]);
 
-      expect(tracked.toSorted()).toStrictEqual([
-        "apps/api/src/beta.ts",
-        "apps/api/src/index.ts",
-      ]);
+      expect(run.code).toBe(2);
+      expect(run.output).toContain("--abort");
     });
 
-    it("omits the module from saasaloy.json", async () => {
-      const state = await config(partialProject);
+    it("restores every file byte for byte with --abort", async () => {
+      const run = await add(partialProject, ["--abort"]);
 
-      expect(state.installed).toStrictEqual([]);
-    });
-
-    it("pins nothing the config does not also claim", async () => {
-      const state = await config(partialProject);
-
-      expect(Object.keys((await lock(partialProject)).modules)).toStrictEqual(
-        state.installed
-      );
-    });
-
-    it("leaves the root package.json byte-identical", async () => {
-      // The dependency merge trails the apply (#98), so a throw must never reach it.
+      expect(run.code).toBe(0);
       await expect(
-        readFile(join(partialProject, "package.json"), "utf-8")
-      ).resolves.toBe(packageJsonBefore);
+        exists(join(partialProject, ".saasaloy", "journal.json"))
+      ).resolves.toBeFalsy();
+      await expect(snapshot(partialProject)).resolves.toStrictEqual(before);
     });
   }
 );
 
 describe.skipIf(!DENIES_WRITES)(
-  "e2e — the re-run converges on the clean result",
+  "e2e — the run after --abort converges on the clean result",
   () => {
     let cleanProject: string;
     let repaired: CliRun;
@@ -269,108 +197,10 @@ describe.skipIf(!DENIES_WRITES)(
       expect(cleanRun.code).toBe(0);
     });
 
-    it("ends with the same saasaloy.json", async () => {
-      await expect(config(partialProject)).resolves.toStrictEqual(
-        await config(cleanProject)
-      );
-    });
-
-    it("ends with the same manifest", async () => {
-      await expect(manifest(partialProject)).resolves.toStrictEqual(
-        await manifest(cleanProject)
-      );
-    });
-
-    it("ends with the same lockfile", async () => {
-      await expect(lock(partialProject)).resolves.toStrictEqual(
-        await lock(cleanProject)
-      );
-    });
-
     it("ends with the same tree, file for file", async () => {
       await expect(snapshot(partialProject)).resolves.toStrictEqual(
         await snapshot(cleanProject)
       );
-    });
-  }
-);
-
-describe.skipIf(!SYMLINKS_WORK)(
-  "e2e — a file that appears mid-apply holds its module back",
-  () => {
-    let driftProject: string;
-    let blocked: CliRun;
-
-    beforeAll(async () => {
-      driftProject = await initProject(join(workspace, "drift"));
-
-      // The window between the plan and the write, opened with filesystem state alone:
-      // `apps/api/src/beta.ts` is a symlink to a sibling that does not exist yet, so the
-      // plan reads the target as empty and classifies a `create`. alpha's `index.ts` is
-      // written earlier in the same plan, which makes the link resolve — by beta's turn
-      // the target holds bytes the user never approved a write over.
-      const src = join(driftProject, "apps", "api", "src");
-      await mkdir(src, { recursive: true });
-      await symlink("index.ts", join(src, "beta.ts"));
-
-      blocked = await add(driftProject, ["beta", "--yes"]);
-    }, 120_000);
-
-    it("exits 0 — nothing failed, an edit simply outranked the plan", () => {
-      expect(blocked.code).toBe(0);
-    });
-
-    it("names the module it did not install and the re-run that completes it", () => {
-      expect(blocked.output).toContain("is not installed");
-      expect(blocked.output).toContain("saasaloy add beta");
-    });
-
-    it("keeps the bytes that were there", async () => {
-      const target = join(driftProject, "apps", "api", "src", "beta.ts");
-
-      await expect(readlink(target)).resolves.toBe("index.ts");
-      await expect(readFile(target, "utf-8")).resolves.toContain("alpha");
-    });
-
-    it("leaves the module out of saasaloy.json", async () => {
-      expect((await config(driftProject)).installed).toStrictEqual(["alpha"]);
-    });
-
-    it("claims no manifest entry for the file it did not write", async () => {
-      const tracked = await manifest(driftProject);
-
-      expect(tracked.managed["apps/api/src/beta.ts"]).toBeUndefined();
-    });
-
-    describe("and the re-run installs it on informed approval", () => {
-      let repair: CliRun;
-
-      beforeAll(async () => {
-        repair = await add(driftProject, ["beta", "--yes"]);
-      }, 120_000);
-
-      it("re-plans the module, because it never reached saasaloy.json", () => {
-        expect(repair.code).toBe(0);
-        expect(repair.output).toContain("will install: beta");
-      });
-
-      it("shows the drift in the preview this time", () => {
-        expect(repair.output).toContain("apps/api/src/beta.ts");
-        expect(repair.output).toContain("merge");
-      });
-
-      it("installs the module once the plan is approved with the drift on it", async () => {
-        expect((await config(driftProject)).installed.toSorted()).toStrictEqual(
-          ["alpha", "beta"]
-        );
-      });
-
-      it("still keeps the user's bytes, held back for a merge", async () => {
-        const target = join(driftProject, "apps", "api", "src", "beta.ts");
-
-        expect(repair.output).toContain("Needs merge");
-        await expect(readFile(target, "utf-8")).resolves.toContain("alpha");
-      });
     });
   }
 );

@@ -159,14 +159,14 @@ With testing `off`, neither file ships, so nothing fails on a route with no stat
 
 No manual page edit is needed. With `api-keys-user` installed, the module's own route `apps/app/src/routes/agents.tsx` renders the `AgentKeys` block from `@ui/blocks/agent/agent-keys.tsx`. `saasaloy add` still prints "Manual wire-up needed ... on no page yet" for that block target, because it flags every block target. For this module that line is wrong. Ignore it.
 
-The patches did the wiring:
+The table rows did the wiring. The CLI writes each row into the `.generated.ts` file beside the file that holds the table:
 
-| Patch | File | Effect |
+| Table | Generated file | Effect |
 |---|---|---|
-| `chained-route` | `apps/api/src/index.ts` | mounts `agent` at `/`, which serves `/mcp`, `/openapi.json`, `/llms.txt` and the Server Card |
-| `nav-entry` | `apps/app/src/components/nav.ts` | adds Agents (`BotIcon`, shortcut `G A`) to the Workspace group of the `/` area in `NAV_AREAS`, only with `api-keys-user` |
-| `plugin-array` | `packages/config/src/sections.ts` | adds `agentConfig()` to `sections` |
-| `plugin-array` | `apps/web/src/lib/agent-entries.ts` | adds the "API for agents" section to the site's `/llms.txt` |
+| `api.baseRoutes` | `apps/api/src/routes.generated.ts` | mounts `agent` at `/` on `base`, which serves `/mcp`, `/openapi.json`, `/llms.txt` and the Server Card |
+| `app.nav` | `apps/app/src/components/nav.generated.ts` | adds Agents (`BotIcon`, shortcut `G A`) to the Workspace group of the `/` area in `NAV_AREAS`, only with `api-keys-user` |
+| `config.sections` | `packages/config/src/sections.generated.ts` | adds `agentConfig()` to `sections` |
+| `web.agentEntries` | `apps/web/src/lib/agent-entries.generated.ts` | adds the "API for agents" section to the site's `/llms.txt` |
 
 ## What `remove` leaves behind
 

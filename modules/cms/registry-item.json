@@ -6,7 +6,7 @@
   "stage": "scale",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.10.0"
   },
   "dependsOn": [
     "api",
@@ -22,39 +22,6 @@
     "The images uploaded through the CMS stay as file-uploads rows in storage_objects, with their objects in the bucket. Delete them from the Files screen, or keep them if file-uploads stays installed."
   ],
   "patches": [
-    {
-      "file": "packages/cms/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "cms",
-      "arrayProp": "collections",
-      "call": "blogCollection",
-      "import": {
-        "name": "blogCollection",
-        "from": "./collections/blog"
-      }
-    },
-    {
-      "file": "packages/config/src/sections.ts",
-      "kind": "plugin-array",
-      "exportName": "sections",
-      "arrayProp": "sections",
-      "call": "cmsConfig",
-      "import": {
-        "name": "cmsConfig",
-        "from": "./sections/cms"
-      }
-    },
-    {
-      "file": "apps/api/src/index.ts",
-      "kind": "chained-route",
-      "exportName": "default",
-      "path": "/cms",
-      "call": "cms",
-      "import": {
-        "name": "cms",
-        "from": "./routes/cms"
-      }
-    },
     {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
@@ -87,31 +54,6 @@
       "kind": "wrangler-binding",
       "bindingType": "assets.run_worker_first",
       "entry": "/blog/*"
-    },
-    {
-      "file": "packages/ui/src/blocks/navbar.tsx",
-      "kind": "const-array",
-      "constName": "pageLinks",
-      "key": "href",
-      "entry": {
-        "label": "Blog",
-        "href": "/blog"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Content",
-      "entry": {
-        "to": "/cms/blog",
-        "label": "Blog"
-      },
-      "icon": {
-        "name": "FileTextIcon",
-        "from": "lucide-react"
-      }
     },
     {
       "file": "packages/cms/package.json",
@@ -148,12 +90,63 @@
       "kind": "package-json-script",
       "name": "cms:rerender",
       "value": "pnpm --filter @repo/cms cms:rerender"
+    }
+  ],
+  "tables": [
+    {
+      "id": "cms.collections",
+      "file": "@cms/collections.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "cms.collections",
+      "call": "blogCollection",
+      "import": {
+        "name": "blogCollection",
+        "from": "./collections/blog"
+      }
     },
     {
-      "file": "apps/web/src/lib/agent-entries.ts",
-      "kind": "plugin-array",
-      "exportName": "agentEntries",
-      "arrayProp": "entries",
+      "table": "config.sections",
+      "call": "cmsConfig",
+      "import": {
+        "name": "cmsConfig",
+        "from": "./sections/cms"
+      }
+    },
+    {
+      "table": "api.routes",
+      "path": "/cms",
+      "call": "cms",
+      "import": {
+        "name": "cms",
+        "from": "./routes/cms"
+      }
+    },
+    {
+      "table": "ui.pageLinks",
+      "entry": {
+        "label": "Blog",
+        "href": "/blog"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Content",
+      "entry": {
+        "to": "/cms/blog",
+        "label": "Blog"
+      },
+      "import": {
+        "name": "FileTextIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "table": "web.agentEntries",
       "call": "cmsAgentEntry",
       "import": {
         "name": "cmsAgentEntry",

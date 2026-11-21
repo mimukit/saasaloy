@@ -315,9 +315,9 @@ One file in `src/providers/`, exporting a factory that returns a `SubscriptionPr
 3. **Map the vendor's events onto the five normalized types** and enqueue `subscription.event`. Drop anything that maps to none.
 4. **Map the vendor's statuses onto the seven normalized ones**, and keep the raw value in `metadata`.
 5. **Read price ids from `providerIds.<your-name>`** in `plans.ts`. Never hard-code one.
-6. **Register it.** A `plugin-array` patch appends your factory call to the `providers` array in `packages/subscription/src/index.ts`, and a `package-json-dependency` patch puts the vendor SDK in `packages/subscription/package.json` — never in another workspace (ADR 0020).
+6. **Register it.** A `subscription.providers` row adds your factory call to `packages/subscription/src/providers.generated.ts`, which the `providers` array in `packages/subscription/src/index.ts` spreads, and a `package-json-dependency` patch puts the vendor SDK in `packages/subscription/package.json` — never in another workspace (ADR 0020).
 
-A provider whose vendor ships a Better Auth plugin also exports a plugin factory and registers it into the `plugins` arrays of both `auth` and `adminAuth` with two more `plugin-array` patches (`exportName` `auth` and `adminAuth`), the way `subscription-stripe` does. A provider file that reaches the plugin's endpoints casts the `auth` it is handed, which is whichever instance `authFor(c)` picked. If a new provider would need a second runtime file or a scaffold of its own, the contract is wrong. Fix the contract.
+A provider whose vendor ships a Better Auth plugin also exports a plugin factory and registers it into the `plugins` arrays of both `auth` and `adminAuth` with two more rows, one in the `auth.plugins` table and one in `adminAuth.plugins`, the way `subscription-stripe` does. A provider file that reaches the plugin's endpoints casts the `auth` it is handed, which is whichever instance `authFor(c)` picked. If a new provider would need a second runtime file or a scaffold of its own, the contract is wrong. Fix the contract.
 
 Run `.agents/skills/create-provider/` in its `subscription` mode rather than writing the descriptor by hand.
 

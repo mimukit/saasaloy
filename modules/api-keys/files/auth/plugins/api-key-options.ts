@@ -5,8 +5,8 @@ import { config } from "@repo/config";
 //
 // `api-keys` is the core, and it ships no `apiKeyPlugin()` of its own. An owner module
 // (`api-keys-organization` or `api-keys-user`) ships `./api-key.ts` at one fixed path, so
-// the core's `plugin-array` patches into `auth.ts`, on both instances, import from the
-// same place in every mode.
+// the core's `auth.plugins` and `adminAuth.plugins` rows, on both instances, import from
+// the same place in every mode.
 // That owner builds its plugin from `API_KEY_OPTIONS` below and adds the two things that
 // differ per owner: `references` and the `schema.apikey` rename.
 //

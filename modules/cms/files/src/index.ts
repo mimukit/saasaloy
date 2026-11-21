@@ -1,4 +1,5 @@
 import { defineCms } from "./define";
+import { cmsCollections } from "./collections.generated";
 
 // `@repo/cms`: the collection registry, the field builders, the renderer and the text
 // helpers. The editor is a separate subpath, `@repo/cms/editor`, so the api and the
@@ -68,14 +69,12 @@ export {
 } from "./text";
 export type { ResolvedSeo } from "./text";
 
-// The registry, and the patch point every collection lands in. `saasaloy add cms` appends
-// `blogCollection()` here; a project adds its own collection the same way.
-//
-// Keep this line in exactly this shape: `export const cms = defineCms({ collections: [...] })`
-// with a real array literal. The codemod behind the `plugin-array` patch kind
-// (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into otherwise, and an
-// install fails silently. Never omit `collections`, even while it is empty.
-export const cms = defineCms({ collections: [] });
+// The registry. A module adds its collection as a row of the `cms.collections` table, and
+// the CLI writes `./collections.generated.ts` from those rows on every run: `saasaloy add
+// cms` adds `blogCollection()`. A project adds its own collection after the spread, never
+// in the generated file: the CLI overwrites it, and `saasaloy update` refuses when it was
+// edited.
+export const cms = defineCms({ collections: [...cmsCollections] });
 
 /** Every registered collection name, as a type. */
 export type CollectionName = (typeof cms.collections)[number]["name"];

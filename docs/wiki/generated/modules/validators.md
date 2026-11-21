@@ -34,6 +34,14 @@ This module declares no environment variables.
 |---|---|
 | `apps/api/package.json` | `package-json-dependency` |
 
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+This module adds no row to a table.
+
 ## See the rest
 
 Run `saasaloy add validators --dry-run` to print every file and patch the module writes, in install order, and write nothing.
@@ -84,7 +92,7 @@ export const signup = new Hono().post(
 );
 ```
 
-One named export, one chained expression. Split the `.post()` into its own `signup.post(...)` statement and the exported type forgets the route, which empties it out of `AppType`. The name has to be an `export const`: the `chained-route` codemod writes `import { signup } from "./routes/signup"` and refuses a default import. Every route also carries one `declare({...})` link, its agent statement, and a callable route names its output schema there; keep that schema in this package next to the input one. See the `saasaloy-api` skill for the full route contract.
+One named export, one chained expression. Split the `.post()` into its own `signup.post(...)` statement and the exported type forgets the route, which empties it out of `AppType`. The name has to be an `export const`: the generated `apps/api/src/routes.generated.ts` imports it by name, as `import { signup } from "./routes/signup"`. Every route also carries one `declare({...})` link, its agent statement, and a callable route names its output schema there; keep that schema in this package next to the input one. See the `saasaloy-api` skill for the full route contract.
 
 `result.error.issues[0]` is possibly undefined under the template's tsconfig, so guard it rather than indexing straight into `.message`.
 
@@ -131,7 +139,7 @@ This schema and the `sms` capability check the same country at different layers,
 
 Remove the dependents first. `waitlist`, `feature-flags`, `file-uploads` and `payment-manual` depend on `validators`, so `remove validators` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
 
-`saasaloy remove validators` deletes the `packages/validators` workspace (`common.ts`, `phone.ts`). It has no reversible patch. The `@repo/validators` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. A schema file you added to the workspace is untracked, so `remove` leaves it.
+`saasaloy remove validators` deletes the `packages/validators` workspace (`common.ts`, `phone.ts`). It has no reversible patch. The same run takes the `@repo/validators` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. A schema file you added to the workspace is untracked, so `remove` leaves it.
 
 Every route that imports `@repo/validators` stops compiling. Move the schemas you still need next to their routes first.
 

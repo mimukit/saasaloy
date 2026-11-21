@@ -13,7 +13,7 @@ A storage provider that keeps objects in memory, for local development and tests
 | Tier | provider |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`storage`](storage.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -30,9 +30,17 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/storage/src/index.ts` | `plugin-array` |
+| `storage.providers` | 1 |
 
 ## See the rest
 

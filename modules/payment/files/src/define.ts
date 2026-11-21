@@ -108,9 +108,9 @@ function reviewableFrom(payment: Payment): readonly PaymentStatus[] {
 }
 
 /**
- * Build the registry. `providers` and `listeners` are the patch points: every
- * `payment-<provider>` module appends to `providers`, and a capability that reacts to a
- * payment (a subscription renewal) appends to `listeners`. See `src/index.ts`.
+ * Build the registry. `providers` and `listeners` hold the generated tables: every
+ * `payment-<provider>` module adds a row to `providers`, and a capability that reacts to a
+ * payment (a subscription renewal) adds a row to `listeners`. See `src/index.ts`.
  */
 export function definePayment(config: PaymentConfig): PaymentRegistry {
   const { providers, listeners } = config;

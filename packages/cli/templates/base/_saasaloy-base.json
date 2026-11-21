@@ -2,7 +2,6 @@
   "seedFiles": [
     "apps/web/DESIGN.md",
     "README.md",
-    "saasaloy.json",
     "apps/web/src/pages/index.astro",
     "packages/ui/src/content/landing.ts",
     "docs/runbook-deploy.md",
@@ -12,7 +11,6 @@
   ],
   "retiredSeedFiles": ["DESIGN.md"],
   "ownedFiles": [
-    "packages/env/.env.example",
     "packages/env/src/services.ts",
     "packages/env/src/sources.ts",
     "apps/web/src/env.ts",
@@ -29,5 +27,58 @@
     "apps/web/public/favicon.*",
     "packages/tooling/src/deploy.config.ts",
     "packages/tooling/src/targets.ts"
+  ],
+  "tables": [
+    {
+      "id": "web.agentEntries",
+      "file": "@web/lib/agent-entries.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "config.sections",
+      "file": "@config/sections.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "env.services",
+      "file": "@env/services.generated.ts",
+      "shape": "objects",
+      "type": {
+        "name": "Service",
+        "from": "./services.ts"
+      }
+    },
+    {
+      "id": "env.sources",
+      "file": "@env/sources.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "tooling.deployTargets",
+      "file": "packages/tooling/src/targets.generated.ts",
+      "shape": "objects",
+      "type": {
+        "name": "DeployTarget",
+        "from": "./types.ts"
+      }
+    },
+    {
+      "id": "tooling.smokeChecks",
+      "file": "packages/tooling/src/targets.generated.ts",
+      "shape": "objects",
+      "type": {
+        "name": "SmokeCheck",
+        "from": "./types.ts"
+      }
+    },
+    {
+      "id": "ui.pageLinks",
+      "file": "@ui/blocks/navbar.generated.ts",
+      "shape": "objects",
+      "type": {
+        "name": "NavbarLink",
+        "from": "./navbar"
+      }
+    }
   ]
 }

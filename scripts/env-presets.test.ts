@@ -232,19 +232,23 @@ function exportsSubpath(pkg: PackageJson, subpath: string): boolean {
 
 // #206: `database-postgres` patched `databaseEnv` into `apps/api/src/env.ts` from
 // `@repo/db/env-preset`, but `packages/db` exported no such subpath and never depended on
-// `@repo/env`, so a fresh project failed `pnpm typecheck` twice. No patch kind edits an
-// exports map, so the owning package.json has to declare the subpath up front.
+// `@repo/env`, so a fresh project failed `pnpm typecheck` twice. A table row's import of a
+// workspace subpath resolves only through an exports map no patch kind edits, so the owning
+// package.json has to declare the subpath up front.
 describe("every env preset a module patches in resolves", () => {
   const packages = workspacePackages();
 
   for (const module of modules()) {
-    const patches =
-      (descriptorOf(module) as { patches?: Patch[] }).patches ?? [];
+    const descriptor = descriptorOf(module) as {
+      patches?: Patch[];
+      entries?: { import?: { from: string } }[];
+    };
+    const patches = descriptor.patches ?? [];
 
-    for (const patch of patches) {
-      const from = patch.import?.from;
+    for (const row of descriptor.entries ?? []) {
+      const from = row.import?.from;
       const match = from?.match(/^(@repo\/[^/]+)\/(.+)$/);
-      if (patch.kind !== "plugin-array" || !match?.[1] || !match[2]) {
+      if (!match?.[1] || !match[2]) {
         continue;
       }
       const [, name, rest] = match;

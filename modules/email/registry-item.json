@@ -5,7 +5,7 @@
   "description": "A packages/email workspace with the provider interface, the escaping html tag and safeUrl; add one email provider.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -22,12 +22,23 @@
       "section": "dependencies",
       "name": "@repo/email",
       "range": "workspace:*"
+    }
+  ],
+  "tables": [
+    {
+      "id": "email.providers",
+      "file": "@email/providers.generated.ts",
+      "shape": "calls"
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "id": "email.envPresets",
+      "file": "@email/env-preset.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.envPresets",
       "call": "emailEnv",
       "import": {
         "name": "emailEnv",

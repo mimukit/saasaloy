@@ -11,7 +11,7 @@ The web tokens move from `packages/ui/src/styles/web.css` to a new `packages/ui/
 
 Until you finish the steps below, `apps/web/src/layouts/Layout.astro` still loads your old `web.css`, so the site looks the same and `brand.css` is unused.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/ui/src/styles/web.css`, because the project owns it. The steps below are the merge.
 - `packages/ui/src/styles/globals.css` and `apps/web/src/layouts/Layout.astro`, for comment changes only. Take the new comments or keep yours; no code changes.

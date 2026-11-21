@@ -2,6 +2,7 @@ import { accounts as accountsTable } from "../../schema/auth";
 import { seedId } from "../id";
 import { defineSlice } from "../slice";
 import type { SliceOptions } from "../slice";
+import { seedAccounts } from "./accounts.generated";
 
 // One email-and-password account for each seed user in `./users.ts`.
 //
@@ -45,10 +46,10 @@ function moreAccounts(input: { accounts: readonly ExtraAccounts[] }) {
   return { messages, rows };
 }
 
-// Accounts another module adds to this slice, such as `auth-phone`'s phone accounts. A
-// `plugin-array` patch appends the module's factory call to the array, and `remove` takes
-// it back out. Keep the shape `export const <name> = <fn>({ accounts: [...] })`.
-export const extraAccounts = moreAccounts({ accounts: [] });
+// Accounts another module adds to this slice, such as `auth-phone`'s phone accounts. The
+// module adds its factory call as a row of the `seed.accounts` table, which the CLI writes
+// into `./accounts.generated.ts`, and `remove` takes it back out.
+export const extraAccounts = moreAccounts({ accounts: [...seedAccounts] });
 
 export const accounts = defineSlice(accountsTable, {
   message: [

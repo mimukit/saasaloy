@@ -1,7 +1,8 @@
+import { auditActions } from "./audit-actions.generated";
 // Every admin write, by action. Each installed module ships its own action file in
 // `apps/api/src/audit/<module>.ts`, exporting one function that returns its actions, and
-// its descriptor carries a `plugin-array` patch that appends that call into `actions`
-// below, with the import above it. `saasaloy remove <module>` takes the call and the file
+// its descriptor adds that call as an `audit.actions` row, which the CLI writes into
+// `./audit-actions.generated.ts`. `saasaloy remove <module>` takes the row and the file
 // away again, so no module edits a file another module owns.
 //
 // An action is named `<area>.<object>.<verb>`, such as `payment.refund.create`. Its entry
@@ -89,11 +90,10 @@ export function defineAuditActions<
   return Object.freeze(merged) as Readonly<MergedAuditActions<T>>;
 }
 
-// The registry, and the patch point every module's `plugin-array` patch writes into.
-// Keep the line below in this shape, a `defineAuditActions` call whose `actions` is a real
-// array literal: the codemod has nothing to append into otherwise. Never omit `actions`,
-// even while it is empty.
-export const AUDIT_ACTIONS = defineAuditActions({ actions: [] });
+// The registry. Every module's `audit.actions` row lands in the generated spread, and an
+// action set of your own goes after it, never in the generated file: the CLI overwrites
+// it, and `saasaloy update` refuses when it was edited.
+export const AUDIT_ACTIONS = defineAuditActions({ actions: [...auditActions] });
 
 /** An action this project's modules register. */
 export type AuditAction = keyof typeof AUDIT_ACTIONS & string;

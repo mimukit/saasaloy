@@ -1,6 +1,9 @@
 import { defineQueue } from "./define";
 import { exampleJob } from "./jobs/example";
 import type { JobContext, QueueEnv } from "./provider";
+import { queueJobs } from "./jobs.generated";
+import { queueProviders } from "./providers.generated";
+import { queueSchedules } from "./schedules.generated";
 
 export { matchesCron, matchesParsed, parseCron } from "./cron";
 export type { ParsedCron } from "./cron";
@@ -23,20 +26,18 @@ export type {
   StandardSchemaResult,
 } from "./provider";
 
-// The three registration tables, and the patch points every module writes into.
-// `saasaloy add queue-cloudflare` adds its import and appends `cloudflare()` to
-// `providers`; a feature that ships background work appends `myJob()` to `jobs` and
-// `mySchedule()` to `schedules`. Every one of those is idempotent, so a re-run changes
-// nothing, and `saasaloy remove` takes the same line back out.
-//
-// Keep this line in exactly this shape: `export const <name> = <fn>({ <prop>: [...] })`
-// with a real array literal for each property. The codemod behind the `plugin-array`
-// patch kind (packages/cli/src/lib/patch/ts-module.ts) has nothing to push into
-// otherwise, and an install fails silently. Never omit an array, even while it's empty.
+// The three registration tables. A module adds rows to `queue.providers`, `queue.jobs`
+// and `queue.schedules`, and the CLI writes `./providers.generated.ts`,
+// `./jobs.generated.ts` and `./schedules.generated.ts` from them on every run:
+// `saasaloy add queue-cloudflare` adds `cloudflare()` to `providers`, and a feature that
+// ships background work adds `myJob()` to `jobs` and `mySchedule()` to `schedules`.
+// `saasaloy remove` takes the row back out. A job or schedule of your own goes after the
+// spread, never in a generated file: the CLI overwrites it, and `saasaloy update` refuses
+// when it was edited.
 export const queue = defineQueue({
-  jobs: [exampleJob()],
-  providers: [],
-  schedules: [],
+  jobs: [exampleJob(), ...queueJobs],
+  providers: [...queueProviders],
+  schedules: [...queueSchedules],
 });
 
 /**

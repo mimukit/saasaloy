@@ -13,7 +13,7 @@ A logger provider that writes structured JSON to the Worker's console.
 | Tier | provider |
 | Stage | validate |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`logger`](logger.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -30,9 +30,17 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/logger/src/index.ts` | `plugin-array` |
+| `logger.providers` | 1 |
 
 ## See the rest
 

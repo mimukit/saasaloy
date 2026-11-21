@@ -9,7 +9,7 @@ import type { Tenant } from "./tenant-rules";
 // tenant is resolved and the refusal is thrown.
 //
 // A throwing helper rather than Hono middleware, for the reason `requireTenant` and
-// `requireAdmin` both give: the `chained-route` patch kind registers routes, not `.use()`
+// `requireAdmin` both give: the `api.routes` table registers routes, not `.use()`
 // links (ADR 0028). A throw reuses api's `onError` envelope, so a refusal from here
 // renders as the same `{ error: { code, message } }` body every other refusal does.
 

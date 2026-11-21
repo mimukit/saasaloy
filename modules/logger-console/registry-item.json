@@ -5,25 +5,22 @@
   "description": "A logger provider that writes structured JSON to the Worker's console.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["logger"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
+    { "path": "files/console.ts", "target": "@logger/providers/console.ts" }
+  ],
+  "entries": [
     {
-      "file": "packages/logger/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "logger",
-      "arrayProp": "providers",
+      "table": "logger.providers",
       "call": "consoleLogger",
       "import": {
         "name": "consoleLogger",
         "from": "./providers/console"
       }
     }
-  ],
-  "files": [
-    { "path": "files/console.ts", "target": "@logger/providers/console.ts" }
   ],
   "scaffolds": []
 }

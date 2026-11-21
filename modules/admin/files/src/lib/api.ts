@@ -33,7 +33,7 @@ import { apiBaseUrl } from "@admin/lib/auth";
 // here acts as the admin who is signed in, not as the client in the other tab.
 //
 // The two are exported so a plain `fetch` to the api (the shell's live nav counts, whose
-// paths come from module patches and have no route type) sends exactly what `api` sends.
+// paths come from module table rows and have no route type) sends exactly what `api` sends.
 export const API_HEADERS = { "x-auth-audience": "admin" } as const;
 export const API_CREDENTIALS: RequestCredentials = "include";
 

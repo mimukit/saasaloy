@@ -5,7 +5,7 @@
   "description": "An apps/api Hono Worker on Cloudflare, registered as the @api alias, with structured logging.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["logger", "logger-console"],
   "dependencies": [],
   "envVars": {
@@ -17,12 +17,32 @@
   "devVars": {
     "CORS_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:3002"
   },
-  "patches": [
+  "files": [],
+  "tables": [
     {
-      "file": "packages/env/src/services.ts",
-      "kind": "const-array",
-      "constName": "SERVICES",
-      "key": "name",
+      "id": "api.envPresets",
+      "file": "@api/env.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "api.baseRoutes",
+      "file": "@api/routes.generated.ts",
+      "shape": "routes"
+    },
+    {
+      "id": "api.routes",
+      "file": "@api/routes.generated.ts",
+      "shape": "routes"
+    },
+    {
+      "id": "worker.handlers",
+      "file": "@api/worker.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "env.services",
       "entry": {
         "name": "api",
         "file": "apps/api/.env",
@@ -32,20 +52,15 @@
       }
     },
     {
-      "file": "packages/tooling/src/targets.ts",
-      "kind": "const-array",
-      "constName": "DEPLOY_TARGETS",
-      "key": "service",
+      "table": "tooling.deployTargets",
       "entry": {
         "service": "api",
         "order": 10
-      }
+      },
+      "order": 10
     },
     {
-      "file": "packages/tooling/src/targets.ts",
-      "kind": "const-array",
-      "constName": "SMOKE_CHECKS",
-      "key": "id",
+      "table": "tooling.smokeChecks",
       "entry": {
         "id": "api-health",
         "service": "api",
@@ -53,9 +68,18 @@
         "status": 200,
         "body": "\"ok\""
       }
+    },
+    {
+      "table": "api.routes",
+      "path": "/health",
+      "call": "health",
+      "import": {
+        "name": "health",
+        "from": "./routes/health"
+      },
+      "order": 0
     }
   ],
-  "files": [],
   "scaffolds": [
     {
       "workspace": "apps/api",

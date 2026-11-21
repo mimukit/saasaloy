@@ -5,6 +5,7 @@ import { parseValues } from "./dotenv.ts";
 import { readExample } from "./example.ts";
 import { LOCAL_PROD_VALUES, LOCAL_VALUES } from "./services.ts";
 import type { EnvSource } from "./source.ts";
+import { envSources } from "./sources.generated.ts";
 
 // Where `pnpm env:setup` gets its values. A source is vendor-blind from here: it takes a
 // service and an environment, and it answers with a key-value map or it throws one of the
@@ -72,9 +73,7 @@ export const local: EnvSource = {
 };
 
 /**
- * Keep this line in exactly this shape: `export const sources = defineSources({ sources: [...] })`
- * with a real array literal. The codemod behind the `plugin-array` patch kind has nothing
- * to push into otherwise, and `saasaloy add env-infisical` fails silently.
+ * The registry: the built-in `local` source first, then every source in `config.sources`.
  */
 export function defineSources(config: {
   sources: EnvSource[];
@@ -98,4 +97,7 @@ export function defineSources(config: {
   };
 }
 
-export const sources = defineSources({ sources: [] });
+// The installed sources come from `./sources.generated.ts`, which the CLI writes on every
+// run: `saasaloy add env-infisical` adds its source there. A source of your own goes after
+// the spread.
+export const sources = defineSources({ sources: [...envSources] });

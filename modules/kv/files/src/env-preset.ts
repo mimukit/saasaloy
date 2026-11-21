@@ -1,5 +1,6 @@
 import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
+import { kvEnvPresets } from "./env-preset.generated";
 
 // The environment keys the kv capability reads. `apps/api/src/env.ts` folds this preset in, so a missing
 // key is named at the gate rather than thrown from inside a factory on the first request
@@ -32,13 +33,12 @@ const kvCorePreset = definePreset({
 });
 
 /**
- * Keep this line in exactly this shape: `export const kvPreset = definePreset({ extends: [...] })`
- * with a real array literal, and keep `kvCorePreset` its first entry. A provider module
- * appends its own preset with a `plugin-array` patch, and it fails silently otherwise.
+ * The capability's preset, then every provider preset. A provider module adds its own to
+ * `./env-preset.generated.ts`, which the CLI writes on every run. `kvCorePreset` stays the first entry.
  */
 export const kvPreset = definePreset({
   module: "@repo/kv",
-  extends: [kvCorePreset],
+  extends: [kvCorePreset, ...kvEnvPresets],
 });
 
 /** The preset a service's `env.ts` folds in. */

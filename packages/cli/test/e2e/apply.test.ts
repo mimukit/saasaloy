@@ -86,30 +86,38 @@ describe("e2e — init scaffolds a project the binary can then add into", () => 
 });
 
 describe("e2e — a preview writes nothing", () => {
+  // `init` already wrote the manifest and the lock, so a preview must leave their bytes.
+  async function state(): Promise<string> {
+    return [
+      await readFile(join(project, ".saasaloy", "manifest.json"), "utf-8"),
+      await readFile(join(project, "saasaloy-lock.json"), "utf-8"),
+    ].join("\n");
+  }
+
   it("--dry-run leaves the project exactly as it was", async () => {
+    const before = await state();
     const run = await add(["beta", "--dry-run"]);
 
     expect(run.code).toBe(0);
-    await expect(exists(join(project, ".saasaloy"))).resolves.toBeFalsy();
-    await expect(
-      exists(join(project, "saasaloy-lock.json"))
-    ).resolves.toBeFalsy();
+    await expect(state()).resolves.toBe(before);
     await expect(exists(join(project, "apps", "api"))).resolves.toBeFalsy();
   });
 
   it("--diff leaves the project exactly as it was", async () => {
+    const before = await state();
     const run = await add(["beta", "--diff"]);
 
     expect(run.code).toBe(0);
-    await expect(exists(join(project, ".saasaloy"))).resolves.toBeFalsy();
+    await expect(state()).resolves.toBe(before);
     await expect(exists(join(project, "apps", "api"))).resolves.toBeFalsy();
   });
 
   it("still shows the plan it would have applied", async () => {
     const run = await add(["beta", "--dry-run"]);
 
-    expect(run.output).toContain("alpha");
-    expect(run.output).toContain("beta");
+    // alpha's scaffold file and beta's own file, so the prerequisite is in the plan.
+    expect(run.output).toContain("apps/api/src/index.ts");
+    expect(run.output).toContain("apps/api/src/beta.ts");
   });
 });
 
@@ -124,8 +132,18 @@ describe("e2e — add writes the artifacts a project is made of", () => {
     expect(applied.code).toBe(0);
   });
 
-  it("installs the prerequisite before the module that needs it", () => {
-    expect(applied.output).toContain("will install: alpha");
+  it("installs the prerequisite and records only the module asked for", async () => {
+    const lock = await json<{
+      modules: Record<string, unknown>;
+      requested: string[];
+    }>(join(project, "saasaloy-lock.json"));
+
+    expect(applied.output).toContain("Applied alpha, beta");
+    expect(Object.keys(lock.modules).toSorted()).toStrictEqual([
+      "alpha",
+      "beta",
+    ]);
+    expect(lock.requested).toStrictEqual(["beta"]);
   });
 
   it("copies a scaffold's files to its workspace root", async () => {
@@ -152,11 +170,14 @@ describe("e2e — add writes the artifacts a project is made of", () => {
 
   it("records every written file in the manifest, with a content hash", async () => {
     const manifest = await json<{
-      managed: Record<string, { module: string; hash: string }>;
+      version: number;
+      files: Record<string, { module: string; hash: string; class: string }>;
     }>(join(project, ".saasaloy", "manifest.json"));
 
-    const entry = manifest.managed["apps/api/src/beta.ts"];
+    const entry = manifest.files["apps/api/src/beta.ts"];
+    expect(manifest.version).toBe(2);
     expect(entry?.module).toBe("beta");
+    expect(entry?.class).toBe("merged");
     expect(entry?.hash).toMatch(/^[\da-f]{64}$/);
   });
 
@@ -196,11 +217,10 @@ describe("e2e — add writes the artifacts a project is made of", () => {
     expect(pkg.dependencies?.zod).toBe("4.4.3");
   });
 
-  it("writes the env vars the module declared into .dev.vars.example", async () => {
-    // The file belongs beside the Worker that reads it, so it lands in the workspace the
-    // `@api` alias points into — apps/api here, because alpha's scaffold registered it.
+  it("writes the env vars the module declared into the key list", async () => {
+    // One tracked key list for every service (ADR 0039).
     const example = await readFile(
-      join(project, "apps", "api", ".dev.vars.example"),
+      join(project, "packages", "env", ".env.example"),
       "utf-8"
     );
 
@@ -246,24 +266,18 @@ describe("e2e — re-running is idempotent", () => {
   });
 });
 
-describe("e2e — a hand-edited file is held back, not clobbered", () => {
+describe("e2e — a hand-edited file is kept, not clobbered", () => {
   const edited = "export const beta = 999; // mine\n";
 
-  it("keeps the edit and reports it as drift", async () => {
+  it("keeps the edit under --force, because the release did not change the file", async () => {
     const target = join(project, "apps", "api", "src", "beta.ts");
     await writeFile(target, edited, "utf-8");
 
     const run = await add(["beta", "--force", "--yes"]);
 
     expect(run.code).toBe(0);
-    expect(run.output).toContain("drift");
+    expect(run.output).toContain("No file changes");
     await expect(readFile(target, "utf-8")).resolves.toBe(edited);
-  });
-
-  it("names it under a heading that says what to do about it", async () => {
-    const run = await add(["beta", "--force", "--yes"]);
-
-    expect(run.output).toContain("Needs merge");
   });
 });
 

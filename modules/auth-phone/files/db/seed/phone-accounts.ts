@@ -4,7 +4,7 @@ import type { SliceOptions } from "./slice";
 import type { ExtraAccounts } from "./slices/accounts";
 
 // `auth-phone`'s seed rows. They join `auth`'s `users` and `accounts` slices through the
-// `extraUsers` and `extraAccounts` patch points there, because the seed takes one slice
+// `seed.users` and `seed.accounts` tables there, because the seed takes one slice
 // per table. Two phone accounts, one for each way the sign-in screens treat a number:
 //
 // - `+12025550101` signs in with the dev password.

@@ -1,6 +1,6 @@
 ---
 name: saasaloy-api
-description: Runbook for the api capability — Hono on Cloudflare Workers with a statically chained, RPC-typed route table. Use when adding, changing, or debugging routes in apps/api, building a typed client with hc<AppType>, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, testing a route with Vitest in Node (app.request), or deploying it. Covers the chained-route registration convention, the mount-relative path rule, explicit status codes, the declare({...}) agent statement every route carries, and how features add their own wrangler bindings.
+description: Runbook for the api capability — Hono on Cloudflare Workers with a statically chained, RPC-typed route table. Use when adding, changing, or debugging routes in apps/api, building a typed client with hc<AppType>, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, testing a route with Vitest in Node (app.request), or deploying it. Covers the generated route table (`api.routes`), the mount-relative path rule, explicit status codes, the declare({...}) agent statement every route carries, and how features add their own wrangler bindings.
 ---
 
 # api — Hono on Cloudflare Workers
@@ -11,24 +11,22 @@ app running on Cloudflare Workers, built and served with Vite via `@cloudflare/v
 chained route table**: every mounted route is one `.route()` link in a single expression in
 `src/index.ts`, and the type of that expression is exported as `AppType`.
 
-The chain is what makes the api typed end to end. A client built with `hc<AppType>` reads every
-path, request body, and per-status response shape straight off that type. A route discovered at
-build time by scanning a folder carries none of that, which is why registration is an edit to the
-chain rather than a file drop.
+The chain is what makes the api typed end to end. A client built with `hc<AppType>` reads every path, request body, and per-status response shape straight off that type. A route discovered at build time by scanning a folder carries none of that, which is why registration is a row in the chain's table rather than a file drop.
 
 ## The entry, in shape
 
 ```ts
 // src/index.ts
-export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono<{
-  Bindings: Bindings;
-  Variables: Variables;
-}>()
-  .use("*", cors({ /* … */ }))
-  .use("*", requestCorrelation) // binds c.get("log") — see Logging, below
-  .onError((err, c) => { /* every thrown error leaves as the error envelope */ });
+import { apiBaseRoutes, apiRoutes } from "./routes.generated";
 
-const app = base.route("/health", health);
+export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = apiBaseRoutes(
+  new Hono<{ Bindings: Bindings; Variables: Variables }>()
+    .use("*", cors({ /* … */ }))
+    .use("*", requestCorrelation) // binds c.get("log") — see Logging, below
+    .onError((err, c) => { /* every thrown error leaves as the error envelope */ })
+);
+
+const app = apiRoutes(base); // `/health` is the first row
 
 export type AppType = typeof app;
 export default app;
@@ -46,7 +44,7 @@ export function defineWorker(config: WorkerConfig): ExportedHandler<never> {
 
 export const worker: ExportedHandler<never> = defineWorker({
   fetch: app.fetch,
-  handlers: [],
+  handlers: [...workerHandlers], // from ./worker.generated.ts
 });
 
 export default worker;
@@ -59,12 +57,7 @@ Two bindings, and the split between them is the point:
   freezes `base` at `Hono<{ Bindings: Bindings; Variables: Variables }>`, so mounting on it cannot widen `AppType`.
 - **`app`** is the typed chain. Everything a caller should see through `hc` goes here.
 
-**Keep every app-wide middleware as a link in `base`'s chain**, not as a `base.use("*", …)`
-statement underneath. A `chained-route` patch with `exportName: "base"` appends to that
-initializer, and Hono runs the handlers a request matches in registration order. Written as a
-statement, the middleware would register *after* the catch-all it is meant to wrap: `/auth`
-responses would come back with no CORS headers, and `c.get("log")` would be undefined inside that
-handler.
+**Keep every app-wide middleware as a link in `base`'s chain**, not as a `base.use("*", …)` statement underneath. `apiBaseRoutes` mounts every `api.baseRoutes` row after that initializer, and Hono runs the handlers a request matches in registration order. Written as a statement, the middleware would register *after* the catch-all it is meant to wrap: `/auth` responses would come back with no CORS headers, and `c.get("log")` would be undefined inside that handler.
 
 ### `/auth` and `/admin/auth` are the auth module's
 
@@ -105,35 +98,30 @@ export const widgets = new Hono()
 
 Each route carries one `declare({...})` link, its agent statement. See "Every route states whether agents may call it" below.
 
-**Named, not default.** The `chained-route` codemod writes a named import for the handler and
-refuses to wire a link whose binding resolves to a default import, so `export default widgets`
-leaves the route unmountable by patch.
+**Named, not default.** The generated `src/routes.generated.ts` imports each router by name, so `export default widgets` leaves the route with nothing its row can import.
 
-**2. Add the link to the chain** in `src/index.ts`:
+**2. Add the link to the chain.** A route of your own goes after the generated ones in `src/index.ts`:
 
 ```ts
 import { widgets } from "./routes/widgets";
 
-const app = base.route("/health", health).route("/widgets", widgets);
+const app = apiRoutes(base).route("/widgets", widgets);
 ```
 
-A module does step 2 through a **`chained-route` patch** in its `registry-item.json`, not by hand:
+Never edit `src/routes.generated.ts`. The CLI writes it in full on every run, and `saasaloy update` refuses when it was edited.
+
+A module does step 2 through a **row of the `api.routes` table**, under `entries` in its `registry-item.json`, not by hand:
 
 ```json
 {
-  "kind": "chained-route",
-  "file": "apps/api/src/index.ts",
-  "exportName": "default",
+  "table": "api.routes",
   "path": "/widgets",
   "call": "widgets",
   "import": { "name": "widgets", "from": "./routes/widgets" }
 }
 ```
 
-`saasaloy add` appends the link and its import; `saasaloy remove` takes both back out, leaving the
-file byte-identical to its pre-add state. `exportName: "default"` resolves through
-`export default app` to the `const app = …` declarator, so the chain is edited and the export line
-is untouched. Use `exportName: "base"` for a handler that must stay out of `AppType`.
+`apiRoutes(app)` chains every `api.routes` row onto `app`, with its import. Rows sort by `order` (default 1000), then by module name; `/health` has `order: 0`, so it comes first. The table keeps only the first row for a path. `saasaloy remove` renders the file without the module, so its row goes. A handler that must stay out of `AppType` takes a row of the `api.baseRoutes` table instead, and `apiBaseRoutes` mounts it on `base`.
 
 ### Keep the chain unbroken
 
@@ -283,16 +271,13 @@ A nested binding is patched by the same `wrangler-binding` kind with a dotted `b
 
 ## The handler table: non-`fetch` exports register in `src/worker.ts`
 
-A Worker exports more than `fetch`. A queue consumer is a `queue` export, a Cron Trigger is a `scheduled` export, and both are the Worker's, not any one route's. They register in the `handlers` array in `src/worker.ts`, which is a registration table for the same reason the route chain is one: a table yields a type, and a `remove` that takes the line back out.
+A Worker exports more than `fetch`. A queue consumer is a `queue` export, a Cron Trigger is a `scheduled` export, and both are the Worker's, not any one route's. They register in the `handlers` array in `src/worker.ts`, which spreads the generated `worker.handlers` table for the same reason the route chain is one: a table yields a type, and a `remove` that takes the row back out.
 
-A module that owns such an export ships a function returning a `HandlerSet`, then appends the call with a `plugin-array` patch:
+A module that owns such an export ships a function returning a `HandlerSet`, then adds the call as a `worker.handlers` row. The CLI writes it into `src/worker.generated.ts`:
 
 ```jsonc
 {
-  "kind": "plugin-array",
-  "file": "apps/api/src/worker.ts",
-  "exportName": "worker",
-  "arrayProp": "handlers",
+  "table": "worker.handlers",
   "call": "cloudflareQueueHandlers",
   "import": { "name": "cloudflareQueueHandlers", "from": "@repo/queue/providers/cloudflare" },
 }
@@ -303,7 +288,7 @@ Four rules hold here:
 - **The `import.from` is the package export, not a scaffold alias.** `apps/api` reaches into another workspace, so the specifier is `@repo/queue/providers/cloudflare`, resolved by the `"./providers/*"` entry in `packages/queue`'s `exports` map. `@queue` is a descriptor-target alias the CLI uses to place files; it is not a TypeScript path and does not resolve at runtime.
 - **`HandlerSet` is declared in `worker.ts`, not imported from a capability.** `api` depends on no capability, and every capability that registers a handler depends on `api`. An import the other way would invert that.
 - **`defineWorker` exports a hook only when a set declares it.** Cloudflare reads a `queue` export as a promise that the Worker consumes a queue, so an empty stub would claim a consumer that does not exist.
-- **The deploy tooling is not the registration path.** A provider patches `wrangler.jsonc` and `worker.ts` directly. `pnpm deploy:production` hands that config to `wrangler deploy` as it is, and wrangler creates the resources the bindings name.
+- **The deploy tooling is not the registration path.** A provider patches `wrangler.jsonc` and adds its `worker.handlers` row directly. `pnpm deploy:production` hands that config to `wrangler deploy` as it is, and wrangler creates the resources the bindings name.
 
 ## Logging: `c.get("log")`, never `console.log`
 
@@ -494,8 +479,7 @@ The api deploys first. `saasaloy add api` appends `{ service: "api", order: 10 }
 
 ## Conventions to honor
 
-- **Register a route with a `chained-route` patch**, not a file drop. The entry is edited on
-  purpose, and `saasaloy remove` reverses the edit.
+- **Register a route with an `api.routes` row**, not a file drop. The CLI writes the row into `src/routes.generated.ts`, and `saasaloy remove` takes it out, because the render without the module has no such row.
 - **Build every sub-app as one unbroken chain.** A statement-per-route file typechecks and serves
   correctly while handing the client an empty type.
 - **Pass the status code to `c.json`** on every path, success included.

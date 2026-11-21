@@ -13,7 +13,7 @@ Organization-owned API keys scoped through can(), on multitenant, plus an API ke
 | Tier | driver |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api-keys`](api-keys.md), [`multitenant`](multitenant.md) |
 | Requires one of | none |
 | Conflicts with | [`api-keys-user`](api-keys-user.md) |
@@ -37,10 +37,18 @@ Files:
 
 ## Patches it applies
 
-| File | Kind |
+This module patches no file.
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
 |---|---|
-| `packages/auth/src/tenant.ts` | `plugin-array` |
-| `apps/admin/src/components/nav.ts` | `nav-entry` |
+| `multitenant.resolvers` | 1 |
+| `admin.nav` | 1 |
 
 ## See the rest
 

@@ -1,6 +1,6 @@
 ---
 name: create-provider
-description: Author a provider module for a Saasaloy capability that owns a provider interface (modules/<capability>-<provider>/) — the descriptor, the single provider file, and the registration patch. Use when adding a second (or third) implementation behind an existing capability's interface — "add a Resend/SES/Plunk email provider", "support Postmark", "write an email-<x> module" — even if the word "provider" isn't used.
+description: Author a provider module for a Saasaloy capability that owns a provider interface (modules/<capability>-<provider>/) — the descriptor, the single provider file, and the registration row in `entries`. Use when adding a second (or third) implementation behind an existing capability's interface — "add a Resend/SES/Plunk email provider", "support Postmark", "write an email-<x> module" — even if the word "provider" isn't used.
 ---
 
 # create-provider
@@ -67,25 +67,14 @@ Six rules hold for every mode:
    recorded in `CONTEXT.md` → *Provider module* — don't add a third tier to fix it.
 3. **One file, into the capability's `providers/` folder**, via the capability's alias:
    `{ "path": "files/<provider>.ts", "target": "@<capability>/providers/<provider>.ts" }`.
-4. **Register with a `plugin-array` patch** on the capability's barrel. This is the existing
-   codemod (`packages/cli/src/lib/patch/ts-module.ts`), unchanged — it adds the import and appends
-   the call idempotently. Dropping the file registers nothing; nothing scans `providers/`. That
-   split is now the registry-wide rule rather than a provider quirk — an `api` route registers the
-   same way, through the `chained-route` patch (ADR 0028) — so a target file that is a **statically
-   named list** is what you should expect at every extension point.
+4. **Register with an `entries` row in the capability's `<capability>.providers` table:** `{ "table": "email.providers", "call": "resend", "import": { "name": "resend", "from": "./providers/resend" } }`. The capability declares that table in its own `tables`, and the CLI writes it into `@<capability>/providers.generated.ts` on every run. The barrel spreads it: `defineEmail({ providers: [...emailProviders] })`. `import.from` is relative to the generated file, which sits beside the barrel, so `./providers/<provider>` resolves. Dropping the file registers nothing; nothing scans `providers/`. A remove is a render without the module, so the row and its import leave the generated file. That split is now the registry-wide rule rather than a provider quirk. An `api` route registers the same way, through an `api.routes` row (ADR 0028), so a **statically named list** in a generated file is what you should expect at every extension point. A provider that reads env keys of its own also adds its preset as a row of `<capability>.envPresets`, as `email-plunk` does with `plunkEnv`. See `create-module`'s `tables` and `entries` notes for every field.
 5. **The npm dependency, if any, goes in the *capability's* `package.json`** through a
    `package-json-dependency` patch — never the descriptor's `dependencies[]` (which merges into the
    project root) and never another workspace. Only the capability's own workspace may import a
    provider SDK (ADR 0020).
 6. **A vendor type is an `import type`, never an ambient global.** The barrel imports every registered provider, so any workspace that imports the capability compiles your file, `packages/email-react` included, and it lists no vendor types of its own. Write `import type { KVNamespace } from "@cloudflare/workers-types"`, not a bare `KVNamespace` that resolves only where a tsconfig lists the package in `types`. Pin the types package as a `devDependencies` entry of the capability's `package.json` with a `package-json-dependency` patch, as rule 5 does for an SDK. The core lists neither the package nor a `types` entry, so a project with only the local provider installs nothing from the vendor (issue #253). Two cores are exceptions, and both for one reason: `cloudflare:workers` is a module only the ambient declarations name, so no `import type` can replace it. `packages/subscription` keeps the package and the `types` entry because `subscription-stripe` imports `cloudflare:workers`. `packages/queue` keeps them because its `jobs` array imports the `@repo/subscription` barrel, and `queue-cloudflare` adds no patch. Both providers still import their own types explicitly.
 
-A provider that carries a **checked-in constant** — a page size, a default the vendor does not
-supply — puts it in a config section rather than in its one runtime file or in an env var. That is
-a second file (`files/config/<capability>-<provider>.ts` → `@config/sections/…`) and a second
-`plugin-array` patch, on `packages/config/src/sections.ts`. Think twice first: a value that differs
-between two deployments of one project is an `envVars` entry, and a value the capability owns
-belongs in the *capability's* section, not the provider's. See `create-module`'s `config` bullet and
-ADR 0052.
+A provider that carries a **checked-in constant** — a page size, a default the vendor does not supply — puts it in a config section rather than in its one runtime file or in an env var. That is a second file (`files/config/<capability>-<provider>.ts` → `@config/sections/…`) and a second `entries` row, in the `config.sections` table. Think twice first: a value that differs between two deployments of one project is an `envVars` entry, and a value the capability owns belongs in the *capability's* section, not the provider's. See `create-module`'s `config` bullet and ADR 0052.
 
 Provider modules ship **no skill folder of their own**. The capability's skill is where a provider
 gets documented; add a row to its provider table and, if the provider needs out-of-band setup, a
@@ -116,7 +105,7 @@ one is its own module:
 |---|---|---|
 | `patches` → `apps/api/wrangler.jsonc` | a binding | — |
 | `patches` → the capability's `package.json` | `@cloudflare/workers-types`, a devDependency | the SDK dependency |
-| `patches` → the capability's barrel | register | register |
+| `entries` → `<capability>.providers` | register | register |
 | `envVars` | none — the binding *is* the credential | the API key |
 
 One mode below per capability that owns a provider interface. The rules above hold for all of them;
@@ -168,13 +157,15 @@ Contract points that are easy to get wrong:
   "name": "email-resend",
   "type": "saasaloy:feature",
   "dependsOn": ["email"],
+  "requires": { "saasaloy": ">=0.10.0" },   // the first CLI that reads `entries`
   "dependencies": [],                       // stays empty — see the patch below
   "envVars": { "RESEND_API_KEY": "…" },     // provider-owned, never in the core
   "patches": [
     { "file": "packages/email/package.json", "kind": "package-json-dependency",
-      "section": "dependencies", "name": "resend", "range": "4.0.1" },
-    { "file": "packages/email/src/index.ts", "kind": "plugin-array",
-      "exportName": "email", "arrayProp": "providers", "call": "resend",
+      "section": "dependencies", "name": "resend", "range": "4.0.1" }
+  ],
+  "entries": [
+    { "table": "email.providers", "call": "resend",
       "import": { "name": "resend", "from": "./providers/resend" } }
   ],
   "files": [{ "path": "files/resend.ts", "target": "@email/providers/resend.ts" }],
@@ -245,9 +236,8 @@ secret, no binding):
   "dependsOn": ["logger"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
-    { "file": "packages/logger/src/index.ts", "kind": "plugin-array",
-      "exportName": "logger", "arrayProp": "providers", "call": "consoleLogger",
+  "entries": [
+    { "table": "logger.providers", "call": "consoleLogger",
       "import": { "name": "consoleLogger", "from": "./providers/console" } }
   ],
   "files": [{ "path": "files/console.ts", "target": "@logger/providers/console.ts" }],
@@ -320,9 +310,8 @@ with the same caller response, and `providerCode` keeps the vendor's own code fo
   "dependsOn": ["sms"],
   "dependencies": [],
   "envVars": { "TWILIO_ACCOUNT_SID": "…", "TWILIO_AUTH_TOKEN": "…" },
-  "patches": [
-    { "file": "packages/sms/src/index.ts", "kind": "plugin-array",
-      "exportName": "sms", "arrayProp": "providers", "call": "twilio",
+  "entries": [
+    { "table": "sms.providers", "call": "twilio",
       "import": { "name": "twilio", "from": "./providers/twilio" } }
   ],
   "files": [{ "path": "files/twilio.ts", "target": "@sms/providers/twilio.ts" }],
@@ -379,11 +368,7 @@ What a provider copied from `email` gets wrong here:
   seen and let the rest fall through to `provider_error` / `retryable: false`. A wrong
   `retryable: true` means the job runs twice.
 
-**The second export, when the platform delivers rather than being polled.** A provider whose
-service pushes work back into the Worker (a Queues consumer, a Cron Trigger) ships a *second*
-factory in the same file returning `{ queue?, scheduled? }`, and registers it with a second
-`plugin-array` patch on `apps/api/src/worker.ts`. That is the handler table from ADR 0033, and it
-is the only route for a non-`fetch` Worker export. Two rules bind that half:
+**The second export, when the platform delivers rather than being polled.** A provider whose service pushes work back into the Worker (a Queues consumer, a Cron Trigger) ships a *second* factory in the same file returning `{ queue?, scheduled? }`, and registers it with a second `entries` row, in the `worker.handlers` table that `apps/api/src/worker.ts` spreads from `./worker.generated.ts`. That is the handler table from ADR 0033, and it is the only route for a non-`fetch` Worker export. Two rules bind that half:
 
 - **Gate on `QUEUE_PROVIDER` and return with one warn line when it names another provider.** The
   module installs as a unit, so a project that switched providers without removing yours would
@@ -405,9 +390,8 @@ is the only route for a non-`fetch` Worker export. Two rules bind that half:
   "dependsOn": ["queue"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
-    { "file": "packages/queue/src/index.ts", "kind": "plugin-array",
-      "exportName": "queue", "arrayProp": "providers", "call": "memory",
+  "entries": [
+    { "table": "queue.providers", "call": "memory",
       "import": { "name": "memory", "from": "./providers/memory" } }
   ],
   "files": [{ "path": "files/memory.ts", "target": "@queue/providers/memory.ts" }],
@@ -415,10 +399,7 @@ is the only route for a non-`fetch` Worker export. Two rules bind that half:
 }
 ```
 
-**Descriptor, binding flavour** (`queue-cloudflare`): the same `plugin-array` patch, plus a
-`wrangler-binding` patch per binding and a second `plugin-array` for the handler set. The binding
-patches use the **dotted `bindingType`** the CLI gained for this capability, so a nested Wrangler
-key is one patch and removal unwinds the parents it created. A resource name lives in one Cloudflare account beside every other project's, so it starts with `{{PROJECT_NAME}}`, which `saasaloy add` renders in module files and patch entries alike:
+**Descriptor, binding flavour** (`queue-cloudflare`): the same `queue.providers` row, plus a `wrangler-binding` patch per binding and a second row, in `worker.handlers`, for the handler set. The binding patches use the **dotted `bindingType`** the CLI gained for this capability, so a nested Wrangler key is one patch, and a render without the module has neither the entry nor the parents it created. A resource name lives in one Cloudflare account beside every other project's, so it starts with `{{PROJECT_NAME}}`, which `saasaloy add` renders in module files and patch entries alike:
 
 ```jsonc
 { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
@@ -427,11 +408,19 @@ key is one patch and removal unwinds the parents it created. A resource name liv
   "bindingType": "queues.consumers", "matchOn": "queue",
   "entry": { "queue": "{{PROJECT_NAME}}-jobs", "max_batch_size": 10, "max_retries": 3 } },
 { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
-  "bindingType": "triggers.crons", "entry": "* * * * *" },
-{ "file": "apps/api/src/worker.ts", "kind": "plugin-array",
-  "exportName": "worker", "arrayProp": "handlers", "call": "cloudflareQueueHandlers",
-  "import": { "name": "cloudflareQueueHandlers", "from": "@repo/queue/providers/cloudflare" } }
+  "bindingType": "triggers.crons", "entry": "* * * * *" }
 ```
+
+```jsonc
+"entries": [
+  { "table": "queue.providers", "call": "cloudflare",
+    "import": { "name": "cloudflare", "from": "./providers/cloudflare" } },
+  { "table": "worker.handlers", "call": "cloudflareQueueHandlers",
+    "import": { "name": "cloudflareQueueHandlers", "from": "@repo/queue/providers/cloudflare" } }
+]
+```
+
+The `worker.handlers` row imports by package name, `@repo/queue/providers/cloudflare`, because its generated file sits in `apps/api/src`, not beside the provider.
 
 Pick `matchOn` to name the entry's own identifying field: `binding` for a producer (the default),
 `queue` for a consumer, and nothing at all for `triggers.crons`, whose entries are bare strings
@@ -504,7 +493,7 @@ status out of `KV PUT failed: 429 …` and maps 429 and the 5xx family to retrya
 to `provider_error` / `retryable: false`.
 
 **Descriptor, binding flavour (`kv-cloudflare`):** one `kv_namespaces` entry matched on `binding`,
-three `ratelimits` entries matched on `name`, the registration patch, and the rule 6 devDependency patch.
+three `ratelimits` entries matched on `name`, the rule 6 devDependency patch, and the registration row.
 
 ```jsonc
 {
@@ -521,11 +510,12 @@ three `ratelimits` entries matched on `name`, the registration patch, and the ru
       "bindingType": "ratelimits", "matchOn": "name",
       "entry": { "name": "RL_STRICT", "namespace_id": "1001",
                  "simple": { "limit": 10, "period": 10 } } },
-    { "file": "packages/kv/src/index.ts", "kind": "plugin-array",
-      "exportName": "kv", "arrayProp": "providers", "call": "cloudflare",
-      "import": { "name": "cloudflare", "from": "./providers/cloudflare" } },
     { "file": "packages/kv/package.json", "kind": "package-json-dependency",
       "section": "devDependencies", "name": "@cloudflare/workers-types", "range": "5.20261001.1" }
+  ],
+  "entries": [
+    { "table": "kv.providers", "call": "cloudflare",
+      "import": { "name": "cloudflare", "from": "./providers/cloudflare" } }
   ],
   "files": [{ "path": "files/cloudflare.ts", "target": "@kv/providers/cloudflare.ts" }],
   "scaffolds": []
@@ -560,16 +550,7 @@ also the one where copying `email` goes wrong fastest. Five rules, in the order 
   `requireSubscriptionStore`. A state change is reported, not written: return a `CheckoutResult.event`
   when your vendor has no webhook, or let your webhook enqueue one when it does. Never both — a
   provider that does both writes the projection twice and races itself.
-- **Wrap the vendor's Better Auth plugin when it has one.** Better Auth ships plugins for Stripe,
-  Polar, Dodo and Autumn, and each owns customer creation, checkout, the portal and a
-  signature-verified webhook. Re-implementing that against the raw SDK is a large amount of vendor
-  code you would then have to keep correct. Export a second factory, `<vendor>AuthPlugin()`, from
-  the same file and register it with a second `plugin-array` patch on `packages/auth/src/auth.ts`.
-  Two exports, still one file. **Build the vendor client lazily.** That factory is called while
-  `packages/auth/src/auth.ts` is being imported, so a client built eagerly makes your vendor's
-  secret a requirement for signing in, and takes `SUBSCRIPTION_PROVIDER=console` away from a
-  contributor who has no account. `subscription-stripe` hands the plugin a `Proxy` that builds the
-  client on the first property read; copy that shape.
+- **Wrap the vendor's Better Auth plugin when it has one.** Better Auth ships plugins for Stripe, Polar, Dodo and Autumn, and each owns customer creation, checkout, the portal and a signature-verified webhook. Re-implementing that against the raw SDK is a large amount of vendor code you would then have to keep correct. Export a second factory, `<vendor>AuthPlugin()`, from the same file and register it with a second `entries` row, in the `auth.plugins` table that `packages/auth/src/auth.ts` spreads (and in `adminAuth.plugins` when the admin auth instance needs it too). Two exports, still one file. **Build the vendor client lazily.** That factory is called while `packages/auth/src/auth.ts` is being imported, so a client built eagerly makes your vendor's secret a requirement for signing in, and takes `SUBSCRIPTION_PROVIDER=console` away from a contributor who has no account. `subscription-stripe` hands the plugin a `Proxy` that builds the client on the first property read; copy that shape.
 - **Map the plugin's model onto the core's columns, and check the map covers every field the
   plugin writes.** Better Auth plugins let a project rename the model and every field
   (`schema.subscription.modelName` + `fields`). `modelName` is the **Drizzle export key**
@@ -590,22 +571,26 @@ Codes are `invalid_request`, `not_found`, `card_declined`, `rate_limited`, `webh
 `provider_error`. Map only vendor codes you have seen, keep the raw one in `providerCode`, and set
 `retryable` honestly: a rate limit and a connection failure earn it, a declined card never does.
 
-**Descriptor** (`subscription-stripe`): two `plugin-array` patches — one per door Stripe reaches the
-project through — and one `package-json-dependency` per vendor package, into the **capability's**
-`package.json` and never into `packages/auth`:
+**Descriptor** (`subscription-stripe`): one `entries` row per door Stripe reaches the project through, and one `package-json-dependency` patch per vendor package, into the **capability's** `package.json` and never into `packages/auth`:
 
 ```jsonc
-{ "file": "packages/subscription/src/index.ts", "kind": "plugin-array",
-  "exportName": "subscription", "arrayProp": "providers", "call": "stripeSubscription",
-  "import": { "name": "stripeSubscription", "from": "./providers/stripe" } },
-{ "file": "packages/auth/src/auth.ts", "kind": "plugin-array",
-  "exportName": "auth", "arrayProp": "plugins", "call": "stripeAuthPlugin",
-  "import": { "name": "stripeAuthPlugin", "from": "@repo/subscription/providers/stripe" } },
-{ "file": "packages/subscription/package.json", "kind": "package-json-dependency",
-  "section": "dependencies", "name": "stripe", "range": "22.6.1" },
-{ "file": "packages/subscription/package.json", "kind": "package-json-dependency",
-  "section": "peerDependencies", "name": "better-auth", "range": "1.7.3" }
+"patches": [
+  { "file": "packages/subscription/package.json", "kind": "package-json-dependency",
+    "section": "dependencies", "name": "stripe", "range": "22.6.1" },
+  { "file": "packages/subscription/package.json", "kind": "package-json-dependency",
+    "section": "peerDependencies", "name": "better-auth", "range": "1.7.3" }
+],
+"entries": [
+  { "table": "subscription.providers", "call": "stripeSubscription",
+    "import": { "name": "stripeSubscription", "from": "./providers/stripe" } },
+  { "table": "auth.plugins", "call": "stripeAuthPlugin",
+    "import": { "name": "stripeAuthPlugin", "from": "@repo/subscription/providers/stripe" } },
+  { "table": "adminAuth.plugins", "call": "stripeAuthPlugin",
+    "import": { "name": "stripeAuthPlugin", "from": "@repo/subscription/providers/stripe" } }
+]
 ```
+
+The `auth.plugins` rows import by package name, because their generated file sits in `packages/auth/src`, not beside the provider.
 
 The vendor's plugin peers on `better-auth`, so declare that as a **peer** dependency of
 `packages/subscription` rather than a direct one. Two copies of Better Auth in one project is two
@@ -618,7 +603,7 @@ session implementations.
 
 **The local provider is not optional here, and it is not a mock.** `subscription-console` runs the whole
 flow — checkout, portal, change-plan, cancel, restore — with no account and no network, by
-returning the event the route enqueues. It has no auth plugin, so it patches one array. Two things
+returning the event the route enqueues. It has no auth plugin, so it adds one row, to `subscription.providers`. Two things
 it needs that a vendor provider does not: ids derived from the subject, so a second call converges
 on the row the first created instead of stacking a history row; and `SubjectInput.current`, the
 live row the route reads for it, because `cancel` and `restore` carry no plan and a provider with
@@ -657,7 +642,7 @@ Five contract points, and each one is a way to get a `storage-<x>` wrong:
 
 Keys arrive already built and already checked. The core runs `assertValidKey` before it calls you, so never repair, re-prefix or re-encode a key; escape it for a URL if your vendor needs that, and nothing more.
 
-**Descriptor, binding-plus-SDK flavour.** `storage-cloudflare` needs all three patch kinds, which is the fullest a provider ever gets:
+**Descriptor, binding-plus-SDK flavour.** `storage-cloudflare` needs both patch kinds a provider uses and a registration row, which is the fullest a provider ever gets:
 
 ```jsonc
 {
@@ -672,18 +657,19 @@ Keys arrive already built and already checked. The core runs `assertValidKey` be
       "matchOn": "binding" },
     { "file": "packages/storage/package.json", "kind": "package-json-dependency",
       "section": "dependencies", "name": "aws4fetch", "range": "1.0.20" },
-    { "file": "packages/storage/src/index.ts", "kind": "plugin-array",
-      "exportName": "storage", "arrayProp": "providers", "call": "cloudflare",
-      "import": { "name": "cloudflare", "from": "./providers/cloudflare" } },
     { "file": "packages/storage/package.json", "kind": "package-json-dependency",
       "section": "devDependencies", "name": "@cloudflare/workers-types", "range": "5.20261001.1" }
+  ],
+  "entries": [
+    { "table": "storage.providers", "call": "cloudflare",
+      "import": { "name": "cloudflare", "from": "./providers/cloudflare" } }
   ],
   "files": [{ "path": "files/cloudflare.ts", "target": "@storage/providers/cloudflare.ts" }],
   "scaffolds": []
 }
 ```
 
-`r2_buckets` entries are keyed by `binding`, which is also the `matchOn` default. It is written out above so a reader comparing this with `email-cloudflare`'s `matchOn: "name"` does not have to guess which one applies here. `storage-memory` is the minimal end of the same shape: no binding, no dependency, no secret, one `plugin-array` patch.
+`r2_buckets` entries are keyed by `binding`, which is also the `matchOn` default. It is written out above so a reader comparing this with `email-cloudflare`'s `matchOn: "name"` does not have to guess which one applies here. `storage-memory` is the minimal end of the same shape: no binding, no dependency, no secret, one `storage.providers` row.
 
 **Testing a storage provider in this repo.** The root `node_modules` holds dev tooling only, so a provider's npm dependency is not installed here and `../provider` does not resolve to the capability core. Both `storage-cloudflare` and `storage-memory` carry a repo-only `provider.ts` at the module root that re-exports `modules/storage/files/src/provider.ts`, and `storage-cloudflare` carries an `aws4fetch-stub.ts` its test maps onto the `aws4fetch` specifier with a `node:module` resolve hook. Neither file is in `files[]`, so neither ships. Copy that arrangement rather than skipping the tests. A fake binding proves the provider calls the vendor correctly; a real bucket is what proves the vendor call works.
 
@@ -696,11 +682,7 @@ pnpm play:reset
 cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-, subscription-, storage-<provider>
 ```
 
-That resolves `email` first, scaffolds `packages/email`, drops your file, and applies your patches
-in one run — a provider's file target and patch point both resolve against a workspace that didn't
-exist when the run started (`buildPlan` collects scaffold aliases up front; patches execute after
-every file is written). Then run it **a second time** and confirm it is a no-op: one entry in the
-`providers` array, one binding in `wrangler.jsonc`, comments intact.
+That resolves `email` first, scaffolds `packages/email`, drops your file, applies your patches and writes `packages/email/src/providers.generated.ts` in one run. A provider's file target and its table both resolve against a workspace that did not exist when the run started, because the render sees every module of the run at once. Then run it **a second time** and confirm it is a no-op: one call to your factory in the generated file, one binding in `wrangler.jsonc`, comments intact.
 
 ## Authoring checklist
 
@@ -708,10 +690,8 @@ every file is written). Then run it **a second time** and confirm it is a no-op:
 - [ ] `modules/<capability>-<provider>/registry-item.json`, `name` matching the directory.
 - [ ] `type: saasaloy:feature`, `dependsOn: ["<capability>"]`, `scaffolds: []`.
 - [ ] Exactly one file, targeted at `@<capability>/providers/<provider>.ts`.
-- [ ] A `plugin-array` patch registering it on the capability's barrel.
-- [ ] A non-`fetch` Worker export, if any, registered through the `handlers` array in
-      `apps/api/src/worker.ts` with a second `plugin-array` patch, and gated on the capability's
-      `<CAP>_PROVIDER` variable.
+- [ ] An `entries` row registering it in the capability's `<capability>.providers` table, and `requires.saasaloy` set to `>=0.10.0`.
+- [ ] A non-`fetch` Worker export, if any, registered with a second `entries` row in the `worker.handlers` table, and gated on the capability's `<CAP>_PROVIDER` variable.
 - [ ] Any npm dependency patched into the **capability's** `package.json`, exact-pinned.
 - [ ] Vendor types named with `import type`, and the types package pinned as a devDependency of
       the capability (rule 6).
@@ -720,5 +700,4 @@ every file is written). Then run it **a second time** and confirm it is a no-op:
 - [ ] Failures normalized into the capability's error type, `retryable` set honestly.
 - [ ] No skill folder — the capability's skill gains a row (and a runbook section if it needs one).
 - [ ] Installed twice on a clean playground: second run changes nothing.
-- [ ] Removed again: `saasaloy remove <capability>-<provider>` leaves every patched file
-      byte-identical to before the add.
+- [ ] Removed again: `saasaloy remove <capability>-<provider>` renders the project without the module, so the row leaves the generated file and every patched file is byte-identical to before the add.

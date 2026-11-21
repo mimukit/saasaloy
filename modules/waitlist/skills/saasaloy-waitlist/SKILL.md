@@ -1,16 +1,11 @@
 ---
 name: saasaloy-waitlist
-description: Runbook for the waitlist feature — a landing-page email waitlist proving the api chained-route patch and the database/ui file-drop conventions end to end. Use when adding, changing, or debugging the waitlist route, schema, table, or block, placing the block on a page, running migrations after install, or setting PUBLIC_API_URL.
+description: Runbook for the waitlist feature — a landing-page email waitlist proving the api route table and the database/ui file-drop conventions end to end. Use when adding, changing, or debugging the waitlist route, schema, table, or block, placing the block on a page, running migrations after install, or setting PUBLIC_API_URL.
 ---
 
 # waitlist — landing-page email waitlist
 
-`waitlist` is a **feature module** (`saasaloy:feature`): it drops files into the extension points
-`api`, `database`, `validators`, `packages/ui` and `apps/web` already established, registers its
-route with one `chained-route` patch, and leaves one step to you — placing its form on a page (see
-[Wire-up](#wire-up)). It depends on `api`, `database` and `validators`, resolved and installed
-automatically. It names no database **driver**: `database`'s own `requiresOneOf` is what guarantees
-one is present.
+`waitlist` is a **feature module** (`saasaloy:feature`): it drops files into the extension points `api`, `database`, `validators`, `packages/ui` and `apps/web` already established, registers its route with one `api.routes` row, and leaves one step to you, placing its form on a page (see [Wire-up](#wire-up)). It depends on `api`, `database` and `validators`, resolved and installed automatically. It names no database **driver**: `database`'s own `requiresOneOf` is what guarantees one is present.
 
 ## Either database driver
 
@@ -100,17 +95,15 @@ those two lines out yourself, or the page stops building.
 
 ## What it patches
 
-Three patches; `saasaloy remove` reverses only the first — it does not uninstall npm dependencies,
-so the other two are dropped with a warning and uninstalling leaves them in
-`apps/web/package.json`:
+One table row and two patches. `saasaloy remove` takes out all three, because the render without the module has none of them; run `pnpm install` afterwards:
 
-| Patch | Target | Why |
+| Row or patch | Target | Why |
 |---|---|---|
-| `chained-route` | `apps/api/src/index.ts` | mounts the route at `POST /waitlist` **and** puts it in `AppType` |
+| `api.routes` row | `apps/api/src/routes.generated.ts` | mounts the route at `POST /waitlist` **and** puts it in `AppType` |
 | `package-json-dependency` | `apps/web/package.json` | `hono`, for `hc` from `hono/client` |
 | `package-json-dependency` | `apps/web/package.json` | `@repo/api`, for `type { AppType }` |
 
-The route link is a patch, not a drop, because a folder scan gives the chain no type to carry. See
+The route link is a table row, not a drop, because a folder scan gives the chain no type to carry. See
 the `saasaloy-api` skill for the convention. Nothing here edits `src/schema.ts` or `index.astro`.
 
 The `hono` patch carries a **version**, `4.13.5`, and it is the only versioned patch range in the
@@ -139,7 +132,7 @@ one of them, because this module works with both.
 
 `created_at` used to be `integer("created_at", { mode: "timestamp" })`, which stores **whole
 seconds**. The SQLite variant now uses `mode: "timestamp_ms"`, which stores **milliseconds**. The
-integers already in the table do not change when `saasaloy update waitlist` rewrites the schema
+integers already in the table do not change when `saasaloy update` rewrites the schema
 file — only the way Drizzle reads them changes, so every pre-existing row comes back dated near
 1970.
 
@@ -162,7 +155,7 @@ This module used to name its table `waitlist`. It now names it `waitlist_entries
 export is `waitlistEntries`. The file stays `packages/db/src/schema/waitlist.ts`. A project that
 installed the old name upgrades it with one migration:
 
-1. Run `saasaloy update waitlist` to take the new schema file.
+1. Run `saasaloy update` to take the new schema file.
 2. Run `pnpm --filter @repo/db db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table.
    Pick the rename from the old name: `waitlist` → `waitlist_entries`.
@@ -231,9 +224,7 @@ If a submission is blocked in the browser, check `CORS_ORIGINS` on the api Worke
 
 ## Boundaries to honor
 
-- **The route registers by patch; table, block and island stay file-drops.** Extend any of them by
-  editing the dropped file. The one edit to `apps/api/src/index.ts` is the `chained-route` patch's,
-  so don't hand-write the link and don't reach into `src/schema.ts`.
+- **The route registers by a table row; table, block and island stay file-drops.** Extend any of them by editing the dropped file. The route link lives in `apps/api/src/routes.generated.ts`, which the CLI writes, so don't hand-write the link and don't reach into `src/schema.ts`.
 - **The block stays free of the api.** `packages/ui/src/blocks/waitlist.tsx` takes `onSubmit` and
   imports React and ui primitives only. Never move `hc`, `@repo/api`, or an `import.meta.env` read
   into it: `packages/ui` has a `typecheck` script, and one import of `@repo/api` there makes `tsc`

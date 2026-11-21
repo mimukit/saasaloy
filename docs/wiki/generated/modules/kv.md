@@ -13,7 +13,7 @@ A packages/kv workspace with the provider interface, namespaced keys and the con
 | Tier | capability |
 | Stage | scale |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`api`](api.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -47,7 +47,22 @@ KV_PROVIDER=upstash  uses kv-upstash
 | File | Kind |
 |---|---|
 | `apps/api/package.json` | `package-json-dependency` |
-| `apps/api/src/env.ts` | `plugin-array` |
+
+## Tables it owns
+
+The CLI writes each table in full on every run, from the rows of the installed modules.
+
+| Table | Generated file | Shape |
+|---|---|---|
+| `kv.policies` | `@kv/policies.generated.ts` | `calls` |
+| `kv.providers` | `@kv/providers.generated.ts` | `calls` |
+| `kv.envPresets` | `@kv/env-preset.generated.ts` | `calls` |
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `api.envPresets` | 1 |
 
 ## See the rest
 
@@ -298,7 +313,7 @@ after a write, or counted exactly, belongs in `database` instead.
 #### Writing a provider
 
 Follow `.agents/skills/create-provider/`. A provider is one file in `src/providers/` and one
-`plugin-array` patch. It implements `name`, `minTtlSeconds`, `get`, `set`, `delete` and `list`, and
+`kv.providers` row. It implements `name`, `minTtlSeconds`, `get`, `set`, `delete` and `list`, and
 optionally `consume`. It stores strings only — the core does the JSON encoding, the size cap, the
 key checks and the TTL floor, so none of that is re-implemented per vendor.
 
@@ -309,9 +324,9 @@ Map every vendor failure onto a `KvError` code, keep the raw code in `providerCo
 
 Remove the dependents first. `kv-cloudflare`, `kv-memory` and `kv-upstash` depend on `kv`, and so do `ratelimit` and `feature-flags`. `remove kv` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
 
-`saasaloy remove kv-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. A provider that needs a Workers binding also reverses its descriptor patches. `kv-upstash` deletes its `env.ts` too, and it does not delete the Upstash database or its keys. Delete the database in the Upstash console and revoke `UPSTASH_REDIS_REST_TOKEN`.
+`saasaloy remove kv-<provider>` deletes the provider file, and the render without the module drops its row from `providers.generated.ts`. A provider that needs a Workers binding also reverses its descriptor patches. `kv-upstash` deletes its `env.ts` too, and it does not delete the Upstash database or its keys. Delete the database in the Upstash console and revoke `UPSTASH_REDIS_REST_TOKEN`.
 
-`saasaloy remove kv` then deletes the `packages/kv` workspace (`index.ts`, `define.ts`, `provider.ts`, `keys.ts`, `cached.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the kv preset to `apps/api/src/env.ts`. The `@repo/kv` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `KV_PROVIDER`, `KV_KEY_PREFIX` and any provider secret lines by hand.
+`saasaloy remove kv` then deletes the `packages/kv` workspace (`index.ts`, `define.ts`, `provider.ts`, `keys.ts`, `cached.ts`, `env-preset.ts`) and drops the `api.envPresets` row that adds the kv preset to `apps/api/src/env.generated.ts`. The same run takes the `@repo/kv` line out of `apps/api/package.json`, because the render without the module has no such line. Run `pnpm install` afterwards. A file you edited by hand since `add` stays on disk, untracked, with one line in the report. `remove` does not edit `packages/env/.env`, so delete the `KV_PROVIDER`, `KV_KEY_PREFIX` and any provider secret lines by hand.
 
 Every route that imports `@repo/kv` stops compiling, and every rate limit policy goes with `define.ts`. The stored entries survive in the vendor namespace.
 

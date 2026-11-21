@@ -20,7 +20,7 @@ export function renderModule(
   mod: LoadedModule,
   vars: TemplateVars
 ): LoadedModule {
-  const { patches } = mod.item;
+  const { entries, patches } = mod.item;
   return {
     ...mod,
     vars,
@@ -29,20 +29,14 @@ export function renderModule(
       ...(patches === undefined
         ? {}
         : { patches: patches.map((op) => renderValue(op, vars)) }),
+      ...(entries === undefined
+        ? {}
+        : { entries: entries.map((entry) => renderValue(entry, vars)) }),
     },
   };
 }
 
 /** Every module in `modules`, rendered, in a new map under the same keys. */
-export function renderModules(
-  modules: ReadonlyMap<string, LoadedModule>,
-  vars: TemplateVars
-): Map<string, LoadedModule> {
-  return new Map(
-    [...modules].map(([name, mod]) => [name, renderModule(mod, vars)])
-  );
-}
-
 /** One of `mod`'s files, as the project receives it. */
 export async function readModuleFile(
   mod: LoadedModule,

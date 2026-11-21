@@ -15,12 +15,12 @@ import { navCountQuery } from "@app/lib/nav-count";
 // Query keys:
 //
 // - `["nav-count", "/notifications"]` is the unread count. The sidebar badge and the bell
-//   read it through `navCountQuery`, with the NAV_COUNTS entry this module patches in.
+//   read it through `navCountQuery`, with the NAV_COUNTS entry this module's row adds.
 // - `["notifications", ...]` is every list: the menu's rows, the page's pages and the
 //   preferences. A mark-read invalidates the whole prefix and the count, so every open
 //   view follows at once.
 
-/** The NAV_COUNTS entry this module patches in, for the bell to read the same count. */
+/** The NAV_COUNTS entry this module's row adds, for the bell to read the same count. */
 const UNREAD_COUNT_SOURCE = {
   to: "/notifications",
   path: "/notifications/unread-count",

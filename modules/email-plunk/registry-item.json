@@ -5,7 +5,7 @@
   "description": "An email provider on Plunk over plain HTTP, with no SDK and no binding; needs a Plunk API key.",
   "stage": "mvp",
   "needs": ["vendor-account"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["email"],
   "dependencies": [],
   "envVars": {
@@ -16,30 +16,6 @@
     "default": ["api"]
   },
   "envOptional": ["PLUNK_API_URL"],
-  "patches": [
-    {
-      "file": "packages/email/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "email",
-      "arrayProp": "providers",
-      "call": "plunk",
-      "import": {
-        "name": "plunk",
-        "from": "./providers/plunk"
-      }
-    },
-    {
-      "file": "packages/email/src/env-preset.ts",
-      "kind": "plugin-array",
-      "exportName": "emailPreset",
-      "arrayProp": "extends",
-      "call": "plunkEnv",
-      "import": {
-        "name": "plunkEnv",
-        "from": "./env/plunk"
-      }
-    }
-  ],
   "files": [
     {
       "path": "files/plunk.ts",
@@ -48,6 +24,24 @@
     {
       "path": "files/env.ts",
       "target": "@email/env/plunk.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "email.providers",
+      "call": "plunk",
+      "import": {
+        "name": "plunk",
+        "from": "./providers/plunk"
+      }
+    },
+    {
+      "table": "email.envPresets",
+      "call": "plunkEnv",
+      "import": {
+        "name": "plunkEnv",
+        "from": "./env/plunk"
+      }
     }
   ],
   "scaffolds": []

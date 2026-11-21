@@ -125,8 +125,8 @@ async function keyCaller(c: AuthRequestContext): Promise<Caller> {
 /**
  * The key, as a caller kind of `requireUser` in `./user-caller.ts`.
  *
- * Registered into `userResolvers.resolvers` by this module's `plugin-array` patch, and
- * never called directly. It runs the same verification `requireCaller` runs, so a key
+ * Registered into `userResolvers.resolvers` by this module's `userCaller.resolvers` row,
+ * and never called directly. It runs the same verification `requireCaller` runs, so a key
  * that fails gets the same 401, and a route an agent may call (`GET /notifications`,
  * `GET /files`) accepts a user's key limited to its scope. `requireCaller` keeps working
  * for the routes a project already wrote against it.

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { PATCH_KINDS } from "./patch/index.js";
 import type { PatchKind } from "./patch/index.js";
+import { LEGACY_TABLE_KINDS } from "./registry.js";
 import {
   MODULE_NEEDS,
   MODULE_STAGES,
@@ -43,7 +44,9 @@ describe("patch-kind enums agree across both schemas", () => {
     ).toStrictEqual([...PATCH_KINDS]);
   });
 
-  it("manifest.schema.json lists exactly the engine's kinds", async () => {
+  // A version 1 manifest records what the old engine applied, the four table kinds of
+  // plan 0116 Phase 7 included, and a conversion still reads it.
+  it("manifest.schema.json lists the engine's kinds and the legacy table kinds", async () => {
     const schema = await readSchema("manifest.schema.json");
     expect(
       kindEnum(schema, [
@@ -55,7 +58,7 @@ describe("patch-kind enums agree across both schemas", () => {
         "properties",
         "kind",
       ])
-    ).toStrictEqual([...PATCH_KINDS]);
+    ).toStrictEqual([...PATCH_KINDS, ...LEGACY_TABLE_KINDS].toSorted());
   });
 });
 
@@ -135,17 +138,6 @@ describe("registry-item schema — onlyWith (#99)", () => {
 // One authored op per kind. `Record<PatchKind, …>` keeps this exhaustive: a new kind
 // with no sample here fails typecheck rather than silently going untested.
 const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
-  "chained-route": {
-    exportName: "default",
-    path: "/waitlist",
-    call: "waitlist",
-    import: { name: "waitlist", from: "./routes/waitlist.js" },
-  },
-  "const-array": {
-    constName: "NAV_ITEMS",
-    key: "to",
-    entry: { to: "/teams", label: "Teams" },
-  },
   "const-property": {
     constName: "deployConfig",
     property: "ciWorkflow",
@@ -156,20 +148,8 @@ const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
     column: "subscriptionCustomerId",
     value: 'text("subscription_customer_id")',
   },
-  "nav-entry": {
-    constName: "NAV_AREAS",
-    area: "/",
-    group: "Manage",
-    entry: { to: "/teams", label: "Teams" },
-    icon: { name: "UsersRoundIcon", from: "lucide-react" },
-  },
   "package-json-dependency": { name: "zod", version: "4.4.3" },
   "package-json-script": { name: "db:generate", value: "drizzle-kit generate" },
-  "plugin-array": {
-    exportName: "auth",
-    property: "plugins",
-    insert: "organization()",
-  },
   "wrangler-binding": { array: "d1_databases", binding: "DB" },
 };
 
@@ -192,6 +172,98 @@ describe.each(PATCH_KINDS)("patch kind %s", (kind) => {
       })
     ).resolves.toMatchObject({ valid: true });
   });
+});
+
+// Plan 0116, Phase 7: a registration table is `tables` and `entries`, never a patch.
+describe("tables and entries", () => {
+  const item = (extra: Record<string, unknown>) => ({
+    name: "sample",
+    type: "saasaloy:feature",
+    ...extra,
+  });
+
+  it("validates a table and a row of each shape", async () => {
+    await expect(
+      validateRegistryItem(
+        item({
+          tables: [
+            {
+              id: "sample.providers",
+              file: "@sample/providers.generated.ts",
+              shape: "calls",
+            },
+            {
+              id: "sample.rows",
+              file: "packages/sample/src/rows.generated.ts",
+              shape: "objects",
+              type: { name: "Row", from: "./rows.ts" },
+            },
+          ],
+          entries: [
+            {
+              table: "sample.providers",
+              call: "memory",
+              import: { name: "memory", from: "./providers/memory" },
+              order: 10,
+            },
+            { table: "sample.rows", entry: { name: "a" } },
+            {
+              table: "api.routes",
+              path: "/sample",
+              call: "sample",
+              import: { name: "sample", from: "./routes/sample" },
+            },
+            {
+              table: "admin.nav",
+              area: "/",
+              group: "Manage",
+              entry: { to: "/sample", label: "Sample" },
+              import: { name: "BoxIcon", from: "lucide-react" },
+              when: { installed: ["admin"] },
+            },
+          ],
+        })
+      )
+    ).resolves.toMatchObject({ valid: true });
+  });
+
+  it("rejects a generated file not named *.generated.ts", async () => {
+    await expect(
+      validateRegistryItem(
+        item({
+          tables: [{ id: "sample.x", file: "@sample/x.ts", shape: "calls" }],
+        })
+      )
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it("rejects an unknown shape and an unknown row field", async () => {
+    await expect(
+      validateRegistryItem(
+        item({
+          tables: [
+            { id: "sample.x", file: "@sample/x.generated.ts", shape: "map" },
+          ],
+        })
+      )
+    ).resolves.toMatchObject({ valid: false });
+    await expect(
+      validateRegistryItem(
+        item({ entries: [{ table: "sample.x", exportName: "x" }] })
+      )
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it.each(["plugin-array", "const-array", "chained-route", "nav-entry"])(
+    "rejects the old table patch kind %s",
+    async (kind) => {
+      await expect(
+        validateRegistryItem(
+          item({ patches: [{ file: "apps/api/src/index.ts", kind }] })
+        )
+      ).resolves.toMatchObject({ valid: false });
+    }
+  );
 });
 
 describe("removal warnings", () => {

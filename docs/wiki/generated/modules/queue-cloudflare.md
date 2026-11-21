@@ -13,7 +13,7 @@ A queue provider on Cloudflare Queues, which needs a paid Workers plan.
 | Tier | provider |
 | Stage | scale |
 | Needs | `cloudflare-paid` |
-| Needs CLI | `>=0.7.0` |
+| Needs CLI | `>=0.10.0` |
 | Depends on | [`queue`](queue.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -36,8 +36,17 @@ Files:
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
 | `apps/api/wrangler.jsonc` | `wrangler-binding` |
-| `packages/queue/src/index.ts` | `plugin-array` |
-| `apps/api/src/worker.ts` | `plugin-array` |
+
+## Tables it owns
+
+This module owns no registration table.
+
+## Rows it adds to tables
+
+| Table | Rows |
+|---|---|
+| `queue.providers` | 1 |
+| `worker.handlers` | 1 |
 
 ## See the rest
 

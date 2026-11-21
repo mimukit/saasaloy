@@ -196,7 +196,7 @@ Pointed at a project, `doctor` also prints a Base section: which CLI recorded th
 
 ### Changing the base template
 
-Every file under `packages/cli/templates/base/` is a managed file in a scaffolded project, recorded at `init` under the module name `base` with the hash of its rendered bytes. `saasaloy outdated` compares the lock's template hash against the running CLI's, so any edit to the template turns the base row `outdated` for every project scaffolded before it, and `saasaloy update` then overwrites the clean copies and routes edited ones to the merge plan. Two rules follow. A file the owner is meant to rewrite goes in `_saasaloy-base.json`'s `seedFiles`, as an explicit path; a test asserts every listed path exists. And the declaration itself is never copied: `copyTemplate` skips it by name before the `_` to `.` rename. A module marks the same kind of file with `"seed": true` on its `files[]` or `scaffolds[].files[]` entry: written once, never overwritten or merged by `update`, restored when missing, and kept by `remove` once changed (ADR 0060).
+Every file under `packages/cli/templates/base/` is a tracked file in a scaffolded project, recorded at `init` under the module name `base` with the sha256 of its raw render and the release that wrote it. `saasaloy outdated` compares the lock's release with the running CLI's, and `saasaloy update` then writes the clean copies and merges edited ones three ways, so an edit to the template reaches every project at the next release. Two rules follow. A file the owner is meant to rewrite goes in `_saasaloy-base.json`'s `seedFiles` or `ownedFiles`, which makes it a `once` file (ADR 0067); a test asserts every listed `seedFiles` path exists. And the declaration itself is never copied: `copyTemplate` skips it by name before the `_` to `.` rename. A module marks the same kind of file with `"seed": true` on its `files[]` or `scaffolds[].files[]` entry: written once, never overwritten or merged by `update` unless `update --merge <path>` asks, and kept by `remove` once changed (ADR 0060, ADR 0067).
 
 ### One-command bring-up
 
@@ -552,7 +552,7 @@ Before `1.0.0`:
 - `feat` is a **minor** bump.
 - `fix` and `perf` are a **patch** bump.
 
-`1.0.0` is a deliberate decision about the applier being stable. It is never the answer to a prompt you clicked through.
+`1.0.0` is a deliberate decision about the engine being stable. It is never the answer to a prompt you clicked through.
 
 ### Breaking changes need an update note
 

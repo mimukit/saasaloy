@@ -5,7 +5,7 @@
   "description": "Background jobs and schedules in a packages/queue workspace, with a cron matcher and the provider registry.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -21,12 +21,28 @@
       "section": "dependencies",
       "name": "@repo/queue",
       "range": "workspace:*"
+    }
+  ],
+  "tables": [
+    {
+      "id": "queue.jobs",
+      "file": "@queue/jobs.generated.ts",
+      "shape": "calls"
     },
     {
-      "file": "apps/api/src/env.ts",
-      "kind": "plugin-array",
-      "exportName": "apiEnv",
-      "arrayProp": "extends",
+      "id": "queue.providers",
+      "file": "@queue/providers.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "queue.schedules",
+      "file": "@queue/schedules.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "api.envPresets",
       "call": "queueEnv",
       "import": {
         "name": "queueEnv",

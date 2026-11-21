@@ -35,9 +35,9 @@ import { initialsOf } from "@admin/lib/initials";
 //
 // NAV_AREAS, its types, and the two rules that read it live in ./nav.ts, which is the
 // one file to edit to add a screen. The live counts some rows show come from
-// ./nav-counts.ts, which a module extends with a `const-array` patch. The same counts feed
-// the "Needs attention" menu in the header, so a module that adds a count gets a row there
-// too, with no second patch.
+// ./nav-counts.ts, which a module extends with an `admin.navCounts` row. The same counts
+// feed the "Needs attention" menu in the header, so a module that adds a count gets a row
+// there too, with no second row.
 
 /**
  * The link the shell renders for every nav entry. TanStack Router sets aria-current on
@@ -103,7 +103,7 @@ const NAV_COUNT_INTERVAL_MS = 60_000;
  * One live nav count.
  *
  * Plain `fetch` rather than the typed `api` client: a NAV_COUNTS `path` is data a module's
- * patch wrote, so there is no route type to call it through. The origin, the cookie and
+ * table row wrote, so there is no route type to call it through. The origin, the cookie and
  * the audience header are the same three `src/lib/api.ts` sets, for the same reasons.
  *
  * Every failure (network, a non-OK status, a body that is not `{ count: number }`) throws,

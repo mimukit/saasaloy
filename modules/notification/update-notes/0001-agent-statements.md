@@ -12,7 +12,7 @@ The link only calls `next()`. Every response, every status and `AppType` stay as
 
 `packages/validators/src/notifications.ts` gets the output schemas of the callable routes: `notificationList`, `notificationUnreadCount` and `notificationPreferences`. They describe the bodies the routes already answer.
 
-## What the merge plan gets
+## What update merges
 
 - `apps/api/src/routes/notifications.ts`, if you edited it. Keep your edits and take the `declare(...)` link on each route and the `../contract` import. A route you added yourself needs a link of its own.
 - `packages/validators/src/notifications.ts`, if you edited it. Keep your edits and take the new output schemas at the end of the file.

@@ -5,35 +5,13 @@
   "description": "Organization-owned API keys scoped through can(), on multitenant, plus an API keys admin screen.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["api-keys", "multitenant"],
   "conflictsWith": ["api-keys-user"],
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
     "The deployed api_keys table survives this removal. Run db:generate and review the resulting drop migration before you apply it. Every key in it stops working the moment the bearer resolver goes, so tell the machine callers before you remove this module, not after."
-  ],
-  "patches": [
-    {
-      "file": "packages/auth/src/tenant.ts",
-      "kind": "plugin-array",
-      "exportName": "tenantResolvers",
-      "arrayProp": "resolvers",
-      "call": "apiKeyTenant",
-      "import": {
-        "name": "apiKeyTenant",
-        "from": "./resolvers/api-key"
-      }
-    },
-    {
-      "file": "apps/admin/src/components/nav.ts",
-      "kind": "nav-entry",
-      "constName": "NAV_AREAS",
-      "area": "/",
-      "group": "Manage",
-      "entry": { "to": "/api-keys", "label": "API keys" },
-      "icon": { "name": "KeyRoundIcon", "from": "lucide-react" }
-    }
   ],
   "files": [
     {
@@ -69,6 +47,29 @@
     {
       "path": "files/db/column-classes/api-keys.ts",
       "target": "@db/column-classes/api-keys.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "multitenant.resolvers",
+      "call": "apiKeyTenant",
+      "import": {
+        "name": "apiKeyTenant",
+        "from": "./resolvers/api-key"
+      }
+    },
+    {
+      "table": "admin.nav",
+      "area": "/",
+      "group": "Manage",
+      "entry": {
+        "to": "/api-keys",
+        "label": "API keys"
+      },
+      "import": {
+        "name": "KeyRoundIcon",
+        "from": "lucide-react"
+      }
     }
   ]
 }

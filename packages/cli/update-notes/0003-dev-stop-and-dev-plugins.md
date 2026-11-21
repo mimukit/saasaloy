@@ -10,7 +10,7 @@ version: 0.9.0
 - `apps/web/package.json` gets `@repo/tooling` as a devDependency, and `apps/web/astro.config.mjs` adds `devGzip()` to `vite.plugins`. The web app does not take `restartOnLockfile()`, because a bare Vite restart under `astro dev` replaces the watcher that Astro's own config reload listens on. Restart `pnpm dev` by hand after an install there.
 - `packages/ui/src/lib/random-id.ts` exports `randomId()`, a v4 UUID built on `crypto.getRandomValues()`. `packages/ui/src/lib/clipboard.ts` exports `copyText(text)`, which falls back to a hidden textarea and the copy command. Both work on a plain-http page that is not localhost, where `crypto.randomUUID()` and `navigator.clipboard` are missing. Each ships with a test beside it.
 
-## What the merge plan gets
+## What update merges
 
 - The root `package.json`, if you edited it. Keep your scripts and add `"dev:stop": "node packages/tooling/src/dev-stop.ts"`.
 - `packages/tooling/package.json`, if you edited it. Take the `exports` block and the `vite` devDependency.

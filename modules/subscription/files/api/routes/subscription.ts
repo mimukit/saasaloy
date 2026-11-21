@@ -28,15 +28,15 @@ import {
 } from "../subscription-store";
 import { declare } from "../contract";
 
-// The seven subscription endpoints, mounted at `/subscription` by this module's `chained-route`
-// patch. Paths here are relative to that mount, so `post("/checkout")` serves
+// The seven subscription endpoints, mounted at `/subscription` by this module's `api.routes`
+// row. Paths here are relative to that mount, so `post("/checkout")` serves
 // `POST /subscription/checkout`.
 //
 // Route module contract: ONE chained expression under a NAMED export matching the file.
 // Split it into separate `subscriptionRoute.post(...)` statements and the exported type forgets
 // the route, which empties it out of `AppType`. The name has to be an `export const`: the
-// `chained-route` codemod writes `import { subscriptionRoute } from "./routes/subscription"` and
-// refuses to wire a binding that resolves to a default import.
+// generated `routes.generated.ts` imports it by name, as
+// `import { subscriptionRoute } from "./routes/subscription"`.
 //
 // Every handler goes through `guard` below, and none of them names a payment provider.
 // `createSubscription(c.env)` picks one from `SUBSCRIPTION_PROVIDER`; which key that provider reads

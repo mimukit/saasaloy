@@ -4,12 +4,13 @@ import type { ComponentType, ReactNode } from "react";
 //
 // Each app holds its own list, in `src/components/shell-extensions.ts`:
 //
-//   export const shellExtensions = defineShellExtensions({ extensions: [] });
+//   export const shellExtensions = defineShellExtensions({
+//     extensions: [...appShellExtensions],
+//   });
 //
 // and passes it to `ShellLayout`. A module ships a factory, such as `commandExtension()`,
-// and the app's descriptor appends a bare call to it into the `extensions` array with a
-// `plugin-array` patch. Keep the `extensions` property even while the array is empty:
-// the patch has nothing to append into otherwise.
+// and the module's descriptor adds a bare call to it as a row of the app's
+// `<app>.shellExtensions` table, which the CLI writes into `shell-extensions.generated.ts`.
 //
 // This file imports only React's types, so it holds no state and no IO.
 

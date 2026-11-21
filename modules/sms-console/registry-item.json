@@ -5,25 +5,22 @@
   "description": "An sms provider that logs each message instead of sending it.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["sms"],
   "dependencies": [],
   "envVars": {},
-  "patches": [
+  "files": [
+    { "path": "files/console.ts", "target": "@sms/providers/console.ts" }
+  ],
+  "entries": [
     {
-      "file": "packages/sms/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "sms",
-      "arrayProp": "providers",
+      "table": "sms.providers",
       "call": "consoleSms",
       "import": {
         "name": "consoleSms",
         "from": "./providers/console"
       }
     }
-  ],
-  "files": [
-    { "path": "files/console.ts", "target": "@sms/providers/console.ts" }
   ],
   "scaffolds": []
 }

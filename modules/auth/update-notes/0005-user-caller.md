@@ -8,11 +8,12 @@ title: A user route can accept a key caller through requireUser
 
 - `src/user-caller.ts` exports `requireUser(c, demand)` and the `userResolvers` table. `requireUser` returns `{ userId, principal, activeOrganizationId }` for the user a request acts for. A signed-in session decides first, exactly as `requireSession` does, and a person passes every demand, so every caller `requireSession` admitted is still admitted. Only a request with no session goes to a resolver, and its credential gets 403 `permission required: <resource>:<action>` when it lacks a demanded pair. With an empty table it is `requireSession`.
 - `src/user-caller-rules.ts` holds the import-free rule `demandDenial`, the same rule and refusal text as `api-keys-user`'s `keyAllows` and `teams`' `can()`.
+- `src/user-caller.generated.ts` holds the rows of that table.
 - `package.json` exports `./user-caller`.
 
-A credential module adds a caller kind by appending a resolver to `userResolvers` with a `plugin-array` patch. `api-keys-user` appends its key; `api-keys-organization` appends nothing, because an organization's key acts for no user.
+A credential module adds a caller kind with a row of the `userCaller.resolvers` table, which the CLI writes into `src/user-caller.generated.ts`; `userResolvers` spreads it. `api-keys-user` adds its key; `api-keys-organization` adds nothing, because an organization's key acts for no user.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/auth/package.json`, if you edited it. Keep your edits and take the `./user-caller` export.
 

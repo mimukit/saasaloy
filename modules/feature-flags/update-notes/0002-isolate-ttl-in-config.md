@@ -12,7 +12,7 @@ Nothing reads the `FLAGS_ISOLATE_TTL_SECONDS` env var any more. A value you set 
 
 `DEFAULT_ISOLATE_TTL_SECONDS` is no longer exported. `defineFlags` takes an optional `isolateTtlSeconds`, which defaults to the leaf.
 
-## What the merge plan gets
+## What update merges
 
 - `packages/feature-flags/src/define.ts` and `src/cache.ts`, if you edited them. Keep your edits, and take the TTL from `config["feature-flags"].isolateTtlSeconds` in `defineFlags`.
 - `packages/feature-flags/src/env-preset.ts`, if you edited it. `update` keeps an edited copy. Delete it after step 2.
@@ -22,7 +22,7 @@ Nothing reads the `FLAGS_ISOLATE_TTL_SECONDS` env var any more. A value you set 
 1. Run the update:
 
    ```sh
-   saasaloy update feature-flags
+   saasaloy update
    ```
 
 2. In `apps/api/src/env.ts`, delete the `featureFlagsEnv()` entry from the `extends` array and its import:

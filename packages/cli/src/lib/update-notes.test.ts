@@ -26,7 +26,7 @@ const SECTIONS = `## What update does
 
 It writes a file.
 
-## What the merge plan gets
+## What update merges
 
 Nothing.
 
@@ -187,6 +187,22 @@ describe(parseUpdateNote, () => {
         title: "Move the tokens",
         version: "0.8.0",
       }
+    );
+  });
+
+  // A note an old-engine release shipped names its second section after the merge plan,
+  // and an update reads the old release's notes too.
+  it("reads the old name of the second section", async () => {
+    const path = await put(
+      "0002-old.md",
+      note(
+        "title: An old note\nversion: 0.8.0",
+        SECTIONS.replace("## What update merges", "## What the merge plan gets")
+      )
+    );
+
+    await expect(parseUpdateNote(path, BASE_NOTE_OWNER)).resolves.toMatchObject(
+      { id: "base/0002-old" }
     );
   });
 

@@ -5,7 +5,7 @@
   "description": "A subscription provider on Stripe through stripe and @better-auth/stripe; needs a Stripe account.",
   "stage": "money",
   "needs": ["stripe"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.10.0" },
   "dependsOn": ["subscription"],
   "dependencies": [],
   "envVars": {
@@ -20,39 +20,6 @@
     "`stripe` and `@better-auth/stripe` stay in packages/subscription/package.json. Uninstalling an npm dependency is yours to do; run `pnpm remove` in that workspace when nothing else needs them."
   ],
   "patches": [
-    {
-      "file": "packages/subscription/src/index.ts",
-      "kind": "plugin-array",
-      "exportName": "subscription",
-      "arrayProp": "providers",
-      "call": "stripeSubscription",
-      "import": {
-        "name": "stripeSubscription",
-        "from": "./providers/stripe"
-      }
-    },
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "auth",
-      "arrayProp": "plugins",
-      "call": "stripeAuthPlugin",
-      "import": {
-        "name": "stripeAuthPlugin",
-        "from": "@repo/subscription/providers/stripe"
-      }
-    },
-    {
-      "file": "packages/auth/src/auth.ts",
-      "kind": "plugin-array",
-      "exportName": "adminAuth",
-      "arrayProp": "plugins",
-      "call": "stripeAuthPlugin",
-      "import": {
-        "name": "stripeAuthPlugin",
-        "from": "@repo/subscription/providers/stripe"
-      }
-    },
     {
       "file": "packages/subscription/package.json",
       "kind": "package-json-dependency",
@@ -73,12 +40,35 @@
       "section": "peerDependencies",
       "name": "better-auth",
       "range": "1.7.7"
+    }
+  ],
+  "entries": [
+    {
+      "table": "subscription.providers",
+      "call": "stripeSubscription",
+      "import": {
+        "name": "stripeSubscription",
+        "from": "./providers/stripe"
+      }
     },
     {
-      "file": "packages/subscription/src/env-preset.ts",
-      "kind": "plugin-array",
-      "exportName": "subscriptionPreset",
-      "arrayProp": "extends",
+      "table": "auth.plugins",
+      "call": "stripeAuthPlugin",
+      "import": {
+        "name": "stripeAuthPlugin",
+        "from": "@repo/subscription/providers/stripe"
+      }
+    },
+    {
+      "table": "adminAuth.plugins",
+      "call": "stripeAuthPlugin",
+      "import": {
+        "name": "stripeAuthPlugin",
+        "from": "@repo/subscription/providers/stripe"
+      }
+    },
+    {
+      "table": "subscription.envPresets",
       "call": "stripeEnv",
       "import": {
         "name": "stripeEnv",
