@@ -107,4 +107,4 @@ live here. Third-party module identity is still moving:
 named. The grammar as it stands today is in
 [the reference](../reference.md#module-coordinates).
 
-_Verified against `main`@`c0bf7010` on 2026-11-21._
+_Verified against `main`@`33bc729b` on 2026-11-21._

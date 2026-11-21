@@ -6,7 +6,7 @@ Run the first two in order. The third runs whenever you want the look changed.
 
 ## 1. Tell the project what it is: `/saasaloy-setup`
 
-The setup skill interviews you once, in about fourteen questions, starting with the product's name. Each question has sample answers you can take, edit, or ignore. The first ten go to `docs/product-brief.md`: the landing page's audience, problem, proof, tone, pricing and sign-up link. The last four go to `docs/product-spec.md`: the entities your product keeps (the agent proposes a table for each and you correct it), their order, the optional modules, and whether to deploy a preview. Every other skill reads these two files instead of interviewing you again.
+The setup skill interviews you once, in about fourteen questions, starting with the product's name. Each question has sample answers you can take, edit, or ignore. The first ten go to `docs/product-brief.md`: the landing page's audience, problem, proof, tone, pricing and sign-up link. Questions 11 to 13 go to `docs/product-spec.md`: the entities your product keeps (the agent proposes a table for each and you correct it), their order, and the optional modules. The last one, whether to deploy a preview, goes into the brief's frontmatter. Every other skill reads these two files instead of interviewing you again.
 
 It also sets the two facts that live in code rather than prose: `app.name` and `app.locale` in `packages/config/src/project.ts`. `siteName` and the page's `lang` attribute read them. It writes no landing copy.
 
@@ -37,4 +37,4 @@ Every module you install brings its own `saasaloy-<name>` skill into the same `.
 - [Getting started](../getting-started.md) — scaffold and run the project first.
 - [Add a module](add-a-module.md) — install the API, database, auth and features.
 
-_Verified against `main`@`b86486c3` on 2026-11-21._
+_Verified against `main`@`33bc729b` on 2026-11-21._
