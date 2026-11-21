@@ -1,10 +1,12 @@
-// Which release needs an agent benchmark run, and which score report clears it (plan 0109,
-// "Which releases need a run"; issue #347). `scripts/release-preflight.ts` calls it.
+// Which release calls for an agent benchmark run, and which score report covers it (plan
+// 0109, "Which releases need a run"; issue #347). `scripts/release-preflight.ts` calls it,
+// and prints a warning when a run is suggested. The benchmark is on demand: the check
+// never blocks a release.
 //
 // The rule. A release whose changed paths since the last tag touch a base skill, the
-// unattended CLI contract or a module of the MVP set needs a score report for every
+// unattended CLI contract or a module of the MVP set calls for a score report for every
 // benchmark brief, run in interview mode, at a revision that covers the release, with no
-// FAIL line. Any other release needs no report.
+// FAIL line. Any other release calls for no run.
 //
 // The definitions:
 //   - A base skill: any file under `packages/cli/templates/base/_agents/skills/`.
@@ -17,7 +19,7 @@
 //   - A score report: a file in `docs/research/` named
 //     `NNNN-research-agent-bench-<slug>-YYYY-MM-DD.md`. It holds one `score.md` of
 //     `scripts/agent-bench.ts` for each brief, whose `Brief:`, `Mode:` and `Revision:` lines
-//     the gate reads, and a FAIL line is a table row whose result is FAIL or a line that
+//     the check reads, and a FAIL line is a table row whose result is FAIL or a line that
 //     starts with `FAIL`.
 //   - A report covers the release when, for each brief, its revision is an ancestor of HEAD
 //     and no gated path changed between that revision and HEAD. The newest covering report
@@ -43,7 +45,7 @@ export const UNATTENDED_CLI_CONTRACT = [
   "packages/cli/src/commands/list.ts",
 ] as const;
 
-/** The changed paths that make a release need a benchmark run. */
+/** The changed paths that make a release call for a benchmark run. */
 export function gatedPaths(changed: readonly string[]): string[] {
   const contract = new Set<string>(UNATTENDED_CLI_CONTRACT);
   const modules = MVP_MODULES.map((name) => `modules/${name}/`);
@@ -137,11 +139,11 @@ function coverProblems(
 }
 
 export interface BenchmarkCheck {
-  /** The changed paths that need a run; empty means the release needs no report. */
+  /** The changed paths that call for a run; empty means no run is suggested. */
   needed: string[];
-  /** The report that cleared the release. */
+  /** The report that covers the release. */
   cleared?: string;
-  /** Why the release is refused; empty when it may go. */
+  /** Why a run is suggested; empty when none is. */
   problems: string[];
 }
 
@@ -184,18 +186,19 @@ export function checkBenchmark(input: {
   };
 }
 
-/** What to print when the release needs a run and has no clean report. */
+/** The warning to print when a run is suggested. */
 export function benchmarkMessage(check: BenchmarkCheck): string {
   return [
-    "this release changes paths that need an agent benchmark run:",
+    "this release changes paths that an agent benchmark run checks:",
     ...check.needed.slice(0, 10).map((path) => `  ${path}`),
     ...(check.needed.length > 10
       ? [`  and ${String(check.needed.length - 10)} more`]
       : []),
-    "and no score report clears it:",
+    "and no score report covers them:",
     ...check.problems.map((problem) => `  ${problem}`),
-    "  Run `node scripts/agent-bench.ts --interview --brief <name>` for each brief,",
-    "  save the three score.md files in one docs/research/ report, and commit it.",
-    '  CONTRIBUTING.md, "Before you run it", has the rule.',
+    "  The release may go on. To run the benchmark on demand, run",
+    "  `node scripts/agent-bench.ts --interview --brief <name>` for each brief, and",
+    "  save the three score.md files in one docs/research/ report.",
+    '  CONTRIBUTING.md, "The agent benchmark", has the rule.',
   ].join("\n");
 }

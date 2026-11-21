@@ -33,10 +33,10 @@
 // read as "missing" or as "published": the preflight stops and names the npm error.
 //
 // The benchmark check reads the changed paths since the last tag. When they touch a base
-// skill, the unattended CLI contract or a module of the MVP set, it refuses the release
-// unless a score report in `docs/research/` for every benchmark brief covers this revision
-// and holds no FAIL line (plan 0109). It costs a few `git` calls, so it runs before the
-// gate too. `scripts/bench-gate.ts` defines each term.
+// skill, the unattended CLI contract or a module of the MVP set, and no score report in
+// `docs/research/` for every benchmark brief covers this revision with no FAIL line, it
+// suggests a run. It warns and never fails: a run takes an hour and costs money, so the
+// owner decides when to run it, on demand. `scripts/bench-gate.ts` defines each term.
 //
 // The stale-docs check runs `docs:stale` in its stamp mode and prints each hand-written page
 // whose covered files changed after its stamp. It warns and never fails, the same as the
@@ -558,7 +558,7 @@ async function main(): Promise<void> {
   }
   step(`${cliName}@${published.version} (${tag}) is on npm`);
 
-  // --- Does a benchmark score report clear this release? ----------------------------
+  // --- Does this release call for a benchmark run? ----------------------------------
 
   const changed = capture(
     ["diff", "--name-only", `${tag}..HEAD`],
@@ -579,16 +579,14 @@ async function main(): Promise<void> {
     covers: (revision) => coversRelease(revision),
   });
   if (bench.problems.length > 0) {
-    fail(
-      "no benchmark score report clears this release",
-      benchmarkMessage(bench)
+    warn("an agent benchmark run is suggested", benchmarkMessage(bench));
+  } else {
+    step(
+      bench.cleared
+        ? `the benchmark report ${bench.cleared} covers this release with no FAIL line`
+        : `no change since ${tag} calls for a benchmark run`
     );
   }
-  step(
-    bench.cleared
-      ? `the benchmark report ${bench.cleared} covers this release with no FAIL line`
-      : `no change since ${tag} needs a benchmark run`
-  );
 
   // --- Does llms.txt name only what the release holds? ------------------------------
 

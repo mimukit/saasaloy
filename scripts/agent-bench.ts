@@ -52,7 +52,7 @@
 // The report. `score.md` starts with the brief, the mode, the revision, the turns, the
 // time and the cost, then the bar table. The turns and the cost are the sum of what each
 // agent call reported, or "unknown" when a call reported none. `release-preflight` reads
-// these reports; see CONTRIBUTING.md, "Before you run it".
+// these reports; see CONTRIBUTING.md, "The agent benchmark".
 //
 // On demand only, on a box with the agent's CLI and its credentials. Never in CI. It
 // exits 0 when no bar line fails, 1 when one fails, and 2 when it cannot run. Every

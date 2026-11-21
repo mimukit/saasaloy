@@ -13,7 +13,7 @@ This skill releases `packages/cli` as [`saasaloy`](https://www.npmjs.com/package
 
 One command, `pnpm release`, runs release-it in `packages/cli`:
 
-1. The `before:init` hook runs `pnpm release:preflight`. It checks the token, the sync with origin, the update notes, the stale docs pages (a warning only), the npm state of the last tag, the benchmark report and `llms.txt`. Then it runs the full gate and the tarball smoke. This takes about five minutes.
+1. The `before:init` hook runs `pnpm release:preflight`. It checks the token, the sync with origin, the update notes, the stale docs pages (a warning only), the npm state of the last tag, the benchmark suggestion (a warning only) and `llms.txt`. Then it runs the full gate and the tarball smoke. This takes about five minutes.
 2. release-it sets the version in `packages/cli/package.json`, writes `packages/cli/CHANGELOG.md`, commits `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, and creates the GitHub Release.
 3. The `after:release` hook deploys saasaloy.com at the tag, through `wrangler deploy --tag vX.Y.Z`.
 4. The tag push starts `.github/workflows/publish.yml`. Its `publish` job waits in the GitHub environment `npm` for the owner's approval, then publishes with provenance.
@@ -73,11 +73,11 @@ When a login is missing, ask the owner for it. On a headless box a browser login
 Two checks need a decision rather than a fix:
 
 - **Stale docs.** For each listed page, read it against the commits that `docs:stale` names, fix the text that is now wrong, and move its stamp line to the current `main` commit and date. A page whose text is still right gets only the new stamp. These edits go to `main` in their own `docs(wiki)` commit before the release, because the site deploys the pages at the tag. The preflight only warns, so the owner may also release first and fix the pages later.
-- **The benchmark.** The preflight refuses a release that touches a base skill, the unattended CLI contract or an MVP module without a score report that covers it. See "Before you run it" in `CONTRIBUTING.md`. To know early, compare `git diff --name-only <last tag>..HEAD` with those paths. A benchmark run takes long and costs money, so ask the owner before you start one.
+- **The benchmark.** The benchmark is on demand and never blocks a release. Run the check from "The agent benchmark" in `CONTRIBUTING.md` early: compare `git diff --name-only <last tag>..HEAD` with the gated paths, and read the newest score report in `docs/research/`. When the release touches a gated path and no report covers it, suggest a run to the owner in step 4, with the reason and the cost (about an hour and agent usage). Start a run only when the owner asks for one. Without that request, the release goes on.
 
 ### 4. Confirm the plan with the owner
 
-Report the readiness table, the commits since the last tag, the version, and the exact command. Then ask the owner to confirm. Name what the release does that cannot be undone: the tag, the push to `main`, the GitHub Release and the site deploy.
+Report the readiness table, the commits since the last tag, the version, and the exact command. When step 3 found that a benchmark run is suggested, say so and name the gated paths, but do not wait for a run. Then ask the owner to confirm. Name what the release does that cannot be undone: the tag, the push to `main`, the GitHub Release and the site deploy.
 
 The command is one of these:
 
@@ -148,7 +148,6 @@ Read the matching section of `CONTRIBUTING.md` before you act. Never rerun `pnpm
 | Preflight: `main is not in sync with origin` | local `main` is behind | `git pull --ff-only`, then rerun step 5 |
 | Preflight: breaking change without an update note | a breaking commit has no note | "Breaking changes need an update note"; the fix is a new commit with `Update-Note-For: <full sha>` |
 | Preflight: `vX is not published on npm` | the last publish never finished | finish that publish first, with the rows below |
-| Preflight: no benchmark score report clears this release | a gated path changed | ask the owner; see "Before you run it" |
 | Preflight: a gate script or the smoke failed | a real failure on `main` | fix it on `main` with a normal commit, then rerun step 5; `SAASALOY_RELEASE_SKIP_GATE=1` only when the gate just passed on this exact tree |
 | `release:deploy` failed after the push | Cloudflare login or build | run the rerun command the hook printed, then `git checkout main` |
 | `publish` job: `npm error 404 Not Found - PUT https://registry.npmjs.org/saasaloy` | the trusted publisher on npmjs.com is missing or does not match | the owner opens the package's Access settings on npmjs.com and sets GitHub Actions, `mimukit`, `saasaloy`, `publish.yml`, environment `npm`; then `gh run rerun <run id> --failed` and a new approval |

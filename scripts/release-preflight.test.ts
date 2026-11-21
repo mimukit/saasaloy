@@ -655,8 +655,9 @@ describe("llmsSurfaceProblems", () => {
 });
 
 // Plan 0109, "Which releases need a run": a release that changes a base skill, the
-// unattended CLI contract or a module of the MVP set needs a score report for the three
-// benchmark briefs with no FAIL line. Any other release needs none.
+// unattended CLI contract or a module of the MVP set calls for a score report for the three
+// benchmark briefs with no FAIL line. Any other release calls for none. The preflight only
+// warns: the benchmark runs on demand and never blocks a release.
 describe("gatedPaths", () => {
   it("names a base skill, a contract file and a module of the MVP set", () => {
     assert.deepEqual(
@@ -779,7 +780,7 @@ describe("checkBenchmark", () => {
     assert.deepEqual(result.problems, []);
   });
 
-  it("refuses a gated change with no report", () => {
+  it("suggests a run for a gated change with no report, and lets the release go on", () => {
     const result = checkBenchmark({
       changed: [SKILL],
       reports: [],
@@ -789,9 +790,10 @@ describe("checkBenchmark", () => {
     assert.deepEqual(result.needed, [SKILL]);
     assert.match(result.problems.join("\n"), /no score report/);
     assert.match(benchmarkMessage(result), /saasaloy-setup\/SKILL\.md/);
+    assert.match(benchmarkMessage(result), /The release may go on/);
   });
 
-  it("refuses a report that holds a FAIL line", () => {
+  it("suggests a run when the covering report holds a FAIL line", () => {
     const result = checkBenchmark({
       changed: [SKILL],
       reports: [
@@ -816,7 +818,7 @@ describe("checkBenchmark", () => {
     assert.equal(result.cleared, "0012-research-agent-bench-a-2026-11-20.md");
   });
 
-  it("refuses a report that misses a brief, ran brief mode, or scored an older revision", () => {
+  it("does not count a report that misses a brief, ran brief mode, or scored an older revision", () => {
     const missing = checkBenchmark({
       changed: [SKILL],
       reports: [
