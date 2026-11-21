@@ -23,7 +23,7 @@ export function collectionFor(name: string): Collection | undefined {
   return cms.has(name) ? cms.collection(name) : undefined;
 }
 
-/** One row of the list, as `GET /cms/admin/:collection/entries` answers it. */
+/** One row of the list, as `GET /admin/cms/:collection/entries` answers it. */
 export interface CmsSummary {
   id: string;
   collection: string;
@@ -132,7 +132,7 @@ export function listQuery(
   return queryOptions({
     queryKey: cmsKeys.list(collection, filter, page),
     queryFn: async (): Promise<CmsList> => {
-      const response = await api.cms.admin[":collection"].entries.$get({
+      const response = await api.admin.cms[":collection"].entries.$get({
         param: { collection },
         query: { page: String(page), status: filter },
       });
@@ -148,7 +148,7 @@ export function entryQuery(collection: string, id: string) {
   return queryOptions({
     queryKey: cmsKeys.entry(collection, id),
     queryFn: async (): Promise<CmsEntry> => {
-      const response = await api.cms.admin[":collection"].entries[":id"].$get({
+      const response = await api.admin.cms[":collection"].entries[":id"].$get({
         param: { collection, id },
       });
       if (!response.ok) {
@@ -163,7 +163,7 @@ export function revisionsQuery(collection: string, id: string) {
   return queryOptions({
     queryKey: cmsKeys.revisions(collection, id),
     queryFn: async (): Promise<CmsRevision[]> => {
-      const response = await api.cms.admin[":collection"].entries[
+      const response = await api.admin.cms[":collection"].entries[
         ":id"
       ].revisions.$get({ param: { collection, id } });
       if (!response.ok) {
@@ -196,7 +196,7 @@ export async function createEntry(
   collection: string,
   draft: CmsDraft
 ): Promise<CmsEntry> {
-  const response = await api.cms.admin[":collection"].entries.$post({
+  const response = await api.admin.cms[":collection"].entries.$post({
     json: draft,
     param: { collection },
   });
@@ -208,7 +208,7 @@ export async function saveEntry(
   id: string,
   draft: CmsDraft & { version: number }
 ): Promise<CmsEntry> {
-  const response = await api.cms.admin[":collection"].entries[":id"].$put({
+  const response = await api.admin.cms[":collection"].entries[":id"].$put({
     json: draft,
     param: { collection, id },
   });
@@ -220,7 +220,7 @@ export async function publishEntry(
   id: string,
   version: number
 ): Promise<CmsEntry> {
-  const response = await api.cms.admin[":collection"].entries[
+  const response = await api.admin.cms[":collection"].entries[
     ":id"
   ].publish.$post({ json: { version }, param: { collection, id } });
   return entryFrom(response, "publish the entry");
@@ -231,7 +231,7 @@ export async function unpublishEntry(
   id: string,
   version: number
 ): Promise<CmsEntry> {
-  const response = await api.cms.admin[":collection"].entries[
+  const response = await api.admin.cms[":collection"].entries[
     ":id"
   ].unpublish.$post({ json: { version }, param: { collection, id } });
   return entryFrom(response, "unpublish the entry");
@@ -243,7 +243,7 @@ export async function restoreRevision(
   revisionId: string,
   version: number
 ): Promise<CmsEntry> {
-  const response = await api.cms.admin[":collection"].entries[":id"].revisions[
+  const response = await api.admin.cms[":collection"].entries[":id"].revisions[
     ":revisionId"
   ].restore.$post({
     json: { version },
