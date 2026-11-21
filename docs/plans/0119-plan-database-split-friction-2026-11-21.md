@@ -42,7 +42,7 @@ Change the rule in the CLI, then drop the dead file, then the words. Each phase 
 
 Rejected: merge the modules (Context lists the cost); keep everything as it is (the flag stays in every script and agent file).
 
-### Phase 1: add the single option with no question
+### Phase 1: add the single option with no question (built 2026-11-21)
 
 - `packages/cli/src/commands/add.ts`: before the refusal at line 530 and before the prompt, push each unmet requirement whose `options` has length 1 into `requested`, reload the side, and log `database needs database-postgres; adding it.`
 - `packages/cli/src/engine/render.ts:366` (the `init` path): the same rule, through one shared helper in `lib/requires.ts` so `add` and `init` cannot drift.
@@ -51,14 +51,14 @@ Rejected: merge the modules (Context lists the cost); keep everything as it is (
 
 Done when: the new tests pass; `pnpm --filter saasaloy test` and `pnpm typecheck` pass; in `.dev`, `saasaloy add database --yes` exits 0 and the lock holds both modules.
 
-### Phase 2: drop the core's `tsconfig.json`
+### Phase 2: drop the core's `tsconfig.json` (built 2026-11-21)
 
 - Remove `files/tsconfig.json` and its `scaffolds[]` row from `modules/database/registry-item.json`.
 - `lib/collisions.ts` has no special case for this file: its `dependsOn` rule allows the override. Rewrite only the comments at lines 7-10 and 157-160, which use this file as their example.
 
 Done when: `ls modules/database/files/tsconfig.json` fails; `pnpm test:modules` and `pnpm scaffold:check` pass; `release:smoke` updates a 0.10.0 project with a database with 0 conflict markers and `packages/db/tsconfig.json` unchanged.
 
-### Phase 3: the words
+### Phase 3: the words (built 2026-11-21)
 
 - Remove `--with database-postgres` from the skills (`saasaloy-database`, `saasaloy-build`, `saasaloy-setup`), `llms.txt`, `README.md`, `modules/README.md` and the wiki. Keep it in `add.ts` help as the `--with` example only if `api-keys` makes a worse one.
 - `CONTEXT.md`: the `requiresOneOf` entry states the one-option rule.
