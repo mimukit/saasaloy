@@ -185,10 +185,3 @@ export function transaction<T>(
   // nothing inside a transaction may call: closing the socket mid-transaction is a bug.
   return db.transaction((tx) => body(tx as unknown as Db));
 }
-
-/**
- * Whether `transaction` rolls back on a throw. `true` here. Code that has to act
- * differently when it cannot (`adminWrite` would log a failed audit insert instead of
- * failing a change that already stood) reads this and never names the driver.
- */
-export const TRANSACTION_IS_ATOMIC = true;
