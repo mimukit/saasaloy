@@ -19,18 +19,22 @@ export function isExternalHref(href: string): boolean {
   return /^(?:https?:)?\/\//i.test(href);
 }
 
-/** `target` and `rel` for an outbound href, nothing for a link that stays on the site. */
+/**
+ * `target` and `rel` for an outbound href, nothing for a link that stays on the site.
+ * `newTab` forces a new tab for an on-site path that a block wants in a new tab.
+ */
 export function externalLinkProps(
-  href: string
+  href: string,
+  newTab = false
 ): Pick<AnchorHTMLAttributes<HTMLAnchorElement>, "target" | "rel"> {
-  return isExternalHref(href)
+  return isExternalHref(href) || newTab
     ? { target: "_blank", rel: "noopener noreferrer" }
     : {};
 }
 
 /** Screen-reader text announcing the new tab, or nothing for a link that stays. */
-export function newTabHint(href: string): ReactNode {
-  return isExternalHref(href)
+export function newTabHint(href: string, newTab = false): ReactNode {
+  return isExternalHref(href) || newTab
     ? createElement("span", { className: "sr-only" }, ` ${ui.link.newTab}`)
     : null;
 }

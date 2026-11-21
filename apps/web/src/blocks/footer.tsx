@@ -30,7 +30,8 @@ import { interpolate } from "@web/lib/interpolate";
 // build year stays, which is still a true year.
 //
 // Words and links come from ../content/landing.ts. An empty label in content drops a
-// link. Every link leaves the site, except the wordmark, so each one opens in a new tab.
+// link. Every link leaves the site, except the wordmark and Getting started, which the
+// content marks `newTab`. Each of those opens in a new tab.
 
 // The construction guides drawn over the large wordmark (option 1 of the footer pattern
 // mockup): the x-height and baseline, the side bearings, a construction circle on the
@@ -67,6 +68,8 @@ export interface FooterLink {
   id: string;
   label: string;
   href: string;
+  /** Opens an on-site path in a new tab. Outbound links always do. */
+  newTab?: boolean;
 }
 
 const defaultLinks: FooterLink[] = landing.footer.links.filter(
@@ -174,12 +177,12 @@ export function Footer({
                   <li key={link.id}>
                     <a
                       href={link.href}
-                      {...externalLinkProps(link.href)}
+                      {...externalLinkProps(link.href, link.newTab)}
                       className="text-highlight inline-flex items-center gap-2 font-medium underline-offset-4 hover:underline"
                     >
                       {LINK_ICONS[link.id]}
                       {link.label}
-                      {newTabHint(link.href)}
+                      {newTabHint(link.href, link.newTab)}
                     </a>
                   </li>
                 ))}

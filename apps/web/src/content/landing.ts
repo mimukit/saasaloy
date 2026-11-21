@@ -470,6 +470,7 @@ export const landing = {
         id: "getting-started",
         label: "Getting started",
         href: `${DOCS}/getting-started`,
+        newTab: true,
       },
       {
         id: "changelog",
