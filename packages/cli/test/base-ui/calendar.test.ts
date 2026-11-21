@@ -517,3 +517,32 @@ describe("12-hour time", () => {
     expect(stepMinute(30, 1)).toBe(31);
   });
 });
+
+describe("localized date display", () => {
+  it.each([
+    "pt-BR",
+    "cs",
+    "ru",
+    "uk",
+    "he",
+    "fa",
+    "hi",
+    "bn",
+    "bn-BD",
+    "ja",
+    "ko",
+    "zh-CN",
+    "zh-TW",
+    "th",
+    "vi",
+    "hu",
+    "nl",
+  ])("reads its own display in %s", (locale) => {
+    for (let month = 1; month <= 12; month++) {
+      const date = day(2026, month, 5);
+      const shown = formatShown(date, locale);
+      expect(shown).toContain("2026");
+      expect(parseTyped(shown, locale)).toStrictEqual(date);
+    }
+  });
+});
