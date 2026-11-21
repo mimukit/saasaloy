@@ -24,7 +24,6 @@ async function readDescriptor(name: string): Promise<Record<string, unknown>> {
 interface FileEntry {
   path: string;
   target: string;
-  onlyWith?: string;
 }
 
 interface RowEntry {

@@ -53,7 +53,7 @@ beforeAll(async () => {
   // driver, and `--with` is the flag that picks it. `auth` then finds the driver
   // installed, so it needs no `--with` of its own.
   for (const argv of [
-    ["add", "waitlist", "--with", "database-d1", "--yes"],
+    ["add", "waitlist", "--with", "database-postgres", "--yes"],
     ["add", "auth", "--yes"],
     ["add", "admin", "--yes"],
     ["add", "email", "--yes"],
@@ -88,7 +88,7 @@ describe("e2e — an agent builds a project with flags only (#223)", () => {
       "api",
       "auth",
       "database",
-      "database-d1",
+      "database-postgres",
       "email",
       "email-console",
       "waitlist",

@@ -285,7 +285,7 @@ The base's `seedFiles` and `ownedFiles` in `_saasaloy-base.json` and a module en
 
 ### The base of a merge
 
-The base is the render of the old lock, from the payload at the old ref, accepted only when its sha256 equals the hash the manifest recorded. The manifest hash is always the sha256 of the raw render, before Prettier, never the bytes on disk. When the old lock's render does not match, the run renders the release the record names in its `version`, a side rendered with another database driver included. With no match, the merge writes two-way markers ([ADR 0068](../adr/0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)).
+The base is the render of the old lock, from the payload at the old ref, accepted only when its sha256 equals the hash the manifest recorded. The manifest hash is always the sha256 of the raw render, before Prettier, never the bytes on disk. When the old lock's render does not match, the run renders the release the record names in its `version`. A descriptor read at an older release loads with a retired key translated: `onlyWith: X` reads as `when.installed: [X]`, so a release with twin files renders the twin of the installed driver. With no match, the merge writes two-way markers ([ADR 0068](../adr/0068-adr-a-merge-base-is-found-by-hash-in-a-user-cache-2026-11-20.md)).
 
 The payload of each ref lives in a cache for each user: `$XDG_CACHE_HOME/saasaloy/payload/<source>@<ref>/`, else `~/.cache/saasaloy/payload/<source>@<ref>/`. A fetch fills it, and a later run reads it. A run that needs a merge, with a cold cache and no network, refuses with exit 2. The base template at the running CLI's release is the one bundled in the CLI.
 

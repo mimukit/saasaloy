@@ -6,6 +6,7 @@ import { readVersion, UNKNOWN_VERSION } from "../version.js";
 import { describeInvalidDescriptor } from "./cli-requires.js";
 import { RefusalError } from "./exit.js";
 import { pathExists, readDirNames } from "./fs-utils.js";
+import { normalizeRetiredKeys } from "./retired-keys.js";
 import type { TemplateVars } from "./scaffold.js";
 import type { RegistryItem } from "./schema.js";
 import { validateRegistryItem } from "./schema.js";
@@ -191,11 +192,23 @@ export class UnknownModuleError extends RefusalError {
   }
 }
 
+/** How a descriptor read treats a key the schema has retired. */
+export interface LoadOptions {
+  /**
+   * The read is at a ref that is not the running CLI's own: a release snapshot an older
+   * project renders its base from, or the commit a lock entry pinned. A retired key is
+   * translated before the schema check (`lib/retired-keys.ts`). Absent, the read is of
+   * the running registry and a retired key fails the check.
+   */
+  atOldRef?: boolean;
+}
+
 /** Read + validate `<dir>/registry-item.json`, asserting it declares `name`. */
 export async function loadModuleFolder(
   dir: string,
   name: string,
-  requiredBy?: string
+  requiredBy?: string,
+  options: LoadOptions = {}
 ): Promise<LoadedModule> {
   const file = join(dir, "registry-item.json");
   if (!(await pathExists(file))) {
@@ -218,7 +231,10 @@ export async function loadModuleFolder(
       { cause: error }
     );
   }
-  const result = await validateRegistryItem(dropLegacyTablePatches(parsed));
+  const prepared = dropLegacyTablePatches(
+    options.atOldRef === true ? normalizeRetiredKeys(parsed) : parsed
+  );
+  const result = await validateRegistryItem(prepared);
   if (!result.valid) {
     // A descriptor this CLI cannot validate is most often one written for a newer CLI,
     // so the refusal reads its `requires.saasaloy` floor first (#205).
@@ -231,7 +247,7 @@ export async function loadModuleFolder(
       })
     );
   }
-  const item = parsed as RegistryItem;
+  const item = prepared as RegistryItem;
   if (item.name !== name) {
     throw new RefusalError(
       `Module folder "${name}" declares name "${item.name}" — the folder and descriptor name must match.`
@@ -278,7 +294,10 @@ export function dropLegacyTablePatches(parsed: unknown): unknown {
 
 /** A local `modules/` directory: `<dir>/<name>/registry-item.json`. Dev/offline. */
 export class LocalRegistrySource implements RegistrySource {
-  constructor(private readonly dir: string) {}
+  constructor(
+    private readonly dir: string,
+    private readonly options: LoadOptions = {}
+  ) {}
 
   get label(): string {
     return this.dir;
@@ -286,7 +305,12 @@ export class LocalRegistrySource implements RegistrySource {
 
   async readModule(name: string, requiredBy?: string): Promise<LoadedModule> {
     await this.assertExists();
-    return loadModuleFolder(join(this.dir, name), name, requiredBy);
+    return loadModuleFolder(
+      join(this.dir, name),
+      name,
+      requiredBy,
+      this.options
+    );
   }
 
   async listModules(): Promise<string[]> {
@@ -447,7 +471,8 @@ export class RemoteRegistrySource implements RegistrySource {
   constructor(
     private readonly owner: string,
     private readonly repo: string,
-    private readonly ref?: string
+    private readonly ref?: string,
+    private readonly options: LoadOptions = {}
   ) {}
 
   // Once resolved, the label names the ref the source settled on, so `list` says which
@@ -483,7 +508,7 @@ export class RemoteRegistrySource implements RegistrySource {
         { cause: error }
       );
     }
-    return loadModuleFolder(dir, name, requiredBy);
+    return loadModuleFolder(dir, name, requiredBy, this.options);
   }
 
   async listModules(): Promise<string[]> {

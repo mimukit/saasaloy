@@ -7,7 +7,7 @@ import { REGISTRY_ENV } from "../lib/registry.js";
 import type { RegistryItem } from "../lib/schema.js";
 import { loadPayload } from "./payload.js";
 import type { Payload, PayloadModule } from "./payload.js";
-import { fixedOrder, gateOf, render } from "./render.js";
+import { fixedOrder, render } from "./render.js";
 import type { RenderResult } from "./render.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -326,76 +326,6 @@ describe("generated tables (plan 0116, Phase 7)", () => {
     expect(() => renderOf(payloadOf([owner, clash]), ["clash"])).toThrow(
       RefusalError
     );
-  });
-});
-
-describe("onlyWith reads as a when.installed gate", () => {
-  const widget = moduleOf(
-    {
-      files: [
-        { onlyWith: "extra", path: "files/a.ts", target: "@web/a.ts" },
-        {
-          path: "files/b.ts",
-          target: "@web/b.ts",
-          when: { installed: ["extra"] },
-        },
-        { onlyWith: "pg", path: "files/db.pg.ts", target: "@web/db.ts" },
-        {
-          onlyWith: "sqlite",
-          path: "files/db.sqlite.ts",
-          target: "@web/db.ts",
-        },
-      ],
-      name: "widget",
-    },
-    {
-      "files/a.ts": "a\n",
-      "files/b.ts": "b\n",
-      "files/db.pg.ts": "pg\n",
-      "files/db.sqlite.ts": "sqlite\n",
-    }
-  );
-  const payload = payloadOf([
-    widget,
-    moduleOf({ name: "extra" }),
-    moduleOf({ name: "pg" }),
-    moduleOf({ name: "sqlite" }),
-  ]);
-
-  it("turns onlyWith into one more installed name", () => {
-    expect(gateOf(undefined, "extra")).toStrictEqual({ installed: ["extra"] });
-    expect(gateOf({ installed: ["a"], testing: true }, "b")).toStrictEqual({
-      installed: ["a", "b"],
-      testing: true,
-    });
-    // An entry with no `onlyWith` keeps its own condition, the same object.
-    const entry: { when: { testing: true }; onlyWith?: string } = {
-      when: { testing: true },
-    };
-    expect(gateOf(entry.when, entry.onlyWith)).toBe(entry.when);
-  });
-
-  it("drops both entries when the module is absent", () => {
-    const result = renderOf(payload, ["widget"]);
-    expect(result.files.has("apps/web/src/a.ts")).toBeFalsy();
-    expect(result.files.has("apps/web/src/b.ts")).toBeFalsy();
-    // Every variant of the target fails, so nothing is written and nothing refuses.
-    expect(result.files.has("apps/web/src/db.ts")).toBeFalsy();
-  });
-
-  it("ships both entries when the module is in the set", () => {
-    const result = renderOf(payload, ["widget", "extra"]);
-    expect(result.files.get("apps/web/src/a.ts")?.content).toBe("a\n");
-    expect(result.files.get("apps/web/src/b.ts")?.content).toBe("b\n");
-  });
-
-  it("picks the variant whose module is in the set", () => {
-    expect(
-      renderOf(payload, ["widget", "pg"]).files.get("apps/web/src/db.ts")
-    ).toMatchObject({ content: "pg\n", from: "files/db.pg.ts" });
-    expect(
-      renderOf(payload, ["widget", "sqlite"]).files.get("apps/web/src/db.ts")
-    ).toMatchObject({ content: "sqlite\n", from: "files/db.sqlite.ts" });
   });
 });
 

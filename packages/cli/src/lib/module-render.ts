@@ -5,7 +5,7 @@ import type { TemplateVars } from "./scaffold.js";
 
 // `{{PROJECT_NAME}}` in a module, rendered the way `init` renders the base (#197).
 //
-// A module ships account-scoped names: the `api` Worker, the D1 database, the queues. Copied
+// A module ships account-scoped names: the `api` Worker, the KV namespace, the queues. Copied
 // verbatim, two projects in one Cloudflare account deploy over each other's Workers and bind
 // to each other's data. So a module's files and its patch entries carry `{{PROJECT_NAME}}`,
 // and the module is rendered once, as it enters a plan. Every later step — the manifest hash,

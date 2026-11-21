@@ -56,13 +56,13 @@ function lockFor(...modules: LoadedModule[]): Lockfile {
 describe("detectConflicts — forward direction (incoming descriptor declares it)", () => {
   it("flags an incoming module that names an installed one", () => {
     const report = detectConflicts({
-      graph: graph(mod("database-d1", { conflictsWith: ["database-pg"] })),
+      graph: graph(mod("database-lite", { conflictsWith: ["database-pg"] })),
       config: config("database-pg"),
       lock: lockFor(mod("database-pg")),
     });
     expect(report.conflicts).toStrictEqual([
       {
-        declaredBy: "database-d1",
+        declaredBy: "database-lite",
         conflictsWith: "database-pg",
         installed: "database-pg",
       },
@@ -71,7 +71,7 @@ describe("detectConflicts — forward direction (incoming descriptor declares it
 
   it("stays silent when the named module isn't installed and isn't in the graph", () => {
     const report = detectConflicts({
-      graph: graph(mod("database-d1", { conflictsWith: ["database-pg"] })),
+      graph: graph(mod("database-lite", { conflictsWith: ["database-pg"] })),
       config: config("api"),
       lock: lockFor(mod("api")),
     });
@@ -88,18 +88,18 @@ describe("detectConflicts — forward direction (incoming descriptor declares it
   });
 
   it("flags a conflict declared by a transitive prerequisite, not just the requested module", () => {
-    // `waitlist` is clean; the `database-d1` it drags in is what collides.
+    // `waitlist` is clean; the `database-lite` it drags in is what collides.
     const report = detectConflicts({
       graph: graph(
-        mod("waitlist", { dependsOn: ["database-d1"] }),
-        mod("database-d1", { conflictsWith: ["database-pg"] })
+        mod("waitlist", { dependsOn: ["database-lite"] }),
+        mod("database-lite", { conflictsWith: ["database-pg"] })
       ),
       config: config("database-pg"),
       lock: lockFor(mod("database-pg")),
     });
     expect(report.conflicts).toStrictEqual([
       {
-        declaredBy: "database-d1",
+        declaredBy: "database-lite",
         conflictsWith: "database-pg",
         installed: "database-pg",
       },
@@ -109,8 +109,8 @@ describe("detectConflicts — forward direction (incoming descriptor declares it
   it("flags two mutually exclusive modules pulled into one graph, with nothing installed", () => {
     const report = detectConflicts({
       graph: graph(
-        mod("bundle", { dependsOn: ["database-d1", "database-pg"] }),
-        mod("database-d1", { conflictsWith: ["database-pg"] }),
+        mod("bundle", { dependsOn: ["database-lite", "database-pg"] }),
+        mod("database-lite", { conflictsWith: ["database-pg"] }),
         mod("database-pg")
       ),
       config: config(),
@@ -118,15 +118,15 @@ describe("detectConflicts — forward direction (incoming descriptor declares it
     });
     // No `installed` key — neither side is on disk, so there's nothing to remove.
     expect(report.conflicts).toStrictEqual([
-      { declaredBy: "database-d1", conflictsWith: "database-pg" },
+      { declaredBy: "database-lite", conflictsWith: "database-pg" },
     ]);
   });
 
   it("ignores a module that names itself", () => {
     const report = detectConflicts({
-      graph: graph(mod("database-d1", { conflictsWith: ["database-d1"] })),
-      config: config("database-d1"),
-      lock: lockFor(mod("database-d1", { conflictsWith: ["database-d1"] })),
+      graph: graph(mod("database-lite", { conflictsWith: ["database-lite"] })),
+      config: config("database-lite"),
+      lock: lockFor(mod("database-lite", { conflictsWith: ["database-lite"] })),
     });
     expect(report.conflicts).toStrictEqual([]);
   });
@@ -136,59 +136,59 @@ describe("detectConflicts — reverse direction (installed module declared it)",
   it("flags an installed module whose lock entry names the incoming one", () => {
     // database-pg went in first and is the only side that declares the conflict.
     const report = detectConflicts({
-      graph: graph(mod("database-d1")),
+      graph: graph(mod("database-lite")),
       config: config("database-pg"),
-      lock: lockFor(mod("database-pg", { conflictsWith: ["database-d1"] })),
+      lock: lockFor(mod("database-pg", { conflictsWith: ["database-lite"] })),
     });
     expect(report.conflicts).toStrictEqual([
       {
         declaredBy: "database-pg",
-        conflictsWith: "database-d1",
+        conflictsWith: "database-lite",
         installed: "database-pg",
       },
     ]);
   });
 
   it("refuses in both install orders for the same declaring module", () => {
-    const pg = mod("database-pg", { conflictsWith: ["database-d1"] });
-    const d1 = mod("database-d1");
+    const pg = mod("database-pg", { conflictsWith: ["database-lite"] });
+    const lite = mod("database-lite");
 
-    // pg first, then d1 — caught via pg's lock entry.
+    // pg first, then lite — caught via pg's lock entry.
     const pgFirst = detectConflicts({
-      graph: graph(d1),
+      graph: graph(lite),
       config: config("database-pg"),
       lock: lockFor(pg),
     });
-    // d1 first, then pg — caught via pg's own fresh descriptor.
-    const d1First = detectConflicts({
+    // lite first, then pg — caught via pg's own fresh descriptor.
+    const liteFirst = detectConflicts({
       graph: graph(pg),
-      config: config("database-d1"),
-      lock: lockFor(d1),
+      config: config("database-lite"),
+      lock: lockFor(lite),
     });
 
     expect(pgFirst.conflicts).toHaveLength(1);
-    expect(d1First.conflicts).toHaveLength(1);
+    expect(liteFirst.conflicts).toHaveLength(1);
     expect(pgFirst.conflicts[0]?.installed).toBe("database-pg");
-    expect(d1First.conflicts[0]?.installed).toBe("database-d1");
+    expect(liteFirst.conflicts[0]?.installed).toBe("database-lite");
   });
 
   it("reports one entry, not two, when both sides declare the same pair", () => {
     const report = detectConflicts({
-      graph: graph(mod("database-d1", { conflictsWith: ["database-pg"] })),
+      graph: graph(mod("database-lite", { conflictsWith: ["database-pg"] })),
       config: config("database-pg"),
-      lock: lockFor(mod("database-pg", { conflictsWith: ["database-d1"] })),
+      lock: lockFor(mod("database-pg", { conflictsWith: ["database-lite"] })),
     });
     expect(report.conflicts).toHaveLength(1);
     // The fresh descriptor wins the attribution over the recorded copy.
-    expect(report.conflicts[0]?.declaredBy).toBe("database-d1");
+    expect(report.conflicts[0]?.declaredBy).toBe("database-lite");
   });
 
   it("ignores a stale lock entry for a module that is no longer installed", () => {
     const lock = lockFor(
-      mod("database-pg", { conflictsWith: ["database-d1"] })
+      mod("database-pg", { conflictsWith: ["database-lite"] })
     );
     const report = detectConflicts({
-      graph: graph(mod("database-d1")),
+      graph: graph(mod("database-lite")),
       config: config(), // pg was removed; only its lock entry lingers
       lock,
     });
@@ -197,7 +197,7 @@ describe("detectConflicts — reverse direction (installed module declared it)",
 
   it("reports an installed module with no lock entry as unverifiable, and proceeds", () => {
     const report = detectConflicts({
-      graph: graph(mod("database-d1")),
+      graph: graph(mod("database-lite")),
       config: config("legacy"),
       lock: emptyLock(),
     });
@@ -219,7 +219,7 @@ describe("detectConflicts — reverse direction (installed module declared it)",
   // so `installed[]` holds only modules `add` applied and every one of them is checked.
   it("says nothing when every installed module has a lock entry", () => {
     const report = detectConflicts({
-      graph: graph(mod("database-d1")),
+      graph: graph(mod("database-lite")),
       config: config("api"),
       lock: lockFor(mod("api")),
     });
@@ -228,7 +228,7 @@ describe("detectConflicts — reverse direction (installed module declared it)",
 
   it("reports an installed module that lost its lock entry", () => {
     const report = detectConflicts({
-      graph: graph(mod("database-d1")),
+      graph: graph(mod("database-lite")),
       config: config("api"),
       lock: emptyLock(),
     });
@@ -243,13 +243,13 @@ describe(formatConflicts, () => {
   it("names both modules and the remove that clears the conflict", () => {
     const text = message(
       {
-        declaredBy: "database-d1",
+        declaredBy: "database-lite",
         conflictsWith: "database-pg",
         installed: "database-pg",
       },
-      "database-d1"
+      "database-lite"
     );
-    expect(text).toContain("database-d1");
+    expect(text).toContain("database-lite");
     expect(text).toContain("database-pg");
     expect(text).toContain("`saasaloy remove database-pg`");
   });
@@ -258,32 +258,32 @@ describe(formatConflicts, () => {
     const text = message(
       {
         declaredBy: "database-pg",
-        conflictsWith: "database-d1",
+        conflictsWith: "database-lite",
         installed: "database-pg",
       },
-      "database-d1"
+      "database-lite"
     );
     expect(text).toContain(
-      "database-pg is already installed and declares a conflict with database-d1"
+      "database-pg is already installed and declares a conflict with database-lite"
     );
   });
 
   it("names the prerequisite when the requested module isn't the conflicting one", () => {
     const text = message(
       {
-        declaredBy: "database-d1",
+        declaredBy: "database-lite",
         conflictsWith: "database-pg",
         installed: "database-pg",
       },
       "waitlist"
     );
-    expect(text).toContain("database-d1 (required by waitlist)");
+    expect(text).toContain("database-lite (required by waitlist)");
     expect(text).toContain("`saasaloy remove database-pg`");
   });
 
   it("offers no remove when both conflicting modules arrive in the same run", () => {
     const text = message(
-      { declaredBy: "database-d1", conflictsWith: "database-pg" },
+      { declaredBy: "database-lite", conflictsWith: "database-pg" },
       "bundle"
     );
     expect(text).toContain("Add only one of them.");
@@ -308,7 +308,7 @@ describe(formatConflicts, () => {
     const text = formatConflicts(
       [
         {
-          declaredBy: "database-d1",
+          declaredBy: "database-lite",
           conflictsWith: "database-pg",
           installed: "database-pg",
         },
@@ -324,7 +324,7 @@ describe(formatConflicts, () => {
 
   it("says `updating` rather than `adding` when both modules arrive together", () => {
     const text = formatConflicts(
-      [{ declaredBy: "database-d1", conflictsWith: "database-pg" }],
+      [{ declaredBy: "database-lite", conflictsWith: "database-pg" }],
       "bundle",
       "update"
     );
@@ -333,7 +333,7 @@ describe(formatConflicts, () => {
 });
 
 const item = (conflictsWith: unknown) => ({
-  name: "database-d1",
+  name: "database-lite",
   type: "saasaloy:feature" as const,
   conflictsWith,
 });
@@ -349,7 +349,7 @@ describe("registry-item schema — conflictsWith", () => {
 
   it("accepts a descriptor that omits the field", async () => {
     const result = await validateRegistryItem({
-      name: "database-d1",
+      name: "database-lite",
       type: "saasaloy:feature",
     });
     expect(result.errors).toStrictEqual([]);
@@ -386,43 +386,43 @@ describe("conflictsWith — across two runs, through the lockfile on disk", () =
   });
 
   it("refuses the second module using only what the first run wrote to disk", async () => {
-    // Run 1: `add database-d1`, which declares the conflict. Nothing is installed yet,
+    // Run 1: `add database-lite`, which declares the conflict. Nothing is installed yet,
     // so nothing is refused, and the lock records what the descriptor said.
-    const d1 = mod("database-d1", { conflictsWith: ["database-pg"] });
+    const lite = mod("database-lite", { conflictsWith: ["database-pg"] });
     const first = detectConflicts({
-      graph: graph(d1),
+      graph: graph(lite),
       config: config(),
       lock: emptyLock(),
     });
     expect(first.conflicts).toStrictEqual([]);
 
     const lock = emptyLock();
-    upsertLock(lock, PROVENANCE, ["database-d1"], graph(d1));
+    upsertLock(lock, PROVENANCE, ["database-lite"], graph(lite));
     await saveLock(root, lock);
 
-    // Run 2: `add database-pg`. Its own descriptor declares nothing, and `database-d1`'s
+    // Run 2: `add database-pg`. Its own descriptor declares nothing, and `database-lite`'s
     // descriptor is long gone — the refusal has to come out of the lockfile.
     const reloaded = await loadLock(root);
-    expect(reloaded.modules["database-d1"]?.conflictsWith).toStrictEqual([
+    expect(reloaded.modules["database-lite"]?.conflictsWith).toStrictEqual([
       "database-pg",
     ]);
     expect((await validateLock(reloaded)).errors).toStrictEqual([]);
 
     const report = detectConflicts({
       graph: graph(mod("database-pg")),
-      config: config("database-d1"),
+      config: config("database-lite"),
       lock: reloaded,
     });
     expect(report.missingLockEntries).toStrictEqual([]);
     expect(report.conflicts).toStrictEqual([
       {
-        declaredBy: "database-d1",
+        declaredBy: "database-lite",
         conflictsWith: "database-pg",
-        installed: "database-d1",
+        installed: "database-lite",
       },
     ]);
     expect(formatConflicts(report.conflicts, "database-pg")).toContain(
-      "Run `saasaloy remove database-d1` first."
+      "Run `saasaloy remove database-lite` first."
     );
   });
 });

@@ -43,18 +43,12 @@ const NOTES = {
 } as const;
 type Release = keyof typeof NOTES;
 
-const DB_SQLITE = "// the database\nexport const db = 'sqlite';\n\n// end\n";
-const DB_PG = "// the database\nexport const db = 'pg';\n\n// end\n";
-const OWNER_DB = `${DB_SQLITE}export const mine = 1;\n`;
-
 function payloadAt(release: Release): Payload {
   const notes: PayloadModule = {
     files: new Map([
       ["files/notes.ts", NOTES[release]],
       ["files/seed.ts", `export const seed = "${release}";\n`],
       ["files/extra.ts", "export const extra = 1;\n"],
-      ["files/db.sqlite.ts", DB_SQLITE],
-      ["files/db.pg.ts", DB_PG],
       ["files/old.ts", "export const old = 1;\n"],
     ]),
     item: {
@@ -65,12 +59,6 @@ function payloadAt(release: Release): Payload {
         { path: "files/notes.ts", target: "@web/notes.ts" },
         { path: "files/seed.ts", seed: true, target: "@web/seed.ts" },
         { path: "files/extra.ts", target: "@web/extra.ts" },
-        {
-          onlyWith: "drv-sqlite",
-          path: "files/db.sqlite.ts",
-          target: "@web/db.ts",
-        },
-        { onlyWith: "drv-pg", path: "files/db.pg.ts", target: "@web/db.ts" },
         { path: "files/old.ts", target: "@web/old.ts" },
       ],
       name: "notes",
@@ -78,17 +66,15 @@ function payloadAt(release: Release): Payload {
     },
     name: "notes",
   };
-  // Two drivers that exclude each other, as `database-postgres` and `database-d1` do.
-  const driver = (name: string, other: string): PayloadModule => ({
-    files: new Map([["files/driver.ts", `export const driver = "${name}";\n`]]),
+  const driver: PayloadModule = {
+    files: new Map([["files/driver.ts", 'export const driver = "drv";\n']]),
     item: {
-      conflictsWith: [other],
       files: [{ path: "files/driver.ts", target: "@web/driver.ts" }],
-      name,
+      name: "drv",
       type: "saasaloy:capability",
     },
-    name,
-  });
+    name: "drv",
+  };
   return {
     base: {
       declaration: {
@@ -116,8 +102,7 @@ function payloadAt(release: Release): Payload {
     },
     modules: new Map([
       ["notes", notes],
-      ["drv-pg", driver("drv-pg", "drv-sqlite")],
-      ["drv-sqlite", driver("drv-sqlite", "drv-pg")],
+      ["drv", driver],
     ]),
     ref: `v${release}`,
     source: "test",
@@ -125,22 +110,13 @@ function payloadAt(release: Release): Payload {
 }
 
 const OPTIONS: RenderOptions = { projectName: "demo", testingMode: "off" };
-const REQUESTED = ["drv-pg", "notes"];
+const REQUESTED = ["drv", "notes"];
 
 function sideAt(release: Release): ApplySide {
   return {
     options: OPTIONS,
     payload: payloadAt(release),
     requested: REQUESTED,
-  };
-}
-
-/** The side with the old driver, which renders `db.sqlite.ts`. */
-function sqliteSideAt(release: Release): ApplySide {
-  return {
-    options: OPTIONS,
-    payload: payloadAt(release),
-    requested: ["drv-sqlite", "notes"],
   };
 }
 
@@ -188,8 +164,7 @@ const OWNER_README = "# demo\n\nThe owner's own words.\n";
 
 /**
  * A project the old engine wrote: the base at 0.2.0, `notes` added at 0.1.0 and its seed
- * file written again at 0.2.0, then edits, a deletion, a file adopted off disk, and a
- * driver variant recorded from before a move to Postgres.
+ * file written again at 0.2.0, then edits, a deletion and a file adopted off disk.
  */
 async function writeVersion1Project(
   managed: Record<string, Record<string, unknown>>
@@ -201,8 +176,7 @@ async function writeVersion1Project(
   await write("apps/web/src/notes.ts", OWNER_NOTES);
   await write("apps/web/src/seed.ts", 'export const seed = "0.2.0";\n');
   await write("apps/web/src/extra.ts", "export const extra = 'mine';\n");
-  await write("apps/web/src/db.ts", OWNER_DB);
-  await write("apps/web/src/driver.ts", 'export const driver = "drv-pg";\n');
+  await write("apps/web/src/driver.ts", 'export const driver = "drv";\n');
   await write(
     ".saasaloy/manifest.json",
     `${JSON.stringify(
@@ -230,7 +204,7 @@ async function writeVersion1Project(
         },
         lockfileVersion: 1,
         modules: {
-          "drv-pg": {
+          drv: {
             ref: "v0.2.0",
             resolved: "v0.2.0",
             source: "mimukit/saasaloy",
@@ -248,11 +222,6 @@ async function writeVersion1Project(
   );
 }
 
-function copied(release: Release, from: string): string {
-  const raw = payloadAt(release).modules.get("notes")?.files.get(from) ?? "";
-  return raw;
-}
-
 const MANAGED: Record<string, Record<string, unknown>> = {
   "AGENTS.md": {
     from: "AGENTS.md",
@@ -264,15 +233,10 @@ const MANAGED: Record<string, Record<string, unknown>> = {
     hash: sha("# demo\n"),
     module: "base",
   },
-  "apps/web/src/db.ts": {
-    from: "files/db.sqlite.ts",
-    hash: sha(copied("0.1.0", "files/db.sqlite.ts")),
-    module: "notes",
-  },
   "apps/web/src/driver.ts": {
     from: "files/driver.ts",
-    hash: sha('export const driver = "drv-pg";\n'),
-    module: "drv-pg",
+    hash: sha('export const driver = "drv";\n'),
+    module: "drv",
   },
   "apps/web/src/extra.ts": {
     adopted: true,
@@ -375,17 +339,6 @@ describe(convertProject, () => {
     });
     expect(files["package.json"]?.hash).not.toBe(MANAGED["package.json"]?.hash);
 
-    // A driver variant: the project's set renders `db.pg.ts` at the path, and only a
-    // side with the old driver renders the recorded `db.sqlite.ts`. Its render's hash
-    // equals the record, so it is the base.
-    expect(files["apps/web/src/db.ts"]).toStrictEqual({
-      class: "merged",
-      from: "files/db.sqlite.ts",
-      hash: sha(DB_SQLITE),
-      module: "notes",
-      version: "0.2.0",
-    });
-
     // No render holds the recorded bytes: the file becomes a file on both sides.
     expect(files["apps/web/src/extra.ts"]).toBeUndefined();
     expect(files["saasaloy.json"]).toBeUndefined();
@@ -410,11 +363,11 @@ describe(convertProject, () => {
     }
 
     const found = conversion.files.filter((file) => file.version !== undefined);
-    expect(found).toHaveLength(7);
-    expect(conversion.files).toHaveLength(11);
+    expect(found).toHaveLength(6);
+    expect(conversion.files).toHaveLength(10);
 
     // The lock gains the requested list; the base keeps its release.
-    expect(conversion.lock.requested).toStrictEqual(["drv-pg", "notes"]);
+    expect(conversion.lock.requested).toStrictEqual(["drv", "notes"]);
     expect(conversion.lock.base?.cliVersion).toBe("0.2.0");
     expect(
       conversion.manifest.pendingNotes.map((note) => note.id)
@@ -434,7 +387,7 @@ describe(convertProject, () => {
     const lock = JSON.parse(
       await readFile(join(root, "saasaloy-lock.json"), "utf-8")
     ) as { requested?: string[] };
-    expect(lock.requested).toStrictEqual(["drv-pg", "notes"]);
+    expect(lock.requested).toStrictEqual(["drv", "notes"]);
   });
 
   it("refuses a manifest with no source path or no hash, and names the last old-engine CLI", async () => {
@@ -498,12 +451,7 @@ describe("an update after the conversion", () => {
 
     // The record names 0.1.0. With its render as a base, the owner's edit and the
     // upstream change both land.
-    const withBase = await run(
-      new Map([
-        ["0.1.0", [sideAt("0.1.0")]],
-        ["0.2.0", [sqliteSideAt("0.2.0")]],
-      ])
-    );
+    const withBase = await run(new Map([["0.1.0", [sideAt("0.1.0")]]]));
     const notes = withBase.results.find(
       (result) => result.path === "apps/web/src/notes.ts"
     );
@@ -520,13 +468,6 @@ describe("an update after the conversion", () => {
       without.results.find((result) => result.path === "apps/web/src/notes.ts")
         ?.kind
     ).toBe("no-base");
-
-    // The variant base: the owner's line and the move to the pg source both land.
-    const db = withBase.results.find(
-      (result) => result.path === "apps/web/src/db.ts"
-    );
-    expect(db?.kind).toBe("clean");
-    expect(db?.after).toBe(`${DB_PG}export const mine = 1;\n`);
 
     // The files with no base go to the plan's "both sides" rule; the once paths keep.
     const kinds = Object.fromEntries(

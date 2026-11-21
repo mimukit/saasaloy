@@ -276,11 +276,13 @@ async function loadDeclarations(
       }
       // Pin to the resolved SHA, not the ref: the descriptor has to describe the bytes
       // this project installed, and the ref has moved on by definition when it moved.
+      // That commit may be an older release than this CLI's, so a retired descriptor key
+      // is read translated rather than refused (plan 0117).
       const ref = entry.resolved === "local" ? entry.ref : entry.resolved;
       const key = `${entry.source}@${ref}`;
       let cached = resolvers.get(key);
       if (!cached) {
-        cached = new RemoteRegistrySource(owner, repo, ref);
+        cached = new RemoteRegistrySource(owner, repo, ref, { atOldRef: true });
         resolvers.set(key, cached);
         sources.push(cached);
       }

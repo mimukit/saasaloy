@@ -3,8 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
-import { REGISTRY_ENV } from "../lib/registry.js";
+import { GITHUB_API_ENV, REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
+import {
+  fixtureModule,
+  startGithubFixture,
+} from "../../test/support/github-fixture.js";
 import { runJson } from "../../test/support/json-run.js";
 import { parseArgs, renderPending, runEnv, writeAnswers } from "./env.js";
 
@@ -523,6 +527,91 @@ describe("runEnv --check --json (#223)", () => {
       },
     });
     await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
+  });
+});
+
+// `env` reads each installed module's descriptor at the commit its lock entry resolved,
+// which may be a release older than this CLI. A descriptor of such a release may carry a
+// key the schema has since retired, so that read translates it rather than skipping the
+// module (plan 0117, "Old descriptors at an old ref").
+describe("runEnv — a descriptor read at the commit the lock pinned", () => {
+  const PINNED = "abcdef0123456789abcdef0123456789abcdef01";
+  let fixture: Awaited<ReturnType<typeof startGithubFixture>>;
+  let gigetCache: string;
+  const saved: Record<string, string | undefined> = {};
+
+  beforeEach(async () => {
+    for (const key of ["XDG_CACHE_HOME", "GITHUB_TOKEN", "GIGET_AUTH"]) {
+      saved[key] = process.env[key];
+    }
+    gigetCache = await mkdtemp(join(tmpdir(), "saasaloy-env-giget-"));
+    process.env.XDG_CACHE_HOME = gigetCache;
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.GIGET_AUTH;
+    // The released `waitlist` shipped a file gated by the retired `onlyWith`.
+    fixture = await startGithubFixture({
+      modules: {
+        waitlist: fixtureModule("waitlist", {
+          envVars: { PUBLIC_API_URL: PUBLIC_DESCRIPTION },
+          files: [
+            {
+              onlyWith: "database-postgres",
+              path: "files/waitlist.ts",
+              target: "@web/waitlist.ts",
+            },
+          ],
+        }),
+      },
+      sha: PINNED,
+    });
+    process.env[GITHUB_API_ENV] = fixture.url;
+    process.env.GIGET_GITHUB_URL = fixture.url;
+    delete process.env[REGISTRY_ENV];
+    await put(
+      "saasaloy.json",
+      JSON.stringify({ aliases: {}, base: "web", installed: ["waitlist"] })
+    );
+    await put(
+      "saasaloy-lock.json",
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules: {
+          waitlist: {
+            ref: "v0.9.0",
+            resolved: PINNED,
+            source: "mimukit/saasaloy",
+          },
+        },
+      })
+    );
+  });
+
+  afterEach(async () => {
+    await fixture.close();
+    delete process.env[GITHUB_API_ENV];
+    delete process.env.GIGET_GITHUB_URL;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    await rm(gigetCache, { force: true, recursive: true });
+  });
+
+  it("reads the module's variables and skips nothing", async () => {
+    const { doc } = await runJson(runEnv, ["--check", "--json"]);
+
+    expect(doc.skipped).toStrictEqual([]);
+    expect(doc.variables).toStrictEqual([
+      {
+        description: PUBLIC_DESCRIPTION,
+        module: "waitlist",
+        name: "PUBLIC_API_URL",
+        set: false,
+      },
+    ]);
   });
 });
 

@@ -26,14 +26,14 @@ describe("mergeGraph — folding a second resolution in", () => {
       graph(
         mod("api"),
         mod("database", ["api"]),
-        mod("database-d1", ["database"])
+        mod("database-lite", ["database"])
       )
     );
-    expect(merged.order).toStrictEqual(["api", "database", "database-d1"]);
+    expect(merged.order).toStrictEqual(["api", "database", "database-lite"]);
     expect([...merged.modules.keys()]).toStrictEqual([
       "api",
       "database",
-      "database-d1",
+      "database-lite",
     ]);
   });
 

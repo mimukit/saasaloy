@@ -43,7 +43,7 @@ beforeAll(async () => {
   }
 
   for (const argv of [
-    ["add", "auth", "--with", "database-d1", "--yes"],
+    ["add", "auth", "--with", "database-postgres", "--yes"],
     ["add", "app", "--yes"],
   ]) {
     const run = await runCli(argv, {

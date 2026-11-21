@@ -9,7 +9,7 @@ import type { RequestedInput } from "./requested.js";
 // `dependsOn` says "install this too". `conflictsWith` says "refuse this beside me".
 // Neither can say "pick one of these", which is what a capability split across mutually
 // exclusive drivers needs: `database` scaffolds `packages/db` and declares the `./client`
-// export, but the file behind that export ships in `database-d1` or `database-postgres`.
+// export, but the file behind that export ships in a driver, today `database-postgres`.
 // Installing the core alone leaves a project whose `@repo/db/client` import resolves to
 // nothing, and nothing said so at `add` time (#98, ADR 0026's amendment).
 //

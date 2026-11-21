@@ -8,6 +8,10 @@ A three-way merge ([ADR 0066](0066-adr-one-render-and-a-three-way-merge-replace-
 
 accepted. Supersedes the snapshot rule of [ADR 0059](0059-adr-the-base-merges-against-its-release-tag-and-keeps-a-deleted-file-deleted-2026-11-04.md): `fetchBaseSnapshot`, the version choice and the `templateHash` check give way to a render by hash, and `--from` is gone. Keeps ADR 0059's rule that a tracked file the owner deleted stays deleted, with `update --restore <path>` as the way back.
 
+## Amendment — 2026-11-21: the base search no longer covers a move between SQL drivers
+
+[ADR 0065](0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md) makes Postgres the only SQL dialect and removes `onlyWith` from the descriptor schema. The sentence above about a record whose source a driver gates off no longer holds. `variantSets` in `engine/render.ts` and `variantSides` in `engine/project.ts` read only `onlyWith`, so both are gone, and neither `update` nor the version 1 conversion renders a side with another driver. A record whose source only a D1 render produced finds no base and merges with two-way markers. A descriptor read at an older release still loads: `lib/retired-keys.ts` translates its `onlyWith: X` into `when.installed: [X]` before the schema check, so a release snapshot renders one file per target. A read of the running registry stays strict (plan [0117](../plans/0117-plan-postgres-only-2026-11-20.md), rows "Old descriptors at an old ref" and "Driver-switch base search"; issue [#366](https://github.com/mimukit/saasaloy/issues/366)).
+
 ## Considered Options
 
 - **Keep a copy of the base render inside the project.** Rejected. It adds about 300 files to the tree and doubles the diff of each update (grill Q2).

@@ -36,7 +36,7 @@ function config(...installed: string[]): SaasaloyConfig {
   return { aliases: {}, installed };
 }
 
-const DRIVERS = ["database-d1", "database-postgres"];
+const DRIVERS = ["database-lite", "database-postgres"];
 
 describe("detectMissingRequirements — what counts as satisfied", () => {
   it("flags a module whose choice is neither in the graph nor installed", () => {
@@ -54,7 +54,7 @@ describe("detectMissingRequirements — what counts as satisfied", () => {
       config: config(),
       graph: graph(
         mod("database", { requiresOneOf: DRIVERS }),
-        mod("database-d1", { dependsOn: ["database"] })
+        mod("database-lite", { dependsOn: ["database"] })
       ),
     });
     expect(missing).toStrictEqual([]);
@@ -104,8 +104,8 @@ describe("formatMissingRequirements — the refusal text", () => {
     );
     expect(message).toContain("Cannot add database");
     expect(message).toContain("database needs one of");
-    expect(message).toContain("database-d1, database-postgres");
-    expect(message).toContain("saasaloy add database --with database-d1");
+    expect(message).toContain("database-lite, database-postgres");
+    expect(message).toContain("saasaloy add database --with database-lite");
   });
 
   it("says which requested module dragged in the declaring prerequisite", () => {
@@ -154,14 +154,14 @@ describe("registry-item schema — requiresOneOf", () => {
 
   it("rejects a name that isn't a module name", async () => {
     expect(
-      (await validateRegistryItem(item(["Database-D1"]))).valid
+      (await validateRegistryItem(item(["Database-Lite"]))).valid
     ).toBeFalsy();
     expect((await validateRegistryItem(item(["../etc"]))).valid).toBeFalsy();
   });
 
   it("rejects a repeated name", async () => {
     const result = await validateRegistryItem(
-      item(["database-d1", "database-d1"])
+      item(["database-lite", "database-lite"])
     );
     expect(result.valid).toBeFalsy();
   });
@@ -178,7 +178,7 @@ describe("registry-item schema — requiresOneOf", () => {
   });
 
   it("rejects a string in place of the list", async () => {
-    const result = await validateRegistryItem(item("database-d1"));
+    const result = await validateRegistryItem(item("database-lite"));
     expect(result.valid).toBeFalsy();
   });
 });
@@ -223,9 +223,8 @@ describe("the first-party database driver wiring", () => {
   });
 
   it("has neither payload pinning a driver — `database` is what guarantees one", async () => {
-    // #99 retracted the `dependsOn: ["database-d1"]` stopgap from both payloads. They ship
-    // a per-driver schema variant instead, so they depend on the `database` capability and
-    // let its `requiresOneOf` pick the driver (ADR 0029).
+    // #99 retracted a stopgap that pinned the D1 driver in both payloads. They depend on
+    // the `database` capability and let its `requiresOneOf` pick the driver (ADR 0029).
     expect((await descriptor("auth")).dependsOn).toStrictEqual([
       "api",
       "database",
@@ -276,7 +275,7 @@ describe("the first-party database driver wiring", () => {
     // The #99 acceptance case, read off the real descriptors: `add database-postgres`,
     // then `add auth`. `auth` brings no driver of its own, so nothing collides with the
     // installed one and `database`'s requiresOneOf is already satisfied. Before #91 this
-    // pair was refused, because `auth` dragged `database-d1` in and the drivers exclude
+    // pair was refused, because `auth` dragged the D1 driver in and the drivers excluded
     // each other.
     const installed = await loaded("database-postgres");
     const lock = emptyLock();

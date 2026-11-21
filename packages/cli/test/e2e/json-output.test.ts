@@ -97,7 +97,13 @@ describe("e2e — --json (#223)", () => {
   });
 
   it("puts every file of the human plan into the --dry-run --json plan", async () => {
-    const argv = ["add", "waitlist", "--with", "database-d1", "--dry-run"];
+    const argv = [
+      "add",
+      "waitlist",
+      "--with",
+      "database-postgres",
+      "--dry-run",
+    ];
     const human = await cli(argv);
     const json = await cli([...argv, "--json"]);
 
@@ -105,7 +111,7 @@ describe("e2e — --json (#223)", () => {
     assertOk(json);
     const doc = parsed(json);
     expect(doc).toMatchObject({ requested: ["waitlist"], schemaVersion: 3 });
-    expect(doc.install).toContain("database-d1");
+    expect(doc.install).toContain("database-postgres");
 
     const files = doc.files as PlanFile[];
     const text = collapse(human.stdout);
@@ -127,7 +133,7 @@ describe("e2e — --json (#223)", () => {
   });
 
   it("lists only the installed modules under --installed --json", async () => {
-    const add = await cli(["add", "database-d1", "--yes"]);
+    const add = await cli(["add", "database-postgres", "--yes"]);
     assertOk(add);
 
     const run = await cli(["list", "--installed", "--json"]);
@@ -140,7 +146,7 @@ describe("e2e — --json (#223)", () => {
     expect(modules.map((m) => m.name).toSorted()).toStrictEqual([
       "api",
       "database",
-      "database-d1",
+      "database-postgres",
       "logger",
       "logger-console",
     ]);
@@ -156,7 +162,7 @@ describe("e2e — --json (#223)", () => {
     // The installed driver answers `database`'s choice, so no `--with` is needed and
     // neither the capability nor the driver is planned again.
     expect(doc.install).not.toContain("database");
-    expect(doc.install).not.toContain("database-d1");
+    expect(doc.install).not.toContain("database-postgres");
     expect((doc.files as PlanFile[]).length).toBeGreaterThan(0);
   });
 
