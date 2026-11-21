@@ -315,9 +315,9 @@ export async function adminWrite<T>(
 
 /**
  * `adminWrite` for a change Better Auth makes, which no transaction of ours can hold. The
- * body runs inside the auth scope Better Auth reads its client from. Its rows are inserted
- * once it succeeds; a failed insert is logged at `error` and the route still answers what
- * the body answered, because the change already stands.
+ * body runs inside the auth scope Better Auth reads its client from. Call audit only
+ * after a change succeeds. The wrapper inserts queued rows even if a later step fails.
+ * An insert failure is logged and does not override the body's result.
  *
  * A refused key is dropped from its row and logged, not thrown: Better Auth has made the
  * change by the time the row is built, and a throw would answer 500 for a change that
@@ -335,43 +335,44 @@ export function adminAuthWrite<T>(
     };
     const log = loggerOf(c);
     const rows: AuditEventInput[] = [];
-    const answer = await body({
-      actor,
-      audit: (entry) => {
-        const changed = changedFields(
-          entry.before ?? null,
-          entry.after ?? null
-        );
-        const before = withoutRefused(changed.before);
-        const after = withoutRefused(changed.after);
-        const dropped = [...before.dropped, ...after.dropped];
-        if (dropped.length > 0) {
-          log.error("an audit row named a refused key, which was left out", {
-            action: entry.action,
-            dropped,
-          });
-        }
+    try {
+      return await body({
+        actor,
+        audit: (entry) => {
+          const changed = changedFields(
+            entry.before ?? null,
+            entry.after ?? null
+          );
+          const before = withoutRefused(changed.before);
+          const after = withoutRefused(changed.after);
+          const dropped = [...before.dropped, ...after.dropped];
+          if (dropped.length > 0) {
+            log.error("an audit row named a refused key, which was left out", {
+              action: entry.action,
+              dropped,
+            });
+          }
+          try {
+            rows.push(rowOf(actor, entry, before.fields, after.fields));
+          } catch (error) {
+            log.error("an audit row of a Better Auth change was refused", {
+              action: entry.action,
+              err: error,
+            });
+          }
+        },
+      });
+    } finally {
+      if (rows.length > 0) {
         try {
-          rows.push(rowOf(actor, entry, before.fields, after.fields));
+          await withDb(c, (db) => insertAuditEvents(db, rows));
         } catch (error) {
-          log.error("an audit row of a Better Auth change was refused", {
-            action: entry.action,
+          log.error("the audit rows of a Better Auth change were not written", {
+            actions: rows.map((row) => row.action),
             err: error,
           });
         }
-      },
-    });
-    if (isFailedAnswer(answer) || rows.length === 0) {
-      return answer;
+      }
     }
-    try {
-      await withDb(c, (db) => insertAuditEvents(db, rows));
-    } catch (error) {
-      log.error("the audit rows of a Better Auth change were not written", {
-        actions: rows.map((row) => row.action),
-        err: error,
-      });
-    }
-    return answer;
   });
 }
