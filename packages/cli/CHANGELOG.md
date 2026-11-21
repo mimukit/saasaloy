@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.11.0](https://github.com/mimukit/saasaloy/compare/v0.10.0...v0.11.0) (2026-11-21)
+
+### ⚠ BREAKING CHANGES
+
+* **database-postgres:** @repo/db/client no longer exports
+  TRANSACTION_IS_ATOMIC. (update note: [modules/database-postgres/update-notes/0001-transaction-is-atomic.md](https://github.com/mimukit/saasaloy/blob/v0.11.0/modules/database-postgres/update-notes/0001-transaction-is-atomic.md))
+* **cli:** a descriptor that declares onlyWith no longer validates; one read
+  at an older release still loads, with onlyWith read as when.installed. (update note: [packages/cli/update-notes/0010-only-with.md](https://github.com/mimukit/saasaloy/blob/v0.11.0/packages/cli/update-notes/0010-only-with.md))
+* **cms:** CMS admin API paths now start with /admin/cms. (update note: [modules/cms/update-notes/0004-admin-api-mount.md](https://github.com/mimukit/saasaloy/blob/v0.11.0/modules/cms/update-notes/0004-admin-api-mount.md))
+* **database:** saasaloy add database-d1 no longer resolves;
+  use database-postgres. (update note: [packages/cli/update-notes/0009-postgres-only.md](https://github.com/mimukit/saasaloy/blob/v0.11.0/packages/cli/update-notes/0009-postgres-only.md))
+
+### Features
+
+* **bench:** select the benchmark agent with no default ([6a20504](https://github.com/mimukit/saasaloy/commit/6a2050497f21bc69e53a4b4b24d4c838e2f96c80))
+* **cli:** add the single requiresoneof option without a question ([00d0472](https://github.com/mimukit/saasaloy/commit/00d0472b0a4a16432b00f0256bd8ca6141fbd35f)), references [#371](https://github.com/mimukit/saasaloy/issues/371)
+
+### Bug Fixes
+
+* **admin:** close gaps in member audit logging ([bb0288e](https://github.com/mimukit/saasaloy/commit/bb0288eba98e28961486f6030227a50939894b3e)), references [#337](https://github.com/mimukit/saasaloy/issues/337)
+* **admin:** fit text in member and activity views ([2391997](https://github.com/mimukit/saasaloy/commit/2391997bcd0fa3bce5d928afd563dc176400a0a1)), references [#337](https://github.com/mimukit/saasaloy/issues/337)
+* **api-keys:** enforce organization creator bans ([1700ab9](https://github.com/mimukit/saasaloy/commit/1700ab9eed531d305435a8bb7bbfed18ea18d921)), references [#257](https://github.com/mimukit/saasaloy/issues/257)
+* **auth:** let better auth write sign-up in a transaction ([4515193](https://github.com/mimukit/saasaloy/commit/451519328833e34ce6990a5ce09b6b254c911ae4)), references [#372](https://github.com/mimukit/saasaloy/issues/372)
+* **bench:** clear the lint errors in the agent prompt ([a6eceda](https://github.com/mimukit/saasaloy/commit/a6eceda65ef681542152882958d6a7429db7b095))
+* **bench:** detect entity screens and validators ([97540fd](https://github.com/mimukit/saasaloy/commit/97540fd58c0f20b20b10b11c2e71a85a94789534))
+* **cli:** read retired keys strictly at the running release ([0a8849b](https://github.com/mimukit/saasaloy/commit/0a8849b94b1db6521f424c32679423145c741336))
+* **cms:** audit cms admin writes ([f9e7205](https://github.com/mimukit/saasaloy/commit/f9e7205a543ef882fbe9090e5ef4ef4d6cf22b18)), references [#335](https://github.com/mimukit/saasaloy/issues/335)
+* **cms:** publish an entry in one transaction ([91d6c9a](https://github.com/mimukit/saasaloy/commit/91d6c9a1d16433fceafe9efdeccc2530a7035019)), references [#372](https://github.com/mimukit/saasaloy/issues/372)
+* **date-picker:** disable quick ranges out of bounds ([dd13728](https://github.com/mimukit/saasaloy/commit/dd137282e0cff8eb48edf93210ee9f7002bf40ab))
+* **date-picker:** disable quick ranges out of bounds ([11bbc5c](https://github.com/mimukit/saasaloy/commit/11bbc5c5eaadd62464fadfbd9b7aed2b70f360e3))
+* **e2e:** give the local verifier a branch ([e7c3b5f](https://github.com/mimukit/saasaloy/commit/e7c3b5fde872d65186d55dafb7944f8db05f6943)), references [#303](https://github.com/mimukit/saasaloy/issues/303)
+* **e2e:** require a local branch database ([586591f](https://github.com/mimukit/saasaloy/commit/586591fa4a2ef1ae077261fcf22d6be9186597dd)), references [#303](https://github.com/mimukit/saasaloy/issues/303)
+* **payment:** ship the store test only with the console provider ([b4b19ab](https://github.com/mimukit/saasaloy/commit/b4b19ab6d0b74e61242798bc5cdcc3d09e37db06)), references [#372](https://github.com/mimukit/saasaloy/issues/372)
+* **payment:** write a status change and its event together ([34c7357](https://github.com/mimukit/saasaloy/commit/34c7357c1d0ca03ea559dc6a01d67781c3251425)), references [#372](https://github.com/mimukit/saasaloy/issues/372)
+* **scripts:** accept an upgrade range with no update note ([6648241](https://github.com/mimukit/saasaloy/commit/6648241ee74e92c4e455852060ed43689ed1aa31))
+* **scripts:** add a module bare from a 0.10.0 or later release ([d6e2a79](https://github.com/mimukit/saasaloy/commit/d6e2a796c53b9e488df5ed596db7c7ea95dc254e)), references [#366](https://github.com/mimukit/saasaloy/issues/366)
+* **shell:** format attention counts by locale ([745ba6b](https://github.com/mimukit/saasaloy/commit/745ba6b297ac9bcb6ca84a41c92c1ada0a525fe3))
+* **shell:** format attention counts by locale ([310cf85](https://github.com/mimukit/saasaloy/commit/310cf8597c64920e8fbe65097b00e11265358610))
+* **subscription:** apply an event in one transaction ([7e980c3](https://github.com/mimukit/saasaloy/commit/7e980c310f56c8a3237c80857134a8533c3e8143)), references [#372](https://github.com/mimukit/saasaloy/issues/372)
+* **ui:** parse shown dates in every locale ([449817b](https://github.com/mimukit/saasaloy/commit/449817bb55a4602ce8382fa6d701e17076081f3f))
+* **ui:** parse shown dates in every locale ([caf55f5](https://github.com/mimukit/saasaloy/commit/caf55f58d3f6d6832c02201c198a495a3da3a2e9))
+
+### Code Refactoring
+
+* **cli:** remove onlyWith from the engine ([33bc729](https://github.com/mimukit/saasaloy/commit/33bc729bb52593c4712d67f40e2e754f6fb02d45)), references [#366](https://github.com/mimukit/saasaloy/issues/366)
+* **database-postgres:** remove TRANSACTION_IS_ATOMIC ([e6d9b93](https://github.com/mimukit/saasaloy/commit/e6d9b93873e3cf5f300f415552dfee0012dbc76f)), references [#372](https://github.com/mimukit/saasaloy/issues/372)
+* **database:** remove the d1 driver from the registry ([05e78e0](https://github.com/mimukit/saasaloy/commit/05e78e080b167cdec369ca33f57bc17a2c3297e3)), references [#366](https://github.com/mimukit/saasaloy/issues/366)
+
 ## Unreleased
 
 ### ⚠ BREAKING CHANGES
