@@ -11,6 +11,13 @@
   validates. A descriptor read at an older release still loads,
   and its `onlyWith` reads as `when.installed`.
 
+### Features
+
+* **cli:** `saasaloy add` adds the one option of a `requiresOneOf`
+  list with no question, also with `--yes`, `--json` or no
+  terminal, so `saasaloy add database` needs no
+  `--with database-postgres` (#371).
+
 ## [0.10.0](https://github.com/mimukit/saasaloy/compare/v0.9.0...v0.10.0) (2026-11-21)
 
 ### ⚠ BREAKING CHANGES

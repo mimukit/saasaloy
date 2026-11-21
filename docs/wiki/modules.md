@@ -4,14 +4,13 @@ Every installable module in the default registry is listed in [the module catalo
 
 For the environment variables of all modules in one table, see [the environment reference](generated/env.md).
 
-Dependencies install automatically: `saasaloy add waitlist` installs each module it depends on first, prerequisites first. The one thing `add` will not choose for you is the database driver. `database` names its one driver, `database-postgres`, in `requiresOneOf`, so on a project without it, an interactive run asks you to pick it, `--with` names it on the command line, and a `--yes` run without `--with` stops and names the options:
+Dependencies install automatically: `saasaloy add waitlist` installs each module it depends on first, prerequisites first. `database` names its one driver, `database-postgres`, in `requiresOneOf`. A list with one option is no choice, so `add` installs the driver too and prints one line that names it:
 
 ```
-Cannot add waitlist — unmet requirement:
-  database (required by waitlist) needs one of: database-postgres, and none is installed. Re-run as `saasaloy add waitlist --with database-postgres`, or pick another from that list.
+database needs database-postgres; adding it.
 ```
 
-`saasaloy add waitlist --with database-postgres --yes` installs the module and the driver in one run, with no terminal needed. Adding the driver first and then the module works too. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
+`saasaloy add waitlist --yes` installs the module, `database` and the driver in one run, with no terminal needed. The one choice `add` will not make for you is a list of two or more, such as the `api-keys` owner: an interactive run asks you to pick, `--with api-keys-user` names it on the command line, and a `--yes` run without `--with` stops and names the options. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
 
 To see what any module would do to your project before installing it:
 

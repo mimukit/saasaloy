@@ -75,11 +75,10 @@ Name the driver and the driver's own `dependsOn` pulls the core in:
 saasaloy add database-postgres
 ```
 
-`saasaloy add database` on a terminal asks you to confirm the driver. With `--yes`, or in a pipeline with no terminal, there is nothing to ask, so name it with `--with`: `saasaloy add database --with database-postgres --yes`. Without it, `add` refuses and names the option:
+`saasaloy add database` installs the driver with the core, because `database-postgres` is the only option: there is no choice to ask about. This holds on a terminal, with `--yes`, and in a pipeline with no terminal. `add` prints one line that names it:
 
 ```
-Cannot add database — unmet requirement:
-  database needs one of: database-postgres, and none is installed. Re-run as `saasaloy add database --with database-postgres`, or pick another from that list.
+database needs database-postgres; adding it.
 ```
 
 Read the driver's skill for anything the tables themselves don't decide: how the connection reaches a request handler, which bindings or environment variables it needs, and how a generated migration is applied.

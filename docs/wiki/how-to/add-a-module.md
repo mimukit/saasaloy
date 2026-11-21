@@ -37,12 +37,12 @@ Run `add` with no module name and you get a multi-select over the registry inste
 ## Install several at once
 
 ```bash
-saasaloy add admin teams --with database-postgres --yes
+saasaloy add admin teams --yes
 ```
 
 Several names resolve into one graph, so you get one plan and one `Proceed?`. Every check that would refuse one module runs on the whole set before anything is written: a conflict between the first and the last name exits 2 with nothing on disk. A shell loop over `saasaloy add` gives you neither, because each run checks only its own graph and a refusal at the third module leaves the first two installed.
 
-Prerequisites install first, then the names in the order you typed them. A module you named that is already installed is skipped with a note, and the rest install. One `--with` answers a driver choice for every module in the set. All the names must come from one registry.
+Prerequisites install first, then the names in the order you typed them. A module you named that is already installed is skipped with a note, and the rest install. One `--with` answers a driver choice for every module in the set, such as `--with api-keys-user` beside `api-keys`. All the names must come from one registry.
 
 ## The skill that comes with it
 
@@ -55,15 +55,21 @@ you and for any agent in the project.
 
 ## Drivers and mutually exclusive modules
 
-Some capabilities cannot run without a driver, so their descriptor declares `requiresOneOf`. `database` declares `requiresOneOf: ["database-postgres"]`. When nothing in the run and nothing installed satisfies that list, `add` prompts you to pick one, resolves it, and folds it into the same plan. It re-checks after each pick, up to eight rounds, because one driver can settle two requirements and a picked module can raise a requirement of its own.
+Some capabilities cannot run without a driver, so their descriptor declares `requiresOneOf`. `api-keys` declares `requiresOneOf: ["api-keys-organization", "api-keys-user"]`. When nothing in the run and nothing installed satisfies that list, `add` prompts you to pick one, resolves it, and folds it into the same plan. It re-checks after each pick, up to eight rounds, because one driver can settle two requirements and a picked module can raise a requirement of its own.
 
-`--with <module>` answers the choice on the command line, so the run needs no prompt: `saasaloy add waitlist --with database-postgres --yes`. It is repeatable. A `--with` module that answers no unmet requirement exits 2 before anything is written, so it cannot install a module on the side.
-
-There is no prompt in a non-interactive run or under `--yes`. Without `--with`, both refuse and name the options, exit 2:
+A list with one option is no choice, so `add` asks nothing. `database` declares `requiresOneOf: ["database-postgres"]`, and `saasaloy add database` adds the driver to the same plan, also with `--yes` or no terminal, and prints one line:
 
 ```text
-Cannot add database — unmet requirement:
-  database needs one of: database-postgres, and none is installed. Re-run as `saasaloy add database --with database-postgres`, or pick another from that list.
+database needs database-postgres; adding it.
+```
+
+`--with <module>` answers the choice on the command line, so the run needs no prompt: `saasaloy add api-keys --with api-keys-user --yes`. It is repeatable. A `--with` module that answers no unmet requirement exits 2 before anything is written, so it cannot install a module on the side.
+
+There is no prompt in a non-interactive run or under `--yes`. Without `--with`, a list of two or more refuses and names the options, exit 2:
+
+```text
+Cannot add api-keys — unmet requirement:
+  api-keys needs one of: api-keys-organization, api-keys-user, and none is installed. Re-run as `saasaloy add api-keys --with api-keys-organization`, or pick another from that list.
 ```
 
 Two modules that must never sit side by side declare `conflictsWith`. `api-keys-user` and `api-keys-organization` name each other. `add` checks that after the driver prompt, before it plans a single file, and `--force` does not bypass it:
