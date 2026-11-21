@@ -16,7 +16,7 @@ export interface ColumnShape {
   name: string;
   /** True for a column that holds a string, so a seed id fits it. */
   text: boolean;
-  /** True when the database fills the value: an identity, serial or autoincrement key. */
+  /** True when the database fills the value: an identity or serial key. */
   generated: boolean;
 }
 
