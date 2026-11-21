@@ -26,7 +26,7 @@ This module declares no environment variables.
 
 ## Files and workspaces it writes
 
-- Workspace `packages/db`, 20 files.
+- Workspace `packages/db`, 19 files.
   - Alias `@db` points at `packages/db/src`.
 Files:
 - `@api/routes/health-db.ts`

@@ -64,7 +64,6 @@
       "aliases": { "@db": "packages/db/src" },
       "files": [
         { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
         { "path": "files/vitest.config.ts", "target": "vitest.config.ts" },
         { "path": "files/src/schema.ts", "target": "src/schema.ts" },
         {

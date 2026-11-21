@@ -121,7 +121,7 @@ and `--force` does not bypass it. `add` never uninstalls anything to resolve a c
 module installed before its lock entry existed can't be checked this way; `add` says so and
 proceeds.
 
-Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that rendered it. A module may write over a file owned by a module it declares in `dependsOn`, which is how `database-postgres` puts its own `packages/db/tsconfig.json` over the one `database` scaffolds, and over nothing else. Two modules in one set that both write a path with no `dependsOn` edge either way are refused before anything is written, with exit 2 and every contested path named. Swapping `api-keys-user` for `api-keys-organization` is `saasaloy remove api-keys-user` then `saasaloy add api-keys-organization`.
+Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that rendered it. A module may write over a file owned by a module it declares in `dependsOn`, and over nothing else. Two modules in one set that both write a path with no `dependsOn` edge either way are refused before anything is written, with exit 2 and every contested path named. Swapping `api-keys-user` for `api-keys-organization` is `saasaloy remove api-keys-user` then `saasaloy add api-keys-organization`.
 
 A descriptor may also declare `requiresOneOf`, naming modules exactly one of which has to
 be present. `add` counts an option as present when it is already installed or arrives in
