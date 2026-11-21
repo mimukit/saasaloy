@@ -18,7 +18,7 @@ import type {
 // The database arrives as a **port**, not as a Drizzle client. `packages/subscription` has zero
 // npm runtime dependencies, so it cannot import `drizzle-orm` to type a query, and a
 // structural type over a query builder would pin the core to one ORM's shape. A port of
-// five named methods keeps the core vendor-blind, keeps these rules unit-testable with a
+// a few named methods keeps the core vendor-blind, keeps these rules unit-testable with a
 // fake, and leaves the SQL in the one workspace that owns the schema. `apps/api` builds
 // the port over its request-scoped client (ADR 0029) and hands it in.
 
@@ -41,6 +41,14 @@ export interface SubscriptionPatch {
  * driver; the tests in this folder use an in-memory fake.
  */
 export interface SubscriptionStore {
+  /**
+   * Run `body` in one database transaction, with a store whose every method writes inside
+   * it, and commit when it resolves. A throw rolls back every write `body` made through
+   * that store. `applyEvent` puts the dedupe row and the projection in one transaction, so
+   * a failed write leaves no `subscription_events` row and the redelivery applies. Never
+   * send an email or call a vendor inside `body`.
+   */
+  transaction<T>(body: (store: SubscriptionStore) => Promise<T>): Promise<T>;
   /**
    * Insert the event row. Returns `false` when `(provider, providerEventId)` is already
    * there, which is the whole dedupe: it is the table's primary key, so the answer comes
@@ -143,49 +151,64 @@ const NEEDS_CURRENT_ROW = new Set<SubscriptionEvent["type"]>([
  *
  * The `subscription_events` insert comes **first**, and a conflict returns immediately. That
  * ordering is the dedupe guarantee: every side effect below it — the row write, the lock
- * clear, and in Phase 5 the emails — sits inside the guarded body, so a vendor redelivering
- * the same event id runs none of them a second time.
+ * clear and the emails — sits inside the guarded body, so a vendor redelivering the same
+ * event id runs none of them a second time.
+ *
+ * The event row, the row write, the lock clear and `processedAt` commit in one transaction.
+ * A failed write rolls the event row back too, so the redelivery is not a duplicate and
+ * applies. The email goes after the commit, and the `reminderSentAt` stamp after the email:
+ * a crash between the commit and the send loses that one email rather than sending it twice.
  */
 export async function applyEvent(
   db: SubscriptionStore,
   event: SubscriptionEvent,
   now: Date = new Date()
 ): Promise<ApplyEventResult> {
-  const fresh = await db.recordEvent({
-    provider: event.provider,
-    providerEventId: event.providerEventId,
-    receivedAt: now,
-    type: event.type,
-  });
+  const written = await db.transaction(async (tx) => {
+    const fresh = await tx.recordEvent({
+      provider: event.provider,
+      providerEventId: event.providerEventId,
+      receivedAt: now,
+      type: event.type,
+    });
 
-  if (!fresh) {
-    return { applied: false, duplicate: true };
-  }
+    if (!fresh) {
+      return;
+    }
 
-  let subscription: Subscription | undefined;
+    let row: Subscription | undefined;
 
-  if (event.subscription) {
-    subscription = await db.upsertSubscription(
-      event.subject,
-      project(event.type, event.subscription, now)
-    );
-  } else if (NEEDS_CURRENT_ROW.has(event.type)) {
-    // No projected row on the event, but the side effect below needs one. See
-    // `NEEDS_CURRENT_ROW`: this is the `invoice.paid` path, and it is what ends a lockout.
-    subscription = await db.latestSubscription(event.subject);
-  }
+    if (event.subscription) {
+      row = await tx.upsertSubscription(
+        event.subject,
+        project(event.type, event.subscription, now)
+      );
+    } else if (NEEDS_CURRENT_ROW.has(event.type)) {
+      // No projected row on the event, but the side effect below needs one. See
+      // `NEEDS_CURRENT_ROW`: this is the `invoice.paid` path, and it is what ends a lockout.
+      row = await tx.latestSubscription(event.subject);
+    }
 
-  let notified: SubscriptionNotificationKind | undefined;
-
-  if (subscription) {
     // A successful payment is the one event that clears a lockout: the subject paid, so
     // whatever the daily job locked is released. `lockedAt` is core-only, so no provider
     // can set or clear it by accident.
-    if (event.type === "payment.succeeded" && subscription.lockedAt) {
-      await db.patchSubscription(subscription.id, { lockedAt: null });
-      subscription = { ...subscription, lockedAt: null };
+    if (row && event.type === "payment.succeeded" && row.lockedAt) {
+      await tx.patchSubscription(row.id, { lockedAt: null });
+      row = { ...row, lockedAt: null };
     }
 
+    await tx.markEventProcessed(event.provider, event.providerEventId, now);
+    return { subscription: row };
+  });
+
+  if (!written) {
+    return { applied: false, duplicate: true };
+  }
+
+  let { subscription } = written;
+  let notified: SubscriptionNotificationKind | undefined;
+
+  if (subscription) {
     // The trial reminder is once per subscription, not once per delivery. `subscription_events`
     // already stops a redelivered event id, but a vendor may legitimately send
     // `trial_will_end` twice under two ids — Stripe does, on a trial that gets extended —
@@ -220,7 +243,6 @@ export async function applyEvent(
     }
   }
 
-  await db.markEventProcessed(event.provider, event.providerEventId, now);
   invalidateEntitlements(event.subject);
 
   return {

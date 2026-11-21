@@ -112,9 +112,16 @@ function sharedOptions(group: Audience) {
     // does not catch it. `usePlural` appends a plain `s`, to a custom `modelName` too, so a
     // plugin with `modelName: "X"` needs the export key `Xs`. See ADR 0038.
     //
+    // `transaction: true` lets Better Auth run a multi-row write in one transaction: the user
+    // and the credential account of an email sign-up, an OAuth user and its account, an
+    // invitation accept. A failed second insert then leaves no half-made user. It opens the
+    // transaction on `authDb`, which binds it to this request's client (`./db-scope.ts`).
+    // better-auth 1.7.7 does not wrap an organization create and its owner member, so those
+    // still commit one at a time.
+    //
     // `scopeSessionsTo` limits every session lookup by token to this instance's audience.
     database: scopeSessionsTo(
-      drizzleAdapter(authDb, { provider, usePlural: true }),
+      drizzleAdapter(authDb, { provider, transaction: true, usePlural: true }),
       group
     ),
     // No database hook writes a role, and nothing promotes an account. Every sign-up gets

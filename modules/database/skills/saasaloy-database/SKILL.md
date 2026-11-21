@@ -260,11 +260,13 @@ export const projects = defineSlice(projectsTable, {
 });
 ```
 
-The engine in `packages/db/src/seed/` is driver-neutral. `index.ts` globs `slices/*.ts` with the same eager `import.meta.glob` the schema barrel uses, so a new slice file needs no edit anywhere else. The runner and its guard belong to the driver: read `saasaloy-database-postgres` for what `db:seed` refuses and where it writes.
+The engine in `packages/db/src/seed/` builds Postgres statements and runs none itself. `index.ts` globs `slices/*.ts` with the same eager `import.meta.glob` the schema barrel uses, so a new slice file needs no edit anywhere else. The runner and its guard belong to the driver: read `saasaloy-database-postgres` for what `db:seed` refuses and where it writes.
 
 **Rows are keyed by slug, and the slug makes the id.** A table with a single text primary key gets `id = seedId("<table>", "<slug>")` when the row leaves `id` out. `seedId` is a UUIDv5 of the table name and the slug, so a row in another slice points at it with the same call: `userId: seedId("users", "superadmin")`. Every id is known before the first write, and the whole seed runs in one transaction.
 
-**The conflict key is the primary key, with one exception.** Every row is an `insert … on conflict do update` on the table's primary key, read from the Drizzle schema. A composite key such as `subscription_events` (`provider`, `provider_event_id`) needs nothing extra. A primary key the database generates (an identity or autoincrement column, such as `waitlist_entries.id`) cannot be named by a row, so the slice names a unique key instead: `key: ["email"]`. No other slice may point at those rows by slug; the plan refuses a `seedId` of a generated-key table.
+**The conflict key is the primary key, with one exception.** Each table is one multi-row `insert … on conflict do update` on the table's primary key, read from the Drizzle schema. Rows that set different columns go in separate statements, so a column one row leaves out never resets a value on another. A composite key such as `subscription_events` (`provider`, `provider_event_id`) needs nothing extra. A primary key the database generates (an identity or serial column, such as `waitlist_entries.id`) cannot be named by a row, so the slice names a unique key instead: `key: ["email"]`. No other slice may point at those rows by slug; the plan refuses a `seedId` of a generated-key table.
+
+**Two rows of one slice never share a conflict key.** Both rows land in one statement, and Postgres refuses it with `ON CONFLICT DO UPDATE command cannot affect row a second time`, so `db:seed` fails and writes nothing. Give each row its own slug, or its own value of the `key` columns.
 
 **A rerun is an upsert.** `pnpm db:seed` twice prints the same counts. Each seed row goes back to its slice values, and every row you made by hand stays, including one that points at a seed row: a session, an organization you made as the superadmin.
 

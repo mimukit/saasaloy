@@ -55,7 +55,10 @@ let gateway: (url: URL, init: RequestInit | undefined) => unknown;
 const realFetch = globalThis.fetch;
 
 function fakeStore(): PaymentStore {
-  return {
+  const store: PaymentStore = {
+    transaction(body) {
+      return body(store);
+    },
     appendEvent(record) {
       events.push(record);
       return Promise.resolve();
@@ -107,6 +110,7 @@ function fakeStore(): PaymentStore {
       return Promise.resolve(next);
     },
   };
+  return store;
 }
 
 const client = (env: Record<string, unknown> = ENV) =>

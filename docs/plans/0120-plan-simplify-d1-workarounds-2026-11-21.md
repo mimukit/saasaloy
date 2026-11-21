@@ -58,21 +58,21 @@ Close the correctness sites first, each behind a test that fails first. Then do 
 
 Rejected: a clarity-only sweep that leaves the four windows open (it skips the only part with user value); one transaction around every request handler (it would span vendor calls and Better Auth writes).
 
-### Phase 1: the correctness sites
+### Phase 1: the correctness sites (built 2026-11-21)
 
 - Sites 1 to 4, each with its failing test first.
 - New real-Postgres tests: `payment` store (`payment/files/api/payment-store.vitest.ts`) and `subscription` store (`subscription/files/api/subscription-store.vitest.ts`), registered in each descriptor under `when: { testing: true }`.
 
 Done when: each of the 4 new tests fails on a checkout of `origin/main` with only the test added, and passes after the change; `pnpm test:modules` and `pnpm scaffold:check` with `testing` on pass.
 
-### Phase 2: the clarity sweep
+### Phase 2: the clarity sweep (built 2026-11-21)
 
 - Sites 5 to 14.
 - Rewrite each comment that still names the old shape.
 
 Done when: `git grep -n -E "TRANSACTION_IS_ATOMIC|ROWS_PER_INSERT|sqlite-core|UNIQUE constraint failed" -- modules` prints nothing; `pnpm test:modules`, `pnpm lint` and `pnpm scaffold:check` pass.
 
-### Phase 3: notes and docs
+### Phase 3: notes and docs (built 2026-11-21)
 
 - One update note in each module whose public surface changes: `database-postgres` for the removed `TRANSACTION_IS_ATOMIC`, and `auth` if site 4 changes how sign-up writes. A merged file needs no note for a change the merge carries.
 - The module skills that describe a changed shape (`saasaloy-admin`, `saasaloy-payment`, `saasaloy-subscription`, `saasaloy-cms`, `saasaloy-database`).

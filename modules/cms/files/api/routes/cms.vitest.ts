@@ -1,8 +1,9 @@
 import { users } from "@repo/db/schema/auth";
+import { cmsEntries, cmsRevisions } from "@repo/db/schema/cms";
 import { seedId } from "@repo/db/seed/id";
 import { testDatabase } from "@repo/db/testing";
 import { env as workerEnv } from "cloudflare:workers";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import app from "../index";
 
@@ -469,6 +470,51 @@ describe("POST /cms/admin/:collection/entries/:id/publish", () => {
         version: 2,
       },
       error: { code: "conflict", message: expect.any(String) },
+    });
+  });
+
+  it("keeps no revision and leaves the entry a draft when a later publish write fails", async () => {
+    const cookie = await signInAdmin();
+    // A statement-level trigger fails the redirect cleanup, the write after the revision
+    // insert and the entry update. It is DDL inside the test's transaction, so it rolls
+    // back with the test.
+    await database.db.execute(sql`
+      create function cms_test_fail_redirects() returns trigger language plpgsql as $$
+      begin
+        raise exception 'the redirect write failed';
+      end;
+      $$
+    `);
+    await database.db.execute(sql`
+      create trigger cms_test_fail_redirects before delete on cms_redirects
+      for each statement execute function cms_test_fail_redirects()
+    `);
+
+    const res = await send(
+      `/cms/admin/blog/entries/${DRAFT}/publish`,
+      cookie,
+      "POST",
+      { version: 1 }
+    );
+
+    expect(res.status).toBe(500);
+    const revisions = await database.db
+      .select({ id: cmsRevisions.id })
+      .from(cmsRevisions)
+      .where(eq(cmsRevisions.entryId, DRAFT));
+    expect(revisions, "the failed publish keeps no revision").toStrictEqual([]);
+    const [entry] = await database.db
+      .select({
+        publishedRevisionId: cmsEntries.publishedRevisionId,
+        status: cmsEntries.status,
+        version: cmsEntries.version,
+      })
+      .from(cmsEntries)
+      .where(eq(cmsEntries.id, DRAFT));
+    expect(entry).toStrictEqual({
+      publishedRevisionId: null,
+      status: "draft",
+      version: 1,
     });
   });
 });

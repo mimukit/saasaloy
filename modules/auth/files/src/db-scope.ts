@@ -70,9 +70,11 @@ function outsideScope(prop: string): never {
 // A `Proxy` over an empty extensible object with no own properties, so the `get` trap
 // may return anything without tripping a proxy invariant. `get` is the only trap the
 // adapter needs: it reaches `db.select`, `db.insert`, `db.update`, `db.delete`,
-// `db.query` and `db._`, and `DrizzleAdapterConfig.transaction` defaults to `false`, so
-// `db.transaction` is never called. It also never probes with `in` or `Object.keys` on
-// the client itself.
+// `db.query`, `db._` and, because `./auth.ts` sets `transaction: true`, `db.transaction`.
+// That one comes back bound to the request's client like every other method, so Better
+// Auth's transaction runs on the request's connection. Under a route test that client is
+// the test's own transaction, and Better Auth's becomes a savepoint inside it. The adapter
+// never probes with `in` or `Object.keys` on the client itself.
 const authDbTarget: Record<string, unknown> = {};
 
 /**

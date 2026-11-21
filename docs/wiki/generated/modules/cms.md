@@ -131,6 +131,8 @@ Each entry keeps its newest 50 revisions. A publish prunes older ones and never 
 
 When a publish changes the live slug, the repository writes a `cms_redirects` row. A public read of the old slug answers 301 to the current one. A redirect points at the entry, so a chain of renames ends at the current slug.
 
+A publish is one Postgres transaction: the version check, the revision insert, the entry update, the redirect writes and the prune commit together. A stale version or a failed write rolls all of them back, so a failed publish leaves no orphan revision and no half-moved slug.
+
 Every write sends the `version` it started from. A stale version answers `409 conflict`, and the body names the last editor and the time (`conflict.updatedByName`, `conflict.updatedAt`). The admin editor shows that in its conflict alert and offers Reload only. Nothing is merged.
 
 #### Add a collection

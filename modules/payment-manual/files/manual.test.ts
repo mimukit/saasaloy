@@ -79,7 +79,10 @@ function claimed(
 }
 
 function fakeStore(): PaymentStore {
-  return {
+  const store: PaymentStore = {
+    transaction(body) {
+      return body(store);
+    },
     appendEvent(record) {
       events.push(record);
       return Promise.resolve();
@@ -137,7 +140,10 @@ function fakeStore(): PaymentStore {
         claimed(id, row.provider, next.transactionIdNormalized)
       ) {
         return Promise.reject(
-          new PaymentError("duplicate_transaction", "UNIQUE constraint failed")
+          new PaymentError(
+            "duplicate_transaction",
+            "duplicate key value violates unique constraint"
+          )
         );
       }
       rows.set(id, next);
@@ -153,6 +159,7 @@ function fakeStore(): PaymentStore {
       return Promise.resolve(next);
     },
   };
+  return store;
 }
 
 const client = (options: Parameters<typeof manual>[0] = OPTIONS) =>

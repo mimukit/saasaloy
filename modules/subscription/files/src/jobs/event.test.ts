@@ -49,6 +49,9 @@ function fakeStore() {
   const calls = { record: 0, upsert: 0 };
 
   const store: SubscriptionStore = {
+    transaction(body) {
+      return body(store);
+    },
     latestSubscription(subject) {
       const matching = rows.filter(
         (row) =>

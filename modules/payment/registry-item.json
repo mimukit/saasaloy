@@ -134,6 +134,11 @@
       "target": "@api/payment-store.ts"
     },
     {
+      "path": "files/api/payment-store.vitest.ts",
+      "target": "@api/payment-store.test.ts",
+      "when": { "testing": true, "installed": ["payment-console"] }
+    },
+    {
       "path": "files/db/schema/payment.ts",
       "target": "@db/schema/payment.ts"
     },

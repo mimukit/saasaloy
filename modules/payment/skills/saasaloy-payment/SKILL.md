@@ -96,6 +96,8 @@ export const checkoutRoute = new Hono<{ Bindings: PaymentBindings }>().post(
 
 `withPaymentStore` is optional. Without it the core opens its own database client for the call through the runner `apps/api/src/payment-store.ts` registers, so a plain `createPayment(c.env).create(...)` also works. Wrapping saves a second connection under `database-postgres`.
 
+The core writes a status change and its `payment_events` row in one transaction, through `PaymentStore.transaction(body)`. A failed event insert rolls the status back, so a payment never shows a status with no history row. The transaction covers only those two writes and never a provider call. `transaction(body)` is a required method of the port: `apps/api/src/payment-store.ts` opens it with `transaction(db, …)` from `@repo/db/client`, and inside `staffWrite` it becomes a savepoint in the `adminWrite` transaction. A fake store in your own tests implements it as `transaction(body) { return body(store) }`.
+
 `next` is one of three kinds:
 
 - `{ kind: "redirect", url }`: a hosted checkout. Send the browser to `url`. The gateway calls back to `/payment/callback/<provider>/...`, and the browser comes back to `returnUrl`.
@@ -115,7 +117,7 @@ export const payment = definePayment({
 });
 ```
 
-The core awaits every listener in order, inline, after each status write, with `(env, { payment, from, to })`. The creation counts as a change from `null` to `pending`. A listener that throws is logged with `console.error` and the payment id, and the API call still succeeds. So:
+The core awaits every listener in order, inline, after each status write commits, with `(env, { payment, from, to })`. The creation counts as a change from `null` to `pending`. A listener that throws is logged with `console.error` and the payment id, and the API call still succeeds. So:
 
 - Make a listener idempotent. A retry or a replayed callback can call it twice for the same outcome.
 - Never make a listener the only record of anything. Read the `payments` row when in doubt.

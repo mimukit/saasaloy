@@ -2,10 +2,11 @@
 // normalized event does to the table. Repo-only, like ./define.test.ts, and it runs on
 // `node:test` via `pnpm test:modules`.
 //
-// The store is faked rather than mocked. `applyEvent` takes a five-method port instead of a
+// The store is faked rather than mocked. `applyEvent` takes a small port instead of a
 // Drizzle client (see subscription.ts), so the fake below is the whole database: an array
 // of rows, a set of event keys, and a counter per method so a test can assert that a
-// duplicate event touched nothing.
+// duplicate event touched nothing. Its `transaction` runs the body on the same fake and
+// logs the commit, so a test can see whether an email went out before or after it.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -38,8 +39,11 @@ const NOW = new Date("2026-09-08T12:00:00.000Z");
 // mail system: a list the assertions read back. Registered once for the file; each
 // `fakeStore` clears it.
 const sent: SubscriptionNotification[] = [];
+/** The order of commits and sends, across the fake store and the notifier. */
+const timeline: string[] = [];
 setSubscriptionNotifier((notification) => {
   sent.push(notification);
+  timeline.push(`send ${notification.kind}`);
   return Promise.resolve();
 });
 
@@ -56,6 +60,11 @@ function fakeStore(seed: Subscription[] = []) {
   };
 
   const store: SubscriptionStore = {
+    async transaction(body) {
+      const result = await body(store);
+      timeline.push("commit");
+      return result;
+    },
     pastDueSince(before: Date) {
       return Promise.resolve(
         rows.filter(
@@ -129,6 +138,7 @@ function fakeStore(seed: Subscription[] = []) {
   };
 
   sent.length = 0;
+  timeline.length = 0;
 
   return {
     calls,
@@ -140,6 +150,7 @@ function fakeStore(seed: Subscription[] = []) {
     },
     sent,
     store,
+    timeline,
   };
 }
 
@@ -464,6 +475,14 @@ describe("applyEvent side effects", () => {
     assert.equal(mail[0]?.to.email, "ada@example.com");
     assert.equal(mail[0]?.subscription.plan, "pro");
     assert.deepEqual(rows[0]?.reminderSentAt, NOW);
+  });
+
+  it("sends the email only after the event and the row commit", async () => {
+    const { store, timeline: order } = fakeStore();
+
+    await applyEvent(store, makeEvent("trial.ending"), NOW);
+
+    assert.deepEqual(order, ["commit", "send trial.ending"]);
   });
 
   it("sends no second reminder when the vendor sends trial_will_end twice", async () => {

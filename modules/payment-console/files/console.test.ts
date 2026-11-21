@@ -21,7 +21,10 @@ let rows: Map<string, Payment>;
 let events: PaymentEventRecord[];
 
 function fakeStore(): PaymentStore {
-  return {
+  const store: PaymentStore = {
+    transaction(body) {
+      return body(store);
+    },
     appendEvent(record) {
       events.push(record);
       return Promise.resolve();
@@ -62,6 +65,7 @@ function fakeStore(): PaymentStore {
     },
     updatePayment: (id) => Promise.resolve(rows.get(id)),
   };
+  return store;
 }
 
 const client = () =>

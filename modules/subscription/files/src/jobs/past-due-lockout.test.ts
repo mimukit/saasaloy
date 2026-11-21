@@ -64,6 +64,9 @@ function fakeStore(seed: Subscription[] = []) {
   };
 
   const store: SubscriptionStore = {
+    transaction(body) {
+      return body(store);
+    },
     latestSubscription() {
       return Promise.resolve(rows.at(-1));
     },

@@ -151,6 +151,11 @@
       "target": "@api/subscription-store.ts"
     },
     {
+      "path": "files/api/subscription-store.vitest.ts",
+      "target": "@api/subscription-store.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/config/subscription.ts",
       "target": "@config/sections/subscription.ts"
     },

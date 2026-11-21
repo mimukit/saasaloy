@@ -43,6 +43,7 @@ SUBSCRIPTION_PROVIDER=stripe  uses subscription-stripe
 Files:
 - `@api/routes/subscription.ts`
 - `@api/subscription-store.ts`
+- `@api/subscription-store.test.ts`
 - `@config/sections/subscription.ts`
 - `@api/middleware/require-feature.ts`
 - `@admin/routes/subscription.tsx`
@@ -274,6 +275,10 @@ vendor webhook → provider verifies the signature → maps onto a SubscriptionE
 Normalized event types: `subscription.changed`, `subscription.deleted`, `trial.ending`, `payment.failed`, `payment.succeeded`. A vendor event that maps to none of them is dropped in the provider and never enqueued.
 
 `applyEvent` inserts `(provider, providerEventId)` into `subscription_events` **first** and returns early on the primary-key conflict. Every side effect below that insert — the row write, the lock clear, the emails — sits inside the guarded body, so a redelivered event runs none of them a second time. At-least-once delivery makes that mandatory, not optional.
+
+`applyEvent` runs the event insert, the row write, the lock clear and the `processedAt` stamp in one transaction through `SubscriptionStore.transaction(body)`. A failed write rolls the `subscription_events` row back too, so the vendor's redelivery is not a duplicate and applies. The emails go after the commit, and the `reminderSentAt` stamp after the trial email: a crash between the commit and the send loses that one email and never sends it twice.
+
+`transaction(body)` is a required method of the port. `apps/api/src/subscription-store.ts` opens a Postgres transaction with `transaction(db, …)` from `@repo/db/client` and hands `body` a store over it. A fake store in your own tests implements it as `transaction(body) { return body(store) }`.
 
 `subscription_events` is never pruned. It grows by a handful of rows per subscription per month, which is the price of the dedupe guarantee surviving a vendor's redelivery window.
 
