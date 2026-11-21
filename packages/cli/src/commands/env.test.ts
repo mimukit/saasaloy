@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import cliPackage from "../../package.json" with { type: "json" };
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { GITHUB_API_ENV, REGISTRY_ENV } from "../lib/registry.js";
@@ -612,6 +613,27 @@ describe("runEnv — a descriptor read at the commit the lock pinned", () => {
         set: false,
       },
     ]);
+  });
+
+  it("refuses the retired key in a pin at this CLI's own release", async () => {
+    await put(
+      "saasaloy-lock.json",
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules: {
+          waitlist: {
+            ref: `v${cliPackage.version}`,
+            resolved: PINNED,
+            source: "mimukit/saasaloy",
+          },
+        },
+      })
+    );
+
+    const { doc } = await runJson(runEnv, ["--check", "--json"]);
+
+    expect(doc.variables).toStrictEqual([]);
+    expect(doc.skipped).toStrictEqual([expect.stringContaining("onlyWith")]);
   });
 });
 

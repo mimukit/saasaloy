@@ -109,6 +109,24 @@ describe(normalizeRetiredKeys, () => {
     expect(normalizeRetiredKeys("not a descriptor")).toBe("not a descriptor");
   });
 
+  it("leaves an entry with a malformed when as written, for the schema to refuse", () => {
+    const badWhen = {
+      onlyWith: "pg",
+      path: "files/a.ts",
+      target: "@db/a.ts",
+      when: "api",
+    };
+    const badInstalled = {
+      onlyWith: "pg",
+      path: "files/b.ts",
+      target: "@db/b.ts",
+      when: { installed: "auth" },
+    };
+    const raw = { files: [badWhen, badInstalled], name: "bad" };
+
+    expect(normalizeRetiredKeys(raw)).toStrictEqual(raw);
+  });
+
   it("never changes its input", () => {
     const raw = {
       files: [

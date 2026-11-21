@@ -30,10 +30,16 @@ function translateFile(file: unknown): unknown {
     // Not a shape any release wrote: leave it for the schema to refuse.
     return file;
   }
-  const when = isEntry(rest.when) ? rest.when : {};
-  const installed = Array.isArray(when.installed)
-    ? (when.installed as unknown[])
-    : [];
+  if (rest.when !== undefined && !isEntry(rest.when)) {
+    // A malformed `when` stays as written, so the schema refuses it rather than the
+    // translation replacing it with a valid condition.
+    return file;
+  }
+  const when: Entry = isEntry(rest.when) ? rest.when : {};
+  if (when.installed !== undefined && !Array.isArray(when.installed)) {
+    return file;
+  }
+  const installed = (when.installed as unknown[] | undefined) ?? [];
   return {
     ...rest,
     when: {
