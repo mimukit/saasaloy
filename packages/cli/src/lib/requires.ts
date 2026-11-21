@@ -18,8 +18,11 @@ import type { RequestedInput } from "./requested.js";
 // a driver pulled in by `auth`'s `dependsOn` satisfies the core's requirement without the
 // user naming it.
 //
-// The check reports; it never resolves. `add` refuses, or offers the list as a prompt on
-// an interactive terminal. `--with <module>` answers the choice on the command line.
+// The check reports; it never resolves. `add` settles only a list with one option
+// (`singleOptions`, plan 0119): there is no choice to make, so it adds that option and says
+// so. A list of two or more refuses, or becomes a prompt on an interactive terminal.
+// `--with <module>` answers the choice on the command line. `update` and `render()` never
+// settle one, so `update` cannot install a module the owner did not ask for.
 
 export interface MissingRequirement {
   /** The module whose descriptor declared `requiresOneOf`. */
@@ -63,6 +66,41 @@ export function detectMissingRequirements(
   }
 
   return missing;
+}
+
+/** A requirement `add` settles itself: the one option of a one-option list. */
+export interface SingleOption {
+  declaredBy: string;
+  option: string;
+}
+
+/**
+ * The unmet requirements whose list has exactly one option, each with that option, in the
+ * order given. An option two requirements share is named once, by the first. A list of two
+ * or more is a choice, so it is not here: the caller still refuses or prompts for it.
+ */
+export function singleOptions(
+  unmet: readonly Pick<MissingRequirement, "declaredBy" | "options">[]
+): SingleOption[] {
+  const seen = new Set<string>();
+  const found: SingleOption[] = [];
+  for (const { declaredBy, options } of unmet) {
+    const [option] = options;
+    if (options.length !== 1 || option === undefined || seen.has(option)) {
+      continue;
+    }
+    seen.add(option);
+    found.push({ declaredBy, option });
+  }
+  return found;
+}
+
+/** The line `add` prints for a requirement it settled. */
+export function formatSingleOption({
+  declaredBy,
+  option,
+}: SingleOption): string {
+  return `${declaredBy} needs ${option}; adding it.`;
 }
 
 // One unmet requirement as a sentence. `requested` is what the user typed, so a

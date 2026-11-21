@@ -60,7 +60,7 @@ saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <mo
 | `--diff` | show a per-file diff and write nothing |
 | `-y, --yes` | skip the confirmation prompt |
 | `--force` | write even over uncommitted changes, overwrite edited generated files, and write the deleted files of a named module again |
-| `--with <module>` | answer a `requiresOneOf` choice, e.g. `--with database-postgres` (repeatable) |
+| `--with <module>` | answer a `requiresOneOf` choice, e.g. `--with api-keys-user` (repeatable) |
 | `--json` | with --dry-run, print the plan as one JSON document on stdout |
 | `--abort` | put back the files the last add, remove, update or testing run changed |
 | `-h, --help` | show this help |

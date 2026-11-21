@@ -189,6 +189,19 @@ describe(render, () => {
     ).toThrow(RefusalError);
   });
 
+  // Plan 0119: only `add` settles a one-option list. `render()` is the refusal `update`
+  // hits, so it must never add the option a release starts to require.
+  it("refuses an unmet one-option requirement rather than add the option", () => {
+    const core = moduleOf({ name: "core", requiresOneOf: ["driver"] });
+    const driver = moduleOf({ name: "driver" });
+    expect(() => renderOf(payloadOf([core, driver]), ["core"])).toThrow(
+      "core needs one of: driver"
+    );
+    expect(
+      renderOf(payloadOf([core, driver]), ["core", "driver"]).order
+    ).toStrictEqual(["core", "driver"]);
+  });
+
   it("lets a module that depends on another take its path", () => {
     const core = moduleOf(
       { files: [{ path: "files/x.ts", target: "@web/x.ts" }], name: "core" },
