@@ -295,12 +295,43 @@ export function formatShown(day: Date | string, locale: string): string {
   if (!date) {
     return "";
   }
+  return shownDateFormat(locale).format(date);
+}
+
+function shownDateFormat(locale: string): Intl.DateTimeFormat {
   return new Intl.DateTimeFormat(locale, {
+    calendar: "gregory",
     day: "numeric",
     month: "short",
     year: "numeric",
     numberingSystem: "latn",
-  }).format(date);
+  });
+}
+
+/** Read the month text and punctuation in the same context as the displayed day. */
+function parseShown(text: string, locale: string): Date | null {
+  const format = shownDateFormat(locale);
+  for (let month = 0; month < 12; month++) {
+    const parts = format.formatToParts(new Date(2026, month, 5));
+    const pattern = parts
+      .map(({ type, value }) => {
+        if (type === "day") {
+          return "(?<day>[0-9]{1,2})";
+        }
+        if (type === "year") {
+          return "(?<year>[0-9]{1,6})";
+        }
+        return value
+          .replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&")
+          .replaceAll(/\s+/g, "\\s+");
+      })
+      .join("");
+    const fields = new RegExp(`^${pattern}$`, "iu").exec(text)?.groups;
+    if (fields) {
+      return makeDay(Number(fields.year), month, Number(fields.day));
+    }
+  }
+  return null;
 }
 
 /**
@@ -342,7 +373,7 @@ export function numericDayOrder(locale: string): "dmy" | "mdy" | "ymd" {
 
 /**
  * A day that a person typed, as local midnight, or null when it does not read as a real day.
- * Accepts `2026-10-05` and `2026/10/05`; `5 Oct 2026` and `Oct 5, 2026` (any month word of
+ * Accepts the text from `formatShown`, `2026-10-05` and `2026/10/05`; `5 Oct 2026` and `Oct 5, 2026` (any month word of
  * three letters or more, in `locale` or English); and `5/10/2026`, `5.10.2026` or
  * `5-10-2026` in the order `locale` writes a numeric day (`numericDayOrder`). Rejects
  * 31/02/2026. The digits must be Latin.
@@ -360,6 +391,10 @@ export function parseTyped(text: string, locale: string): Date | null {
   if (yearFirst) {
     const [, year, month, day] = yearFirst;
     return makeDay(Number(year), Number(month) - 1, Number(day));
+  }
+  const shown = parseShown(text.trim(), locale);
+  if (shown) {
+    return shown;
   }
   const slash = SLASH_PATTERN.exec(clean);
   if (slash) {
