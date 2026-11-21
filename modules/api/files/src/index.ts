@@ -8,7 +8,7 @@ import { apiBaseRoutes, apiRoutes } from "./routes.generated";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
 // (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` and the two logger
-// vars (below); a capability or feature that adds a D1/R2/KV/Queue binding extends this
+// vars (below); a capability or feature that adds an R2/KV/Queue binding extends this
 // type and patches wrangler.jsonc.
 export interface Bindings {
   // Open by design: a capability's env type (`LoggerEnv`, `EmailEnv`, `QueueEnv`) carries

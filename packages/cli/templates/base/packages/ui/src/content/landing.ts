@@ -132,7 +132,7 @@ export const landing = {
       {
         id: "waitlist-out",
         kind: "output",
-        text: "pulls api, validators and database, then asks for a database driver",
+        text: "pulls api, validators and database, then asks for the Postgres driver",
       },
       { id: "admin", kind: "command", text: "saasaloy add admin" },
       {
@@ -278,7 +278,7 @@ export const landing = {
         icon: "cloud",
         title: "Cloudflare-native",
         description:
-          "Workers, D1, KV and R2 keep most modules on the free tier, from a Saturday idea to a first paying customer.",
+          "Workers, Hyperdrive, KV and R2 have free plans, and Neon's free Postgres tier gives each project 1 GB and 100 compute hours a month with no credit card.",
       },
       {
         id: "providers",
@@ -329,7 +329,7 @@ export const landing = {
         id: "modules",
         title: "38 modules in one registry",
         description:
-          "Capabilities set the conventions, features drop files into them, providers swap the vendor at runtime, and drivers pick the database.",
+          "Capabilities set the conventions, features drop files into them, providers swap the vendor at runtime, and a driver connects Postgres.",
         points: [
           { id: "pinned", text: "Fetched from GitHub at a pinned commit" },
           {
@@ -440,7 +440,7 @@ export const landing = {
       {
         id: "drivers",
         title: "Drivers",
-        modules: ["database-d1", "database-postgres"],
+        modules: ["database-postgres"],
       },
     ],
     skills: [
@@ -605,9 +605,10 @@ export const landing = {
         annualPrice: 0,
         priceSuffix: "",
         features: [
-          "base, api, database-d1",
+          "base, api, database-postgres",
           "auth, admin, waitlist, teams",
-          "Workers, D1, KV and R2",
+          "Workers, Hyperdrive, KV and R2",
+          "Neon's free Postgres: 1 GB, 100 compute hours a month",
           "Static assets for this page",
           "A hosting bill close to zero",
         ],
@@ -663,7 +664,7 @@ export const landing = {
         id: "leave",
         question: "Can I leave Cloudflare later?",
         answer:
-          "Yes. Every vendor sits behind a provider that an env var selects, and the database takes a Postgres driver in place of D1.",
+          "Yes. Every vendor sits behind a provider that an env var selects, and the database is plain Postgres, which any host runs.",
       },
       {
         id: "requirements",

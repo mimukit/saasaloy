@@ -18,9 +18,7 @@ import {
 // `packages/feature-flags/src/index.ts`. A row appears the first time somebody toggles the
 // flag, which is why nothing seeds this table at install time.
 export const featureFlags = pgTable("feature_flags", {
-  // `timestamptz`, matching the millisecond integers the SQLite twin stores: both come back
-  // as a `Date` with sub-second precision, which is what makes a route body port between
-  // the two drivers unchanged.
+  // `timestamptz`: it comes back as a `Date` with sub-second precision.
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()
     .defaultNow(),

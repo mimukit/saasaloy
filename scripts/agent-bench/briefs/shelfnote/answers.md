@@ -59,10 +59,6 @@ Books is the only entity, so it goes first.
 
 Nothing beyond the MVP set.
 
-## 14. Database driver
-
-`database-postgres`, the only driver.
-
-## 15. Preview deploy
+## 14. Preview deploy
 
 a. No, keep it on my machine (`deploy: none`).

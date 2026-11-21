@@ -1,6 +1,6 @@
 // A fake agent command for the harness test (issue #347). It plays the agent's side of
 // the agent command contract in `agents/claude.ts` with no model: it asks questions 1 to
-// 15 in batches, shows the read-back, and on the answer `a` writes a tiny project and
+// 14 in batches, shows the read-back, and on the answer `a` writes a tiny project and
 // ends its turn. Each call prints a Claude Code style `result` event, except the read-back
 // call when FAKE_AGENT_PLAIN is set, which prints plain text so the harness must record
 // the turns and the cost as unknown.
@@ -47,8 +47,8 @@ const QUESTIONS: Record<number, string> = {
   5: "Can you be more specific about the tone?",
   6: "**9. Pricing?**\n**10. Where does sign up go?**",
   7: "**11. These are the entities I would build.**",
-  8: "**12. Which order?**\n**13. Which capabilities?**\n**14. Which driver?**",
-  9: "**15. Put the finished build on a preview address?**",
+  8: "**12. Which order?**\n**13. Which capabilities?**",
+  9: "**14. Put the finished build on a preview address?**",
   10: "Here is everything.\n\n**Build it?**\na. Yes\nb. Ask me\nc. Change",
 };
 

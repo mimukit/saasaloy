@@ -1,8 +1,7 @@
 import { definePreset } from "@repo/env";
 import { z } from "@repo/env/zod";
 
-// The environment keys the Postgres driver reads. `database-d1` ships no preset: D1
-// arrives as a Worker binding, not as a value, so there is no key to validate.
+// The environment keys the Postgres driver reads.
 
 export const databasePreset = definePreset({
   module: "database-postgres",

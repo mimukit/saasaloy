@@ -112,8 +112,8 @@ export function authFor(c: AuthRequestContext) {
  * Auth's `auth` is a module-scope singleton while its database client belongs to one
  * request, so the call has to run inside `withAuthScope`, which needs `c.env` to open the
  * client and `c.executionCtx` to close it. Passing `c.req.raw` alone would leave the
- * caller to remember the wrapper, and forgetting it type-checks, passes on D1 and throws
- * on Postgres. Doing it here means there is nothing to forget. See `./db-scope.ts`.
+ * caller to remember the wrapper, and forgetting it type-checks and then throws at run
+ * time. Doing it here means there is nothing to forget. See `./db-scope.ts`.
  *
  * The httpOnly session cookie rides along on `c.req.raw` automatically.
  *

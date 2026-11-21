@@ -40,8 +40,7 @@ export type ColumnClassMap<TTable extends Table> = Record<
 /**
  * Declare the class of every column in `table`. `classes` is keyed by the table's property
  * keys, as a seed slice names them; the result is keyed by SQL column name. Export the
- * result from a file in `src/column-classes/`. One file serves both drivers, because the
- * `pgTable` and the `sqliteTable` of a schema file carry the same keys.
+ * result from a file in `src/column-classes/`.
  */
 export function defineColumnClasses<TTable extends Table>(
   table: TTable,

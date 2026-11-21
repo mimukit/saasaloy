@@ -16,12 +16,9 @@ import { users } from "../schema/auth";
 import { auditEvents } from "../schema/audit";
 import type { AuditEventRow, NewAuditEvent } from "../schema/audit";
 
-// Every query the admin audit log needs, in one file, written once for both dialects. The
-// table declarations are the only part that knows whether it talks to SQLite or Postgres
-// (`schema/audit.sqlite.ts` and `.pg.ts`), and Drizzle's query builder is neutral at call
-// time, so this file ships once and `apps/api` never branches on the driver. The one
-// dialect gap it closes by hand is the label search: Postgres `like` is case-sensitive and
-// SQLite's is not, and only Postgres has `ilike`, so the search lowers both sides.
+// Every query the admin audit log needs, in one file. The table declarations live in
+// `schema/audit.ts`. The label search is case-blind: Postgres `like` is case-sensitive, so
+// the search lowers both sides.
 //
 // `insertAuditEvents` is called only by `adminWrite` and `adminAuthWrite` in
 // `apps/api/src/lib/admin-write.ts`. The Activity page reads the rest. Newest first, paged
@@ -32,9 +29,8 @@ import type { AuditEventRow, NewAuditEvent } from "../schema/audit";
 export const AUDIT_PAGE_SIZE = 50;
 
 /**
- * Rows per insert statement. D1 binds at most 100 parameters to one statement and a row
- * binds 10, so a long write goes in several statements. Postgres would take them all at
- * once; one size keeps the file driver-blind.
+ * Rows per insert statement. A row binds 10 parameters, so 9 rows keep a statement under
+ * 100 bound parameters, and a long write goes in several statements.
  */
 const ROWS_PER_INSERT = 9;
 
@@ -117,7 +113,7 @@ function conditions(filter: AuditFilter): SQL[] {
   }
   const search = filter.search?.trim() ?? "";
   if (search !== "") {
-    // `escape` is spelled out: SQLite has no default escape character for `like`.
+    // `escape` is spelled out, so the backslash in `escapeLike` is the escape character.
     const pattern = `%${escapeLike(search.toLowerCase())}%`;
     where.push(
       sql`lower(${auditEvents.targetLabel}) like ${pattern} escape '\\'`
@@ -195,8 +191,8 @@ export async function lastAuditTimes(
   }
   const rows = await db
     .select({
-      // `mapWith` turns the driver's value back into a `Date` the way the column does: an
-      // epoch number on SQLite, a timestamp string on Postgres.
+      // `mapWith` turns the driver's value back into a `Date` the way the column does: the
+      // driver returns a timestamp string.
       at: sql<Date>`max(${auditEvents.createdAt})`.mapWith(
         auditEvents.createdAt
       ),

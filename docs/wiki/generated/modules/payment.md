@@ -266,7 +266,7 @@ The two write routes run through `adminWrite` from `apps/api/src/lib/admin-write
 
 The area is `payments`, the target type is `payment`, the target id is the payment id, and the label is the reference staff see, `<referenceType> · <referenceId>`. The reads need no action.
 
-`staffWrite()` builds the payment store over the transaction `adminWrite` opens and puts it in scope with `withPaymentStore`, so the core's status update, its `payment_events` or `payment_refunds` row and the audit row go through one client. Under `database-postgres` they commit together, and a `PaymentError` (a 409 from a race, a 404) rolls every one of them back. Under `database-d1` each statement commits as it runs, and a failed decision only goes without an audit row. A status listener runs inside that transaction too: write through `currentAdminWrite()?.db` when it is set, and put a side effect such as an email in its `afterCommit`.
+`staffWrite()` builds the payment store over the transaction `adminWrite` opens and puts it in scope with `withPaymentStore`, so the core's status update, its `payment_events` or `payment_refunds` row and the audit row go through one client. They commit together, and a `PaymentError` (a 409 from a race, a 404) rolls every one of them back. A status listener runs inside that transaction too: write through `currentAdminWrite()?.db` when it is set, and put a side effect such as an email in its `afterCommit`.
 
 A refund calls the provider inside the transaction. Under `database-postgres`, if the provider refunds and a later statement fails, the rollback removes the `payment_refunds` row while the gateway's refund stands. Check the gateway's dashboard after a refund that answered 500.
 

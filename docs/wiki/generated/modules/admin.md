@@ -383,7 +383,7 @@ show the order.
 
 The role string itself comes from better-auth's `admin()` plugin, which the `auth` module enables on both halves (`admin()` server-side, `adminClient()` in `adminAuthClientPlugins` in `packages/auth/src/client.ts`). Drop the client half and `session.user.role` stops being typed.
 
-**No sign-up becomes the superadmin.** Every sign-up gets the plugin's `"user"` default, the first one included, and this app's login refuses it until a superadmin grants an admin-group role. The first superadmin comes from outside the api: the seed writes `superadmin@example.test` in development, `pnpm db:prod:superadmin --email <address>` makes it on Postgres in production, and on D1 in production you sign up as a client and promote the account with one `wrangler d1 execute --remote` statement. This app has no sign-up, and neither has the admin instance, so the account signs in here with the email and password it has on the client side. The `saasaloy-auth` skill, "The first superadmin", owns the rule and the exact commands.
+**No sign-up becomes the superadmin.** Every sign-up gets the plugin's `"user"` default, the first one included, and this app's login refuses it until a superadmin grants an admin-group role. The first superadmin comes from outside the api: the seed writes `superadmin@example.test` in development, `pnpm db:prod:superadmin --email <address>` makes it in production. This app has no sign-up, and neither has the admin instance, so the account signs in here with the email and password it has on the client side. The `saasaloy-auth` skill, "The first superadmin", owns the rule and the exact commands.
 
 **A deep link survives the login hop.** The guard records the path it turned an anonymous visitor
 away from as `?redirect=` on `/login`, and `login.tsx` navigates there after `forgetSession()` and
@@ -403,11 +403,11 @@ There is deliberately **no sign-up route** here, and `adminAuth` sets `disableSi
 3. **Write the row.** Call `audit({ action, target: { id, label }, before, after })` once per change, with the fields the change touched. A create passes `after` only, a delete `before` only. Never pass a password: `adminWrite` throws on a key that matches `/password/i`, and `adminAuthWrite` drops it and logs at `error`. Put an email or any other side effect in `afterCommit`.
 4. **Prove it.** `audit-coverage.test.ts` fails until step 1 names the route, and `admin-gate.test.ts` fails if the validator runs before the gate. Neither proves the row is written, so add a route test beside the route that signs in a seeded admin, calls it, and reads `audit_events` for the row. `admin-members.test.ts` is the model.
 
-#### What the D1 driver guarantees
+#### What the transaction guarantees
 
-Under `database-postgres`, `adminWrite` is one transaction. The change and its audit rows commit together, and a body that throws or answers 4xx keeps nothing.
+`adminWrite` is one Postgres transaction. The change and its audit rows commit together, and a body that throws or answers 4xx keeps nothing.
 
-Under `database-d1` there is no interactive transaction. Each statement of the body commits as it runs, and the audit rows go in one batch after it. A body that writes and then fails keeps its write and gets no row. A failed audit insert is logged at `error` and the change stands. Validate before you write, and a D1 route keeps nothing on a 4xx either. `adminAuthWrite` gives this weaker guarantee on both drivers, because Better Auth makes the change outside our transaction.
+`adminAuthWrite` gives a weaker guarantee, because Better Auth makes the change outside our transaction. The change commits as Better Auth runs it, and the audit rows go in after it. A failed audit insert is logged at `error` and the change stands. Validate before you call Better Auth.
 
 #### The members screen
 
@@ -653,7 +653,7 @@ files.
 - **Describe a request once with `queryOptions`**, prefetch in the loader, read with `useQuery`,
   refresh by invalidating the key.
 - **Browser env vars are `PUBLIC_*`.** A `VITE_*` name is not exposed here.
-- **No bindings and no Worker entry.** Anything needing D1, R2 or a secret belongs in `apps/api`.
+- **No bindings and no Worker entry.** Anything needing a database binding, R2 or a secret belongs in `apps/api`.
 
 #### Next
 

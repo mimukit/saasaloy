@@ -23,8 +23,8 @@
     "enabled": true,
     "head_sampling_rate": 1,
   },
-  // No bindings in the base `api` module. Capabilities and features that need a
-  // D1 database, R2 bucket, KV namespace, or Queue patch this file to add their own
+  // No bindings in the base `api` module. Capabilities and features that need an
+  // R2 bucket, KV namespace, Queue or Hyperdrive config patch this file to add their own
   // binding (via the jsonc-parser patch engine) — see the `saasaloy-api` skill. A
   // nested binding (`queues.producers`, `triggers.crons`) is patched the same way.
 }

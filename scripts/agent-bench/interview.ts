@@ -8,7 +8,7 @@
 // `agents/claude.ts`). Each call ends when the agent ends its turn, which in an interview
 // is a question. The harness reads the reply, picks the answer, and calls again.
 //
-// How a reply is matched to an answer. `saasaloy-setup` numbers its questions 1 to 15 so
+// How a reply is matched to an answer. `saasaloy-setup` numbers its questions 1 to 14 so
 // the owner can answer by number, and asks them alone or in batches of two or three. The
 // harness reads every question number at the start of a line of the reply (`**11. ...**`,
 // `12) ...`, `Question 13:`, `Q14.`) that it has not answered yet, and answers each one by

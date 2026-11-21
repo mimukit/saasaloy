@@ -17,7 +17,7 @@ import { users } from "./auth";
 // `timestamptz`, for the reason `auth.ts` spells out: a bare `timestamp` drops the
 // offset postgres.js sends, and a JS `Date` then reads it back in the server's own zone.
 //
-// `precision: 3` keeps milliseconds, as the SQLite twin does. The page's cursor carries
+// `precision: 3` keeps milliseconds. The page's cursor carries
 // `created_at` as a JS `Date`, which holds no more than that. With the default six digits
 // a row stamped by `now()` sits a few microseconds after its own cursor, and the next
 // page loses every row that shares its millisecond.

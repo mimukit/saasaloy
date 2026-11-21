@@ -39,15 +39,13 @@ export const waitlist = new Hono<{ Bindings: DbBindings }>().post(
       return c.json(errorBody("invalid_input", message), 400);
     }
   }),
-  // `withDb` is the call shape both database drivers export, so this file is dialect-neutral
-  // and ships once. Under `database-postgres` it opens a connection for the request and
-  // closes it on `c.executionCtx.waitUntil`; under `database-d1` there is no socket and it
-  // just runs the callback. Read what you need *inside* the callback — the Postgres client
-  // starts closing the moment the callback settles, and rejects every query issued after.
+  // `withDb` is the call shape the database driver exports. It opens a connection for the
+  // request and closes it on `c.executionCtx.waitUntil`. Read what you need *inside* the
+  // callback — the Postgres client starts closing the moment the callback settles, and
+  // rejects every query issued after.
   //
-  // The dialect only reaches the table declaration, which `modules/waitlist` ships twice
-  // (`files/db/schema/waitlist.ts`). Drizzle's
-  // query builder below is the same under either.
+  // The dialect only reaches the table declaration, which `modules/waitlist` ships in
+  // `files/db/schema/waitlist.ts`.
   (c) =>
     withDb(c, async (db) => {
       const { email } = c.req.valid("json");

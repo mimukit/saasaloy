@@ -24,8 +24,7 @@ import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 // 1.7.2 had added. 1.7.3's `getAuthTables()` declares neither, so a snapshot that
 // still carries `issuer text NOT NULL` breaks every sign-up — the adapter never writes
 // the column and the insert fails the NOT NULL constraint. Both are gone below,
-// matching the SQLite variant, and (`providerId`, `accountId`) is the row's identity
-// again. A project that applied the 1.7.2 migration has the column and the index in
+// and (`providerId`, `accountId`) is the row's identity again. A project that applied the 1.7.2 migration has the column and the index in
 // its database; `db:generate` on this snapshot emits the drop, and the auth skill
 // carries it. Nothing else moved: the other three tables and every admin-plugin field
 // match 1.7.3 column for column.
@@ -42,8 +41,7 @@ import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 // `timestamptz`, where the adapter's generator emits a bare `timestamp`. The stored
 // value is an absolute instant either way, but `timestamp without time zone` drops the
 // offset postgres.js sends and reads back a string a JS `Date` then interprets in the
-// server's own zone. `timestamptz` costs the same and cannot be misread, which is what
-// makes it agree with the SQLite variant's millisecond epoch integers. The same choice
+// server's own zone. `timestamptz` costs the same and cannot be misread. The same choice
 // is made in `modules/waitlist/files/db/schema/waitlist.ts`.
 const timestamptz = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });

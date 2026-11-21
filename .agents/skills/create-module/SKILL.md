@@ -20,7 +20,6 @@ now honored at `add` time; author the full descriptor and it all applies.
 | Field | Applied at `add` time? |
 | --- | --- |
 | `files[]` | ✅ copied to their `@alias` targets |
-| `files[].onlyWith` | ✅ the entry is copied only when the module it names is in the resolved install set; two entries may share one `target` under disjoint conditions (also honored on a scaffold's `files[]`) |
 | `files[].when`, `patches[].when`, `entries[].when` | ✅ the entry ships only while its condition holds: `testing: true` needs a testing mode other than `off`, `installed` needs every named module; a tracked entry stays managed in every mode (also honored on a scaffold's `files[]`) (ADR 0054) |
 | `files[].seed` | ✅ written once and recorded as a seed; `update` never overwrites or merges it and restores it when missing, `remove` keeps it once changed (also honored on a scaffold's `files[]`) (ADR 0060) |
 | `files[].untested` | ✅ read by the test guards, which print the reason instead of failing |
@@ -37,7 +36,7 @@ now honored at `add` time; author the full descriptor and it all applies.
 | `tables` | ✅ each table is written as a `<name>.generated.ts` file, in full, on every run (plan 0116) |
 | `entries` | ✅ each row is written into the generated file of its table, sorted by `order` and then by module name |
 
-Consequence to know while authoring: a **capability** whose files all live in `scaffolds[]` (like `api`) lands its whole workspace on disk from `add`, registers its aliases, and applies any `patches` (e.g. `database`'s D1 binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise such a module through the `.dev/` playground to see it end to end.
+Consequence to know while authoring: a **capability** whose files all live in `scaffolds[]` (like `api`) lands its whole workspace on disk from `add`, registers its aliases, and applies any `patches` (e.g. `kv-cloudflare`'s KV binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise such a module through the `.dev/` playground to see it end to end.
 
 A `remove` is a render without the module. The CLI renders the project from the modules that stay, so a file, a patch or a table row of the removed module is not in the result, and the merge takes it out of the project. No patch kind has an inverse of its own, and the old "remove reverses the patch" rule no longer applies. Everything else the applier does is fully described by the descriptor.
 
@@ -155,8 +154,9 @@ Field notes:
   topologically sorts them, and confirms with the user before installing (`waitlist` → `api`,
   `database`). Declare every hard prerequisite; mark genuinely optional ones as such in your
   skill/README rather than in `dependsOn`. **Name the capability, never one of its drivers.**
-  `waitlist` depends on `database`, not on `database-d1`, even though its schema is SQLite-only. The
-  capability's `requiresOneOf` names the drivers, so the user picks one at install time. A feature
+  `api-keys-organization` depends on `api-keys`, and no feature depends on `api-keys-user` or
+  `api-keys-organization` directly. The capability's `requiresOneOf` names the drivers, so the user
+  picks one at install time. A feature
   that pins a driver overrides that choice silently and makes itself uninstallable beside any other
   driver. When your payload only works on one driver, say so in your skill and fix the payload; do
   not encode it in `dependsOn`.
@@ -168,14 +168,14 @@ Field notes:
   fires in either install order, and declaring it on both sides buys nothing. `add` never
   auto-resolves a conflict: it refuses and tells the user which `saasaloy remove` clears it.
 - **`requiresOneOf`** — a list of modules, exactly one of which has to be present. Use it when this
-  module is incomplete on its own and several modules could complete it: `database` scaffolds
-  `packages/db` and declares the `./client` export, but the file behind that export ships in
-  `database-d1` or `database-postgres`. `add` counts an option as present when it is already
-  installed or arrives in the same resolved graph, so a user who runs `saasaloy add database-d1`
-  directly satisfies the core with no prompt. That is the only legitimate way a driver name reaches
+  module is incomplete on its own and one or more modules could complete it: `api-keys` wires Better
+  Auth's api-key plugin, but who owns a key ships in `api-keys-organization` or `api-keys-user`.
+  `database` names its one driver the same way, `database-postgres`. `add` counts an option as
+  present when it is already installed or arrives in the same resolved graph, so a user who runs
+  `saasaloy add api-keys-user` directly satisfies the core with no prompt. That is the only legitimate way a driver name reaches
   the graph: from the user, never from another module's `dependsOn`. When nothing satisfies it, an interactive `add` offers the list as a picker and a
-  non-interactive one refuses and names the options. It takes **at least two** names — one hard
-  prerequisite is `dependsOn`. Pair it with `conflictsWith` on the options themselves: this field
+  non-interactive one refuses and names the options. It takes one name when the capability has one
+  driver, as `database` does. Pair it with `conflictsWith` on the options themselves: this field
   stops a project at zero, `conflictsWith` stops it at two.
 - **`dependencies` / `devDependencies`** — npm packages (distinct from `dependsOn`, which is
   *inter-module*), merged into the consumer's `dependencies` / `devDependencies` respectively —
@@ -193,17 +193,7 @@ Field notes:
   written with a consumer **alias**, resolved from the consumer's `saasaloy.json`:
   `@web`→`apps/web/src`, `@api`→`apps/api/src`, `@admin`→`apps/admin/src`, `@db`→`packages/db/src`,
   `@ui`→`packages/ui/src`. Prefer alias targets that land in a convention folder (Step 3).
-- **`onlyWith`** — an optional condition on one file entry, in `files[]` or in a scaffold's
-  `files[]`, naming a single module. The file is copied only when that module is in the resolved
-  install set: this run's `dependsOn` graph plus what the project's `saasaloy.json` already records.
-  Two entries may name the **same `target`** under disjoint conditions, which is how one module
-  ships a per-driver variant of a file it cannot write neutrally — a `sqliteTable` schema and a
-  `pgTable` schema behind one `@db/schema/waitlist.ts`. Name the variants for the dialect
-  (`waitlist.sqlite.ts`, `waitlist.pg.ts`) and keep every neutral file single-source: the condition
-  is for the file that genuinely cannot be written once, never a shortcut around writing it once.
-  A target whose entries are **all** conditional and none matches makes `add` refuse and name the
-  candidates, so a missing variant is a refusal rather than a file that quietly never arrived.
-- **`when`** — an optional condition on a `files[]` entry, a scaffold `files[]` entry, a `patches` op, or an `entries` row (ADR 0054). `{ "testing": true }` ships it only when the project's testing mode is `tests-after` or `tdd`. `{ "installed": ["e2e"] }` ships it only when every named module is installed. Both keys together mean both. The applier asks `when` before `onlyWith`, and a target whose entries `when` drops is skipped, not refused. `when` decides the first write only: once the file is in the manifest it stays managed in every mode. A later `saasaloy testing tests-after`, `add` or `update` backfills an entry whose condition turned true, and `remove X` takes every entry whose `installed` names X. Use `testing` for every test file, and `installed` for a file that only makes sense beside another module, such as a journey spec beside `e2e`.
+- **`when`** — an optional condition on a `files[]` entry, a scaffold `files[]` entry, a `patches` op, or an `entries` row (ADR 0054). `{ "testing": true }` ships it only when the project's testing mode is `tests-after` or `tdd`. `{ "installed": ["e2e"] }` ships it only when every named module is installed. Both keys together mean both. A target whose entries `when` drops is skipped, not refused. `when` decides the first write only: once the file is in the manifest it stays managed in every mode. A later `saasaloy testing tests-after`, `add` or `update` backfills an entry whose condition turned true, and `remove X` takes every entry whose `installed` names X. Use `testing` for every test file, and `installed` for a file that only makes sense beside another module, such as a journey spec beside `e2e`.
 - **`seed`** — `true` on a `files[]` or scaffold `files[]` entry the project is meant to change: an extension point a managed file imports, such as `apps/admin/src/extend/payments.ts`. `add` and backfill write it once and the manifest records it as a seed. `update` never overwrites or merges it, and writes it again only when it is missing. `remove` deletes it while unchanged and keeps it, with a warning, once the project changed it. Keep a seed small and stable: a project that already holds it never sees a later change to its content, so a change to what it exports needs an update note. Use it in place of asking the owner to edit a managed file in place, and set `requires.saasaloy` to `>=0.9.0`, the first CLI that reads the flag (ADR 0060).
 - **`untested`** — on a `files[]` entry, a one-line reason the file ships with no test beside it (`"untested": "generated types"`). The test guards print it instead of failing.
 - **`enablesTesting`** — `true` on a module whose whole point is tests (`e2e`). Adding it to a project with testing `off` sets `tests-after` after the apply succeeds and backfills. It leaves `tdd` alone, and `remove` never changes the mode.
@@ -360,7 +350,7 @@ file where a capability already auto-discovers it.
 - **An admin page is a route file on the admin shell, not a block.** A module that adds an admin screen drops `@admin/routes/<feature>.tsx` and registers its nav row as an `admin.nav` row in `entries`: `{ "table": "admin.nav", "area": "/", "group": "Manage", "entry": { "to": "/teams", "label": "Teams" }, "import": { "name": "UsersRoundIcon", "from": "lucide-react" } }`. The `app` shell takes the same row in `app.nav`. The page renders inside the page frame the admin root route provides, so it writes no `<main>`, no centred `max-w-*` wrapper, no outer padding and no `h1`. It renders `PageHeader` from `@repo/ui/blocks/shell/page-header`, puts a list in `DataTable` inside `PageLayout` with a `DetailPanel` for the selected record, and puts anything else in `PageBody`. Every control comes from the shell primitive set at `@repo/ui/components/shell/*`: `Field` and `Input` in forms, `Switch` for a toggle, `Dialog` for a create flow, `AlertDialog` before a destructive action, and `toastManager.add` for each mutation result. A lint rule fails any base `@repo/ui/components/*` import under `apps/admin/**`. The router supplies a skeleton and an error screen for every route, so a page writes its own only when its words differ. A module block that only the admin page renders goes in `@ui/blocks/admin/<name>.tsx` and uses the shell set too; `feature-flags` is the worked example. The `saasaloy-shell` skill documents every block and container.
 - Non-UI files still drop into their own app (`@web/...`, `@api/...`).
 
-Only when a change is genuinely structural — and no convention exists for it — use a **small, tested AST patch** in `patches`: a D1 binding in `wrangler.jsonc`, a column on another module's Drizzle table, a `db:generate` command in the app's `package.json`. A plugin in Better Auth's array is a table row (`auth.plugins`), not a patch. That's the 10%, not the spine. If you reach for a patch to edit another *module's* file, stop — add or use a convention instead.
+Only when a change is genuinely structural — and no convention exists for it — use a **small, tested AST patch** in `patches`: a KV binding in `wrangler.jsonc`, a column on another module's Drizzle table, a `db:generate` command in the app's `package.json`. A plugin in Better Auth's array is a table row (`auth.plugins`), not a patch. That's the 10%, not the spine. If you reach for a patch to edit another *module's* file, stop — add or use a convention instead.
 
 **Registering a route is not optional.** `apps/api` used to glob `routes/*.ts`, so a drop was enough; it no longer does. Every route is one `.route()` link in a single chain, because `hc<AppType>` reads its paths, inputs and response shapes off `typeof app`, and a glob gives that type nothing to carry. So a route module drops its handler file **and** adds one row to `entries`. The drop on its own leaves a file nothing imports. ADR 0028 records the trade.
 
@@ -431,14 +421,14 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
   `featureFlagOverrides` on `feature_flag_overrides`, `waitlistEntries` on `waitlist_entries`.
   Columns stay singular, and an index starts with its table name. A Better Auth plugin table
   follows the rule too: the adapter runs with `usePlural: true` and asks for `<model>s`, so a
-  plugin with `modelName: "X"` needs the export `Xs`. Ship both `.pg.ts` and `.sqlite.ts` with
-  the same names; `scripts/table-names.test.ts` checks all of it (ADR 0038).
+  plugin with `modelName: "X"` needs the export `Xs`. `scripts/table-names.test.ts` checks all of
+  it (ADR 0038).
 
 ## Conventions to honor
 
 - **Feature modules never AST-patch another module's internals.** Extend via the
   convention-based drop points instead: a table into `packages/db/schema/`, a UI component
-  into `apps/web`. Only genuinely structural edits (a D1 binding, a Better Auth plugin) use
+  into `apps/web`. Only genuinely structural edits (a KV binding, a Better Auth plugin) use
   small, tested AST patches.
 - **A route is the exception: drop the handler, then register it with an `api.routes` row in `entries`.** The generated `apps/api/src/routes.generated.ts` names every route statically so `AppType` carries them; nothing globs `routes/` (ADR 0028).
 - **A registration goes in `entries`, never in a file the owner keeps.** The owning module declares the table in `tables`, the CLI writes it as a `<name>.generated.ts` file, and the file the owner keeps spreads it.
@@ -454,7 +444,7 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - **Name every module skill `saasaloy-<module>`** — folder and frontmatter `name` alike — so it
   can't collide with a user's own installed skills (ADR 0014).
 - Declare `dependsOn` so the applier can resolve and topologically sort prerequisites.
-- **Prefix every account-scoped name with `{{PROJECT_NAME}}`**: a Worker `name`, a D1 `database_name`, a queue, an R2 bucket. `saasaloy add` renders the token in module files and in patch entries, as `init` does for the base, so two projects in one Cloudflare account never deploy over each other. The token renders in every module file, skills included, so a skill that means the placeholder writes `<project>` instead.
+- **Prefix every account-scoped name with `{{PROJECT_NAME}}`**: a Worker `name`, a KV namespace, a queue, an R2 bucket. `saasaloy add` renders the token in module files and in patch entries, as `init` does for the base, so two projects in one Cloudflare account never deploy over each other. The token renders in every module file, skills included, so a skill that means the placeholder writes `<project>` instead.
 
 ## Authoring checklist
 

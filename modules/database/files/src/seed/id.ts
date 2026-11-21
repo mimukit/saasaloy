@@ -6,8 +6,7 @@ import { createHash } from "node:crypto";
 //   userId: seedId("users", "superadmin"),
 //
 // No insert returns an id, no slug-to-id map is passed around, and every id is known before
-// the first write. That last part is what lets the D1 runner send the whole seed as one
-// atomic `db.batch`: D1 has no interactive transaction to read an id back inside.
+// the first write, so the runner never reads an id back between two writes.
 //
 // The id is a UUIDv5 (RFC 9562, section 5.5): the SHA-1 of a fixed namespace and the name
 // `<table>:<slug>`, with the version and variant bits set. It is a valid UUID string, so it
@@ -42,7 +41,7 @@ function formatUuid(bytes: Uint8Array): string {
  * The id of the seed row `slug` in the table named `table` (the SQL name, such as
  * `"users"` or `"organization_roles"`).
  *
- * The same pair always gives the same id, on every machine and on both drivers.
+ * The same pair always gives the same id, on every machine.
  */
 export function seedId(table: string, slug: string): string {
   const hash = createHash("sha1")

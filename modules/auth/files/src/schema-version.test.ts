@@ -58,7 +58,7 @@ for (const variant of VARIANTS) {
       assert.equal(
         header,
         pinned,
-        `the snapshot says it was verified against better-auth@${header}, but package.json pins ${pinned}. Re-verify the four tables against the pinned version's getAuthTables() and its Drizzle SQLite type mapping, fix any column that moved, then update the header.`
+        `the snapshot says it was verified against better-auth@${header}, but package.json pins ${pinned}. Re-verify the four tables against the pinned version's getAuthTables() and its Drizzle Postgres type mapping, fix any column that moved, then update the header.`
       );
     });
 

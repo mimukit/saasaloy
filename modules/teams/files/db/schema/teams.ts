@@ -28,7 +28,6 @@ import { users } from "./auth";
 
 // `timestamptz`, for the reason `auth.ts` spells out: a bare `timestamp` drops the
 // offset postgres.js sends, and a JS `Date` then reads it back in the server's own zone.
-// That would disagree with the SQLite variant's millisecond epoch integers.
 const timestamptz = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });
 

@@ -6,7 +6,7 @@
 // `../index` resolves through the shim beside this module to the real `packages/payment`
 // barrel, so the selection, the status machine and the event rows are the ones a deployed
 // Worker runs. Only the database is a fake, and it enforces the partial unique index on
-// `(provider, transaction_id_normalized)` the way both schema twins declare it.
+// `(provider, transaction_id_normalized)` the way the payment schema declares it.
 //
 // `@repo/validators/phone` is a workspace package in a generated project and is not
 // installed in this repo, so the hook below maps it onto the real file in

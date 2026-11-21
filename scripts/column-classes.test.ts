@@ -6,8 +6,7 @@
 // For each module with `files/db/schema/*.ts`, every table those files export
 // must be the subject of a `defineColumnClasses(...)` in a file the module's descriptor
 // installs at `@db/column-classes/<table>.ts`, where `<table>` is the SQL name in
-// kebab-case, and that file must name every column key of the table, in both the Postgres
-// and the SQLite variant, and no other key. A `drizzle-column` patch that adds a column to
+// kebab-case, and that file must name every column key of the table, and no other key. A `drizzle-column` patch that adds a column to
 // another module's table must add its class to that table's class file the same way.
 //
 // Like `./seed-slices.test.ts`, it reads the files as text: the class files import

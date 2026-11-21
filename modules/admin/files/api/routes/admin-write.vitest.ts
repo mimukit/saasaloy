@@ -16,10 +16,8 @@ import type { AuditAction } from "../lib/audit-actions";
 // write route from another module, and checks what the wrapper promises:
 //
 // - A body that succeeds keeps its change and leaves exactly one `audit_events` row.
-// - A body that throws, or answers 4xx, leaves no row. Under `database-postgres` it also
-//   keeps no change, because the wrapper's transaction rolls it back. Under `database-d1`
-//   there is no transaction to roll back, so the change the body made before it failed
-//   stands. The test names say which driver ran.
+// - A body that throws, or answers 4xx, leaves no row. It also keeps no change, because
+//   the wrapper's transaction rolls it back. The test names say which guarantee ran.
 //
 // The route renames the seeded member, a row every scaffold with `auth` has. Its action is
 // registered here through `vi.mock`, because no installed module needs to own it.
@@ -141,7 +139,7 @@ function testRows() {
 
 const failedChange = TRANSACTION_IS_ATOMIC
   ? "rolls the change back (Postgres)"
-  : "keeps the change, with no transaction to roll back (D1)";
+  : "keeps the change, with no transaction to roll back";
 
 describe(adminWrite, () => {
   it("keeps the change and writes one audit_events row when the body succeeds", async () => {

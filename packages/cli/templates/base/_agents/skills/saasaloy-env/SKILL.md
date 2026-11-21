@@ -137,7 +137,7 @@ Three more forms:
 
 - `pnpm deploy:production --only <service>` deploys one Worker after the same gates, and runs its smoke checks. It writes no deploy tag.
 - `pnpm --filter @repo/web run deploy -- --dry-run` builds one Worker with the production values and uploads nothing. Pass wrangler flags after `--`. Do not deploy with `pnpm --filter <package> run deploy` alone: it skips the gates, the order and the tag.
-- `env-deploy --run <service> -- <command> [args...]` runs one command with that service's `prod` values and the credentials. The `db:prod:migrate` and `db:prod:dump` scripts use it: `--run api` under `database-postgres`, because `DATABASE_URL` is an `api` key, and `--run deploy` under `database-d1`, which needs only the Cloudflare credentials.
+- `env-deploy --run <service> -- <command> [args...]` runs one command with that service's `prod` values and the credentials. The `db:prod:migrate` and `db:prod:dump` scripts use it with `--run api`, because `DATABASE_URL` is an `api` key.
 - `env-deploy --check` is step 1 on its own.
 
 Two things the flow does not do. `--secrets-file` only adds: a secret you removed from the value source stays on the Worker until you run `wrangler secret delete <KEY>` in its workspace. And a key marked `# Blank on purpose` passes the check even where production needs it, such as `BETTER_AUTH_SECRET`; the Worker's own `createEnv` gate is what refuses it.

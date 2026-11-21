@@ -60,7 +60,7 @@ Each test starts from the seed, and nothing a test writes reaches the next one. 
 
 A public route has no `401` or `403` case. Say so in a comment, and keep the other two.
 
-The test database needs the database driver's setup. Read the `saasaloy-database-d1` or `saasaloy-database-postgres` skill, "Route tests", when `testDatabase()` refuses to start.
+The test database needs the database driver's setup. Read the `saasaloy-database-postgres` skill, "Route tests", when `testDatabase()` refuses to start.
 
 ### A provider
 

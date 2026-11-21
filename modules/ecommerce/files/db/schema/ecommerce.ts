@@ -16,9 +16,8 @@ import {
 import { users } from "./auth";
 import { storageObjects } from "./file-uploads";
 
-// The ecommerce tables. Postgres only: the module depends on `database-postgres`, so there
-// is no SQLite twin (plan 0106, "Postgres only"). Checkout locks variant rows with
-// `SELECT … FOR UPDATE`, which D1 has no form of.
+// The ecommerce tables. The module depends on `database-postgres`. Checkout locks variant
+// rows with `SELECT … FOR UPDATE`.
 //
 //   product_categories      a flat list of categories
 //   products                draft or active; the description as Tiptap JSON and rendered HTML

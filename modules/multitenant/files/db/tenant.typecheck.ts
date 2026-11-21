@@ -15,8 +15,8 @@ import type { Db } from "./client";
 // directive into a compile failure here. If you change the guard on purpose, change these
 // lines in the same commit and say why. Do not silence one.
 //
-// Nothing here names a dialect. It reads the table type off `Db`, so this file compiles
-// unchanged under `database-d1` and `database-postgres`.
+// Nothing here names a dialect. It reads the table type off `Db`, which the installed
+// driver declares.
 
 declare const db: Db;
 

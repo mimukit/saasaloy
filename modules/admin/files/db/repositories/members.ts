@@ -3,8 +3,7 @@ import type { Db } from "../client";
 import { sessions } from "../schema/auth";
 
 // The one query the members screen needs that the audit log cannot answer: when each
-// member last signed in to the admin app. Written once for both dialects, like
-// `./audit.ts`.
+// member last signed in to the admin app.
 //
 // Better Auth keeps no sign-in time on the account, so the answer is the newest admin
 // session still on record. A sign-out, a ban and a password change that signs out other
@@ -22,7 +21,7 @@ export async function lastAdminSignIns(
   const rows = await db
     .select({
       // `max` loses the column's mapping, so `mapWith` turns the driver's value back into
-      // a `Date`: an epoch number on SQLite, a timestamp string on Postgres.
+      // a `Date`: the driver returns a timestamp string.
       at: max(sessions.createdAt).mapWith(sessions.createdAt),
       userId: sessions.userId,
     })

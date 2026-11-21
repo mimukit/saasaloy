@@ -62,10 +62,6 @@ Categories first, then receipts.
 
 `payment`, for the one-off tax year pass, with its local provider. No subscription.
 
-## 14. Database driver
-
-`database-postgres`, the only driver.
-
-## 15. Preview deploy
+## 14. Preview deploy
 
 a. No, keep it on my machine (`deploy: none`).

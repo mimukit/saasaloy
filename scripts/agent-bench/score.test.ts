@@ -267,7 +267,7 @@ describe("filesystem checks", () => {
     const project = join(dir, "shelfnote");
     put(
       "shelfnote/packages/db/src/schema/books.ts",
-      'export const books = sqliteTable("books", {});'
+      'export const books = pgTable("books", {});'
     );
     put(
       "shelfnote/packages/db/migrations/0001_init.sql",
@@ -318,10 +318,6 @@ const SPEC = `# Product spec
 | Module | Stage | Why |
 |--------|-------|-----|
 | None. | | |
-
-## Database driver
-
-\`database-postgres\`: the only driver.
 
 ## Entities
 
@@ -460,7 +456,7 @@ describe("entities end to end", () => {
   };
   put(
     "packages/db/src/schema/stations.ts",
-    'export const stations = sqliteTable("stations", {});'
+    'export const stations = pgTable("stations", {});'
   );
   put("apps/api/src/routes/stations.ts", 'app.get("/stations", list);');
   put("apps/app/src/routes/stations.tsx", "export function Stations() {}");
@@ -484,7 +480,7 @@ describe("entities end to end", () => {
   it("finds a route and a screen by the kebab-case name", () => {
     put(
       "packages/db/src/schema/prep.ts",
-      'export const prepTasks = sqliteTable("prep_tasks", {});'
+      'export const prepTasks = pgTable("prep_tasks", {});'
     );
     put("apps/api/src/routes/prep.ts", 'app.get("/prep-tasks", list);');
     put(

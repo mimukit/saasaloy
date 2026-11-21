@@ -206,20 +206,13 @@ export default waitlist;
 `withDb` opens the connection, runs your callback, and closes the socket on
 `c.executionCtx.waitUntil` afterwards. That last part is why it exists. This driver opens a real TCP
 socket per request, and a handler that forgets to close it leaks one for the rest of the isolate's
-life — a per-route obligation nobody remembers on the fiftieth route. Two rules the D1 driver does
-not have, both of which `withDb` keeps for you:
+life — a per-route obligation nobody remembers on the fiftieth route. Two rules, both of which `withDb` keeps for you:
 
 - **One connection per request, never one per module.** A Workers isolate outlives the request that
   created it, but an open socket does not. Reusing one client across requests throws
   `Cannot perform I/O on behalf of a different request`.
 - **Close it when the response is done.** `db.$client` is the underlying postgres.js instance and
   `end()` runs the moment it is called, not when the promise settles.
-
-`database-d1` exports the same four names with the same signatures — `getDb`, `Db`,
-`DbRequestContext`, `withDb` — and its `withDb` is a pass-through, because a D1 binding holds no
-socket. So the route body above is byte-identical under both drivers, which is what lets a feature
-module like `waitlist` ship one route file rather than one per dialect. Only the table declarations
-differ, and those the feature module ships per dialect.
 
 The one rule `withDb` cannot keep for you: **read everything you need inside the callback.** `end()`
 starts as soon as the callback settles and postgres.js rejects every query issued after it, so
@@ -256,9 +249,7 @@ export const waitlistEntries = pgTable("waitlist_entries", {
 });
 ```
 
-`drizzle.config.ts` sets `dialect: "postgresql"` to match. That pairing is the reason the config
-lives here and not in the core: a schema written against `pg-core` does not port to D1's SQLite by
-itself.
+`drizzle.config.ts` sets `dialect: "postgresql"` to match. That pairing is the reason the config lives here and not in the core.
 
 #### Applying migrations
 
@@ -381,7 +372,7 @@ It runs `node scripts/superadmin.ts` under `env-deploy --run api`, with the same
 - `--keep-password` promotes without a prompt, and refuses an account that has no password yet.
 - It ends with the other accounts that hold the role. Check that each one should.
 
-Then sign in on the admin app with that email. D1 has no such command: the `saasaloy-auth` skill has the D1 steps.
+Then sign in on the admin app with that email.
 
 #### The lifecycle commands: `db:setup`, `db:status`, `db:drop`
 
@@ -625,68 +616,9 @@ database.
 
 #### `auth` and `waitlist` install here
 
-Both ship their table declarations once, against `pg-core`. Their route files are single
-files under both drivers, because `withDb(c, …)` has the same signature here and on `database-d1`.
+Both ship their table declarations once, against `pg-core`. Their route files name no driver, because they call `withDb(c, …)`.
 
-`auth` carries one extra rule this driver forces: its two Better Auth instances (`auth` and `adminAuth`) are module-scope singletons and their database client is not. Every `api.*` call on either instance runs inside `withAuthScope(c, …)`, which is what
-keeps one request's socket from reaching the next request on the same isolate. Read
-`saasaloy-auth` before writing a protected route, and see ADR 0029.
-
-Until 2026-08-31 both modules declared `dependsOn: ["database-d1"]` and `add` refused them here by
-name. That stopgap is gone; ADR 0026's amendment records the retraction.
-
-#### Switching drivers
-
-`database-postgres` and `database-d1` declare each other in `conflictsWith`, so `add` refuses the
-second one instead of letting two clients fight over `src/client.ts`. To switch:
-
-```sh
-saasaloy remove database-postgres
-saasaloy add database-d1
-```
-
-`remove` deletes the two files this module owns, `src/client.ts` and `drizzle.config.ts`. It also
-deletes `packages/db/tsconfig.json`, which is **not** this module's file: the core `database`
-scaffolds it too, `add database-postgres` overwrote the core's copy, and `remove` now takes the
-whole file away without restoring the core's version.
-
-So run the two commands back to back. In between them `packages/db` has no `tsconfig.json` at all,
-and `pnpm typecheck` fails at `@repo/db` with tsc printing its option help instead. Adding the
-other driver writes the file again and the failure clears. If you need to stop after `remove`,
-put the core's copy back by hand:
-
-```json
-// packages/db/tsconfig.json
-{
-  "extends": "@repo/tsconfig/base.json",
-  "compilerOptions": {
-    "types": ["vite/client"]
-  },
-  "include": ["src", "drizzle.config.ts"]
-}
-```
-
-`remove` takes the `nodejs_compat` flag back out of `apps/api/wrangler.jsonc`. It warns about the
-leftovers it cannot reverse: the `db:migrate` script, the three `db:setup` / `db:status` / `db:drop`
-scripts in both `packages/db/package.json` and the root `package.json`, the root `compose.yaml`, and
-the `postgres` and `@types/node` dependencies. Delete those by hand — and run `pnpm db:drop` before
-`remove`, while the scripts that can still reach the database are there. Your `src/schema/*.ts`
-files stay put and are still `pg-core` — port them to `sqlite-core` yourself.
-
-**A driver switch takes the dependent feature modules with it.** `auth` and `waitlist` pick their
-schema variant at install time, and the unchosen one is filtered before the plan is built, so
-neither notices that the driver under it changed. Remove and add each of them too:
-
-```sh
-saasaloy remove waitlist
-saasaloy remove auth
-saasaloy remove database-postgres
-saasaloy add database-d1
-saasaloy add auth
-saasaloy add waitlist
-```
-
-There is no data migration in either direction; see ADR 0026.
+`auth` carries one extra rule this driver forces: its two Better Auth instances (`auth` and `adminAuth`) are module-scope singletons and their database client is not. Every `api.*` call on either instance runs inside `withAuthScope(c, …)`, which keeps one request's socket from reaching the next request on the same isolate. Read `saasaloy-auth` before writing a protected route, and see ADR 0029.
 
 #### Boundaries to honor
 
@@ -704,7 +636,6 @@ There is no data migration in either direction; see ADR 0026.
 - **The read-only URL lives in `~/.config/<project>/prod-readonly.env`, mode 0600**, never in `packages/env/`.
 - **Route tests use `testDatabase()`**, so each one rolls back. Never point a test at the development database.
 - **Hyperdrive is opt-in and code-free.** Add the binding; change nothing in `src/`.
-- **One driver per project.** Adding `database-d1` beside this one is refused, by design.
 
 #### Next
 

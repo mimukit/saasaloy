@@ -4,26 +4,22 @@ import { authDb as scopedAuthDb, dbScope } from "./db-scope";
 
 // This file holds auth's database wiring. It lands as `packages/auth/src/db-provider.ts`.
 // `./auth.ts`, `./server.ts` and `apps/api/src/routes/auth.ts` are written against it, and
-// none of them names the driver.
-//
-// The two files differ in three lines and nothing else: the `provider` string Better
-// Auth's Drizzle adapter takes, and what `withAuthScope` does after entering the scope.
-// `authDb` and `dbScope` come from `./db-scope.ts` unchanged in both.
+// none of them names the driver. It holds the `provider` string Better Auth's Drizzle
+// adapter takes and what `withAuthScope` does after entering the scope. `authDb` and
+// `dbScope` come from `./db-scope.ts`.
 
 /**
  * The dialect Better Auth's Drizzle adapter generates SQL for.
  *
- * It has to agree with `packages/db/src/schema/auth.ts`, which `modules/auth` ships
- * twice for the same reason. `auth.ts` lands under this driver.
+ * It has to agree with `packages/db/src/schema/auth.ts`, which is a `pgTable` file.
  */
 export const provider = "pg" as const;
 
 /**
  * The binding shape a route composing auth into its Hono generic needs.
  *
- * Re-exported from the driver rather than declared here, so a route names one type under
- * either driver even though the bindings behind it are `DATABASE_URL`/`HYPERDRIVE` here
- * and a `DB` binding under D1.
+ * Re-exported from the driver rather than declared here, so a route names one type and
+ * never learns that the bindings behind it are `DATABASE_URL` and `HYPERDRIVE`.
  */
 export type AuthDbBindings = DbBindings;
 

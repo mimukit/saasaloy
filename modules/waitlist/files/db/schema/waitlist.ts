@@ -9,7 +9,7 @@ import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 export const waitlistEntries = pgTable("waitlist_entries", {
   // `timestamptz`, so the stored instant carries no ambiguity about the server's zone, and
   // `defaultNow()` so the database clock stamps a row the route did not stamp. Postgres
-  // keeps microseconds, which covers the milliseconds the SQLite variant stores.
+  // keeps microseconds.
   createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
     .notNull()
     .defaultNow(),

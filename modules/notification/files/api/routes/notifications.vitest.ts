@@ -198,8 +198,8 @@ describe("cursor paging", () => {
       title: `Row ${index}`,
       userId,
     }));
-    // Two inserts, because D1 binds at most 100 values to one statement and 21 rows of
-    // five values is 105.
+    // Two inserts, so no one statement binds more than 100 values: 21 rows of five values
+    // is 105.
     await database.db.insert(notifications).values(rows.slice(0, 11));
     await database.db.insert(notifications).values(rows.slice(11));
 

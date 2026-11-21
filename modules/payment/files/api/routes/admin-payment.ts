@@ -321,9 +321,8 @@ function staff<T>(
  * `staff` for a write. `adminWrite` runs the admin check and opens one transaction, and
  * the payment store is built over that transaction's `db`, so the core's payment update,
  * its `payment_events` or `payment_refunds` row and the audit row all go through it.
- * Under `database-postgres` they commit together, and the 4xx a `PaymentError` becomes
- * rolls every one of them back. Under `database-d1` each statement commits as it runs,
- * and a failed decision only goes without an audit row.
+ * They commit together, and the 4xx a `PaymentError` becomes rolls every one of them
+ * back.
  */
 function staffWrite<T>(
   c: AdminPaymentContext,
