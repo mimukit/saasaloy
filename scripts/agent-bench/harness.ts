@@ -116,6 +116,21 @@ export function parseArgs(argv: string[], home = homedir()): Options {
   return options;
 }
 
+/** An explicit command takes precedence; otherwise the owner must select an agent. */
+export async function selectAgent(
+  command: string[] | undefined,
+  ask: () => Promise<string>
+): Promise<string[]> {
+  if (command && command.length > 0) {
+    return command;
+  }
+  const answer = (await ask()).trim().toLowerCase();
+  if (answer !== "claude" && answer !== "codex") {
+    throw new Error("Choose claude or codex; there is no default agent.");
+  }
+  return [answer];
+}
+
 /**
  * Splits a command line on spaces, keeping a single- or double-quoted part whole. No
  * shell runs it, so no variable, glob or pipe is expanded.

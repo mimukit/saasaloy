@@ -9,7 +9,7 @@
 //   node scripts/agent-bench.ts --score <run-dir> [--static]
 //                                                         score an earlier run folder again
 //
-// More options: `--agent "<command>"` (default: `node scripts/agent-bench/agents/claude.ts`),
+// More options: `--agent claude|codex|"<command>"` (no default; asks in a terminal),
 // `--runs <dir>` (default `~/.cache/saasaloy-bench`, never inside this repo), `--no-build`
 // (use the CLI build on disk), `--static` (score only the lines that need no server).
 //
@@ -47,7 +47,7 @@
 // entity and starts one more call of the same agent command, in an empty folder, with only
 // the site's address and that key (`./agent-bench/second-agent.ts`). It must create one
 // row and read it back through MCP. `./agent-bench/agent-use.ts` says how the key is
-// seeded; `--score` starts the agent command that `run.json` records.
+// seeded; `--score` asks for an agent again unless `--agent` or `--static` is set.
 //
 // The report. `score.md` starts with the brief, the mode, the revision, the turns, the
 // time and the cost, then the bar table. The turns and the cost are the sum of what each
@@ -74,6 +74,7 @@ import {
 } from "node:fs";
 import { mkdir, open } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 
 import {
   absolutePaths,
@@ -84,6 +85,7 @@ import {
   pickBlock,
   runIdOf,
   runnerShim,
+  selectAgent,
   totals,
 } from "./agent-bench/harness.ts";
 import type { Call, Mode, Options, RunRecord } from "./agent-bench/harness.ts";
@@ -393,11 +395,42 @@ function callOf(
   return call;
 }
 
-/** The agent command: `--agent` with its paths made absolute, else the claude adapter. */
-function agentCommand(options: Options): string[] {
-  return options.agent
-    ? absolutePaths(options.agent, process.cwd(), existsSync)
-    : [process.execPath, join(benchDir, "agents", "claude.ts")];
+/** The owner's agent choice, with built-in names expanded to adapter commands. */
+async function agentCommand(options: Options): Promise<string[]> {
+  try {
+    const command = await selectAgent(options.agent, async () => {
+      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        fatal(
+          "choose --agent claude or --agent codex; there is no default agent without a terminal"
+        );
+      }
+      const input = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      const cancelled = new AbortController();
+      input.once("close", () => cancelled.abort());
+      input.once("SIGINT", () => input.close());
+      try {
+        return await input.question(
+          "Which agent should run the benchmark? (claude/codex): ",
+          { signal: cancelled.signal }
+        );
+      } finally {
+        input.close();
+      }
+    });
+    const [name, ...extra] = command;
+    return absolutePaths(
+      name === "claude" || name === "codex"
+        ? [process.execPath, join(benchDir, "agents", `${name}.ts`), ...extra]
+        : command,
+      process.cwd(),
+      existsSync
+    );
+  } catch (error) {
+    fatal(error instanceof Error ? error.message : String(error));
+  }
 }
 
 async function runAgent(options: Options): Promise<number> {
@@ -411,7 +444,7 @@ async function runAgent(options: Options): Promise<number> {
   if (expect.status) {
     console.log(`agent-bench: brief ${options.brief} is a ${expect.status}`);
   }
-  const command = agentCommand(options);
+  const command = await agentCommand(options);
 
   if (options.build) {
     console.log("agent-bench: building the local CLI");
@@ -515,12 +548,18 @@ async function rescore(options: Options): Promise<number> {
   const run = existsSync(runFile)
     ? (JSON.parse(readFileSync(runFile, "utf-8")) as RunRecord)
     : undefined;
+  const command = options.staticOnly ? [] : await agentCommand(options);
   const code = await score(runDir, {
     brief: run?.brief ?? options.brief,
     mode: run?.mode ?? options.mode,
     staticOnly: options.staticOnly,
-    agent: run?.agent ?? agentCommand(options),
-    header: run ? formatHeader(run) : undefined,
+    agent: command,
+    header: [
+      run ? formatHeader(run) : undefined,
+      options.staticOnly ? undefined : `Scoring agent: ${command.join(" ")}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
   });
   const strays = await killStrays(runDir);
   if (strays.length > 0) {

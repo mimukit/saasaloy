@@ -25,6 +25,12 @@ it("resumes its own Codex thread and keeps raw evidence without inventing costs"
       join(source, "AGENTS.md"),
       "Do not load these global instructions."
     );
+    writeFileSync(
+      join(source, "models_cache.json"),
+      JSON.stringify({
+        models: [{ slug: "gpt-6.1-sol" }, { slug: "gpt-6.2-sol" }],
+      })
+    );
     const fake = join(state, "codex");
     writeFileSync(
       fake,
@@ -50,6 +56,12 @@ process.stdin.on("end", () => {
     );
     chmodSync(fake, 0o755);
     for (const turn of [1, 2]) {
+      if (turn === 2) {
+        writeFileSync(
+          join(source, "models_cache.json"),
+          JSON.stringify({ models: [{ slug: "gpt-7-sol" }] })
+        );
+      }
       const result = spawnSync(
         process.execPath,
         [join(import.meta.dirname, "codex.ts")],
@@ -82,6 +94,37 @@ process.stdin.on("end", () => {
     assert.ok(second.includes('sandbox_mode="workspace-write"'));
     assert.ok(second.includes('approvals_reviewer="auto_review"'));
     assert.ok(second.includes("gpt-6.2-sol"));
+    assert.ok(second.includes('model_reasoning_effort="medium"'));
+    rmSync(join(source, "models_cache.json"));
+    const custom = spawnSync(
+      process.execPath,
+      [
+        join(import.meta.dirname, "codex.ts"),
+        "--model",
+        "custom-sol",
+        "--effort",
+        "high",
+      ],
+      {
+        input: "custom settings",
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          CODEX_HOME: source,
+          PATH: `${state}:${process.env.PATH ?? ""}`,
+          AGENT_BENCH_STATE: state,
+          AGENT_BENCH_TURN: "1",
+        },
+      }
+    );
+    assert.equal(custom.status, 0, custom.stderr);
+    const customArgs = JSON.parse(
+      readFileSync(join(state, "args"), "utf-8").trim().split("\n").at(-1) ??
+        "[]"
+    ) as string[];
+    assert.equal(customArgs.filter((arg) => arg === "--model").length, 1);
+    assert.equal(customArgs[customArgs.indexOf("--model") + 1], "custom-sol");
+    assert.ok(customArgs.includes('model_reasoning_effort="high"'));
     const stopped = spawnSync(
       process.execPath,
       [join(import.meta.dirname, "codex.ts")],

@@ -1,4 +1,4 @@
-// The default agent command of the agent benchmark: Claude Code, headless, one call per
+// The Claude adapter of the agent benchmark: Claude Code, headless, one call per
 // turn (plan 0109 phase 8, issue #347).
 //
 //   node scripts/agent-bench/agents/claude.ts [extra claude flags, such as --model <id>]
@@ -39,6 +39,8 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { agentOptions } from "./options.ts";
+
 export interface ClaudeCall {
   message: string;
   turn: number;
@@ -50,6 +52,7 @@ export interface ClaudeCall {
 
 /** The `claude` arguments for one call. */
 export function claudeArgs(call: ClaudeCall): string[] {
+  const options = agentOptions(call.extra);
   const settings = JSON.stringify({
     claudeMdExcludes: [join(call.home, ".claude", "CLAUDE.md")],
   });
@@ -69,7 +72,11 @@ export function claudeArgs(call: ClaudeCall): string[] {
     "AskUserQuestion",
     "--settings",
     settings,
-    ...call.extra,
+    "--effort",
+    options.effort,
+    ...options.extra,
+    "--model",
+    options.model ?? "opus",
   ];
 }
 

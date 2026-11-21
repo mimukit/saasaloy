@@ -18,13 +18,14 @@ import {
   pickBlock,
   runIdOf,
   runnerShim,
+  selectAgent,
   splitCommand,
   totals,
 } from "./harness.ts";
 import type { RunRecord } from "./harness.ts";
 
 describe("parseArgs", () => {
-  it("runs the Shelfnote brief in brief mode with claude by default", () => {
+  it("leaves the agent unset until the user selects one", () => {
     const options = parseArgs([], "/home/u");
     assert.equal(options.brief, "shelfnote");
     assert.equal(options.mode, "brief");
@@ -66,6 +67,34 @@ describe("parseArgs", () => {
     const options = parseArgs(["--score", "/r/1", "--agent", "--x"], "/home/u");
     assert.equal(options.scoreDir, "/r/1");
     assert.deepEqual(options.unknown, ["--agent (needs a value)", "--x"]);
+  });
+});
+
+describe("selectAgent", () => {
+  it("asks when no agent was specified", async () => {
+    let asked = 0;
+    const result = await selectAgent(undefined, async () => {
+      asked += 1;
+      return "codex";
+    });
+    assert.equal(asked, 1);
+    assert.deepEqual(result, ["codex"]);
+  });
+
+  it("keeps an explicit choice and does not ask again", async () => {
+    const result = await selectAgent(["claude", "--model", "custom"], () => {
+      throw new Error("unexpected prompt");
+    });
+    assert.deepEqual(result, ["claude", "--model", "custom"]);
+  });
+
+  it("never selects an agent for a blank or invalid answer", async () => {
+    for (const answer of ["", "unknown"]) {
+      await assert.rejects(
+        selectAgent(undefined, async () => answer),
+        /claude.*codex/
+      );
+    }
   });
 });
 

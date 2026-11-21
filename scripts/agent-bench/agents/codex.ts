@@ -16,6 +16,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 
+import { agentOptions, latestSol } from "./options.ts";
+
 const state = process.env.AGENT_BENCH_STATE;
 if (!state) {
   throw new Error("AGENT_BENCH_STATE is required");
@@ -49,6 +51,18 @@ if (existsSync(join(source, "auth.json"))) {
   chmodSync(auth, 0o600);
 }
 const resume = Number(process.env.AGENT_BENCH_TURN ?? "1") > 1;
+const options = agentOptions(process.argv.slice(2));
+const modelFile = join(state, "codex-model");
+const model =
+  options.model ??
+  (existsSync(modelFile)
+    ? readFileSync(modelFile, "utf-8").trim()
+    : latestSol(
+        existsSync(join(source, "models_cache.json"))
+          ? JSON.parse(readFileSync(join(source, "models_cache.json"), "utf-8"))
+          : undefined
+      ));
+writeFileSync(modelFile, model);
 const args = [
   "-c",
   'approval_policy="on-request"',
@@ -62,8 +76,10 @@ const args = [
   "--skip-git-repo-check",
   "--json",
   "--model",
-  "gpt-6.2-sol",
-  ...process.argv.slice(2),
+  model,
+  "-c",
+  `model_reasoning_effort=${JSON.stringify(options.effort)}`,
+  ...options.extra,
   "-",
 ];
 const child = spawn("codex", args, {

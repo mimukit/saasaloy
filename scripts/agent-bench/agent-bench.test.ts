@@ -88,6 +88,45 @@ describe(
         .split("\n")
         .map((line) => JSON.parse(line) as Seen);
 
+    it("requires an agent before a new non-interactive build starts", () => {
+      const missing = spawnSync(process.execPath, [harness, "--runs", runs], {
+        cwd: root,
+        encoding: "utf-8",
+        timeout: 10_000,
+      });
+      assert.equal(missing.status, 2, missing.stderr);
+      assert.match(missing.stderr, /--agent claude.*--agent codex/);
+      assert.doesNotMatch(missing.stdout, /building the local CLI/);
+    });
+
+    it("rescores static checks without asking for an unused agent", () => {
+      const staticScore = spawnSync(
+        process.execPath,
+        [harness, "--score", runDir, "--static"],
+        {
+          cwd: root,
+          encoding: "utf-8",
+          timeout: 10_000,
+        }
+      );
+      assert.equal(staticScore.status, 1, staticScore.stderr);
+      assert.doesNotMatch(staticScore.stderr, /choose --agent/);
+    });
+
+    it("requires an agent choice when rescoring without a terminal", () => {
+      const rescored = spawnSync(
+        process.execPath,
+        [harness, "--score", runDir],
+        {
+          cwd: root,
+          encoding: "utf-8",
+          timeout: 10_000,
+        }
+      );
+      assert.equal(rescored.status, 2, rescored.stderr);
+      assert.match(rescored.stderr, /--agent/);
+    });
+
     it("runs to the end and scores the run", () => {
       assert.equal(result.status, 1, result.stderr);
       assert.match(
@@ -229,6 +268,20 @@ describe("claudeArgs", () => {
     extra: ["--model", "claude-sonnet-5-5"],
     home: "/home/u",
   };
+
+  it("uses the latest Opus alias with medium effort unless overridden", () => {
+    const defaults = claudeArgs({ ...call, extra: [], turn: 1 });
+    assert.equal(defaults[defaults.indexOf("--model") + 1], "opus");
+    assert.equal(defaults[defaults.indexOf("--effort") + 1], "medium");
+    const custom = claudeArgs({
+      ...call,
+      extra: ["--model", "custom-opus", "--effort", "high"],
+      turn: 1,
+    });
+    assert.equal(custom.filter((arg) => arg === "--model").length, 1);
+    assert.equal(custom[custom.indexOf("--model") + 1], "custom-opus");
+    assert.equal(custom[custom.indexOf("--effort") + 1], "high");
+  });
 
   it("starts the session on the first call and resumes it later", () => {
     const first = claudeArgs({ ...call, turn: 1 });
