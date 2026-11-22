@@ -52,7 +52,7 @@ Rejected:
 - Minimal: drop only `admin` from the fixed set. It fixes the screenshot case but keeps a landing-only product impossible.
 - Lateral: named presets ("landing", "SaaS", "team SaaS") that the owner picks. It hides the reasons and returns to fixed lists with more names.
 
-### Phase 1: The interview proposes the full list
+### Phase 1: The interview proposes the full list (built 2026-11-22)
 
 - In `saasaloy-setup/SKILL.md`, rewrite "The capabilities question" as "The module proposal". Remove step 1 ("Leave out the MVP set"). Keep the provider and tooling exclusions.
 - Write `.agents/skills/saasaloy-setup/module-triggers.md`: each answer or entity pattern, the modules it adds, the reason text, and what counts as unclear. Rows include: an entity exists; staff work on other users' data; sign-in exists; paid tiers in question 9; a team audience; an entity of the organization; a waitlist destination in question 10.
@@ -66,7 +66,7 @@ Rejected:
 
 Done when: `scripts/skills.test.ts` pins the trigger table and fails on the phrase "MVP set" in `saasaloy-setup`, and a fake-agent interview test for a landing-only answer set writes a spec whose `## Modules` row is `None.`.
 
-### Phase 2: The build installs the approved list
+### Phase 2: The build installs the approved list (built 2026-11-22)
 
 - In `saasaloy-build/SKILL.md`, rewrite "Stage: Validate and Stage: MVP": install each module in the spec's `## Modules`, in two calls split by its `Stage` column (`validate` first, every other stage second). Keep rules 1 to 3 (drop `needs`, pick `database-postgres`, pick the local provider). Remove rules 4 and 5 and the fixed-set sentence.
 - Skip a stage call that has no module. Skip the Feature stage when `## Entities` is `None.`. Set the tests-after mode only when an entity exists.
@@ -84,7 +84,7 @@ Attended: the live bench run over the four briefs waits for the maintainer to st
 
 Done when: `pnpm test` passes, and a live bench run over the four briefs passes the `modules` check on each, with replies inside the 15 to 17 baseline.
 
-### Phase 4: Documentation
+### Phase 4: Documentation (built 2026-11-22)
 
 - Template `AGENTS.md` (lines 153 to 158 and 285), `llms.txt:31`, `docs/wiki/how-to/build-with-an-agent.md:90`, `docs/wiki/getting-started.md:113` and `CONTRIBUTING.md:571-575`: replace "the MVP set" with the derived list.
 - `CONTEXT.md`: rewrite "MVP bar" so the checks follow the approved list, and add the term "module proposal".

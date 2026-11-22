@@ -451,8 +451,12 @@ _Avoid: AFK mode, autopilot. `afk` is only the field value._
 _Avoid: progress file, stop report._
 
 ### MVP bar
-The list of checks an unattended run must pass to count as a finished local MVP, scored by the agent benchmark (`scripts/agent-bench.ts`). Plan 0074 defines the list, and plan 0109 adds three lines: the interview, each entity of the spec, and the preview. Since plan 0123 the build has no fixed module set, so a check of a module applies only when the approved spec lists that module.
+The list of checks an unattended run must pass to count as a finished local MVP, scored by the agent benchmark (`scripts/agent-bench.ts`). Plan 0074 defines the list, and plan 0109 adds three lines: the interview, each entity of the spec, and the preview. Since [ADR 0069](docs/adr/0069-adr-the-owner-approves-a-derived-module-list-not-a-fixed-mvp-set-2026-11-22.md) the build has no fixed module set, so a check of a module applies only when the approved spec lists that module.
 _Avoid: done criteria._
+
+### Module proposal
+The list of modules the interview derives from the owner's answers, each with its reason or the pick that needs it, which the owner approves into the spec's `## Modules` table. The build installs that table and no other module. The rules are in `saasaloy-setup/module-triggers.md` ([ADR 0069](docs/adr/0069-adr-the-owner-approves-a-derived-module-list-not-a-fixed-mvp-set-2026-11-22.md)).
+_Avoid: MVP set, module picks, capabilities question._
 
 ## Key-value, limits & flags
 
