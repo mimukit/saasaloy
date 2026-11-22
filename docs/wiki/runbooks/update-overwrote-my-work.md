@@ -59,4 +59,4 @@ Upgrade the CLI. From 0.2.0, the release carrying ADR 0034:
 
 Commit or stash before any update anyway. It costs one command and it is the only recovery that never depends on the tool behaving.
 
-_Verified against `main`@`7fe1e866` on 2026-11-21._
+_Verified against `main`@`e2830008` on 2026-11-22._

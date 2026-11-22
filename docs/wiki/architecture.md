@@ -155,4 +155,4 @@ module that ships an agent skill installs it into `.agents/skills/` with a
 [ADR 0015](../adr/0015-adr-module-skills-agents-canonical-claude-symlink-2026-07-24.md)).
 After each run the engine links every folder in `.agents/skills/` and drops each `.claude/skills/` link whose folder is gone, so a removed module's link goes with its skill.
 
-_Verified against `main`@`7fe1e866` on 2026-11-21._
+_Verified against `main`@`e2830008` on 2026-11-22._

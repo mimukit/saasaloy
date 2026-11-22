@@ -106,3 +106,5 @@ The build never does these, and it lists them under `## Left for a human`:
 - Create a vendor account: a paid Cloudflare plan, a domain, a mail or payment provider. The build installs the local provider and names the vendor step.
 - Edit a secret, or set a production value.
 - Delete data outside the local dev database.
+
+_Verified against `main`@`e2830008` on 2026-11-22._

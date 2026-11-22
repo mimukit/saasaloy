@@ -172,4 +172,4 @@ A project scaffolded before this flow may still have an `infra/` workspace and a
 
 _The gated flow was checked against branch `issue-234-gate-order-and-tag-the-production-deploy` on 2026-10-23 with `pnpm deploy:production --dry-run` in a generated project; no live deploy ran. Checked against branch `issue-198` on 2026-10-21 with live deploys to a disposable Cloudflare account: the landing page, and a project with `api`, the database driver of that time (since removed, see [Why Postgres, not D1](../why-postgres.md)), `auth`, `kv-cloudflare` and `queue-cloudflare`. The teardown above ran in this order. R2 and the `infra` runbook were not run live._
 
-_Verified against `main`@`7fe1e866` on 2026-11-21._
+_Verified against `main`@`e2830008` on 2026-11-22._
