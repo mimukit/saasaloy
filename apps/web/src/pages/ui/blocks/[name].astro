@@ -18,7 +18,11 @@
 // preview toolbar, a select below `sm`. A pick sets `data-ui-preview-theme` on this page's
 // <html>, which every preview frame on the page follows, shows that theme's install
 // command above the block's, and is kept in localStorage for the next block page. The
-// site's own cobalt brand and light or dark mode never change.
+// site's own cobalt brand and light or dark mode never change. Beside it sit the two
+// preview-only controls round r2 draws (Phase 7): a light and dark pair that sets
+// `data-ui-preview-mode`, which the frames follow (lib/ui-preview-frame.ts), and a desktop
+// and mobile pair that narrows the frame to 390 px. Each shows once at every width
+// (assumption 20).
 //
 // A block of the second kit (plan 0121, Phase 7) names the template that writes it into a
 // Saasaloy project, read from the CLI's recipes (packages/cli/src/lib/recipes.ts).
@@ -76,6 +80,34 @@ const dotCss = UI_THEMES.map((theme) =>
 ).join("\n");
 const segmentClass =
   "aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:border-highlight border-border text-muted-foreground hover:text-foreground focus-visible:outline-ring -ml-px inline-flex h-9 cursor-pointer items-center gap-2 border px-3 font-mono text-sm first:ml-0 focus-visible:relative focus-visible:outline-2 focus-visible:outline-offset-2";
+const iconSegmentClass =
+  "aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:border-highlight border-border text-muted-foreground hover:text-foreground focus-visible:outline-ring -ml-px inline-flex size-9 cursor-pointer items-center justify-center border first:ml-0 focus-visible:relative focus-visible:outline-2 focus-visible:outline-offset-2 pointer-coarse:size-11";
+// The preview-only mode and width controls (round r2). The icons are lucide's sun, moon,
+// monitor and smartphone, drawn inline like the source link's icon.
+const modes = [
+  {
+    id: "light",
+    label: switcher.light,
+    icon: "M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z",
+  },
+  {
+    id: "dark",
+    label: switcher.dark,
+    icon: "M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401",
+  },
+];
+const widths = [
+  {
+    id: "desktop",
+    label: switcher.desktop,
+    icon: "M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 21h8M12 17v4",
+  },
+  {
+    id: "mobile",
+    label: switcher.mobile,
+    icon: "M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM12 18h.01",
+  },
+];
 const tabClass =
   "aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:border-primary border-highlight text-highlight hover:bg-muted focus-visible:outline-ring -mb-px h-10 cursor-pointer border px-6 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2";
 ---
@@ -195,14 +227,77 @@ const tabClass =
               </option>
             ))}
           </select>
+          <div class="flex w-full items-center gap-3 sm:ml-auto sm:w-auto">
+            <div
+              role="group"
+              aria-label={switcher.modeLabel}
+              class="flex"
+              data-ui-mode
+            >
+              {modes.map((mode) => (
+                <button
+                  type="button"
+                  class={iconSegmentClass}
+                  aria-pressed="false"
+                  aria-label={mode.label}
+                  data-mode-choice={mode.id}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    class="size-4"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d={mode.icon} />
+                  </svg>
+                </button>
+              ))}
+            </div>
+            <div
+              role="group"
+              aria-label={switcher.widthLabel}
+              class="flex"
+              data-ui-width
+            >
+              {widths.map((width) => (
+                <button
+                  type="button"
+                  class={iconSegmentClass}
+                  aria-pressed={width.id === "desktop" ? "true" : "false"}
+                  aria-label={width.label}
+                  data-width-choice={width.id}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    class="size-4"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d={width.icon} />
+                  </svg>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
-        <iframe
-          src={`/ui/preview/${block.name}`}
-          title={interpolate(copy.previewTitle, { name: block.name })}
-          loading="lazy"
-          class="block h-[36rem] w-full"
-          data-ui-preview
-        ></iframe>
+        <div class="bg-muted flex justify-center">
+          <iframe
+            src={`/ui/preview/${block.name}`}
+            title={interpolate(copy.previewTitle, { name: block.name })}
+            loading="lazy"
+            class="bg-background block h-[36rem] w-full data-[width=mobile]:max-w-[390px]"
+            data-ui-preview
+            data-width="desktop"
+          ></iframe>
+        </div>
       </div>
 
       <div
@@ -438,6 +533,46 @@ const tabClass =
     themeSelect?.addEventListener("change", () =>
       pick(themeSelect.value, true)
     );
+
+    // The preview-only mode. It follows the site's mode until a press, then holds the
+    // pick in `data-ui-preview-mode`, which every frame on the page follows. The site's
+    // own mode and its stored choice never change.
+    const root = document.documentElement;
+    const modeChoices = [...document.querySelectorAll("[data-mode-choice]")];
+    function showMode() {
+      const mode =
+        root.dataset.uiPreviewMode ??
+        (root.classList.contains("dark") ? "dark" : "light");
+      for (const choice of modeChoices) {
+        choice.setAttribute(
+          "aria-pressed",
+          String(choice.dataset.modeChoice === mode)
+        );
+      }
+    }
+    showMode();
+    new MutationObserver(showMode).observe(root, {
+      attributes: true,
+      attributeFilter: ["class", "data-ui-preview-mode"],
+    });
+    for (const choice of modeChoices) {
+      choice.addEventListener("click", () => {
+        root.dataset.uiPreviewMode = choice.dataset.modeChoice;
+      });
+    }
+
+    // The preview width: the full frame, or a 390 px phone frame.
+    const widthChoices = [...document.querySelectorAll("[data-width-choice]")];
+    for (const choice of widthChoices) {
+      choice.addEventListener("click", () => {
+        for (const other of widthChoices) {
+          other.setAttribute("aria-pressed", String(other === choice));
+        }
+        for (const frame of document.querySelectorAll("[data-ui-preview]")) {
+          frame.dataset.width = choice.dataset.widthChoice;
+        }
+      });
+    }
 
     // Copy the code. Without clipboard access, select it so the reader can copy by hand.
     const copyButton = document.querySelector("[data-copy-code]");

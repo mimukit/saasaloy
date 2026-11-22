@@ -1,0 +1,45 @@
+---
+// /ui/builder, the Saasaloy UI builder (plan 0121, Phase 7), from round r3 of the builder
+// mockup (0121-r3-builder-*.png, decided by the afkkit run on 2026-11-22). The island
+// (components/ui-builder.tsx) holds the controls and the live preview; its state lives in
+// the URL query, so it renders `client:only` and the fallback names the need for
+// JavaScript. The theme dots take each theme's primary through `themeRules` on a
+// `[data-theme-sample]` subtree, as the block page's switcher does (assumption 48).
+import UiLayout from "@web/layouts/UiLayout.astro";
+import { UiBuilder } from "@web/components/ui-builder";
+import { uiRegistry } from "@web/content/ui-registry";
+import { themeRules, UI_THEMES } from "@web/lib/ui-themes";
+
+const copy = uiRegistry.builder;
+const dotCss = UI_THEMES.map((theme) =>
+  themeRules(theme, {
+    light: `[data-theme-sample="${theme.name}"]`,
+    dark: `.dark [data-theme-sample="${theme.name}"]`,
+  })
+).join("\n");
+---
+
+<UiLayout
+  title={uiRegistry.meta.builderTitle}
+  description={uiRegistry.meta.builderDescription}
+  current="builder"
+>
+  <style is:inline set:html={dotCss}></style>
+  <main
+    id="main"
+    tabindex="-1"
+    class="section-container-hero flex flex-col gap-6 pt-10 outline-none"
+  >
+    <header class="flex flex-col gap-3">
+      <h1 class="text-foreground text-4xl font-bold tracking-[-0.02em] sm:text-5xl">
+        {copy.title}
+      </h1>
+      <p class="text-muted-foreground text-lg">{copy.lead}</p>
+    </header>
+    <UiBuilder client:only="react">
+      <p slot="fallback" class="text-muted-foreground border-border border p-6">
+        {copy.loading}
+      </p>
+    </UiBuilder>
+  </main>
+</UiLayout>

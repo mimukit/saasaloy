@@ -12,6 +12,7 @@
         "$TURBO_ROOT$/packages/cli/templates/base/packages/config/src/**",
         "$TURBO_ROOT$/packages/cli/templates/themes/**",
         "$TURBO_ROOT$/packages/cli/templates/kits/**",
+        "$TURBO_ROOT$/modules/**",
         "$TURBO_ROOT$/packages/cli/templates/recipes/**",
         "$TURBO_ROOT$/packages/cli/src/lib/recipes.ts",
         "$TURBO_ROOT$/packages/cli/src/lib/theme-names.ts",
@@ -22,6 +23,18 @@
         "$TURBO_ROOT$/scripts/config-shim.ts",
         "$TURBO_ROOT$/docs/wiki/**",
         "$TURBO_ROOT$/docs/wiki/.wikimap.yaml"
+      ]
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/modules/**",
+        "$TURBO_ROOT$/packages/cli/templates/recipes/**",
+        "$TURBO_ROOT$/packages/cli/src/lib/recipes.ts",
+        "$TURBO_ROOT$/packages/cli/src/lib/theme-names.ts",
+        "$TURBO_ROOT$/packages/cli/src/lib/exit.ts",
+        "$TURBO_ROOT$/packages/cli/test/support/ts-source-hook.ts",
+        "$TURBO_ROOT$/packages/cli/templates/base/packages/ui/src/blocks/navbar.tsx"
       ]
     }
   }

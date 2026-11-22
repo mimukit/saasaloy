@@ -1,0 +1,151 @@
+---
+// /ui/preview/page, the composed landing page the builder (/ui/builder) and the template
+// cards (/ui/templates) embed (plan 0121, Phase 7, assumption 19). The site is static, so
+// the page pre-renders every page block of both kits once, and a small inline script shows
+// and orders the chosen ones from `?template=&theme=&blocks=`.
+//
+// It shows what `saasaloy init <name> --template=<t> --theme=<x> --blocks=<list>` writes:
+// the same blocks, the same kit for each block (the template's kit when the kit ships the
+// block, else ink, as KIT_BLOCKS says), the same order, the theme's tokens, and no navbar
+// link to a section the page leaves out (landing-compose.ts blanks those labels). The
+// navbar renders before `<main>` and the footer after it, as the composed index.astro
+// does; the blocks inside `<main>` take their order from CSS `order`, so no island moves.
+//
+// The builder posts a new state to the frame (`saasaloy-ui-compose`), so an edit shows
+// with no reload. The mode follows the embedding page (lib/ui-preview-frame.ts).
+import "@web/styles/ui-preview.css";
+import { Audience } from "@repo/ui/blocks/audience";
+import { Cta } from "@repo/ui/blocks/cta";
+import { Faq } from "@repo/ui/blocks/faq";
+import { FeatureGrid } from "@repo/ui/blocks/feature-grid";
+import { Footer } from "@repo/ui/blocks/footer";
+import { Hero } from "@repo/ui/blocks/hero";
+import { HowItWorks } from "@repo/ui/blocks/how-it-works";
+import { LogoCloud } from "@repo/ui/blocks/logo-cloud";
+import { Navbar } from "@repo/ui/blocks/navbar";
+import { PainPoints } from "@repo/ui/blocks/pain-points";
+import { PricingTable } from "@repo/ui/blocks/pricing-table";
+import { Showcase } from "@repo/ui/blocks/showcase";
+import { Testimonials } from "@repo/ui/blocks/testimonials";
+import { Cta as DuskCta } from "@saasaloy-kit/dusk/cta";
+import { Faq as DuskFaq } from "@saasaloy-kit/dusk/faq";
+import { FeatureGrid as DuskFeatureGrid } from "@saasaloy-kit/dusk/feature-grid";
+import { Hero as DuskHero } from "@saasaloy-kit/dusk/hero";
+import { PricingTable as DuskPricingTable } from "@saasaloy-kit/dusk/pricing-table";
+import { Testimonials as DuskTestimonials } from "@saasaloy-kit/dusk/testimonials";
+import { locale } from "@web/site";
+import { SAMPLE_SITE_NAME } from "@web/lib/registry-inline";
+import { uiRegistry } from "@web/content/ui-registry";
+import { MODE_SCRIPT, THEME_CSS } from "@web/lib/ui-preview-frame";
+import {
+  DEFAULT_TEMPLATE,
+  KIT_BLOCKS,
+  NAV_ANCHORS,
+  PAGE_BLOCKS,
+  RECIPES,
+  THEME_NAMES,
+} from "@web/lib/ui-builder";
+
+const siteName = SAMPLE_SITE_NAME;
+const BLOCK = "data-compose-block";
+
+// What the inline script needs: each template's kit, theme and blocks, the kits' blocks,
+// the page blocks and the navbar anchors.
+const DATA = {
+  fallback: DEFAULT_TEMPLATE,
+  templates: Object.fromEntries(
+    Object.values(RECIPES).map((recipe) => [
+      recipe.name,
+      { kit: recipe.kit, theme: recipe.theme, blocks: recipe.blocks },
+    ])
+  ),
+  kits: KIT_BLOCKS,
+  blocks: PAGE_BLOCKS,
+  themes: THEME_NAMES,
+  anchors: NAV_ANCHORS,
+};
+
+// Reads the state from the URL before the first paint, then from the builder's messages.
+const COMPOSE_SCRIPT = `(function(){var D=${JSON.stringify(DATA)};var d=document.documentElement;var nav=document.getElementById("compose-nav-css");function read(q){var t=D.templates[q.template]?q.template:D.fallback;var r=D.templates[t];var th=D.themes.indexOf(q.theme)!==-1?q.theme:r.theme;var b=typeof q.blocks==="string"?q.blocks.split(","):null;var ok=b&&b.length>0&&b.every(function(x,i){return D.blocks.indexOf(x)!==-1&&b.indexOf(x)===i});return{template:t,theme:th,blocks:ok?b:r.blocks}}function apply(s){var kit=D.templates[s.template].kit;d.setAttribute("data-ui-theme",s.theme);document.querySelectorAll("[${BLOCK}]").forEach(function(n){var name=n.getAttribute("${BLOCK}");var at=s.blocks.indexOf(name);var want=at!==-1&&n.getAttribute("data-kit")===(D.kits[kit].indexOf(name)!==-1?kit:"ink");n.hidden=!want;n.style.order=want?String(at):""});nav.textContent=D.blocks.filter(function(x){return D.anchors[x]&&s.blocks.indexOf(x)===-1}).map(function(x){return 'a[href="/#'+D.anchors[x]+'"]{display:none!important}'}).join("")}var p=new URLSearchParams(location.search);apply(read({template:p.get("template"),theme:p.get("theme"),blocks:p.get("blocks")}));window.addEventListener("message",function(e){if(e.origin!==location.origin||!e.data||e.data.type!=="saasaloy-ui-compose"){return}apply(read({template:e.data.template,theme:e.data.theme,blocks:Array.isArray(e.data.blocks)?e.data.blocks.join(","):null}))})})();`;
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{uiRegistry.builder.previewTitle}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script is:inline set:html={MODE_SCRIPT} />
+    <style is:inline set:html={THEME_CSS}></style>
+    <style is:inline>
+      [data-compose-block][hidden] {
+        display: none !important;
+      }
+    </style>
+    <style is:inline id="compose-nav-css"></style>
+  </head>
+  <body class="bg-background text-foreground font-sans antialiased">
+    <div data-compose-block="navbar" data-kit="ink" class="contents">
+      <Navbar siteName={siteName} client:load />
+    </div>
+    <main id="main" tabindex="-1" class="flex flex-col">
+      <div data-compose-block="hero" data-kit="ink">
+        <Hero siteName={siteName} />
+      </div>
+      <div data-compose-block="hero" data-kit="dusk">
+        <DuskHero siteName={siteName} />
+      </div>
+      <div data-compose-block="logo-cloud" data-kit="ink">
+        <LogoCloud />
+      </div>
+      <div data-compose-block="pain-points" data-kit="ink">
+        <PainPoints siteName={siteName} />
+      </div>
+      <div data-compose-block="how-it-works" data-kit="ink">
+        <HowItWorks siteName={siteName} />
+      </div>
+      <div data-compose-block="feature-grid" data-kit="ink">
+        <FeatureGrid siteName={siteName} />
+      </div>
+      <div data-compose-block="feature-grid" data-kit="dusk">
+        <DuskFeatureGrid siteName={siteName} />
+      </div>
+      <div data-compose-block="showcase" data-kit="ink">
+        <Showcase siteName={siteName} />
+      </div>
+      <div data-compose-block="audience" data-kit="ink">
+        <Audience siteName={siteName} />
+      </div>
+      <div data-compose-block="testimonials" data-kit="ink">
+        <Testimonials siteName={siteName} />
+      </div>
+      <div data-compose-block="testimonials" data-kit="dusk">
+        <DuskTestimonials siteName={siteName} />
+      </div>
+      <div data-compose-block="pricing-table" data-kit="ink">
+        <PricingTable siteName={siteName} client:load />
+      </div>
+      <div data-compose-block="pricing-table" data-kit="dusk">
+        <DuskPricingTable siteName={siteName} client:load />
+      </div>
+      <div data-compose-block="faq" data-kit="ink">
+        <Faq siteName={siteName} />
+      </div>
+      <div data-compose-block="faq" data-kit="dusk">
+        <DuskFaq siteName={siteName} />
+      </div>
+      <div data-compose-block="cta" data-kit="ink">
+        <Cta siteName={siteName} />
+      </div>
+      <div data-compose-block="cta" data-kit="dusk">
+        <DuskCta siteName={siteName} />
+      </div>
+    </main>
+    <div data-compose-block="footer" data-kit="ink" class="contents">
+      <Footer siteName={siteName} />
+    </div>
+    <script is:inline set:html={COMPOSE_SCRIPT} />
+  </body>
+</html>

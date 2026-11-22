@@ -11,7 +11,7 @@
     "preview": "astro preview",
     "deploy:production": "pnpm run build && wrangler deploy",
     "deploy:release": "node scripts/deploy-release.ts",
-    "test": "node --test \"src/**/*.test.ts\"",
+    "test": "node --import ../../packages/cli/test/support/ts-source-hook.ts --test \"src/**/*.test.ts\"",
     "gate:a11y": "node scripts/gate-a11y.ts",
     "gate:lighthouse": "node scripts/gate-lighthouse.ts"
   },

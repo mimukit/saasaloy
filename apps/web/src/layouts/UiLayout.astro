@@ -4,8 +4,9 @@
 // <html>, the theme and the skip link. The header holds the `saasaloy / UI` wordmark the
 // way /docs shows `saasaloy / Docs`, the section links, the theme toggle and the "Get
 // Saasaloy" button to the home page. The footer bar repeats the section links and links
-// the MIT license. The section list lives in content/ui-registry.ts, so Themes, Templates
-// and the Builder join with their phases and need no edit here.
+// the MIT license. The section list lives in content/ui-registry.ts. From `md` the links
+// sit in the header row; below it they move to a second row of their own, so the four
+// links never crowd the wordmark at 390 px and no menu button is needed.
 import Layout from "@web/layouts/Layout.astro";
 import { ThemeToggle } from "@web/blocks/theme-toggle";
 import { buttonVariants } from "@web/components/button";
@@ -24,6 +25,8 @@ interface Props {
 
 const { title, description, current } = Astro.props;
 const licenseHref = `${repoUrl}/blob/main/LICENSE`;
+const navLinkClass =
+  "text-highlight aria-[current=page]:text-foreground text-sm font-medium underline-offset-4 hover:underline";
 ---
 
 <Layout title={title} description={description}>
@@ -54,13 +57,13 @@ const licenseHref = `${repoUrl}/blob/main/LICENSE`;
         </div>
         <nav
           aria-label={uiRegistry.header.navLabel}
-          class="flex items-center gap-6"
+          class="hidden items-center gap-6 md:flex"
         >
           {uiRegistry.nav.map((link) => (
             <a
               href={link.href}
               aria-current={current === link.id ? "page" : undefined}
-              class="text-highlight aria-[current=page]:text-foreground text-sm font-medium underline-offset-4 hover:underline"
+              class={navLinkClass}
             >
               {link.label}
             </a>
@@ -77,6 +80,20 @@ const licenseHref = `${repoUrl}/blob/main/LICENSE`;
         </a>
       </div>
     </div>
+    <nav
+      aria-label={uiRegistry.header.navLabel}
+      class="border-border section-container-hero flex h-11 items-center gap-6 overflow-x-auto border-t md:hidden"
+    >
+      {uiRegistry.nav.map((link) => (
+        <a
+          href={link.href}
+          aria-current={current === link.id ? "page" : undefined}
+          class={cn(navLinkClass, "shrink-0")}
+        >
+          {link.label}
+        </a>
+      ))}
+    </nav>
   </header>
 
   <slot />
