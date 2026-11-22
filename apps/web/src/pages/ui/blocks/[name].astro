@@ -65,7 +65,7 @@ const kitTemplate =
     ? undefined
     : Object.values(RECIPES).find((recipe) => recipe.kit === block.kit);
 const commandPanelClass =
-  "border-border bg-card flex flex-col gap-3 border p-5";
+  "border-border bg-card flex min-w-0 flex-col gap-3 border p-5";
 const panelHeadingClass = "text-foreground text-base font-semibold";
 // Two panels halve the width, so their commands take the smaller field and fit at 1440.
 const commandSize = wire ? "md" : "lg";
@@ -332,7 +332,11 @@ const tabClass =
       </div>
     </div>
 
-    <div class={wire ? "grid gap-6 lg:grid-cols-2" : "flex flex-col gap-3"}>
+    <div
+      class={
+        wire ? "grid grid-cols-1 gap-6 lg:grid-cols-2" : "flex flex-col gap-3"
+      }
+    >
       <div
         class={wire ? commandPanelClass : "flex flex-col gap-3"}
         aria-labelledby={wire ? "plain-heading" : undefined}

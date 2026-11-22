@@ -44,15 +44,17 @@ const sampleCss = UI_THEMES.map((theme) =>
       <p class="text-muted-foreground text-lg">{copy.lead}</p>
     </header>
 
+    {/* grid-cols-1 and min-w-0 let a card shrink below its command's width, so the
+        command scrolls inside its own field and the page never scrolls sideways. */}
     <ul
-      class="grid gap-6 md:grid-cols-2"
+      class="grid grid-cols-1 gap-6 md:grid-cols-2"
       role="list"
       aria-label={copy.gridLabel}
     >
       {UI_THEMES.map((theme) => (
         <li class="flex">
           <article
-            class="border-border bg-card flex w-full flex-col border"
+            class="border-border bg-card flex w-full min-w-0 flex-col border"
             aria-labelledby={`theme-${theme.name}`}
           >
             <div

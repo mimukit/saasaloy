@@ -161,6 +161,16 @@ function importsOf(source: string): string[] {
   );
 }
 
+/**
+ * The first `@repo/*` module a source file names: a `from "..."` import or re-export, a
+ * side-effect `import "..."`, or a dynamic `import("...")`. A published file names none.
+ */
+function repoImportOf(source: string): string | undefined {
+  return /(?:\bfrom\s+|\bimport\s*\(?\s*)["'`](@repo\/[^"'`]+)["'`]/.exec(
+    source
+  )?.[1];
+}
+
 describe("registry", () => {
   it("parses every item and the index with the shadcn schema", () => {
     assert.ok(items.length > 0);
@@ -231,6 +241,18 @@ describe("registry", () => {
     }
   });
 
+  it("finds an @repo/ import in each form a published file could hold", () => {
+    for (const source of [
+      'import { db } from "@repo/database";',
+      'export { db } from "@repo/database";',
+      'import "@repo/database/side-effect";',
+      'const mod = await import("@repo/database");',
+    ]) {
+      assert.match(repoImportOf(source) ?? "", /^@repo\/database/, source);
+    }
+    assert.equal(repoImportOf('import { cn } from "@/lib/utils";'), undefined);
+  });
+
   it("matches each item's dependencies to its imports", () => {
     const withCode = items.filter((item) =>
       ["registry:block", "registry:component", "registry:ui"].includes(
@@ -241,7 +263,12 @@ describe("registry", () => {
     for (const item of withCode) {
       for (const file of item.files ?? []) {
         const source = file.content ?? "";
-        assert.doesNotMatch(source, /from "@repo\//, item.name);
+        const repoImport = repoImportOf(source);
+        assert.equal(
+          repoImport,
+          undefined,
+          `${item.name} imports ${repoImport ?? ""}`
+        );
         for (const specifier of importsOf(source)) {
           const needed = dependencyOf(specifier);
           if (needed !== undefined) {

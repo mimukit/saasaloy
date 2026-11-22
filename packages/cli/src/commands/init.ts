@@ -107,7 +107,7 @@ const HELP: CommandHelp = {
   flags: {
     "--force": "scaffold into a directory that is not empty",
     "-y, --yes":
-      "run pnpm install with no prompt, and take the neutral theme when --theme is absent",
+      "run pnpm install with no prompt, and take the template's theme, or neutral with no --template, when --theme is absent",
     "--no-install": "never run pnpm install, and never ask",
     "--no-git": "do not run git init or make the first commit",
     "--testing=<mode>":
