@@ -4,3 +4,11 @@
    second copy: a change to the template's brand.css or web.css shows here on the next
    build. Only src/pages/ui/preview/ imports this file. */
 @import "../../../../packages/cli/templates/base/packages/ui/src/styles/web.css";
+
+/* The module blocks (Phase 5) live outside the template, so the template's own @source
+   globs miss them. Each file the preview renders is listed here, or its classes are
+   missing from this stylesheet with no error. */
+@source "../../../../modules/auth/files/ui/blocks/auth/*.tsx";
+@source "../../../../modules/waitlist/files/ui/blocks/waitlist.tsx";
+@source "../../../../modules/shell/files/ui/components/shell/{button,field,input,spinner}.tsx";
+@source "../../registry/shell/brand-mark.tsx";

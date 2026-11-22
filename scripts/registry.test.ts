@@ -9,11 +9,15 @@
 //   - each block's `registryDependencies` and npm `dependencies` agree with its imports, and
 //     no public file still imports `@repo/*`;
 //   - the inlined blocks typecheck. A fixture folder holds every file at the path shadcn
-//     would write it (`components/blocks/`, `lib/`), the template's `button` and `card` at
-//     `components/ui/` (they match upstream base-nova, which is why the items name them by
-//     their shadcn name), and a tsconfig whose `@/*` path points at the fixture. It runs the
+//     would write it (`components/blocks/`, `lib/`), the template's `button`, `card`,
+//     `input` and `label` at `components/ui/` (they match upstream base-nova, which is why
+//     the items name them by their shadcn name), and a tsconfig whose `@/*` path points at the fixture. It runs the
 //     repo's own `tsc`. The fixture sits under apps/web/node_modules/.cache, so `react`,
 //     `lucide-react` and `@base-ui/react` resolve from apps/web;
+//   - the module blocks (Phase 5) are `<module>-<block>` items that name their module's own
+//     files: `auth-sign-in` and `auth-sign-up` over the shared `auth-card`, and
+//     `waitlist-form`. Each shell primitive they render ships as `shell-<name>` with the
+//     coss ui notice, and the fixture renders each block with stub props;
 //   - each theme in packages/cli/templates/themes/ is a `registry:theme` item,
 //     `theme-<name>`, whose `cssVars` name only the variables the template's brand.css
 //     declares, so shadcn merges it in place, and `theme-neutral` equals brand.css.
@@ -45,6 +49,48 @@ import {
 import { inlineSource } from "../apps/web/src/lib/registry-inline.ts";
 
 const FOUNDATION_URL = `https://saasaloy.com/r/${FOUNDATION}.json`;
+const itemUrl = (name: string) => `https://saasaloy.com/r/${name}.json`;
+
+/** The module blocks of Phase 5, with the source file each one names. */
+const MODULE_BLOCKS: Record<string, string> = {
+  "auth-sign-in": "modules/auth/files/ui/blocks/auth/sign-in.tsx",
+  "auth-sign-up": "modules/auth/files/ui/blocks/auth/sign-up.tsx",
+  "waitlist-form": "modules/waitlist/files/ui/blocks/waitlist.tsx",
+};
+/** The shell primitives the module blocks render, each a `shell-<name>` item. */
+const SHELL_PRIMITIVES = ["button", "field", "input", "spinner"];
+
+/**
+ * The item a `@/components/...` import needs. A shell primitive is `shell-<name>`, any
+ * other primitive goes by its shadcn name, and a block in a folder is `<folder>-<name>`
+ * (`auth/sign-in` is `auth-sign-in`, `auth/auth-card` is `auth-card`). A kit block in no
+ * folder is `ink-<name>`.
+ */
+function dependencyOf(specifier: string): string | undefined {
+  const primitive = /^@\/components\/ui\/(.+)$/.exec(specifier)?.[1];
+  if (primitive !== undefined) {
+    const shell = /^shell\/(.+)$/.exec(primitive)?.[1];
+    return shell === undefined ? primitive : itemUrl(`shell-${shell}`);
+  }
+  const block = /^@\/components\/blocks\/(.+)$/.exec(specifier)?.[1];
+  if (block === undefined) {
+    return undefined;
+  }
+  const [folder, file] = block.split("/");
+  if (file === undefined) {
+    return itemUrl(`ink-${block}`);
+  }
+  return itemUrl(file.startsWith(`${folder}-`) ? file : `${folder}-${file}`);
+}
+
+/** The npm package of a bare import (`@base-ui/react/input` is `@base-ui/react`). */
+function packageOf(specifier: string): string | undefined {
+  if (specifier.startsWith(".") || specifier.startsWith("@/")) {
+    return undefined;
+  }
+  const parts = specifier.split("/");
+  return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+}
 const BASE_BLOCKS = readdirSync(join(TEMPLATE_UI, "src/blocks"))
   .filter((name) => name.endsWith(".tsx"))
   .map((name) => name.replace(/\.tsx$/, ""))
@@ -96,6 +142,8 @@ after(() => {
 });
 
 const blocks = () => items.filter((item) => item.type === "registry:block");
+const kitBlocks = () =>
+  blocks().filter((item) => !Object.hasOwn(MODULE_BLOCKS, item.name));
 
 /** What a source file imports, by specifier. */
 function importsOf(source: string): string[] {
@@ -130,8 +178,8 @@ describe("registry", () => {
     }
   });
 
-  it("lists the foundation in every block", () => {
-    for (const item of blocks()) {
+  it("lists the foundation in every kit block", () => {
+    for (const item of kitBlocks()) {
       assert.ok(
         item.registryDependencies?.includes(FOUNDATION_URL),
         `${item.name} does not list ${FOUNDATION_URL}`
@@ -139,36 +187,83 @@ describe("registry", () => {
     }
   });
 
-  it("matches each block's dependencies to its imports", () => {
-    for (const item of blocks()) {
+  it("matches each item's dependencies to its imports", () => {
+    const withCode = items.filter((item) =>
+      ["registry:block", "registry:component", "registry:ui"].includes(
+        item.type
+      )
+    );
+    assert.ok(withCode.length > 0);
+    for (const item of withCode) {
       for (const file of item.files ?? []) {
         const source = file.content ?? "";
         assert.doesNotMatch(source, /from "@repo\//, item.name);
         for (const specifier of importsOf(source)) {
-          const primitive = /^@\/components\/ui\/(.+)$/.exec(specifier)?.[1];
-          if (primitive) {
+          const needed = dependencyOf(specifier);
+          if (needed !== undefined) {
             assert.ok(
-              item.registryDependencies?.includes(primitive),
-              `${item.name} imports ${specifier} but does not list "${primitive}"`
+              item.registryDependencies?.includes(needed),
+              `${item.name} imports ${specifier} but does not list ${needed}`
             );
           }
-          const block = /^@\/components\/blocks\/(.+)$/.exec(specifier)?.[1];
-          if (block) {
-            const url = `https://saasaloy.com/r/ink-${block}.json`;
+          const pkg = packageOf(specifier);
+          if (pkg !== undefined && pkg !== "react") {
             assert.ok(
-              item.registryDependencies?.includes(url),
-              `${item.name} imports ${specifier} but does not list ${url}`
-            );
-          }
-          if (specifier === "lucide-react") {
-            assert.ok(
-              item.dependencies?.includes("lucide-react"),
-              `${item.name} imports lucide-react but does not list it`
+              item.dependencies?.includes(pkg),
+              `${item.name} imports ${specifier} but does not list ${pkg}`
             );
           }
         }
       }
     }
+  });
+
+  it("publishes each module block as <module>-<block> from its module's file", () => {
+    const registry = JSON.parse(
+      readFileSync(join(WEB_ROOT, "registry.json"), "utf-8")
+    ) as { items: { name: string; files: { path: string }[] }[] };
+    for (const [name, source] of Object.entries(MODULE_BLOCKS)) {
+      const item = items.find((one) => one.name === name);
+      assert.ok(item, `${name} is missing`);
+      assert.equal(item.type, "registry:block");
+      assert.ok(registryItemSchema.safeParse(item).success, name);
+      const declared = registry.items.find((one) => one.name === name);
+      assert.deepEqual(
+        declared?.files.map((file) => file.path),
+        [`../../${source}`],
+        `${name} names a second copy of its source`
+      );
+      const [file] = item.files ?? [];
+      assert.match(file?.content ?? "", /^"use client";\n/, name);
+      assert.match(
+        file?.content ?? "",
+        /const siteName = "Acme";|^(?![\s\S]*siteName)/,
+        name
+      );
+    }
+    for (const name of ["auth-sign-in", "auth-sign-up"]) {
+      const item = items.find((one) => one.name === name);
+      assert.ok(item?.registryDependencies?.includes(itemUrl("auth-card")));
+    }
+  });
+
+  it("ships each shell primitive as shell-<name> with the coss ui notice", () => {
+    for (const name of SHELL_PRIMITIVES) {
+      const item = items.find((one) => one.name === `shell-${name}`);
+      assert.ok(item, `shell-${name} is missing`);
+      assert.equal(item.type, "registry:ui");
+      assert.ok(registryItemSchema.safeParse(item).success);
+      const [file] = item.files ?? [];
+      assert.equal(file?.target, `components/ui/shell/${name}.tsx`);
+      assert.match(file?.content ?? "", /^\/\/ Adapted from coss ui/);
+      assert.match(file?.content ?? "", /Copyright \(c\) 2025 coss\.com/);
+    }
+    const mark = items.find((one) => one.name === "shell-brand-mark");
+    assert.equal(
+      mark?.files?.[0]?.target,
+      "components/blocks/shell/brand-mark.tsx"
+    );
+    assert.doesNotMatch(mark?.files?.[0]?.content ?? "", /\.svg"/);
   });
 
   it("ships every helper a block imports in the foundation", () => {
@@ -244,13 +339,36 @@ describe("registry", () => {
     }
     // The primitives the items name by their shadcn name, and shadcn init's own utils.
     const sources = { content: {}, config: {} };
-    for (const name of ["button", "card"]) {
+    for (const name of ["button", "card", "input", "label"]) {
       const source = readFileSync(
         join(TEMPLATE_UI, `src/components/${name}.tsx`),
         "utf-8"
       );
       write(`components/ui/${name}.tsx`, inlineSource(source, sources, name));
     }
+    // Each module block rendered with stub props, the way a project outside Saasaloy uses
+    // it: an `onSubmit` and the data props, nothing more.
+    write(
+      "app/stub-props.tsx",
+      [
+        'import { SignInCard } from "@/components/blocks/auth/sign-in";',
+        'import { SignUpCard } from "@/components/blocks/auth/sign-up";',
+        'import { Waitlist } from "@/components/blocks/waitlist";',
+        "",
+        "export function StubProps() {",
+        "  return (",
+        "    <>",
+        "      <SignInCard onSubmit={async () => undefined} />",
+        '      <SignInCard onSubmit={async (values) => values.email} signUpHref="/sign-up" />',
+        '      <SignUpCard onSubmit={async ({ name }) => (name === "" ? "Name?" : undefined)} signInHref="/sign-in" />',
+        "      <Waitlist onSubmit={async () => ({ ok: true })} />",
+        '      <Waitlist onSubmit={async () => ({ ok: false, message: "Full." })} title="Soon" />',
+        "    </>",
+        "  );",
+        "}",
+        "",
+      ].join("\n")
+    );
     write(
       "lib/utils.ts",
       readFileSync(join(TEMPLATE_UI, "src/lib/utils.ts"), "utf-8")

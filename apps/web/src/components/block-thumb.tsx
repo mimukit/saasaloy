@@ -248,10 +248,38 @@ const DRAWINGS: Record<string, () => ReactNode[]> = {
       className="fill-none stroke-current"
     />,
   ],
+  // Module blocks (plan 0121, Phase 5): a centred card with its fields and one button.
+  "auth/sign-in": () => authCard(2),
+  "auth/sign-up": () => authCard(3),
+  waitlist: () => [
+    box(24, 32, 272, 96),
+    bar(40, 56, 104, "head", 10),
+    bar(40, 74, 96),
+    bar(40, 86, 72),
+    box(168, 64, 64, 20),
+    bar(236, 64, 44, "accent", 21),
+  ],
 };
 
+/** The sign-in or sign-up card: a brand row, a title, `fields` inputs and the button. */
+function authCard(fields: number): ReactNode[] {
+  const top = fields === 2 ? 20 : 12;
+  const parts: ReactNode[] = [
+    box(100, top, 120, 120 + (fields - 2) * 16),
+    bar(112, top + 12, 10, "accent", 10),
+    bar(126, top + 14, 32),
+    bar(112, top + 32, 72, "head", 8),
+  ];
+  for (let index = 0; index < fields; index++) {
+    const y = top + 50 + index * 16;
+    parts.push(box(112, y, 96, 10));
+  }
+  parts.push(bar(112, top + 52 + fields * 16, 96, "accent", 12));
+  return parts;
+}
+
 export interface BlockThumbProps {
-  /** The semantic block name, `hero`. */
+  /** The block path under `blocks/`, `hero` or `auth/sign-in`. */
   block: string;
   className?: string;
 }

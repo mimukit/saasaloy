@@ -14,6 +14,10 @@
 // the frame follows the embedding page's `data-ui-preview-theme`, which the block page's
 // switcher sets. A theme sets its variables on <html> (`themeRules`) over the template's
 // neutral brand.css; `neutral` sets the same values brand.css already holds.
+//
+// Module blocks (Phase 5) render through src/components/ui-module-previews.tsx, which hands
+// each one a stub `onSubmit`, and hydrate so the form shows its pending and done states.
+// The auth cards sit on `bg-sidebar`, the canvas the `app` module centres them on.
 import "@web/styles/ui-preview.css";
 import { Audience } from "@repo/ui/blocks/audience";
 import { Cta } from "@repo/ui/blocks/cta";
@@ -30,6 +34,11 @@ import { PricingTable } from "@repo/ui/blocks/pricing-table";
 import { Showcase } from "@repo/ui/blocks/showcase";
 import { Testimonials } from "@repo/ui/blocks/testimonials";
 import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
+import {
+  SignInPreview,
+  SignUpPreview,
+  WaitlistPreview,
+} from "@web/components/ui-module-previews";
 import { locale } from "@web/site";
 import { SAMPLE_SITE_NAME } from "@web/lib/registry-inline";
 import { interpolate } from "@web/lib/interpolate";
@@ -99,5 +108,16 @@ const THEME_SCRIPT = `(function(){var d=document.documentElement;var names=${JSO
         <ThemeToggle />
       </div>
     )}
+    {name === "auth-sign-in" && (
+      <div class="bg-sidebar flex min-h-[36rem] items-center justify-center p-4">
+        <SignInPreview client:load />
+      </div>
+    )}
+    {name === "auth-sign-up" && (
+      <div class="bg-sidebar flex min-h-[40rem] items-center justify-center p-4">
+        <SignUpPreview client:load />
+      </div>
+    )}
+    {name === "waitlist-form" && <WaitlistPreview client:load />}
   </body>
 </html>

@@ -13,6 +13,7 @@ import { remarkDocsBlocks } from "./src/lib/docs-blocks.ts";
 import { rehypeCodeFrame } from "./src/lib/docs-code.ts";
 import { remarkDocsLinks } from "./src/lib/docs-links.ts";
 import { readBuildInfo } from "./src/lib/build-info.ts";
+import { SAMPLE_SITE_NAME } from "./src/lib/registry-inline.ts";
 import { remarkDropStamp, remarkDropTitle } from "./src/lib/docs-title.ts";
 
 // `astro build` gets its own Vite cache. Both commands keep pre-bundled dependencies under
@@ -41,6 +42,11 @@ function separateBuildCache() {
 const COMPONENT_ENTRIES = [
   "src/**/*.tsx",
   "../../packages/cli/templates/base/packages/ui/src/blocks/*.tsx",
+  "../../modules/auth/files/ui/blocks/auth/*.tsx",
+  "../../modules/waitlist/files/ui/blocks/waitlist.tsx",
+  ...["button", "field", "input", "spinner"].map(
+    (name) => `../../modules/shell/files/ui/components/shell/${name}.tsx`
+  ),
 ];
 
 // Static output — the marketing site is content-first, and every page here is
@@ -120,7 +126,33 @@ const templateConfig = join(
   repoRoot,
   "packages/cli/templates/base/packages/config/src"
 );
+// The module blocks of Saasaloy UI (plan 0121, Phase 5) resolve to their module sources,
+// before the template aliases below claim `@repo/ui/blocks/*` and `@repo/ui/components/*`.
+// The shell's brand mark is an SVG pair; the preview takes the public stand-in instead
+// (registry/shell/brand-mark.tsx), so it shows what `shadcn add` gives a project.
+const modulesRoot = join(repoRoot, "modules");
+const MODULE_ALIASES = [
+  {
+    find: /^@repo\/ui\/blocks\/shell\/brand-mark$/,
+    replacement: fileURLToPath(
+      new URL("registry/shell/brand-mark.tsx", import.meta.url)
+    ),
+  },
+  {
+    find: /^@repo\/ui\/blocks\/auth\/(.+)$/,
+    replacement: `${modulesRoot}/auth/files/ui/blocks/auth/$1`,
+  },
+  {
+    find: /^@repo\/ui\/blocks\/waitlist$/,
+    replacement: `${modulesRoot}/waitlist/files/ui/blocks/waitlist.tsx`,
+  },
+  {
+    find: /^@repo\/ui\/components\/shell\/(.+)$/,
+    replacement: `${modulesRoot}/shell/files/ui/components/shell/$1`,
+  },
+];
 const TEMPLATE_ALIASES = [
+  ...MODULE_ALIASES,
   {
     find: /^@repo\/ui\/(blocks|components|content|lib)\/(.+)$/,
     replacement: `${templateUi}/$1/$2`,
@@ -129,8 +161,16 @@ const TEMPLATE_ALIASES = [
   { find: /^@repo\/ui$/, replacement: `${templateUi}/index.ts` },
   { find: /^@repo\/config$/, replacement: `${templateConfig}/index.ts` },
 ];
-const TEMPLATE_PACKAGES = /\/packages\/cli\/templates\/base\/packages\//;
-const TEMPLATE_SOURCE = /\/packages\/cli\/templates\/base\/packages\/.+\.tsx?$/;
+const TEMPLATE_PACKAGES =
+  /\/(?:packages\/cli\/templates\/base\/packages|modules\/[^/]+\/files)\//;
+const TEMPLATE_SOURCE =
+  /\/(?:packages\/cli\/templates\/base\/packages|modules\/[^/]+\/files)\/.+\.tsx?$/;
+// A module block and the brand-mark stand-in read `siteName` from `@repo/ui`. The preview
+// answers them with the sample name the public copy inlines, the same name the base blocks
+// take as a prop, so the frame shows what an install gives.
+const SAMPLE_IMPORTERS =
+  /\/(?:modules\/[^/]+\/files|apps\/web\/registry)\/.+\.tsx?$/;
+const SAMPLE_UI = "\0saasaloy-ui-sample";
 
 // Compiles the template's TypeScript for the preview. Vite's transform reads the nearest
 // tsconfig.json of each file, and the template's packages/ui and packages/config ones
@@ -145,6 +185,17 @@ function templateTransform() {
   return {
     name: "saasaloy-template-transform",
     enforce: "pre",
+    resolveId(source, importer) {
+      const fromSample = SAMPLE_IMPORTERS.test(importer?.split("?")[0] ?? "");
+      const isUiRoot =
+        source === "@repo/ui" || source === `${templateUi}/index.ts`;
+      return fromSample && isUiRoot ? SAMPLE_UI : null;
+    },
+    load(id) {
+      return id === SAMPLE_UI
+        ? `export const siteName = ${JSON.stringify(SAMPLE_SITE_NAME)};`
+        : null;
+    },
     async transform(code, id) {
       const file = id.split("?")[0] ?? id;
       if (!TEMPLATE_SOURCE.test(file)) {

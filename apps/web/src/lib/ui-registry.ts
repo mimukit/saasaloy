@@ -14,9 +14,9 @@ import { inlineSource, withProvenance } from "@web/lib/registry-inline";
 
 /** One block, as the index card and the block page show it. */
 export interface UiBlock {
-  /** The registry name, `ink-hero`. */
+  /** The registry name, `ink-hero` or `auth-sign-in`. */
   name: string;
-  /** The semantic file name, `hero`. */
+  /** The path under `blocks/` without `.tsx`: `hero`, or `auth/sign-in` for a module block. */
   block: string;
   title: string;
   description: string;
@@ -27,11 +27,19 @@ export interface UiBlock {
   sourceUrl: string;
   /** The `@repo/ui` import path inside a generated Saasaloy project. */
   localImport: string;
+  /** The source file, from the repo root. */
+  sourcePath: string;
+  /** The Saasaloy module that ships the block (`auth`), or `undefined` for a kit block. */
+  module: string | undefined;
 }
 
-// The raw template sources, keyed by their path from apps/web. `?raw` keeps them as text.
+// The raw block sources, keyed by their path from this file. `?raw` keeps them as text.
+// Module blocks (plan 0121, Phase 5) sit in their module's files/ui/blocks/ folder.
 const RAW_BLOCKS = import.meta.glob<string>(
-  "../../../../packages/cli/templates/base/packages/ui/src/blocks/*.tsx",
+  [
+    "../../../../packages/cli/templates/base/packages/ui/src/blocks/*.tsx",
+    "../../../../modules/*/files/ui/blocks/**/*.tsx",
+  ],
   { query: "?raw", import: "default", eager: true }
 );
 
@@ -50,7 +58,9 @@ export function uiBlocks(): UiBlock[] {
           `${item.name}: a block item needs one file with a target.`
         );
       }
-      const block = file.target.replace(/^.*\//, "").replace(/\.tsx$/, "");
+      const block = file.target
+        .replace(/^components\/blocks\//, "")
+        .replace(/\.tsx$/, "");
       const fromRepo = file.path.replace(/^\.\.\/\.\.\//, "");
       return {
         name: item.name,
@@ -61,6 +71,8 @@ export function uiBlocks(): UiBlock[] {
         target: file.target,
         sourceUrl: `${repoUrl}/blob/main/${fromRepo}`,
         localImport: `@repo/ui/blocks/${block}`,
+        sourcePath: fromRepo,
+        module: /^modules\/([^/]+)\//.exec(fromRepo)?.[1],
       };
     });
 }
@@ -68,13 +80,11 @@ export function uiBlocks(): UiBlock[] {
 /** The public source of a block: what `shadcn add` writes into a project. */
 export function publicSource(block: UiBlock): string {
   const key = Object.keys(RAW_BLOCKS).find((path) =>
-    path.endsWith(`/blocks/${block.block}.tsx`)
+    path.endsWith(`/${block.sourcePath}`)
   );
   const raw = key === undefined ? undefined : RAW_BLOCKS[key];
   if (raw === undefined) {
-    throw new Error(
-      `${block.name}: the template has no blocks/${block.block}.tsx.`
-    );
+    throw new Error(`${block.name}: no source at ${block.sourcePath}.`);
   }
   return withProvenance(
     block.name,

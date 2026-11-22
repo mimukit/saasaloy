@@ -1,3 +1,5 @@
+"use client";
+
 import { siteName } from "@repo/ui";
 import {
   AUTH_LINK_CLASS,
@@ -6,7 +8,6 @@ import {
   readField,
   useAuthSubmit,
 } from "@repo/ui/blocks/auth/auth-card";
-import type { SignInValues } from "@repo/ui/blocks/auth/sign-in";
 import { Button } from "@repo/ui/components/shell/button";
 import {
   Field,
@@ -23,8 +24,12 @@ import { Input } from "@repo/ui/components/shell/input";
 // `packages/auth/src/auth.ts`; change both together.
 const MIN_PASSWORD_LENGTH = 12;
 
-export interface SignUpValues extends SignInValues {
+// The fields are written out rather than extending `SignInValues`, so the block imports
+// nothing from ./sign-in and installs on its own from the Saasaloy UI registry.
+export interface SignUpValues {
   name: string;
+  email: string;
+  password: string;
 }
 
 export function SignUpCard({

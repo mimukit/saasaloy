@@ -3,7 +3,11 @@
 //
 // 1. `shadcn build` reads apps/web/registry.json. Its items name the template's own files,
 //    so no block has a second copy: base blocks in
-//    packages/cli/templates/base/packages/ui/src/blocks/, helpers in .../src/lib/.
+//    packages/cli/templates/base/packages/ui/src/blocks/, helpers in .../src/lib/. Module
+//    blocks (Phase 5) name their module's files: modules/auth/files/ui/blocks/auth/,
+//    modules/waitlist/files/ui/blocks/ and the shell primitives they render. One file is
+//    Saasaloy UI's own, apps/web/registry/shell/brand-mark.tsx, the stand-in for the
+//    shell's SVG brand mark.
 // 2. Each file's source goes through `inlineSource` (src/lib/registry-inline.ts): the
 //    `landing` copy, the `siteName` sample and the `@repo/*` imports become what a plain
 //    shadcn project can compile.
@@ -164,10 +168,26 @@ interface BuiltFile {
   content?: string;
 }
 
-/** The public path of a file: `registry/<kit or saasaloy>/<folder>/<name>`. */
+// The shell primitives are adapted from coss ui under the MIT License, whose notice must
+// travel with each copy (modules/shell/files/ui/components/shell/NOTICE.md).
+const SHELL_PRIMITIVES = "modules/shell/files/ui/components/shell/";
+const COSS_NOTICE =
+  "// Adapted from coss ui (https://coss.com/ui) for Saasaloy UI.\n// MIT License, Copyright (c) 2025 coss.com. The full notice: https://github.com/mimukit/saasaloy/blob/main/modules/shell/files/ui/components/shell/NOTICE.md\n\n";
+
+// The public folder of each file type. A shell primitive (`shell-button`) is `ui`.
+const PUBLIC_FOLDER: Record<string, string> = {
+  "registry:lib": "lib",
+  "registry:ui": "ui",
+};
+
+/**
+ * The public path of a file: `registry/<kit, module or saasaloy>/<folder>/<name>`. The
+ * first word of the item name is the kit (`ink-hero`) or the module (`auth-sign-in`,
+ * `shell-button`).
+ */
 function publicPath(itemName: string, file: BuiltFile): string {
   const kit = itemName === FOUNDATION ? "saasaloy" : itemName.split("-")[0];
-  const folder = file.type === "registry:lib" ? "lib" : "blocks";
+  const folder = PUBLIC_FOLDER[file.type] ?? "blocks";
   return `registry/${kit}/${folder}/${basename(file.path)}`;
 }
 
@@ -217,16 +237,25 @@ export async function buildRegistry(outDir: string): Promise<string[]> {
     for (const entry of entries.toSorted()) {
       const item = JSON.parse(
         await readFile(join(staging, entry), "utf-8")
-      ) as { name: string; files?: BuiltFile[] } & Record<string, unknown>;
+      ) as { name: string; type: string; files?: BuiltFile[] } & Record<
+        string,
+        unknown
+      >;
+      // A block opens with its provenance line. A supporting item (the auth card, a shell
+      // primitive) has no page of its own, so it keeps its source as it is.
+      const isBlock = item.type === "registry:block";
       item.files = (item.files ?? []).map((file) => {
         const content = inlineSource(file.content ?? "", sources, file.path);
+        let publicContent = content;
+        if (isBlock && file.type === "registry:component") {
+          publicContent = withProvenance(item.name, content);
+        } else if (file.path.includes(SHELL_PRIMITIVES)) {
+          publicContent = `${COSS_NOTICE}${content}`;
+        }
         return {
           ...file,
           path: publicPath(item.name, file),
-          content:
-            file.type === "registry:component"
-              ? withProvenance(item.name, content)
-              : content,
+          content: publicContent,
         };
       });
       if (item.name === FOUNDATION) {

@@ -10,6 +10,10 @@
 // small inline scripts switch the tabs and size the frame to its content; the Copy button
 // of the code uses the clipboard and falls back to selecting the text.
 //
+// A module block (plan 0121, Phase 5) splits the commands into two panels of one height:
+// "Any shadcn project" with the theme and block commands, and "In a Saasaloy project" with
+// the `saasaloy add` command and the line from the module skill's Wire-up section.
+//
 // The theme switcher (plan 0121, Phase 4, round r2): a "Theme" segmented control in the
 // preview toolbar, a select below `sm`. A pick sets `data-ui-preview-theme` on this page's
 // <html>, which every preview frame on the page follows, shows that theme's install
@@ -43,6 +47,15 @@ interface Props {
 
 const { block } = Astro.props;
 const copy = uiRegistry.block;
+const { wireUp } = uiRegistry;
+// A module block (Phase 5) shows its Saasaloy wire-up beside the plain shadcn command.
+const wire =
+  block.module === undefined ? undefined : wireUp.modules[block.module];
+const commandPanelClass =
+  "border-border bg-card flex flex-col gap-3 border p-5";
+const panelHeadingClass = "text-foreground text-base font-semibold";
+// Two panels halve the width, so their commands take the smaller field and fit at 1440.
+const commandSize = wire ? "md" : "lg";
 const command = `npx shadcn@latest add @saasaloy/${block.name}`;
 const code = publicSource(block);
 const { switcher } = uiRegistry;
@@ -215,27 +228,69 @@ const tabClass =
       </div>
     </div>
 
-    <div class="flex flex-col gap-3">
-      {UI_THEMES.map((theme) => (
+    <div class={wire ? "grid gap-6 lg:grid-cols-2" : "flex flex-col gap-3"}>
+      <div
+        class={wire ? commandPanelClass : "flex flex-col gap-3"}
+        aria-labelledby={wire ? "plain-heading" : undefined}
+        role={wire ? "region" : undefined}
+      >
+        {wire && (
+          <h2 id="plain-heading" class={panelHeadingClass}>
+            {wireUp.plainLabel}
+          </h2>
+        )}
+        {UI_THEMES.map((theme) => (
+          <div
+            data-theme-command={theme.name}
+            hidden={theme.name !== DEFAULT_UI_THEME}
+          >
+            <CommandField
+              command={themeCommand(theme)}
+              size={commandSize}
+              className="max-w-none"
+              client:visible
+            />
+          </div>
+        ))}
+        <CommandField
+          command={command}
+          size={commandSize}
+          className="max-w-none"
+          client:visible
+        />
+        <p class="text-muted-foreground text-sm">{switcher.note}</p>
+        {wire && (
+          <p class="text-muted-foreground text-sm">
+            <InlineCode text={wireUp.plainNote} />
+          </p>
+        )}
+      </div>
+      {wire && (
         <div
-          data-theme-command={theme.name}
-          hidden={theme.name !== DEFAULT_UI_THEME}
+          class={commandPanelClass}
+          role="region"
+          aria-labelledby="saasaloy-heading"
+          data-wire-up
         >
+          <h2 id="saasaloy-heading" class={panelHeadingClass}>
+            {wireUp.saasaloyLabel}
+          </h2>
           <CommandField
-            command={themeCommand(theme)}
-            size="lg"
+            command={wire.command}
+            size={commandSize}
             className="max-w-none"
             client:visible
           />
+          <p class="text-foreground text-sm">
+            <InlineCode text={wire.line} />
+          </p>
+          <p class="text-muted-foreground text-sm">
+            <InlineCode
+              text={interpolate(wireUp.skillNote, { skill: wire.skill })}
+            />
+          </p>
         </div>
-      ))}
-      <CommandField
-        command={command}
-        size="lg"
-        className="max-w-none"
-        client:visible
-      />
-      <p class="text-muted-foreground text-sm">{switcher.note}</p>
+      )}
     </div>
 
     <div class="border-border bg-card flex flex-col gap-2 border px-5 py-4 text-sm">

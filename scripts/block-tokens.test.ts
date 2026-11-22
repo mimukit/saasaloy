@@ -87,16 +87,27 @@ function findColours(source: string): Finding[] {
   return findings.toSorted((a, b) => a.line - b.line);
 }
 
-/** The block files of the module items apps/web/registry.json names. */
+/**
+ * The module block files apps/web/registry.json names: each block and the frame it shares
+ * (`auth-card`) under a module's files/ui/blocks/, and the brand-mark stand-in under
+ * apps/web/registry/. The shell primitives (`shell-button`) are vendored coss ui, the way
+ * the base `button` is vendored shadcn, so the rule leaves them to their upstream.
+ */
 function moduleBlockFiles(): string[] {
   const registry = JSON.parse(
     readFileSync(join(ROOT, "apps/web/registry.json"), "utf-8")
   ) as { items: { type: string; files?: { path: string }[] }[] };
   return registry.items
-    .filter((item) => item.type === "registry:block")
+    .filter((item) =>
+      ["registry:block", "registry:component"].includes(item.type)
+    )
     .flatMap((item) => item.files ?? [])
     .map((file) => join(ROOT, "apps/web", file.path))
-    .filter((file) => file.includes("/modules/"));
+    .filter(
+      (file) =>
+        /\/modules\/[^/]+\/files\/ui\/blocks\//.test(file) ||
+        file.startsWith(join(ROOT, "apps/web/registry/"))
+    );
 }
 
 /** Every block file the rule covers, absolute. */
@@ -110,12 +121,21 @@ function blockFiles(): string[] {
 }
 
 describe("block tokens", () => {
-  it("finds the base blocks", () => {
+  it("finds the base blocks and the module blocks", () => {
     const names = blockFiles().map((file) => relative(ROOT, file));
-    assert.ok(
-      names.some((name) => name.endsWith("blocks/hero.tsx")),
-      `the base hero is missing from ${names.join(", ")}`
-    );
+    for (const expected of [
+      "packages/cli/templates/base/packages/ui/src/blocks/hero.tsx",
+      "modules/auth/files/ui/blocks/auth/sign-in.tsx",
+      "modules/auth/files/ui/blocks/auth/sign-up.tsx",
+      "modules/auth/files/ui/blocks/auth/auth-card.tsx",
+      "modules/waitlist/files/ui/blocks/waitlist.tsx",
+      "apps/web/registry/shell/brand-mark.tsx",
+    ]) {
+      assert.ok(
+        names.includes(expected),
+        `${expected} is missing from ${names.join(", ")}`
+      );
+    }
   });
 
   for (const file of blockFiles()) {

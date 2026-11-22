@@ -1,3 +1,5 @@
+"use client";
+
 import { siteName } from "@repo/ui";
 import {
   AUTH_LINK_CLASS,

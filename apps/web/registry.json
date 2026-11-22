@@ -304,6 +304,151 @@
         }
       ],
       "categories": ["navigation"]
+    },
+    {
+      "name": "shell-spinner",
+      "type": "registry:ui",
+      "title": "Shell spinner",
+      "description": "The loading spinner the Saasaloy shell button shows.",
+      "dependencies": ["lucide-react"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/spinner.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/spinner.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-button",
+      "type": "registry:ui",
+      "title": "Shell button",
+      "description": "The Saasaloy shell button, with a loading state.",
+      "dependencies": ["@base-ui/react", "class-variance-authority"],
+      "registryDependencies": ["https://saasaloy.com/r/shell-spinner.json"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/button.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/button.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-field",
+      "type": "registry:ui",
+      "title": "Shell field",
+      "description": "The Saasaloy shell form field, label and description.",
+      "dependencies": ["@base-ui/react"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/field.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/field.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-input",
+      "type": "registry:ui",
+      "title": "Shell input",
+      "description": "The Saasaloy shell text input.",
+      "dependencies": ["@base-ui/react"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/input.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/input.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-brand-mark",
+      "type": "registry:component",
+      "title": "Brand mark",
+      "description": "A square mark with the first letter of the product name. Replace it with your logo.",
+      "files": [
+        {
+          "path": "registry/shell/brand-mark.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/shell/brand-mark.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "auth-card",
+      "type": "registry:component",
+      "title": "Auth card",
+      "description": "The frame the sign-in and sign-up blocks share: brand, title, form and footer.",
+      "registryDependencies": ["https://saasaloy.com/r/shell-brand-mark.json"],
+      "files": [
+        {
+          "path": "../../modules/auth/files/ui/blocks/auth/auth-card.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/auth/auth-card.tsx"
+        }
+      ],
+      "categories": ["auth"]
+    },
+    {
+      "name": "auth-sign-in",
+      "type": "registry:block",
+      "title": "Sign in",
+      "description": "An email and password sign-in card that hands the values to your onSubmit.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/auth-card.json",
+        "https://saasaloy.com/r/shell-button.json",
+        "https://saasaloy.com/r/shell-field.json",
+        "https://saasaloy.com/r/shell-input.json"
+      ],
+      "files": [
+        {
+          "path": "../../modules/auth/files/ui/blocks/auth/sign-in.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/auth/sign-in.tsx"
+        }
+      ],
+      "categories": ["auth"]
+    },
+    {
+      "name": "auth-sign-up",
+      "type": "registry:block",
+      "title": "Sign up",
+      "description": "A name, email and password sign-up card that hands the values to your onSubmit.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/auth-card.json",
+        "https://saasaloy.com/r/shell-button.json",
+        "https://saasaloy.com/r/shell-field.json",
+        "https://saasaloy.com/r/shell-input.json"
+      ],
+      "files": [
+        {
+          "path": "../../modules/auth/files/ui/blocks/auth/sign-up.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/auth/sign-up.tsx"
+        }
+      ],
+      "categories": ["auth"]
+    },
+    {
+      "name": "waitlist-form",
+      "type": "registry:block",
+      "title": "Waitlist form",
+      "description": "An email form for early access that hands the address to your onSubmit.",
+      "registryDependencies": ["button", "input", "label"],
+      "files": [
+        {
+          "path": "../../modules/waitlist/files/ui/blocks/waitlist.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/waitlist.tsx"
+        }
+      ],
+      "categories": ["waitlist"]
     }
   ]
 }

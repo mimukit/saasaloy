@@ -106,7 +106,7 @@ Starts after issue #365 merges.
 
 Done when: `saasaloy init app --theme=<name> --yes` in `.dev` writes a `brand.css` with that theme's tokens, `pnpm build` passes in the new project, and `DESIGN.md` names the theme.
 
-### Phase 5: module blocks in the registry
+### Phase 5: module blocks in the registry (built 2026-11-22)
 
 - Add the presentational block of each UI-bearing module to `registry.json` as `<module>-<block>`: `auth` forms, `subscription` pricing and invoice list, `teams` member list and invite dialog, `api-keys` key table.
 - Each block page shows the Saasaloy wire-up next to the plain `shadcn add` command.

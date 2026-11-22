@@ -54,6 +54,8 @@ export const uiRegistry = {
     cta: "Calls to action",
     navigation: "Navigation",
     error: "Errors",
+    auth: "Auth",
+    waitlist: "Waitlist",
   } as Record<string, string>,
 
   themes: {
@@ -100,6 +102,32 @@ export const uiRegistry = {
     localName:
       "In a Saasaloy project the same block ships as `{local}`, from the local `@repo/ui` package. Saasaloy UI is the public registry of those blocks.",
     source: "View source on GitHub",
+  },
+
+  /**
+   * The Saasaloy wire-up a module block page shows beside the plain shadcn command (plan
+   * 0121, Phase 5), keyed by the module that ships the block. `command` adds the module to
+   * a Saasaloy project; `line` says what the module connects, and `skill` names the skill
+   * whose Wire-up section shows the code.
+   */
+  wireUp: {
+    plainLabel: "Any shadcn project",
+    plainNote:
+      "The block takes an `onSubmit` prop and nothing more. Your code decides where the values go.",
+    saasaloyLabel: "In a Saasaloy project",
+    skillNote: "The code is in the Wire-up section of the `{skill}` skill.",
+    modules: {
+      auth: {
+        command: "npx saasaloy add auth app",
+        line: "Saasaloy wires the card to Better Auth. The skill's rule: the app renders a block on its own route and owns the call. `app` passes an `onSubmit` that calls the auth client.",
+        skill: "saasaloy-auth",
+      },
+      waitlist: {
+        command: "npx saasaloy add waitlist",
+        line: "Saasaloy wires the form to the waitlist API. `WaitlistForm` passes an `onSubmit` that posts to `/waitlist`, and you place it on a page with `<WaitlistForm client:load />`.",
+        skill: "saasaloy-waitlist",
+      },
+    } as Record<string, { command: string; line: string; skill: string }>,
   },
 
   footer: {
