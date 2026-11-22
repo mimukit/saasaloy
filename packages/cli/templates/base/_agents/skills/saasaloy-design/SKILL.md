@@ -1,12 +1,12 @@
 ---
 name: saasaloy-design
-description: Keep apps/web/DESIGN.md, and apps/admin/DESIGN.md when the admin app is installed, true of the Saasaloy design layer. Use theme to choose and apply a registry style to the web app, update after packages/ui changes, or audit a design contract for token drift. Under autonomy: afk in docs/product-brief.md, theme picks the preset from the brief without asking.
+description: Keep apps/web/DESIGN.md, and apps/admin/DESIGN.md when the admin app is installed, true of the Saasaloy design layer. Use review to propose and approve an MVP design after product approval, theme to choose and apply a registry style to the web app, update after packages/ui changes, or audit a design contract for token drift. Under autonomy: afk in docs/product-brief.md, apply the approved design during the build, or use a preset for an older headless brief.
 derived-from: "designkit (MIT), narrowed 2026-08-09"
 ---
 
 # saasaloy-design
 
-This skill records the design system that the project already uses. It writes no components and no pages. For that work, follow `packages/ui/AGENTS.md`.
+This skill proposes the MVP design for approval and records the design system the project uses. It writes no components and no pages. For that work, follow `packages/ui/AGENTS.md`.
 
 Each app has its own token home and its own contract:
 
@@ -19,10 +19,11 @@ Each app has its own token home and its own contract:
 
 The admin contract also covers the shell primitive set in `packages/ui/src/components/shell/`, its blocks in `packages/ui/src/blocks/shell/`, its containers in `packages/ui/src/containers/shell/` and the defaults in `packages/ui/src/styles/shell.css`, as `admin.css` overrides them. The web contract covers the base `components/`, the other `blocks/` and the web app.
 
-The grounding rule controls every mode. Every token value must exist in the project code or in the Tailwind utility that the project uses. Do not choose a nearby value because it looks cleaner.
+When you document the applied design, every token value must exist in the project code or in a Tailwind utility that the project uses. New values can enter the code through an approved design or a theme preset.
 
 ## Modes
 
+- `review` proposes and records an MVP design after product approval.
 - `theme` reads the product brief, selects a registry style with the owner, applies it, updates `DESIGN.md`, writes a new fingerprint, and lints the result.
 - `update` re-derives the contract after a design layer change, writes a new fingerprint, and lints the result.
 - `audit` checks the fingerprint and the contract. It never writes.
@@ -33,6 +34,8 @@ If the user does not name a mode, ask which mode to use. Do not choose between a
 
 | Mode | Files |
 |------|-------|
+| `review` | `docs/product-design.md`, `docs/product-approvals.json`, ignored `.artifacts/mockups/`, and the brief’s `autonomy` field after approval |
+| Apply an approved design | The shared brand styles, customer app sidebar styles when needed, `apps/web/DESIGN.md` and `docs/build-log.md` |
 | `theme` | web only: `packages/ui/src/styles/brand.css`, `apps/web/DESIGN.md`, `docs/product-brief.md` only when the brief is absent, and `docs/build-log.md` under `autonomy: afk` |
 | `update` | the chosen app's `DESIGN.md`, and `docs/build-log.md` under `autonomy: afk` |
 | `audit` | none, under `autonomy: afk` too |
@@ -119,6 +122,20 @@ Do not hide a warning. Fix it when the code supports the fix. Report it with the
 
 If the network or `pnpm dlx` is unavailable, continue with the fingerprint and local extraction. State that structural lint did not run. Never call an unchecked file clean.
 
+## MVP design review
+
+1. Read the approved product brief and spec. Verify the product approval hashes using the setup skill. Resume a saved draft when its product approval still matches.
+2. Propose one design direction. Start from the current theme or a preset. Write the exact light and dark colors by role, typography, spacing and component styles in `docs/product-design.md`. Check text and control contrast. Use the web and customer app's shared `brand.css`. Account for the customer sidebar overrides when the mockup shows a sidebar. Keep the staff theme.
+3. Use the agent's image generation tool to make mockup images. Cover the landing page and the main customer workflow, including mobile and relevant empty or error states. Keep the files in ignored `.artifacts/mockups/` and show them with the proposed design values. Use an owner-approved link only when the owner supplies it or authorizes publication.
+4. If image generation is unavailable, offer owner-supplied images or explicit approval of a named preset without images. Record the selected option in the design document. If the owner wants generated mockups, leave the review pending until the tool is available.
+5. Name the round when you ask for approval. If the owner requests a revision, clear any design approval, save the new round and show it again. If the change affects product scope, return to setup for product approval first.
+6. Before recording approval, check that the product approval still matches. In `docs/product-approvals.json`, record `design.approvedAt`, `design.round`, `design.documentSha256` and `design.images`. Each image entry holds its name, location and SHA-256 checksum. An empty image list applies only to an explicitly approved preset without images. Keep any replacement locations in the approval record so a move does not change the approved design document.
+7. Set `autonomy: afk` in the brief after approval. Remove the field instead when the owner requests an attended build. Start `saasaloy-build` in the same session. If nobody can approve, leave the draft in place and wait.
+
+### Apply the approved design
+
+During the build, use the exact approved values and component guidance. Merge the brand values into the existing theme and preserve the Tailwind imports and token names. Apply approved customer sidebar values where the app overrides them. Read the design document and images when implementing screens. Re-derive and lint `apps/web/DESIGN.md` from the applied styles. Keep the admin theme. Log minor spacing and focus changes. If the implementation needs a material change to approved colors, layout or actions, record the blocker and stop. Resume after the appropriate approval.
+
 ## `theme`
 
 ### 1. Read the product context
@@ -166,6 +183,8 @@ Name the registry style URL. List the changed token groups and the new fingerpri
 ## Unattended run
 
 `autonomy: afk` in the frontmatter of `docs/product-brief.md` means nobody is at the keyboard. Ask nothing, and wait for no approval. When a person in this conversation asks to choose the theme or to approve it, take the attended path instead.
+
+When the build has a current design approval, follow [Apply the approved design](#apply-the-approved-design). Use the preset procedure below for an older headless brief without a design approval.
 
 1. **Pick the mode.** With no mode named, run `theme` for the web app. A named mode runs as named. `theme` never runs for the admin app, here as anywhere.
 2. **Read the brief instead of asking.** Take the colour mood and the density from the Tone answer, the Audience answer and the site the owner pointed at. Ask no design question.
@@ -223,7 +242,7 @@ Open with the file count that the audit scanned. Give one verdict for the finger
 ## Boundaries
 
 - Never write a component or a page. That work follows `packages/ui/AGENTS.md`.
-- Never add a token value that the project does not contain.
+- Apply new token values only from an approved design or a theme preset.
 - Never change `globals.css` or `web.css` in any mode, or `brand.css` in `update` or `audit`.
 - Never write during `audit`.
 - Never claim that lint passed when the linter did not run.

@@ -147,19 +147,18 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 
 ### The Base Skills
 
-Eleven skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
+Eleven skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. These skills set the product and its design:
 
-1. **`saasaloy-setup`** interviews the owner once, writes `docs/product-brief.md` and `docs/product-spec.md`, and ends with one read-back. On the owner's confirmation it starts `saasaloy-build` in the same session. Other skills read the brief and the spec rather than ask again.
-2. **`saasaloy-landing-copy`** writes `packages/ui/src/content/landing.ts` from the brief.
+1. **`saasaloy-setup`** writes the brief and spec with the owner. It starts design review when the owner approves both.
+2. **`saasaloy-design`** proposes the design system and mockup images. It records the approved round and starts the MVP build. It also keeps the web and admin design contracts current.
+3. **`saasaloy-landing-copy`** writes `packages/ui/src/content/landing.ts` from the brief.
 
 Two build the product once modules are installed:
 
-- **`saasaloy-build`** runs the whole MVP build in stages from a complete brief and the spec, with one commit per stage, one commit per spec entity, on `build/mvp`, and a resumable `docs/build-log.md`. With no brief, start at `saasaloy-setup`, which starts the build when the interview ends.
+- **`saasaloy-build`** runs the whole MVP build in stages from a complete brief and the spec, with one commit per stage, one commit per spec entity, on `build/mvp`, and a resumable `docs/build-log.md`. With no brief, start at `saasaloy-setup`.
 - **`saasaloy-feature`** builds one product entity across the stack from its table in the spec: table, migration, seed slice, validator, route, `hc` client, the `app` screens, an `admin` list and a route test.
 
-The other six run when the thing they own moves:
-
-- **`saasaloy-design`** keeps each app's `DESIGN.md` true, and swaps the web theme for a shadcn preset.
+Other skills run when the part they own changes:
 - **`saasaloy-config`** covers `@repo/config`: a section, the merge rule, config versus `.env`.
 - **`saasaloy-env`** covers `packages/env`: adding a key, the server and client split, `pnpm env:setup`.
 - **`saasaloy-testing`** says which test a change needs under this project's testing mode.
@@ -278,8 +277,8 @@ The database lines run through `pnpm run --if-present`, so the same blocks work 
 
 An agent may build this project with no person at the keyboard. These rules apply only then, and they override "Ask First" where they say so. The `saasaloy-build` skill runs the stages these rules describe.
 
-- **One path: `saasaloy init`, the interview, the build.** The `saasaloy-setup` interview runs with the owner, ends with one read-back, and starts `saasaloy-build` in the same session. Nobody answers a question after the read-back.
-- **The signal is `autonomy: afk`** in the YAML frontmatter of `docs/product-brief.md`. Only a person sets it: the owner's confirmation at the end of the `saasaloy-setup` read-back. With no such field, every skill keeps its attended path and asks. The same frontmatter holds `deploy: preview` or `deploy: none`; the build records the choice and deploys nothing.
+- **Approve the product, then the design.** The owner approves the brief and spec before the agent makes design proposals. The design skill asks the owner to approve the current round before it starts the build.
+- **`autonomy: afk`** in the brief authorizes unattended work. On the review path, set it after design approval and verify both approvals before building or resuming. Ask no questions during an unattended build. A brief that already authorizes headless work can use the legacy preset path. Deployment stays in the handoff.
 - **No brief and no person: stop.** When neither `docs/product-brief.md` nor `./product-brief.md` exists and nobody in the session can answer the interview, write nothing, say that the build needs the interview or a brief with `autonomy: afk`, and stop. A headless run whose prompt says the owner is here and answers questions has a person: run the interview in text. Never answer the interview yourself.
 - **The agent writes the brief and the spec from the owner's answers**, through the `saasaloy-setup` interview, and never invents a price, a proof, a customer name or a URL. `docs/product-spec.md` holds the module picks and one table for each entity, which the build makes in the owner's order with one commit each. A picked module that needs an account gets its local provider, and its vendor step goes under `## Left for a human`. Env values are optional: a missing `packages/env/.env` reads as an empty file, so the local defaults in `packages/env/.env.example` apply. The agent runs `pnpm env:setup` itself, at the start and after each `saasaloy add`. It writes `packages/env/.env` only through `saasaloy env`: `--from-file` with a file a person supplied, or `--set` for a local value that is not a secret, as the `saasaloy-build` skill says. The brief is complete when all ten answers are filled (Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, Where "sign up" goes) and none is tagged `weak:`. An answer tagged `weak-accepted:` counts as filled. With an incomplete brief, stop before the first module and list each missing or weak section under `## Blocked` in `docs/build-log.md`.
 - **`pnpm check` is the gate.** Run `pnpm lint:fix` and `pnpm format`, then `pnpm check`. A stage is not done until it passes.

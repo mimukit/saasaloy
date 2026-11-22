@@ -1,6 +1,6 @@
 ---
 name: saasaloy-setup
-description: Interview the project owner once, about the landing page and about the product, then write docs/product-brief.md and docs/product-spec.md and start saasaloy-build in the same session. The brief is the shared context every other Saasaloy skill reads; the spec holds the modules and one table for each entity. Use right after saasaloy init, when the owner says "set up this project", "tell you about my product", "build my product", "what is this project", when config.app.name is still the shipped "Saasaloy", when another skill needs product context and no brief exists yet, when re-running to update the brief or the spec after something changed, and when an unattended build runs on a brief whose frontmatter says autonomy: afk.
+description: Interview the project owner once, about the landing page and about the product, then record approval of docs/product-brief.md and docs/product-spec.md before starting the saasaloy-design review. The brief is the shared context every other Saasaloy skill reads; the spec holds the modules and one table for each entity. Use right after saasaloy init, when the owner says "set up this project", "tell you about my product", "build my product", "what is this project", when config.app.name is still the shipped "Saasaloy", when another skill needs product context and no brief exists yet, when re-running to update the brief or the spec after something changed, and when an unattended build runs on a brief whose frontmatter says autonomy: afk.
 ---
 
 # saasaloy-setup — find out what this project is, once
@@ -13,7 +13,7 @@ So this skill asks once and writes the answers down. It writes two files and two
 - **`docs/product-spec.md`**: the product part. The modules, one table for each entity, the wishes that are not in this build, and the steps that stay with the owner. Its headings are fixed by [`product-spec-template.md`](product-spec-template.md), which sits beside this file.
 - The product's name and its locale, in `packages/config/src/project.ts`.
 
-The interview has about fourteen questions and ends with one read-back. The owner's one confirmation there settles every thin answer, approves the screens, and sets `autonomy: afk`. Then this skill starts `saasaloy-build` in the same session, and nobody answers another question.
+Use the owner's opening description and ask only for missing facts and decisions. The product read-back confirms the brief, the spec and the screens. After product approval, start the design review. Design approval starts the unattended build unless the owner requests an attended build.
 
 It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves behind.
 
@@ -22,6 +22,7 @@ It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves
 | Path | What you change |
 |------|-----------------|
 | `docs/product-brief.md` | The whole file. Create `docs/` if it does not exist. |
+| `docs/product-approvals.json` | The product approval and invalidation of a stale design approval. See the approval record below. |
 | `docs/product-spec.md` | The whole file, in the shape of `product-spec-template.md`. |
 | `./product-brief.md` | Move it to `docs/product-brief.md` when a person supplied it there, as [Step 0](#step-0--before-you-ask-anything) says. |
 | `packages/config/src/project.ts` | `app.name` and `app.locale`, and nothing else in the file. |
@@ -31,19 +32,22 @@ Nothing else. You are not here to write the landing page, add a module or a depe
 
 ## Step 0 — before you ask anything
 
-1. **Read `docs/product-brief.md`.** If its frontmatter holds `autonomy: afk`, follow [Unattended run](#unattended-run) and ask nothing, unless a person in this conversation asks for the interview, a change to the brief, or to turn unattended runs off. Then take the attended path below. Otherwise, if it exists, someone has already been through this. Read it and `docs/product-spec.md` fully, and jump to [Re-running](#re-running).
-2. **Look for a brief a person supplied.** When `docs/product-brief.md` does not exist and `./product-brief.md` does (or one directory up, when `saasaloy init` made a subfolder), a person wrote the brief before this session. With `autonomy: afk` in its frontmatter, ask nothing: start `saasaloy-build`, whose Intake stage moves the file. Without it, move the file to `docs/product-brief.md` and take [Re-running](#re-running).
-3. **Stop when there is no brief and no person.** You have no brief when steps 1 and 2 found none. You have no person when the prompt says nobody is at the keyboard, or when you run with no way to ask a question (a headless run, such as `claude -p`). A headless run whose prompt says the owner is here and answers your questions has a person: ask each question in text, end your turn, and read the answer in the next message. Without a person, ask nothing and write nothing. Say this, and stop: "No product brief exists and nobody is here to answer the interview. Run /saasaloy-setup with the owner present, or supply a brief with `autonomy: afk` in its frontmatter." Never invent the answers yourself. A brief without `autonomy: afk` and no person is the same case: say "The brief has no `autonomy: afk`, and nobody is here to confirm it", and stop.
-4. **Read `packages/config/src/project.ts`** for the current `app.name`. It ships commented out, so the name is still the base's `"Saasaloy"` until someone sets it. When it is set, it is the best opening guess you have, and it belongs in question 1's samples. The project's directory name is the next best guess.
-5. **Look at git, and treat it as advice.** Run `git status --short` if there is a repo. A dirty tree or no repo at all is worth one sentence ("your changes aren't committed, so you can't undo this with git; every write here is previewed in the read-back anyway"), and then you carry on. `saasaloy init` creates the repository and commits the scaffold on `main`, unless it ran with `--no-git` or found no git identity. The build's Intake stage makes that commit when `init` could not. **Neither state is a reason to stop.**
-6. **Read the module list once**, for question 13: run `saasaloy list --json`, and keep `modules[]`. Each module has `name`, `description`, `stage`, `needs`, `dependsOn`, `requiresOneOf` and `conflictsWith`.
-7. **Say how long this takes and what it is for**, in two lines, before question 1: about fourteen questions, then one read-back, then the build runs with no more questions. An owner who does not know why answers thinly.
+1. **Resume a pending review first.** Read `docs/product-brief.md`, `docs/product-spec.md` and `docs/product-approvals.json` when present. For a brief marked `setup-review: required`, finish any missing interview answers before presenting the read-back. Show the read-back if product approval is absent or stale. If product approval is current and design approval is pending or stale, resume the design review. If both approvals are current and the owner asks to build, start or resume `saasaloy-build`. If nobody can answer a pending review, report the pending step and stop. Honor an explicit request to revise the brief or spec. Before starting a new product review, remove any stale `autonomy` field and invalid approvals.
+
+2. **Read `docs/product-brief.md`.** If its frontmatter holds `autonomy: afk`, follow [Unattended run](#unattended-run) and ask nothing, unless a person in this conversation asks for the interview, a change to the brief, or to turn unattended runs off. Then take the attended path below. Otherwise, if it exists, someone has already been through this. Read it and `docs/product-spec.md` fully, and jump to [Re-running](#re-running).
+3. **Look for a brief a person supplied.** When `docs/product-brief.md` does not exist and `./product-brief.md` does (or one directory up, when `saasaloy init` made a subfolder), a person wrote the brief before this session. With `autonomy: afk` in its frontmatter, ask nothing: start `saasaloy-build`, whose Intake stage moves the file. Without it, move the file to `docs/product-brief.md` and take [Re-running](#re-running).
+4. **Stop when there is no brief and no person.** You have no brief when neither location holds one. You have no person when the prompt says nobody is at the keyboard, or when you run with no way to ask a question (a headless run, such as `claude -p`). A headless run whose prompt says the owner is here and answers your questions has a person: ask each question in text, end your turn, and read the answer in the next message. Without a person, ask nothing and write nothing. Say this, and stop: "No product brief exists and nobody is here to answer the interview. Run /saasaloy-setup with the owner present, or supply a brief with `autonomy: afk` in its frontmatter." Never invent the answers yourself. A brief without `autonomy: afk` and no person is the same case: say "The brief has no `autonomy: afk`, and nobody is here to confirm it", and stop.
+5. **Read `packages/config/src/project.ts`** for the current `app.name`. It ships commented out, so the name is still the base's `"Saasaloy"` until someone sets it. When it is set, it is the best opening guess you have, and it belongs in question 1's samples. The project's directory name is the next best guess.
+6. **Look at git, and treat it as advice.** Run `git status --short` if there is a repo. A dirty tree or no repo at all is worth one sentence ("your changes aren't committed, so you can't undo this with git; every write here is previewed in the read-back anyway"), and then you carry on. `saasaloy init` creates the repository and commits the scaffold on `main`, unless it ran with `--no-git` or found no git identity. The build's Intake stage makes that commit when `init` could not. **Neither state is a reason to stop.**
+7. **Read the module list once**, for question 13: run `saasaloy list --json`, and keep `modules[]`. Each module has `name`, `description`, `stage`, `needs`, `dependsOn`, `requiresOneOf` and `conflictsWith`.
+8. **Check whether the agent can generate mockup images.** If the tool is unavailable, tell the owner that the design review can use supplied images or an approved preset.
+9. **Say how long this takes and what it is for**, in two lines, before the questions: up to thirteen interview questions, then product approval, then design approval. The unattended build starts after design approval. An owner who does not know why answers thinly.
 
 ## Step 1 — the questions
 
-Fourteen of them, in two parts. **Question 1 is the project's name, it goes first, and it goes on its own**: every sample answer after it is built out of the name and the answers before it.
+Use the thirteen numbered topics in two parts. Fill any answer the owner already supplied. **If the name is missing, ask for it first and on its own.** Use the name and previous answers in later samples.
 
-After that, ask in batches of **two or three**. Number them so the owner can answer by number.
+Ask the remaining questions in batches of **up to three**. Number them so the owner can answer by number.
 
 ### The landing part: questions 1 to 10
 
@@ -62,16 +66,15 @@ After that, ask in batches of **two or three**. Number them so the owner can ans
 
 Write the brief after question 10, as [Step 2](#step-2--write-the-brief-and-the-spec) says, before the product part starts.
 
-### The product part: questions 11 to 14
+### The product part: questions 11 to 13
 
 | # | Dimension | What you are actually after |
 |---|-----------|----------------------------|
 | 11 | **Entities** | The things the product's user makes, tracks or reads. You propose one table for each entity, and the owner corrects it. See [Propose the entities](#propose-the-entities). |
 | 12 | **Order** | Which entity the build makes first, second, and so on. The build makes every entity, in this order. |
 | 13 | **Capabilities** | Which optional modules the product needs, from `saasaloy list --json`. See [The capabilities question](#the-capabilities-question). |
-| 14 | **Preview deploy** | Whether to put the finished build on a preview address. Always the last question. See [The preview question](#the-preview-question). |
 
-Then give the [read-back](#the-read-back). It is not a fifteenth question: it shows everything at once and asks for one confirmation.
+Then give the [read-back](#the-read-back). It confirms the scope before the design review.
 
 ### Every question ships with sample answers
 
@@ -212,46 +215,22 @@ When a pick depends on a capability with providers, write that capability's loca
 
 **A wish that no module covers.** When the owner asks for something no module and no entity does, such as "import from Goodreads", write it under `## Not in this build`, in the owner's words. Do not promise it, and do not stretch an entity to hold it.
 
-### The preview question
-
-Question 14 is always the last question, and it goes on its own. It records `deploy: preview` or `deploy: none` in the brief's frontmatter.
-
-> **14. Put the finished build on a preview address?**
-> a. No — keep it on my machine (`deploy: none`).
-> b. Yes — deploy a preview to `workers.dev` addresses when the build is done (`deploy: preview`). I will put a Cloudflare API token in `~/.config/<project>/cloudflare-preview.env` myself.
-> c. Not now — ask me again after I have looked at the local app (`deploy: none`).
-
-Say these facts with it:
-
-- **The token never enters this conversation.** The owner writes it into the file, with mode 0600. Never ask for its value.
-- **The preview runs on a temporary database**, a neon.new database that deletes itself a few days after it is made. The build log states the day it ends.
-- **The build records the choice.** A build with no Preview stage lists the preview deploy under `## Left for a human`.
-
 ### The read-back
 
-After question 14, show everything in one message, and ask for one confirmation. Write the brief and the spec to disk first, so the owner can open them. The read-back has these parts, in this order:
+Once the brief and spec are complete, write them to disk and show the owner:
 
-1. **The brief.** Each of the ten answers in one line. Mark each `weak:` answer and say what the copy leaves out because of it.
-2. **The module list.** The MVP set the build always adds, then each pick from `## Modules` with each local provider.
-3. **Each entity with its screens**, in the owner's order. Name each screen: the app list, the app detail, the app create and update form, and the admin read-only list. Then say that each action of the entity is callable by agents too: an AI agent with a key the user makes can run it through the product's MCP server, with a `<table>:read`, `<table>:write` or `<table>:delete` scope. Name the scopes, such as "`books:read` for `list`, `books:write` for `create`, `update` and `finish`". A delete scope stays off on a new key until the user ticks it.
-4. **Not in this build.** Each wish from `## Not in this build`, or "nothing".
-5. **Left for the owner.** The vendor steps from `## Left for the owner`, the preview token when `deploy: preview`, and the steps no build takes: review and merge `build/mvp`, push it, and deploy to production.
-6. **What happens next.** "On yes, I start the build now and ask you nothing more. It ends at a local app on the `build/mvp` branch, and `docs/build-log.md` records each stage."
+1. The ten brief answers. Mark each `weak:` answer and state which claim the copy will omit.
+2. The default and optional modules, including local providers.
+3. Each entity in build order, with its fields, access rule, actions and screens. Name the MCP scopes for those actions.
+4. The excluded requests and the owner tasks, including deployment.
 
-Then ask, with three samples:
+Ask: **Approve the product brief and spec and start design?** If the owner requests a change, update the files and present them again. On approval, change accepted `weak:` tags to `weak-accepted:` before you record the approval. The design review owns the next decision. Keep `autonomy` unset while that decision is pending.
 
-> **Build it?**
-> a. Yes, build it unattended — I accept each weak answer as written, and I approve these screens.
-> b. Yes, but ask me before each stage — I will stay at the keyboard.
-> c. Change something first — name it.
+### The approval record
 
-What each answer does:
+Use `docs/product-approvals.json` for both approvals. Record `product.approvedAt`, `product.briefSha256` and `product.specSha256` when the owner approves the read-back. Keep `design` absent while it is pending. Use UTC dates and SHA-256 hashes of the approved files. For the brief, remove only the top-level `autonomy` line from its YAML frontmatter when hashing. Keep `setup-review: required` in the brief so a missing approval record cannot select the older headless path.
 
-- **a.** Set `autonomy: afk` in the brief's frontmatter. Rewrite each `weak:` tag as `weak-accepted:`, keeping the answer verbatim. The screens in the spec count as approved. Then [start the build](#start-the-build).
-- **b.** The same as a, but write no `autonomy` field, and remove one an earlier run wrote. The build then asks before each stage.
-- **c.** Change what the owner names, write the files again, and show the read-back again. A change to an answer is not a new question: ask a follow-up only when the change itself is unclear.
-
-An answer tagged `weak-accepted:` counts as filled, and every skill that writes copy still leaves its claim out. Ask nothing after the confirmation.
+Check the hashes when you resume. A material brief or spec change invalidates both approvals. A design revision invalidates only the design approval. If either product hash changes, show the current brief and spec for confirmation before relying on their approval. [Start the design review](#start-the-design-review) when the product approval is current.
 
 ## Step 2 — write the brief and the spec
 
@@ -261,8 +240,7 @@ An answer tagged `weak-accepted:` counts as filled, and every skill that writes 
 
 ```md
 ---
-autonomy: afk
-deploy: none
+setup-review: required
 ---
 
 # Product brief
@@ -302,14 +280,14 @@ https://ledgerly.com.bd/waitlist — a Tally form, live now.
 
 The frontmatter holds the run settings, and nothing else:
 
-- **`autonomy: afk`** only after the owner answered a at the read-back. Leave it out otherwise.
-- **`deploy: preview`** or **`deploy: none`**, from question 14. A brief with no `deploy` field reads as `deploy: none`.
+- **`setup-review: required`** marks briefs on this review path. Write it when starting a new brief or bringing an existing brief into this review path.
+- **`autonomy: afk`** follows design approval. Preserve a deployment setting already supplied by the owner, and leave deployment to handoff.
 
 Three rules about this file:
 
 - **Keep every `weak:` and `weak-accepted:` tag verbatim.** It is the thread the next run picks up.
 - **Write it before you touch any code.** Write it after question 10, and again after the read-back. If the owner walks away after question 6, a brief with six answers in it is worth having; six answers held in a conversation are not.
-- **Write no frontmatter before the read-back**, except `deploy` once question 14 is answered.
+- Keep the review marker while either approval is pending.
 
 ### The spec
 
@@ -333,31 +311,31 @@ export const project: ProjectOverride = {
 };
 ```
 
-When the build starts from this session, its Brand stage sets both through [Unattended run](#unattended-run) step 3, so skip this step here. Run it here only on a re-run with no build to follow: show the change, confirm it, then check it still builds, because every page reads that object:
+When this session leads to a build, its Brand stage sets both values. Run it here only on a re-run with no build to follow: show the change, confirm it, then check it still builds, because every page reads that object:
 
 ```sh
 pnpm typecheck
 pnpm build
 ```
 
-## Start the build
+## Start the design review
 
-After the owner confirms the read-back with a or b, read `.agents/skills/saasaloy-build/SKILL.md` and follow it, in this session. Say one line first: "Starting the build now." Do not ask the owner to start a new session, to run a command, or to copy a file.
+After product approval, follow the `review` mode in `.agents/skills/saasaloy-design/SKILL.md` in this session. Tell the owner that the design proposal comes next. Wait for design approval before starting a build.
 
 ## Re-running
 
-A brief on disk means the interview already happened.
+A brief on disk can contain answers from an earlier session. Keep the answers the owner already supplied.
 
 1. **Summarise it back** in a few lines, with the spec's entities and picks, and ask what changed.
 2. **Ask only about what moved**, plus every `weak:` and `weak-accepted:` tag, which is exactly the thread a second pass should pick up. "Last time 'it's faster' had no number behind it. Do you have one now?" Carry samples on those questions too.
-3. **A brief with no spec** comes from before the product part existed. Ask questions 11 to 14 to write one.
+3. **A brief with no spec** needs product details before review. Use any facts already supplied, then ask for the missing topics from questions 11 to 13.
 4. **Update `Last updated`** in each file you change, and rewrite only the sections that changed.
 5. **If a file was hand-edited**, that wins. Do not tidy someone's prose back into your own phrasing.
-6. **End with the read-back** when anything in the spec or the frontmatter changed, so the owner confirms it once more.
+6. **Confirm changed product scope.** On the review path, record the new product approval and return to design before building. When the owner asks only to update the brief, finish there and tell them if an earlier approval is stale.
 
 ## Unattended run
 
-`autonomy: afk` in the brief's frontmatter means a person confirmed the read-back and is not at the keyboard now. Ask nothing in this run: no question, no confirmation, no preview that waits for an answer. The attended interview above never runs here, because only a person can answer it.
+`autonomy: afk` in the brief's frontmatter means the person authorized an unattended build. On the review path, the build also requires both current approvals. Ask nothing in this run: no question, no confirmation, no preview that waits for an answer. The attended interview above never runs here, because only a person can answer it.
 
 1. **Check that the brief is complete.** It is complete when all ten answers are present and filled: Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, and Where "sign up" goes. An honest empty answer ("no proof yet", "no pricing yet") counts as filled, and so does an answer tagged `weak-accepted:`. An answer tagged `weak:`, a missing section, or an empty one does not. `Known gaps` and any extra section are not checked.
 2. **With an incomplete brief, stop.** Append each missing, empty or weak section to `docs/build-log.md` under `## Blocked`, one list item each, naming the section and what is wrong (`- Product brief: Proof is empty`). Create the file with a `# Build log` title when it does not exist, and add the `## Blocked` heading when it is not there. End the list with `- Product brief: fill these sections with /saasaloy-setup, or delete the autonomy line to work attended`. Write nothing else, and stop the run. An unattended build does not start the first module with a brief that is not complete.
@@ -368,7 +346,7 @@ Never edit the brief or the spec in this run. A wrong answer in either one is th
 
 ## What happens next
 
-The build starts in this session after the read-back, so nothing else is left to say. On a re-run with no build to follow, say so explicitly when you finish, because the brief on its own changes nothing the owner can see:
+The design skill starts the build in this session after design approval. On a re-run with no build to follow, say so explicitly when you finish, because the brief on its own changes nothing the owner can see:
 
 > The brief is at `docs/product-brief.md`, the spec is at `docs/product-spec.md`, and the product's name is set in `packages/config/src/project.ts`. Run `/saasaloy-build` to build the MVP from them, or `/saasaloy-landing-copy` to rewrite only the landing page.
 
@@ -387,4 +365,4 @@ The build starts in this session after the read-back, so nothing else is left to
 
 ## Next
 
-`saasaloy-build` runs after the read-back, in the same session. On a re-run with no build, `saasaloy-landing-copy` writes the landing page from the brief.
+Run the design review after product approval. On a re-run with no build, `saasaloy-landing-copy` writes the landing page from the brief.

@@ -13,7 +13,7 @@
 [![MIT license](https://img.shields.io/badge/license-MIT-315FE8?style=flat-square&logo=opensourceinitiative&logoColor=white&labelColor=0B2253)](LICENSE.md)
 
 > [!TIP]
-> **Are you an AI agent?** Read [`llms.txt`](llms.txt) first. It gives the one path to build a product with Saasaloy: `init`, the interview, the build. To change Saasaloy itself, read [`AGENTS.md`](AGENTS.md).
+> **Are you an AI agent?** Read [`llms.txt`](llms.txt) first. It gives the one path to build a product with Saasaloy: `init`, product approval, design approval and the build. To change Saasaloy itself, read [`AGENTS.md`](AGENTS.md).
 
 
 ## Why Saasaloy exists
@@ -81,7 +81,7 @@ saasaloy add admin
 
 Full walkthrough: [Getting started](docs/wiki/getting-started.md), then [Make the project yours](docs/wiki/how-to/make-it-yours.md) for the bundled skills that write your product brief, landing copy and theme.
 
-To have an AI agent interview you once and then build the MVP with no more questions, see [Build with an agent](docs/wiki/how-to/build-with-an-agent.md). An agent starts from [`llms.txt`](llms.txt).
+To have an AI agent interview you, prepare a design for approval and then build the MVP, see [Build with an agent](docs/wiki/how-to/build-with-an-agent.md). An agent starts from [`llms.txt`](llms.txt).
 
 ## What a built product gives to agents
 

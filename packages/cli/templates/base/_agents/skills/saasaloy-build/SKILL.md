@@ -1,6 +1,6 @@
 ---
 name: saasaloy-build
-description: Run the whole MVP build of a Saasaloy project in stages, from a complete product brief and product spec to a seeded, tested local app, with one commit per stage and one per spec entity on the build/mvp branch and a resumable docs/build-log.md. Use when saasaloy-setup finishes its read-back, when the owner says "build the MVP", "build this product", "build it unattended", when an agent was given a product brief and asked for a SaaS MVP, when docs/product-brief.md has autonomy: afk and no build has run, and when docs/build-log.md shows a build that stopped and must continue.
+description: Run the whole MVP build of a Saasaloy project in stages, from a complete product brief and product spec to a seeded, tested local app, with one commit per stage and one per spec entity on the build/mvp branch and a resumable docs/build-log.md. Use when saasaloy-design finishes the design approval, when the owner says "build the MVP", "build this product", "build it unattended", when an agent was given a product brief and asked for a SaaS MVP, when docs/product-brief.md has autonomy: afk and no build has run, and when docs/build-log.md shows a build that stopped and must continue.
 ---
 
 # saasaloy-build — from a complete brief to a local MVP, in stages
@@ -11,10 +11,11 @@ The build stops at a running, seeded, tested local app. A deploy, a vendor accou
 
 ## The inputs
 
-The `saasaloy-setup` interview writes the brief and the spec with the owner, and then starts this skill in the same session. The build never writes either file.
+The setup skill confirms the brief and spec with the owner. The design skill confirms the design and starts this skill in the same session. The build uses those approved inputs.
 
 - **`docs/product-brief.md`**. It must be complete. `saasaloy-setup`, "Unattended run", defines complete: all ten answers present and filled, none tagged `weak:`. An answer tagged `weak-accepted:` counts as filled. Its frontmatter holds the run settings: `autonomy` and `deploy` (`preview` or `none`; a brief with no `deploy` field reads as `none`).
 - **`docs/product-spec.md`**: the modules the owner picked, one table for each entity in the owner's order, the wishes that are not in this build, and the steps left for the owner. Its `##` headings and the rows of each entity table are fixed by `.agents/skills/saasaloy-setup/product-spec-template.md`. A brief written before the spec existed has none: then the build adds the MVP set on `database-postgres` and builds one entity, as [Without a spec](#without-a-spec) says.
+- **`docs/product-design.md` and `docs/product-approvals.json`** hold the approved design and approval record. They are required for briefs marked `setup-review: required`.
 - **The env values are optional.** A missing `packages/env/.env` reads as an empty file, so `pnpm env:setup` writes the local default of each key in `packages/env/.env.example`. A person who has values puts them in `packages/env/.env`, or in a dotenv file beside the brief (`./env` or `./.env.local`).
 
 The build runs `pnpm env:setup` itself. It writes `packages/env/.env` only through `saasaloy env`, as [Fill a key with no default](#fill-a-key-with-no-default) says, and never edits the file by hand.
@@ -25,17 +26,26 @@ The build runs `pnpm env:setup` itself. It writes `packages/env/.env` only throu
 
 **With no brief and no person, stop.** When neither `docs/product-brief.md` nor `./product-brief.md` exists, and nobody in this session can answer a question (the prompt says so, or the run is headless), write nothing and say why: "No product brief exists and nobody is here to answer the saasaloy-setup interview." Then stop. With a person present, run `saasaloy-setup` first. A headless run whose prompt says the owner is here and answers questions has a person present. Never answer the interview yourself.
 
-Open `docs/build-log.md`. When it exists, a build already ran here:
+Open `docs/build-log.md`. If it exists and the `build/mvp` branch exists, resume the build:
 
 1. Run `git branch --show-current`. Switch to `build/mvp` when you are on another branch.
-2. Read the stages that have a commit from git, not from the log alone: `git log --format='%h %s' main..HEAD`. Each `feat(build): <stage>` subject is a finished stage. Each `feat(build): feature <table>` subject is a finished entity of the Feature stage, such as `feat(build): feature books`. A log from before the spec has one `feat(build): feature` subject with no table, and it counts as the one entity of [Without a spec](#without-a-spec).
-3. When a finished stage's section in the log has no `Commit:` line, write it now from that list. A stop between a stage's commit and its log edit loses only the edit, because the commit subject still names the stage.
-4. Check that each `Commit:` hash in the log is on the branch: `git merge-base --is-ancestor <sha> HEAD`.
-5. Run `git status --porcelain`. When it prints lines, apply [A dirty tree on resume](#a-dirty-tree-on-resume).
-6. Continue at the first stage in [The stages](#the-stages) after the last finished one. Do not redo a stage that has a commit. In the Feature stage, continue at the first entity of the spec's `## Entities`, in its order, with no `feat(build): feature <table>` commit. Do not redo an entity that has one.
-7. When the log has a `## Blocked` list, read it. Clear an item only when its cause is gone, such as a brief section a person has since filled. Otherwise stop again and leave the list.
+2. Verify the approvals below.
+3. Read the stages that have a commit from git, not from the log alone: `git log --format='%h %s' main..HEAD`. Each `feat(build): <stage>` subject is a finished stage. Each `feat(build): feature <table>` subject is a finished entity of the Feature stage, such as `feat(build): feature books`. A log from before the spec has one `feat(build): feature` subject with no table, and it counts as the one entity of [Without a spec](#without-a-spec).
+4. When a finished stage's section in the log has no `Commit:` line, write it now from that list. A stop between a stage's commit and its log edit loses only the edit, because the commit subject still names the stage.
+5. Check that each `Commit:` hash in the log is on the branch: `git merge-base --is-ancestor <sha> HEAD`.
+6. Read `## Blocked` when present. Clear an item only after you verify that its cause is gone. Stop if a blocker remains.
+7. Run `git status --porcelain`. When it prints lines, apply [A dirty tree on resume](#a-dirty-tree-on-resume).
+8. Continue at the first unfinished stage or entity in spec order. When a new approval changes completed work, apply the corrections in [Verify the approvals](#verify-the-approvals) first.
 
-When the log does not exist, start at [Intake](#stage-intake).
+When there is no build branch yet, verify the approvals before starting [Intake](#stage-intake). Keep an existing log and clear any resolved blockers.
+
+### Verify the approvals
+
+After switching to the build branch on resume, verify the approval record before continuing. A brief marked `setup-review: required`, or a project that supplies an approval record, needs both current approvals. Use the hash rules in `saasaloy-setup` and the image entries in `saasaloy-design`. Verify each image checksum against a local file or the owner-approved link. A preset approval can have an empty image list only if the owner explicitly approved it without images.
+
+If a required document or image is missing or differs from the approval, add the exact problem under `## Blocked` and stop. Preserve the reviewed files. A new location for the same image can resolve a missing image. A changed product scope needs both approvals again. A changed design needs only design approval. An older headless brief without the review marker or an approval record uses the preset path.
+
+On resume, if a newly approved design changes work in a completed stage, update the affected styles and screens before continuing. Run the stage gate and commit the corrections separately. Keep the original stage commits and note the approved revision in the log.
 
 ### A dirty tree on resume
 
@@ -69,11 +79,11 @@ Run them in this order. Each one ends with [The stage gate](#the-stage-gate).
 7. **Load the env values.** When the person left a dotenv file beside the brief, run `saasaloy env --from-file <that file>`. It takes each key a module declares or `packages/env/.env.example` lists, such as `PUBLIC_SITE_URL`, and refuses the whole file on any other key. Never pass a secret with `--set`, which leaves it in shell history, and never invent a value. Then run `pnpm env:setup`. With no file, `pnpm env:setup` alone writes the local defaults.
 8. **Set the testing mode.** The MVP needs a route test. When the `<!-- saasaloy:testing -->` block in `AGENTS.md` says `off`, run `saasaloy testing tests-after` and log it.
 9. **Open the branch.** Run `git switch build/mvp`, or `git switch -c build/mvp` when it does not exist.
-10. **Start the log.** Create `docs/build-log.md` with a `# Build log` title and an `## Intake` section that lists what this stage did, with the lines of steps 5 and 6.
+10. **Start the log.** Use `docs/build-log.md` with a `# Build log` title and an `## Intake` section that lists what this stage did, with the lines of steps 5 and 6.
 
 ### Stage: Brand
 
-Run `saasaloy-setup`, then `saasaloy-landing-copy`, then `saasaloy-design`. Under `autonomy: afk` each one takes its unattended path: setup sets `app.name` and `app.locale`, landing copy writes `landing.ts` from the brief with no draft approval, and design picks a preset that fits the brief's tone. Each one logs its own lines in this stage's section. Without `autonomy: afk`, the interview already ran, so run only `saasaloy-setup`'s Step 3 (the name and the locale) and then the other two skills' attended paths.
+Set `app.name` and `app.locale` with `saasaloy-setup` and write the landing copy with `saasaloy-landing-copy`. Follow their unattended procedures when the brief has `autonomy: afk`. When there is an approved design, follow `saasaloy-design`'s **Apply the approved design** section. Use its preset procedure for an older headless brief. In an attended build without an approved design, follow its attended theme procedure. Log the approved round or the preset used.
 
 ### Stage: Validate and Stage: MVP
 

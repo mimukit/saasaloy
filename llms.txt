@@ -1,6 +1,6 @@
 # Saasaloy
 
-> Saasaloy is a CLI that scaffolds a Cloudflare-native SaaS monorepo (Turborepo, Astro, Hono, Drizzle, Better Auth) and then copies features into it as source files the project owns, one `saasaloy add <module>` at a time. Every project ships agent skills in `.agents/skills/`. The `saasaloy-setup` skill interviews the owner once, and the `saasaloy-build` skill then takes the agent to a local MVP with no more questions.
+> Saasaloy is a CLI that scaffolds a Cloudflare-native SaaS monorepo (Turborepo, Astro, Hono, Drizzle, Better Auth) and then copies features into it as source files the project owns, one `saasaloy add <module>` at a time. Every project ships agent skills in `.agents/skills/`. The owner approves the product brief and spec first, then approves the design. The agent then builds the local MVP without further questions.
 
 This file is for an AI agent that wants to build a product with Saasaloy. An agent that wants to change Saasaloy itself reads `AGENTS.md` and `CONTRIBUTING.md` instead.
 
@@ -16,11 +16,12 @@ Check each one before the first command. A missing one stops the build partway.
 
 ## Start a project
 
-One path, in one session: `init`, the interview, the build.
+Start with `init`. Confirm product scope and design before the build.
 
 1. In the folder you were given, run `npx saasaloy@latest init . --force --yes --testing=tests-after`. `--force` lets `init` scaffold into a folder that is not empty. `--yes` runs `pnpm install` with no prompt, writes the local env files, and commits the scaffold on `main`. The tests-after mode makes `add` write the route tests the MVP needs.
-2. Read the generated `AGENTS.md`, then run the `saasaloy-setup` skill from `.agents/skills/saasaloy-setup/SKILL.md`. It interviews the owner: about fourteen questions with sample answers, then one read-back. It writes `docs/product-brief.md` and `docs/product-spec.md`.
-3. When the owner confirms the read-back, `saasaloy-setup` starts the `saasaloy-build` skill from `.agents/skills/saasaloy-build/SKILL.md` in the same session. Ask nothing after the read-back.
+2. Read the generated `AGENTS.md`, then run the `saasaloy-setup` skill from `.agents/skills/saasaloy-setup/SKILL.md`. Use the owner’s description first. Ask for missing facts, write `docs/product-brief.md` and `docs/product-spec.md`, and confirm both in a product read-back.
+3. After product approval, run the `saasaloy-design` review. Propose the brand and generate mockup images for the landing page and main customer workflow. Ask the owner to approve the current round.
+4. After design approval, set `autonomy: afk` unless the owner requests an attended build. Start `saasaloy-build` in the same session. Ask no questions during the unattended build.
 
 No env file is needed. A missing `packages/env/.env` reads as empty, so every key takes its local default.
 
@@ -29,10 +30,10 @@ No env file is needed. A missing `packages/env/.env` reads as empty, so every ke
 - **No brief and no person in the session: stop.** When the folder holds no `product-brief.md` and nobody can answer the interview (the prompt says so, or you run headless), do not run the interview and do not write a brief yourself. Say "No product brief exists and nobody is here to answer the saasaloy-setup interview", and stop. A headless run whose prompt says the owner is here and answers your questions has a person: ask in text, end your turn, and read the answer in the next message.
 - **A brief a person wrote earlier.** When the folder holds `product-brief.md` with `autonomy: afk` in its YAML frontmatter, run step 1, then `saasaloy-build`. It moves the brief to `docs/product-brief.md` and runs with no interview. A `product-spec.md` beside it moves to `docs/` too; with no spec, the build makes the MVP set and one entity from the brief. A brief without `autonomy: afk` needs a person to confirm it: with nobody to answer, stop and say so.
 
-## The interview's output
+## What the reviews record
 
 - `docs/product-brief.md`: the ten landing answers (Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, Where "sign up" goes). It is complete when all ten are filled and none is tagged `weak:`. The owner settles each thin answer at the read-back, and an accepted one is tagged `weak-accepted:` and counts as filled. With an incomplete brief the build stops before the first module and lists the gaps under `## Blocked` in `docs/build-log.md`.
-- The brief's YAML frontmatter: `autonomy: afk` when the owner confirmed an unattended build, and `deploy: preview` or `deploy: none`. Under `autonomy: afk`, ask nothing.
+- `docs/product-design.md` holds the approved design values and image references. `docs/product-approvals.json` records both approvals.
 - `docs/product-spec.md`: the module picks from `saasaloy list --json`, one table for each entity (its fields, who may see it, its actions and its screens) in the owner's order, the wishes that are not in this build, and the steps left for the owner. The build makes each entity with one commit, with no limit on their number.
 - Every CLI command runs with no terminal. A command that would prompt exits 2 and names the flag that answers it. `--json` prints one JSON document with `schemaVersion: 1`.
 - Never invent a price, a proof, a customer name or a URL. The brief holds only what the owner said.
@@ -56,6 +57,7 @@ No env file is needed. A missing `packages/env/.env` reads as empty, so every ke
 ## Skills in a generated project
 
 - [saasaloy-setup](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-setup/SKILL.md): the interview, the read-back, the brief's completeness rule, and the [spec template](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-setup/product-spec-template.md) with its fixed headings.
+- [saasaloy-design](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-design/SKILL.md): the design proposal, mockup review and approved theme.
 - [saasaloy-build](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-build/SKILL.md): the staged MVP build from the brief and the spec.
 - [saasaloy-feature](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-feature/SKILL.md): one product entity across the stack, from its table in the spec.
 - [saasaloy-update](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-update/SKILL.md): the upgrade to a newer CLI, the update report, conflict markers, update notes, and the exit codes.
