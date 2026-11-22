@@ -65,7 +65,7 @@ Alternatives considered:
 - **Ideal: builder first.** Build the gallery, the theme switcher and the builder before the content grows. It builds a picker with one kit and one theme to pick from.
 - **Lateral: contribute upstream.** Add Saasaloy blocks to an existing directory and build no site. The traffic then lands on another site, and the funnel to Saasaloy breaks.
 
-### Phase 1: gallery mockup
+### Phase 1: gallery mockup (built 2026-11-22)
 
 Attended: owner approval of the gallery and block page mockups, and of the kit-one name.
 
@@ -115,7 +115,7 @@ Done when: `saasaloy init app --theme=<name> --yes` in `.dev` writes a `brand.cs
 
 Done when: `scripts/registry.test.ts` covers each listed module block, and in the `qakit` step each one installs with `shadcn add` in the Phase 2 Next.js app and renders with stub props.
 
-### Phase 6: second kit and templates mockup
+### Phase 6: second kit and templates mockup (built 2026-11-22)
 
 Attended: owner approval of the second kit, of each template, and of the builder page.
 
@@ -125,7 +125,7 @@ Attended: owner approval of the second kit, of each template, and of the builder
 
 Done when: a Design decisions row records the approval in the same form as Phase 1.
 
-### Phase 7: second kit, templates and the builder
+### Phase 7: second kit, templates and the builder (built 2026-11-22)
 
 Starts after issue #365 merges.
 
