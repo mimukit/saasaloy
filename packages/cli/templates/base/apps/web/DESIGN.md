@@ -176,7 +176,7 @@ components:
 
 ## Overview
 
-The base uses a neutral, content-first system. It gives a new product a clear structure without choosing a brand palette for the owner. Product identity enters through the theme tokens, the product brief, and the copy.
+The base uses a neutral, content-first system. It gives a new product a clear structure without choosing a brand palette for the owner. Product identity enters through the theme tokens, the product brief, and the copy. Its theme is `neutral`, one of the Saasaloy UI themes (`neutral`, `cobalt`, `ember` and `moss`) that `saasaloy init --theme=<name>` writes into `brand.css`.
 
 ## Apps
 

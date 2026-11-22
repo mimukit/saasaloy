@@ -45,6 +45,11 @@
         }
       }
     },
+    "theme": {
+      "type": "string",
+      "enum": ["neutral", "cobalt", "ember", "moss"],
+      "description": "The project's Saasaloy UI theme (plan 0121): the token set `saasaloy init --theme=<name>` wrote into `packages/ui/src/styles/brand.css` and recorded in `apps/web/DESIGN.md`. `init` writes the key only for a theme other than `neutral`, so a later render writes the same bytes. Absent reads as `neutral`. It decides what `init` writes; changing it later rewrites no file."
+    },
     "installed": {
       "type": "array",
       "description": "Modules present in this project. Grows as `saasaloy add` runs; drives dependsOn resolution.",

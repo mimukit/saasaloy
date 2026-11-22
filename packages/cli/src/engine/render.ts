@@ -49,6 +49,15 @@ import {
 import type { TemplateVars } from "../lib/scaffold.js";
 import type { RegistryEntry, RegistryPatch, When } from "../lib/schema.js";
 import { DEFAULT_TESTING_MODE } from "../lib/testing.js";
+import {
+  BRAND_CSS,
+  DEFAULT_THEME,
+  rewriteBrandCss,
+  rewriteDesign,
+  THEMES,
+  WEB_DESIGN,
+} from "../lib/theme.js";
+import type { ThemeName } from "../lib/theme.js";
 import type { TestingMode } from "../lib/testing.js";
 import { whenHolds } from "../lib/when.js";
 import type { WhenContext } from "../lib/when.js";
@@ -84,6 +93,12 @@ export interface RenderOptions {
    * module turns `off` into `tests-after`, as `add` does (#242).
    */
   testingMode?: TestingMode;
+  /**
+   * The project's theme (plan 0121). A theme other than `neutral` rewrites the base
+   * brand.css and apps/web/DESIGN.md, and `saasaloy.json` records it. Absent reads as
+   * `neutral`, the template's own tokens.
+   */
+  theme?: ThemeName;
   /** The `{{VAR}}` values. `templateVars(projectName)` when absent. */
   vars?: TemplateVars;
 }
@@ -351,6 +366,24 @@ export function render(args: RenderArgs): RenderResult {
     });
   }
 
+  // The theme rewrites two `once` base files: the tokens, then the contract that
+  // records them and fingerprints the tokens file (ADR 0027).
+  const theme = options.theme ?? DEFAULT_THEME;
+  if (theme !== DEFAULT_THEME) {
+    const brand = files.get(BRAND_CSS);
+    if (brand) {
+      const content = rewriteBrandCss(brand.content, THEMES[theme]);
+      files.set(BRAND_CSS, { ...brand, content });
+      const design = files.get(WEB_DESIGN);
+      if (design) {
+        files.set(WEB_DESIGN, {
+          ...design,
+          content: rewriteDesign(design.content, THEMES[theme], content),
+        });
+      }
+    }
+  }
+
   const configFile = files.get(CONFIG_FILE);
   if (!configFile) {
     throw new Error(`The payload's base template ships no ${CONFIG_FILE}.`);
@@ -360,6 +393,7 @@ export function render(args: RenderArgs): RenderResult {
     ...migrateBase(JSON.parse(configFile.content) as LoadedConfig),
     name: options.projectName,
     testing: { mode: testingMode },
+    ...(theme === DEFAULT_THEME ? {} : { theme }),
   };
 
   // --- The set: refusals `add` makes before it writes ------------------------------

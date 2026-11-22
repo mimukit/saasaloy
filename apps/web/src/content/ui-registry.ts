@@ -12,6 +12,9 @@ export const uiRegistry = {
     description:
       "Free, MIT-licensed UI blocks for shadcn projects on the base-nova style. Install each block with one command.",
     blockTitle: "{name} | Saasaloy UI",
+    themesTitle: "Themes | Saasaloy UI",
+    themesDescription:
+      "Four free shadcn themes for Saasaloy UI blocks: neutral, cobalt, ember and moss. Each one changes colour tokens and the radius only.",
   },
 
   header: {
@@ -23,7 +26,10 @@ export const uiRegistry = {
   },
 
   /** The section links in the header and the footer bar. More join with later phases. */
-  nav: [{ id: "blocks", label: "Blocks", href: "/ui" }],
+  nav: [
+    { id: "blocks", label: "Blocks", href: "/ui" },
+    { id: "themes", label: "Themes", href: "/ui/themes" },
+  ],
 
   index: {
     titleLead: "Free UI blocks for",
@@ -49,6 +55,32 @@ export const uiRegistry = {
     navigation: "Navigation",
     error: "Errors",
   } as Record<string, string>,
+
+  themes: {
+    title: "Themes",
+    lead: "Choose a theme for any block. A theme changes colour tokens and the radius only.",
+    gridLabel: "Themes",
+    swatches: {
+      background: "Background",
+      primary: "Primary",
+      muted: "Muted",
+      border: "Border",
+    },
+    swatchesLabel: "{theme} colours",
+    sampleLabel: "{theme} sample",
+    sampleButton: "Continue",
+    sampleCard: "Project",
+    sampleBadge: "Ready",
+    radius: "Radius {radius}",
+    initNote:
+      "In a new Saasaloy project, pass `--theme=<name>` to `saasaloy init` instead. It writes the theme into `brand.css`.",
+  },
+
+  /** The theme switcher of the block page. */
+  switcher: {
+    label: "Theme",
+    note: "Themes change tokens only. Every block fits every theme.",
+  },
 
   block: {
     breadcrumbLabel: "Breadcrumb",

@@ -43,6 +43,7 @@ Target: none, by owner decision (grill 2026-11-22). No number gates a phase, and
 | Visual approval | One mockup round for each new screen, each kit and each theme. A module block gets its round in its own module's plan. Mockup images go to the `mockups: mimukit/saasaloy` gist (grill Q8). |
 | Attended phases | Phases 1, 3 and 6 are attended mockup rounds. Each comes right before the build phase it feeds (grill Q17). |
 | Phase 1 mockup approved | 2026-11-22, round 1 (gallery index and block page, light and dark, 1440 and 390 px). Gist: https://gist.github.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a with file prefix `0121-r1`. Issue comment: https://github.com/mimukit/saasaloy/issues/384#issuecomment-7076034604. Kit-one name: `ink`, locked by the owner on 2026-11-22. |
+| Phase 3 mockup approved | Decided by the afkkit run on 2026-11-22, pending owner review. Round r2 (landing page in each theme, light and dark, 1440 px; block-page switcher, light and dark, 1440 px and light 390 px; themes page, light 1440 px), local file prefix `0121-r2`. Gist: pending. Issue comment: pending. Themes: `neutral` (default, today's brand.css), `cobalt`, `ember`, `moss`. |
 
 ## Approach
 
@@ -85,7 +86,7 @@ Done when: a Design decisions row records the approval date, the round, the gist
 
 Done when: `pnpm test` runs both scripts green; `block-tokens.test.ts` fails on a fixture block with `bg-blue-500`; and in the `qakit` step, in an empty Next.js app with a `base-*` style, `pnpm dlx shadcn add ./apps/web/public/r/<kit>-hero.json` writes a hero that renders with no type error.
 
-### Phase 3: theme mockup
+### Phase 3: theme mockup (built 2026-11-22)
 
 Attended: owner approval of three or four theme presets.
 
@@ -94,7 +95,7 @@ Attended: owner approval of three or four theme presets.
 
 Done when: a Design decisions row records the theme approval in the same form as Phase 1.
 
-### Phase 4: themes, the switcher and `init --theme`
+### Phase 4: themes, the switcher and `init --theme` (built 2026-11-22)
 
 Starts after issue #365 merges.
 

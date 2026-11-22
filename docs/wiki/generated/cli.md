@@ -36,16 +36,17 @@ saasaloy <command> [options]
 ## `saasaloy init`
 
 ```text
-saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>]
+saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>] [--theme=<neutral|cobalt|ember|moss>]
 ```
 
 | Flag | Effect |
 |---|---|
 | `--force` | scaffold into a directory that is not empty |
-| `-y, --yes` | run pnpm install with no prompt |
+| `-y, --yes` | run pnpm install with no prompt, and take the neutral theme when --theme is absent |
 | `--no-install` | never run pnpm install, and never ask |
 | `--no-git` | do not run git init or make the first commit |
 | `--testing=<mode>` | the testing mode: off (default), tests-after or tdd; asked on a terminal when absent |
+| `--theme=<name>` | the Saasaloy UI theme brand.css takes: neutral (default), cobalt, ember or moss; asked on a terminal when absent |
 | `-h, --help` | show this help |
 
 ## `saasaloy add`

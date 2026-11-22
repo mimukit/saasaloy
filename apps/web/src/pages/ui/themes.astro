@@ -1,0 +1,131 @@
+---
+// /ui/themes, the Saasaloy UI themes (plan 0121, Phase 4), from round r2 of the theme
+// mockup (0121-r2-themes-light-1440.png, decided by the afkkit run on 2026-11-22). Four
+// equal-height cards, one per theme: the name, four swatches, a sample button, card and
+// badge drawn in the theme, and the install command.
+//
+// The values come from packages/cli/templates/themes/ (lib/ui-themes.ts), the files
+// `saasaloy init --theme` writes into brand.css. A sample sets the theme's variables on
+// its own subtree through `themeRules`, so `bg-primary` and `rounded-lg` inside it take the
+// theme's colour and radius, light or dark with the site, while the card frame keeps the
+// site's square cobalt look.
+import UiLayout from "@web/layouts/UiLayout.astro";
+import InlineCode from "@web/components/InlineCode.astro";
+import { CommandField } from "@web/components/command-field";
+import { uiRegistry } from "@web/content/ui-registry";
+import { interpolate } from "@web/lib/interpolate";
+import { themeCommand, themeRules, UI_THEMES } from "@web/lib/ui-themes";
+
+const copy = uiRegistry.themes;
+const swatches = Object.entries(copy.swatches);
+const sampleCss = UI_THEMES.map((theme) =>
+  themeRules(theme, {
+    light: `[data-theme-sample="${theme.name}"]`,
+    dark: `.dark [data-theme-sample="${theme.name}"]`,
+  })
+).join("\n");
+---
+
+<UiLayout
+  title={uiRegistry.meta.themesTitle}
+  description={uiRegistry.meta.themesDescription}
+  current="themes"
+>
+  <style is:inline set:html={sampleCss}></style>
+  <main
+    id="main"
+    tabindex="-1"
+    class="section-container-hero flex flex-col gap-8 pt-12 outline-none"
+  >
+    <header class="flex flex-col gap-3">
+      <h1 class="text-foreground text-4xl font-bold tracking-[-0.02em] sm:text-5xl">
+        {copy.title}
+      </h1>
+      <p class="text-muted-foreground text-lg">{copy.lead}</p>
+    </header>
+
+    <ul
+      class="grid gap-6 md:grid-cols-2"
+      role="list"
+      aria-label={copy.gridLabel}
+    >
+      {UI_THEMES.map((theme) => (
+        <li class="flex">
+          <article
+            class="border-border bg-card flex w-full flex-col border"
+            aria-labelledby={`theme-${theme.name}`}
+          >
+            <div
+              class="bg-background flex flex-1 flex-col gap-6 p-5 sm:p-6"
+              data-theme-sample={theme.name}
+            >
+              <div class="flex items-start justify-between gap-4">
+                <div class="flex flex-col gap-1">
+                  <h2
+                    id={`theme-${theme.name}`}
+                    class="text-foreground font-mono text-2xl font-semibold"
+                  >
+                    {theme.name}
+                  </h2>
+                  <p class="text-muted-foreground text-sm">
+                    {theme.description}
+                  </p>
+                </div>
+                <span class="border-primary text-primary bg-background shrink-0 rounded-4xl border px-2.5 py-0.5 text-xs font-medium">
+                  {copy.sampleBadge}
+                </span>
+              </div>
+
+              <ul
+                class="grid grid-cols-2 gap-3 sm:grid-cols-4"
+                role="list"
+                aria-label={interpolate(copy.swatchesLabel, {
+                  theme: theme.name,
+                })}
+              >
+                {swatches.map(([token, label]) => (
+                  <li class="flex flex-col gap-1.5">
+                    <span
+                      class="border-border block h-10 rounded-lg border"
+                      style={`background-color: var(--${token})`}
+                      aria-hidden="true"
+                    />
+                    <span class="text-muted-foreground text-xs">{label}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <div
+                class="bg-background border-border grid flex-1 items-center gap-4 rounded-xl border p-4 sm:grid-cols-[auto_1fr]"
+                role="group"
+                aria-label={interpolate(copy.sampleLabel, {
+                  theme: theme.name,
+                })}
+              >
+                <span class="bg-primary text-primary-foreground inline-flex h-9 w-fit items-center rounded-lg px-5 text-sm font-medium">
+                  {copy.sampleButton}
+                </span>
+                <div class="border-border bg-card text-card-foreground flex flex-col gap-2 rounded-xl border p-3">
+                  <p class="text-sm font-semibold">{copy.sampleCard}</p>
+                  <span class="bg-muted block h-2 w-full rounded-lg" />
+                  <span class="bg-muted block h-2 w-2/3 rounded-lg" />
+                </div>
+              </div>
+            </div>
+            <div class="border-border border-t">
+              <CommandField
+                command={themeCommand(theme)}
+                className="max-w-none border-0"
+                client:visible
+              />
+            </div>
+          </article>
+        </li>
+      ))}
+    </ul>
+
+    <p class="text-muted-foreground text-sm">
+      <InlineCode text={copy.initNote} />
+    </p>
+  </main>
+</UiLayout>

@@ -9,6 +9,11 @@
 // and changes with it, or the system setting when it stands alone. A theme toggle inside
 // the frame flips the frame only, never the site's stored choice. Two blocks hold browser
 // state, so they hydrate: the navbar's menu and the pricing table's billing switch.
+//
+// The theme (plan 0121, Phase 4) works the same way: `?theme=<name>` wins, and otherwise
+// the frame follows the embedding page's `data-ui-preview-theme`, which the block page's
+// switcher sets. A theme sets its variables on <html> (`themeRules`) over the template's
+// neutral brand.css; `neutral` sets the same values brand.css already holds.
 import "@web/styles/ui-preview.css";
 import { Audience } from "@repo/ui/blocks/audience";
 import { Cta } from "@repo/ui/blocks/cta";
@@ -30,6 +35,7 @@ import { SAMPLE_SITE_NAME } from "@web/lib/registry-inline";
 import { interpolate } from "@web/lib/interpolate";
 import { uiRegistry } from "@web/content/ui-registry";
 import { uiBlocks } from "@web/lib/ui-registry";
+import { themeRules, UI_THEMES } from "@web/lib/ui-themes";
 
 export function getStaticPaths() {
   return uiBlocks().map((block) => ({ params: { name: block.name } }));
@@ -41,6 +47,16 @@ const title = interpolate(uiRegistry.block.previewTitle, { name });
 
 // Sets the mode before the first paint, then keeps it in step with the embedding page.
 const MODE_SCRIPT = `(function(){var d=document.documentElement;function a(k){d.classList.toggle("dark",k);d.style.colorScheme=k?"dark":"light";d.setAttribute("data-theme",k?"dark":"light")}var m=new URLSearchParams(location.search).get("mode");var p=null;try{p=window.parent!==window?window.parent.document.documentElement:null}catch(e){}if(m==="dark"||m==="light"){a(m==="dark")}else if(p){a(p.classList.contains("dark"));new MutationObserver(function(){a(p.classList.contains("dark"))}).observe(p,{attributes:true,attributeFilter:["class"]})}else{a(matchMedia("(prefers-color-scheme: dark)").matches)}document.addEventListener("click",function(e){var t=e.target instanceof Element?e.target.closest("[data-theme-toggle]"):null;if(t){a(!d.classList.contains("dark"))}})})();`;
+
+const THEME_CSS = UI_THEMES.map((theme) =>
+  themeRules(theme, {
+    light: `html[data-ui-theme="${theme.name}"]`,
+    dark: `html.dark[data-ui-theme="${theme.name}"]`,
+  })
+).join("\n");
+
+// Sets the theme before the first paint, then keeps it in step with the embedding page.
+const THEME_SCRIPT = `(function(){var d=document.documentElement;var names=${JSON.stringify(UI_THEMES.map((theme) => theme.name))};function a(n){if(names.indexOf(n)!==-1){d.setAttribute("data-ui-theme",n)}}var q=new URLSearchParams(location.search).get("theme");var p=null;try{p=window.parent!==window?window.parent.document.documentElement:null}catch(e){}if(q){a(q)}else if(p){a(p.getAttribute("data-ui-preview-theme")||"");new MutationObserver(function(){a(p.getAttribute("data-ui-preview-theme")||"")}).observe(p,{attributes:true,attributeFilter:["data-ui-preview-theme"]})}})();`;
 ---
 
 <!doctype html>
@@ -52,6 +68,8 @@ const MODE_SCRIPT = `(function(){var d=document.documentElement;function a(k){d.
     <title>{title}</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script is:inline set:html={MODE_SCRIPT} />
+    <script is:inline set:html={THEME_SCRIPT} />
+    <style is:inline set:html={THEME_CSS}></style>
   </head>
   <body class="bg-background text-foreground font-sans antialiased">
     {name === "ink-audience" && <Audience siteName={siteName} />}

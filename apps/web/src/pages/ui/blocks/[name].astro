@@ -9,6 +9,12 @@
 // reaches the block. The Code tab shows the public source: what `shadcn add` writes. Two
 // small inline scripts switch the tabs and size the frame to its content; the Copy button
 // of the code uses the clipboard and falls back to selecting the text.
+//
+// The theme switcher (plan 0121, Phase 4, round r2): a "Theme" segmented control in the
+// preview toolbar, a select below `sm`. A pick sets `data-ui-preview-theme` on this page's
+// <html>, which every preview frame on the page follows, shows that theme's install
+// command above the block's, and is kept in localStorage for the next block page. The
+// site's own cobalt brand and light or dark mode never change.
 import UiLayout from "@web/layouts/UiLayout.astro";
 import InlineCode from "@web/components/InlineCode.astro";
 import { CommandField } from "@web/components/command-field";
@@ -16,6 +22,12 @@ import { uiRegistry } from "@web/content/ui-registry";
 import { ui } from "@web/content/landing";
 import { interpolate } from "@web/lib/interpolate";
 import { publicSource, uiBlocks } from "@web/lib/ui-registry";
+import {
+  DEFAULT_UI_THEME,
+  themeCommand,
+  themeRules,
+  UI_THEMES,
+} from "@web/lib/ui-themes";
 import type { UiBlock } from "@web/lib/ui-registry";
 
 export function getStaticPaths() {
@@ -33,6 +45,15 @@ const { block } = Astro.props;
 const copy = uiRegistry.block;
 const command = `npx shadcn@latest add @saasaloy/${block.name}`;
 const code = publicSource(block);
+const { switcher } = uiRegistry;
+const dotCss = UI_THEMES.map((theme) =>
+  themeRules(theme, {
+    light: `[data-theme-sample="${theme.name}"]`,
+    dark: `.dark [data-theme-sample="${theme.name}"]`,
+  })
+).join("\n");
+const segmentClass =
+  "aria-pressed:bg-muted aria-pressed:text-foreground aria-pressed:border-highlight border-border text-muted-foreground hover:text-foreground focus-visible:outline-ring -ml-px inline-flex h-9 cursor-pointer items-center gap-2 border px-3 font-mono text-sm first:ml-0 focus-visible:relative focus-visible:outline-2 focus-visible:outline-offset-2";
 const tabClass =
   "aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:border-primary border-highlight text-highlight hover:bg-muted focus-visible:outline-ring -mb-px h-10 cursor-pointer border px-6 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2";
 ---
@@ -42,6 +63,7 @@ const tabClass =
   description={block.description}
   current="blocks"
 >
+  <style is:inline set:html={dotCss}></style>
   <main
     id="main"
     tabindex="-1"
@@ -106,6 +128,52 @@ const tabClass =
         aria-labelledby="tab-preview"
         class="border-border mt-6 border"
       >
+        <div
+          class="border-border flex flex-wrap items-center gap-3 border-b px-4 py-3"
+          data-ui-switcher
+          data-default={DEFAULT_UI_THEME}
+        >
+          <span id="theme-label" class="text-foreground text-sm font-medium">
+            {switcher.label}
+          </span>
+          <div
+            role="group"
+            aria-labelledby="theme-label"
+            class="hidden sm:flex"
+          >
+            {UI_THEMES.map((theme) => (
+              <button
+                type="button"
+                class={segmentClass}
+                aria-pressed={
+                  theme.name === DEFAULT_UI_THEME ? "true" : "false"
+                }
+                data-theme-choice={theme.name}
+              >
+                <span
+                  data-theme-sample={theme.name}
+                  class="bg-primary border-border size-3 rounded-full border"
+                  aria-hidden="true"
+                />
+                {theme.name}
+              </button>
+            ))}
+          </div>
+          <select
+            aria-labelledby="theme-label"
+            class="border-border bg-background text-foreground focus-visible:outline-ring h-9 flex-1 border px-3 font-mono text-sm focus-visible:outline-2 sm:hidden"
+            data-theme-select
+          >
+            {UI_THEMES.map((theme) => (
+              <option
+                value={theme.name}
+                selected={theme.name === DEFAULT_UI_THEME}
+              >
+                {theme.name}
+              </option>
+            ))}
+          </select>
+        </div>
         <iframe
           src={`/ui/preview/${block.name}`}
           title={interpolate(copy.previewTitle, { name: block.name })}
@@ -147,12 +215,28 @@ const tabClass =
       </div>
     </div>
 
-    <CommandField
-      command={command}
-      size="lg"
-      className="max-w-none"
-      client:visible
-    />
+    <div class="flex flex-col gap-3">
+      {UI_THEMES.map((theme) => (
+        <div
+          data-theme-command={theme.name}
+          hidden={theme.name !== DEFAULT_UI_THEME}
+        >
+          <CommandField
+            command={themeCommand(theme)}
+            size="lg"
+            className="max-w-none"
+            client:visible
+          />
+        </div>
+      ))}
+      <CommandField
+        command={command}
+        size="lg"
+        className="max-w-none"
+        client:visible
+      />
+      <p class="text-muted-foreground text-sm">{switcher.note}</p>
+    </div>
 
     <div class="border-border bg-card flex flex-col gap-2 border px-5 py-4 text-sm">
       <!-- prettier-ignore -->
@@ -235,6 +319,53 @@ const tabClass =
         fit();
       });
     }
+
+    // The theme switcher. Every preview frame follows the attribute on this page's <html>.
+    const STORAGE_KEY = "saasaloy-ui-preview-theme";
+    const switcherNode = document.querySelector("[data-ui-switcher]");
+    const choices = [...document.querySelectorAll("[data-theme-choice]")];
+    const names = new Set(choices.map((choice) => choice.dataset.themeChoice));
+    const themeSelect = document.querySelector("[data-theme-select]");
+    function pick(name, remember) {
+      if (!names.has(name)) {
+        return;
+      }
+      document.documentElement.dataset.uiPreviewTheme = name;
+      for (const choice of choices) {
+        choice.setAttribute(
+          "aria-pressed",
+          String(choice.dataset.themeChoice === name)
+        );
+      }
+      if (themeSelect) {
+        themeSelect.value = name;
+      }
+      for (const node of document.querySelectorAll("[data-theme-command]")) {
+        node.hidden = node.dataset.themeCommand !== name;
+      }
+      if (remember) {
+        try {
+          localStorage.setItem(STORAGE_KEY, name);
+        } catch {
+          // Storage can be off; the pick still holds for this page.
+        }
+      }
+    }
+    let stored = null;
+    try {
+      stored = localStorage.getItem(STORAGE_KEY);
+    } catch {
+      stored = null;
+    }
+    pick(stored ?? switcherNode?.dataset.default ?? "", false);
+    for (const choice of choices) {
+      choice.addEventListener("click", () =>
+        pick(choice.dataset.themeChoice, true)
+      );
+    }
+    themeSelect?.addEventListener("change", () =>
+      pick(themeSelect.value, true)
+    );
 
     // Copy the code. Without clipboard access, select it so the reader can copy by hand.
     const copyButton = document.querySelector("[data-copy-code]");

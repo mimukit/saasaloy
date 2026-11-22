@@ -10,10 +10,11 @@ import type { APIRoute } from "astro";
 import { loadDocs } from "@web/lib/docs";
 import { uiBlocks } from "@web/lib/ui-registry";
 
-// The Saasaloy UI index and each block page. The preview frames are `noindex`.
+// The Saasaloy UI index, the themes page and each block page. The preview frames are `noindex`.
 const PATHS = [
   "/",
   "/ui",
+  "/ui/themes",
   ...uiBlocks().map((block) => `/ui/blocks/${block.name}`),
 ];
 

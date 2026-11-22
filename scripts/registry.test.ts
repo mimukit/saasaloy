@@ -13,7 +13,10 @@
 //     `components/ui/` (they match upstream base-nova, which is why the items name them by
 //     their shadcn name), and a tsconfig whose `@/*` path points at the fixture. It runs the
 //     repo's own `tsc`. The fixture sits under apps/web/node_modules/.cache, so `react`,
-//     `lucide-react` and `@base-ui/react` resolve from apps/web.
+//     `lucide-react` and `@base-ui/react` resolve from apps/web;
+//   - each theme in packages/cli/templates/themes/ is a `registry:theme` item,
+//     `theme-<name>`, whose `cssVars` name only the variables the template's brand.css
+//     declares, so shadcn merges it in place, and `theme-neutral` equals brand.css.
 //
 // Run it with `pnpm test:scripts`.
 
@@ -53,6 +56,28 @@ interface Item {
   dependencies?: string[];
   registryDependencies?: string[];
   files?: { path: string; type: string; target?: string; content?: string }[];
+  cssVars?: Record<string, Record<string, string>>;
+}
+
+const THEME_NAMES = readdirSync(
+  join(REPO_ROOT, "packages/cli/templates/themes")
+)
+  .filter((name) => name.endsWith(".json"))
+  .map((name) => name.replace(/\.json$/, ""))
+  .toSorted();
+
+/** The `--name: value;` declarations of one rule of the template's brand.css. */
+function brandDeclarations(selector: string): Record<string, string> {
+  const css = readFileSync(join(TEMPLATE_UI, "src/styles/brand.css"), "utf-8");
+  const escaped = selector.replaceAll(".", "\\.");
+  const body =
+    new RegExp(`^${escaped}\\s*\\{([\\s\\S]*?)^\\}`, "m").exec(css)?.[1] ?? "";
+  return Object.fromEntries(
+    [...body.matchAll(/^\s*--([\w-]+):\s*([^;]+);/gm)].map((match) => [
+      match[1] ?? "",
+      (match[2] ?? "").trim(),
+    ])
+  );
 }
 
 let out = "";
@@ -159,6 +184,47 @@ describe("registry", () => {
         }
       }
     }
+  });
+
+  it("ships each theme as a registry:theme item named theme-<name>", () => {
+    assert.deepEqual(THEME_NAMES, ["cobalt", "ember", "moss", "neutral"]);
+    const index = JSON.parse(
+      readFileSync(join(out, "registry.json"), "utf-8")
+    ) as { items: { name: string; type: string }[] };
+    for (const name of THEME_NAMES) {
+      const item = items.find((one) => one.name === `theme-${name}`);
+      assert.ok(item, `theme-${name} is missing`);
+      assert.equal(item.type, "registry:theme");
+      assert.ok(registryItemSchema.safeParse(item).success);
+      assert.ok(
+        index.items.some(
+          (one) => one.name === `theme-${name}` && one.type === "registry:theme"
+        ),
+        `the index does not list theme-${name}`
+      );
+    }
+  });
+
+  it("merges every theme into brand.css in place: the same variables, light and dark", () => {
+    const root = brandDeclarations(":root");
+    const dark = brandDeclarations(".dark");
+    for (const name of THEME_NAMES) {
+      const vars = items.find((one) => one.name === `theme-${name}`)?.cssVars;
+      assert.deepEqual(Object.keys(vars ?? {}).toSorted(), ["dark", "light"]);
+      assert.deepEqual(
+        Object.keys(vars?.light ?? {}).toSorted(),
+        Object.keys(root).toSorted(),
+        `theme-${name} light`
+      );
+      assert.deepEqual(
+        Object.keys(vars?.dark ?? {}).toSorted(),
+        Object.keys(dark).toSorted(),
+        `theme-${name} dark`
+      );
+    }
+    const neutral = items.find((one) => one.name === "theme-neutral")?.cssVars;
+    assert.deepEqual(neutral?.light, root);
+    assert.deepEqual(neutral?.dark, dark);
   });
 
   it("typechecks the inlined blocks in a fixture", () => {

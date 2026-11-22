@@ -137,6 +137,11 @@ export interface SaasaloyConfig {
    * existed still validates; `readTestingMode` reads an absent key as `off`.
    */
   testing?: { mode: TestingMode };
+  /**
+   * The project's Saasaloy UI theme (plan 0121), written by `saasaloy init --theme=<name>`
+   * when it is not `neutral`. Optional: `readTheme` reads an absent key as `neutral`.
+   */
+  theme?: string;
   installed: string[];
 }
 

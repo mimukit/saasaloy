@@ -46,7 +46,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 ## `saasaloy init`
 
 ```text
-saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>]
+saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>] [--theme=<neutral|cobalt|ember|moss>]
 ```
 
 `<name>` may be a bare name (`my-app`), `.` for the current directory, or a path
@@ -56,12 +56,15 @@ match `^[a-z0-9][a-z0-9-]*$`. Omit it and the CLI prompts.
 | Flag | Effect |
 |---|---|
 | `--force` | scaffold into a directory that already has files in it. Without it, a non-empty target cancels with exit 2. A `.git` directory alone does not count as non-empty. |
-| `--yes`, `-y` | answer the "Install dependencies now?" prompt with yes: run `pnpm install` with no prompt. Passing it with `--no-install` exits 2. |
+| `--yes`, `-y` | answer the "Install dependencies now?" prompt with yes: run `pnpm install` with no prompt. Passing it with `--no-install` exits 2. With no `--theme` flag it also takes the `neutral` theme without asking. |
 | `--no-install` | skip the "Install dependencies now?" prompt and never run `pnpm install`. |
 | `--no-git` | do not run `git init` in the new project, and make no commit. |
 | `--testing=<mode>` | the project's [testing mode](#saasaloy-testing): `off`, `tests-after` or `tdd`. An unknown value exits 2 before anything is written. |
+| `--theme=<name>` | the [Saasaloy UI](https://saasaloy.com/ui/themes) theme written into `packages/ui/src/styles/brand.css`: `neutral` (the default), `cobalt`, `ember` or `moss`. An unknown value exits 2 before anything is written and lists the names. |
 
 `init` always writes `testing.mode` into `saasaloy.json`, and fills the testing block in the root `AGENTS.md` for that mode. With no `--testing` flag, an attended run (a terminal on stdin and stdout) asks once, and a run with no terminal writes `off`. `off` is the opt-in default, not a guess.
+
+A theme changes the colour tokens and the radius only. `init` writes the chosen theme's `:root` and `.dark` values and `--radius` into `brand.css`, names the theme in `apps/web/DESIGN.md`, and records the matching token fingerprint there (ADR 0027). A theme other than `neutral` is recorded as `theme` in `saasaloy.json`, so a later render writes the same bytes. With no `--theme` flag, an attended run asks once with `neutral` first, and `--yes` or a run with no terminal writes `neutral`. The theme files live in `packages/cli/templates/themes/`, the same files that the Saasaloy UI registry publishes as `theme-<name>`.
 
 `init` runs `git init` in the scaffolded project before the install, because husky's
 `prepare` script installs its hooks during `pnpm install` and needs a repository to install

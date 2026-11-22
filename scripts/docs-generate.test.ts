@@ -49,6 +49,7 @@ function copyOfInputs(): string {
     "packages/cli/src/commands",
     "packages/cli/src/lib/exit.ts",
     "packages/cli/src/lib/testing.ts",
+    "packages/cli/src/lib/theme.ts",
     "packages/cli/src/lib/new-module.ts",
   ]) {
     mkdirSync(join(copy, path, ".."), { recursive: true });
