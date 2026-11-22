@@ -10,7 +10,7 @@ A scaffolded project knows nothing about the product it is going to become. Its 
 So this skill asks once and writes the answers down. It writes two files and two code facts:
 
 - **`docs/product-brief.md`**: the ten landing answers, and the run settings `autonomy` and `deploy` in its frontmatter.
-- **`docs/product-spec.md`**: the product part. The modules, one table for each entity, the wishes that are not in this build, and the steps that stay with the owner. Its headings are fixed by [`product-spec-template.md`](product-spec-template.md), which sits beside this file.
+- **`docs/product-spec.md`**: the product part. The modules the owner approved, each with its reason, one table for each entity, the wishes that are not in this build, and the steps that stay with the owner. Its headings are fixed by [`product-spec-template.md`](product-spec-template.md), which sits beside this file.
 - The product's name and its locale, in `packages/config/src/project.ts`.
 
 Use the owner's opening description and ask only for missing facts and decisions. The product read-back confirms the brief, the spec and the screens. After product approval, start the design review. Design approval starts the unattended build unless the owner requests an attended build.
@@ -39,7 +39,7 @@ Nothing else. You are not here to write the landing page, add a module or a depe
 4. **Stop when there is no brief and no person.** You have no brief when neither location holds one. You have no person when the prompt says nobody is at the keyboard, or when you run with no way to ask a question (a headless run, such as `claude -p`). A headless run whose prompt says the owner is here and answers your questions has a person: ask each question in text, end your turn, and read the answer in the next message. Without a person, ask nothing and write nothing. Say this, and stop: "No product brief exists and nobody is here to answer the interview. Run /saasaloy-setup with the owner present, or supply a brief with `autonomy: afk` in its frontmatter." Never invent the answers yourself. A brief without `autonomy: afk` and no person is the same case: say "The brief has no `autonomy: afk`, and nobody is here to confirm it", and stop.
 5. **Read `packages/config/src/project.ts`** for the current `app.name`. It ships commented out, so the name is still the base's `"Saasaloy"` until someone sets it. When it is set, it is the best opening guess you have, and it belongs in question 1's samples. The project's directory name is the next best guess.
 6. **Look at git, and treat it as advice.** Run `git status --short` if there is a repo. A dirty tree or no repo at all is worth one sentence ("your changes aren't committed, so you can't undo this with git; every write here is previewed in the read-back anyway"), and then you carry on. `saasaloy init` creates the repository and commits the scaffold on `main`, unless it ran with `--no-git` or found no git identity. The build's Intake stage makes that commit when `init` could not. **Neither state is a reason to stop.**
-7. **Read the module list once**, for question 13: run `saasaloy list --json`, and keep `modules[]`. Each module has `name`, `description`, `stage`, `needs`, `dependsOn`, `requiresOneOf` and `conflictsWith`.
+7. **Read the module list once**, for question 13: run `saasaloy list --json`, and keep `modules[]`. Each module has `name`, `description`, `stage`, `needs`, `dependsOn`, `requiresOneOf` and `conflictsWith`. Read [`module-triggers.md`](module-triggers.md) beside this file too. No module is fixed: the build installs only the modules the owner approves.
 8. **Check whether the agent can generate mockup images.** If the tool is unavailable, tell the owner that the design review can use supplied images or an approved preset.
 9. **Say how long this takes and what it is for**, in two lines, before the questions: up to thirteen interview questions, then product approval, then design approval. The unattended build starts after design approval. An owner who does not know why answers thinly.
 
@@ -70,9 +70,9 @@ Write the brief after question 10, as [Step 2](#step-2--write-the-brief-and-the-
 
 | # | Dimension | What you are actually after |
 |---|-----------|----------------------------|
-| 11 | **Entities** | The things the product's user makes, tracks or reads. You propose one table for each entity, and the owner corrects it. See [Propose the entities](#propose-the-entities). |
-| 12 | **Order** | Which entity the build makes first, second, and so on. The build makes every entity, in this order. |
-| 13 | **Capabilities** | Which optional modules the product needs, from `saasaloy list --json`. See [The capabilities question](#the-capabilities-question). |
+| 11 | **Entities** | The things the product's user makes, tracks or reads. You propose one table for each entity, and the owner corrects it. A product with no signed-in part has none. See [Propose the entities](#propose-the-entities). |
+| 12 | **Order** | Which entity the build makes first, second, and so on. The build makes every entity, in this order. Skip it with fewer than two entities. |
+| 13 | **Capabilities** | Which modules the product needs. You derive the list from the answers with `module-triggers.md`, give a reason for each module, and the owner approves it. See [The module proposal](#the-module-proposal). |
 
 Then give the [read-back](#the-read-back). It confirms the scope before the design review.
 
@@ -150,15 +150,17 @@ Ask where the primary call to action should go. Three answers to expect:
 
 Question 11 is a proposal, not a blank question. Read the answers to questions 3 to 6, and write one table for each entity the product's user makes, tracks or reads. Propose two to four entities. The owner corrects them: a field, a rule, an action, an entity to add or to drop. There is no limit on the number of entities the owner keeps.
 
+An MVP can be the landing page only. When the answers describe no signed-in product yet, such as a waitlist before launch, say so and offer "No signed-in product yet: landing page only" as one of the samples. When the owner takes it, the spec's `## Entities` holds `None.`, and you skip question 12.
+
 Each table has the five rows of `product-spec-template.md`, in its order:
 
 | Part | What you write |
 |------|----------------|
 | Table | The table name, plural snake_case: `books`, `reading_sessions`. |
 | Fields | Each field as `` `name` type ``, with `required` when a row cannot exist without it. Leave out `id`, the owner column and the timestamps: every table gets them. |
-| Who may see it | One of three rules: `the owner` (the user who made the row), `the organization` (every member of the active organization), or `every signed-in user reads, the owner writes`. Add what staff see in `admin`: a read-only list of every row. |
+| Who may see it | One of three rules: `the owner` (the user who made the row), `the organization` (every member of the active organization), or `every signed-in user reads, the owner writes`. When the module list holds `admin`, add what staff see there: a read-only list of every row. |
 | Actions | Always `` `list` ``, `` `create` `` and `` `update` ``, then each domain verb by name, such as `` `finish` ``, `` `archive` `` or `` `approve` ``. A delete is a domain verb too, so name `` `delete` `` only when the owner wants one. |
-| Screens | Always the same four parts: an app list, an app detail, an app create and update form, and an admin read-only list. Name the parts: `data-table`, `detail-panel`, `form` and `field`. |
+| Screens | Always the app list, the app detail and the app create and update form. Add an admin read-only list only when the module list holds `admin`. Name the parts: `data-table`, `detail-panel`, `form` and `field`. |
 
 Use only these field types, so `saasaloy-feature` can map each one to a column and a control:
 
@@ -185,29 +187,30 @@ Show the proposal as the tables, then ask with three samples: take the tables as
 > |------|-------|
 > | Table | `books` |
 > | Fields | `title` text, required; `author` text, required; `status` one of `want`, `reading`, `finished`, required; `finished_on` date; `rating` number |
-> | Who may see it | the owner; staff read every row in admin |
+> | Who may see it | the owner |
 > | Actions | `list`, `create`, `update`, `finish` |
-> | Screens | app: list (`data-table`), detail (`detail-panel`), create and update form (`form`, `field`); admin: read-only list (`data-table`) |
+> | Screens | app: list (`data-table`), detail (`detail-panel`), create and update form (`form`, `field`) |
 >
 > a. Build these as written.
 > b. Change a part: name the entity and the row, such as "books: no rating".
 > c. Add or drop an entity, such as "add notes on a book".
 > Or write your own.
 
-An entity the owner wants that needs a module the MVP lacks, such as an entity of the organization, adds that module to question 13's recommendation (`teams`, `multitenant` and `api-keys-organization` for `the organization`).
+The entities decide part of question 13. An entity adds the modules that build it (row 1 of `module-triggers.md`), and an entity of the organization adds `teams`, `multitenant` and `api-keys-organization` (row 7). When question 13 adds `admin` later, add the admin read-only list to each entity's `Screens` and `Who may see it` rows before the read-back.
 
-### The capabilities question
+### The module proposal
 
-Question 13 offers the optional modules. Take the choices from the `modules[]` you read in Step 0, never from memory. When `saasaloy list --json` failed, tell the owner its message, which names the fix (such as `GITHUB_TOKEN` for the rate limit), and ask again once it runs.
+Question 13 is a proposal, not a pick from a fixed list. No module is fixed, and the floor is the base template's landing page. Take each module from the `modules[]` you read in Step 0, never from memory. When `saasaloy list --json` failed, tell the owner its message, which names the fix (such as `GITHUB_TOKEN` for the rate limit), and ask again once it runs.
 
-Build the choices in four steps:
+Build the proposal in five steps:
 
-1. **Leave out the MVP set** the build always adds: `database`, `api`, `logger`, `validators`, `shell`, `auth`, `app`, `admin`, `email`, `agent`, `api-keys`, `api-keys-user`, and their drivers and providers.
-2. **Leave out the drivers and providers.** A driver or provider is a module that another module's `requiresOneOf` names, or a `<capability>-<vendor>` module that depends on its capability, such as `email-plunk` or `payment-console`. The build picks those.
-3. **Leave out the tooling modules** `ci`, `infra-ci-deploy` and `e2e`. They change how the project is built and checked, not what the product does.
-4. **Offer the rest**, each with its `description`, grouped by `stage`. Recommend the ones the earlier answers call for, and say which answer each comes from: paid tiers in question 9 call for `subscription` or `payment`; an audience that is a team calls for `teams`; an entity of the organization calls for `teams`, `multitenant` and `api-keys-organization`, which the build installs in place of `api-keys-user` because a user's key acts for no organization and every organization route would refuse it; a waitlist destination in question 10 calls for `waitlist`.
+1. **Apply `module-triggers.md`.** Read each row against the answers and the entities. Write the modules each clear row adds, with the reason the row gives, in the owner's words.
+2. **Ask about each unclear row.** When the answers neither call for a row's modules nor rule them out, ask one question about it in this proposal. Give the module and its reason as one sample and leaving it out as another. Never assume. Users other than the owner are app users, so they do not call for `admin`. Only staff work on other users' data, or a pick that depends on `admin`, does.
+3. **Resolve the list.** Run `saasaloy add <modules...> --dry-run --json` with the picks and their local providers. It writes nothing. Mark each module it adds through `dependsOn` as "needed by `<pick>`", so the owner approves the same list the build installs. Never write a reason of your own for such a module.
+4. **Offer the other modules.** List each module of `modules[]` that is not in the proposal, with its `description`, grouped by `stage`. Leave out the drivers and providers (a module that another module's `requiresOneOf` names, or a `<capability>-<vendor>` module such as `email-plunk`) and the tooling modules `ci`, `infra-ci-deploy` and `e2e`.
+5. **Ask once.** Show the proposal as one table: module, stage, and the reason or "needed by". Use three samples: take the list as written, drop a named module, or add a named module. When the owner drops a module that a pick or an entity needs, name what needs it and ask once more. When the owner drops `email` from a product with sign-in, say: "Without email, users cannot reset a password."
 
-Ask with three samples: the recommended set, nothing beyond the MVP, and a different set the owner names.
+An empty list is a valid answer. It means the build ships the landing page only.
 
 When a pick depends on a capability with providers, write that capability's local provider beside the pick in the spec: the provider whose name ends in `-console`, or in `-memory` when no `-console` provider exists. `subscription` pulls in `queue`, so it brings `subscription-console` and `queue-memory`.
 
@@ -220,8 +223,8 @@ When a pick depends on a capability with providers, write that capability's loca
 Once the brief and spec are complete, write them to disk and show the owner:
 
 1. The ten brief answers. Mark each `weak:` answer and state which claim the copy will omit.
-2. The default and optional modules, including local providers.
-3. Each entity in build order, with its fields, access rule, actions and screens. Name the MCP scopes for those actions.
+2. The module list, including local providers, with the reason or "needed by" for each module. Say that the build installs these modules and no others. With an empty list, say that the build ships the landing page only. When the owner dropped `email` from a product with sign-in, repeat the password reset warning.
+3. Each entity in build order, with its fields, access rule, actions and screens. When the list holds `agent`, name the MCP scopes for those actions. With no entity, say so.
 4. The excluded requests and the owner tasks, including deployment.
 
 Ask: **Approve the product brief and spec and start design?** If the owner requests a change, update the files and present them again. On approval, change accepted `weak:` tags to `weak-accepted:` before you record the approval. The design review owns the next decision. Keep `autonomy` unset while that decision is pending.
@@ -293,7 +296,8 @@ Three rules about this file:
 
 `docs/product-spec.md` is the second file. Copy `product-spec-template.md` from this skill's folder and fill it. Its `##` headings are fixed, in this order: `## Modules`, `## Entities`, `## Not in this build` and `## Left for the owner`. Each entity is a `### <n>. <Entity name>` heading under `## Entities`, in the owner's order, with one table whose rows are `Table`, `Fields`, `Who may see it`, `Actions` and `Screens`. `saasaloy-build` and `saasaloy-feature` read these names, so never rename one, drop one, or add another `##` heading.
 
-- **`## Modules`** lists each pick of question 13 and each local provider it brings, one row each, with its `stage` from `saasaloy list --json` and the answer it comes from. It does not list the MVP set. With no picks, write one row: `| None. | | |`.
+- **`## Modules`** lists every module the owner approved in question 13 and each local provider it brings, one row each, with its `stage` from `saasaloy list --json` and its reason: the answer it comes from, or `needed by <pick>`. The build installs these modules and no others. With an empty list, write one row: `| None. | | |`.
+- **`## Entities`** holds `None.` when the owner chose a landing page only.
 - **`## Not in this build`** and **`## Left for the owner`** hold one list item each, or `- None.`
 
 Write the spec after question 13, and again after the read-back.

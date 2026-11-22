@@ -2,7 +2,7 @@
 
 An AI coding agent can build a Saasaloy MVP for you in one session. Describe your product and answer the remaining questions. Approve the product brief and spec first. Then approve the design and mockup images. The agent builds without further questions and leaves a seeded local app on a branch you review.
 
-The MVP it builds is the README's "Build the MVP" row: sign-in through the customer `app`, an `admin` app, transactional email through the console provider, access for AI agents (the `agent` module, with `api-keys` and `api-keys-user`, or `api-keys-organization` when an entity belongs to the organization), landing copy from your answers, and every entity of your product from the database to the screen. The modules you pick in the interview come on top.
+No module list is fixed. The smallest MVP is the landing page with copy from your answers. The agent proposes each module from your answers and gives the reason for it, and you approve the list. A product with entities usually gets sign-in through the customer `app`, transactional email through the console provider, and access for AI agents (`agent` with `api-keys` and `api-keys-user`). It gets an `admin` app only when staff work needs one, or when a module you pick depends on it.
 
 ## 1. Give the prompt
 
@@ -25,7 +25,7 @@ The agent runs the `saasaloy-setup` skill. It uses the facts in your description
 | 1 to 10 | name, language, audience, problem, current alternative, differentiator, proof, tone, pricing, and where "sign up" goes | `docs/product-brief.md` |
 | 11 | the entities: the agent proposes one table for each thing your user makes, tracks or reads (its fields, who may see it, its actions), and you correct it | `docs/product-spec.md` |
 | 12 | the order to build the entities in | `docs/product-spec.md` |
-| 13 | the optional modules, such as `teams` or `subscription`, from `saasaloy list --json` | `docs/product-spec.md` |
+| 13 | the module proposal: each module derived from your answers, with its reason, for you to approve | `docs/product-spec.md` |
 
 The agent never invents a price, a proof, a customer name or a URL. "No proof yet" and "no pricing yet" are good answers. When an answer stays thin after two follow-ups, the agent records it and says what the copy will leave out.
 
@@ -36,8 +36,8 @@ A module that needs an account you do not have yet, such as Stripe, gets its loc
 The interview ends with one message that shows everything at once:
 
 - the brief, with each thin answer marked;
-- the module list;
-- each entity with its screens: the app list, the app detail, the create and update form, and the admin list;
+- the module list, with the reason for each module; the build installs these modules and no others;
+- each entity with its screens: the app list, the app detail, the create and update form, and the admin list when the list holds `admin`;
 - the wishes this build leaves out;
 - the steps that stay with you.
 
@@ -59,8 +59,8 @@ Keep the approved images accessible if you resume on another machine. You can gi
 |---------|---------------|
 | `## Intake` | the brief and spec checks, the env step, the testing mode, and each wish that is not in this build |
 | `## Brand` | the product name and locale, the landing copy and the approved design or preset |
-| `## Validate` | the database, api, logger and validators modules, and your picks of that stage |
-| `## MVP` | `shell`, `auth`, `app`, `admin`, `email`, `email-console`, `agent`, `api-keys` and `api-keys-user` (`api-keys-organization` in its place when an entity belongs to the organization), and your other picks |
+| `## Validate` | the approved modules of the `validate` stage, such as `database`, `api` and `waitlist` |
+| `## MVP` | the other approved modules, such as `auth`, `app`, `email` and `agent` |
 | `## Feature: <table>` | one section for each entity of the spec, in your order |
 | `## Blocked` | what stopped the build, when something did |
 | `## Left for a human` | each step only you can take |
@@ -82,12 +82,12 @@ The work sits on the `build/mvp` branch, one commit per stage and one per entity
    ```
 
    The reset mail prints in the api's terminal, because `email-console` writes mail there.
-4. Sign in to `http://localhost:3001` as the seeded admin. `pnpm db:seed` prints its password.
+4. With `admin` installed, sign in to `http://localhost:3001` as the seeded admin. `pnpm db:seed` prints its password.
 5. Merge the branch when you are happy with it.
 
 ## Start from a brief you already have
 
-A brief written earlier still works. Put it in the empty folder as `product-brief.md`, with `autonomy: afk` in its frontmatter, and a `product-spec.md` beside it if you have one. Then say "The product brief is in ./product-brief.md" in the prompt. The agent runs `init` and the build with no interview. With no spec it builds the MVP set on `database-postgres` and one entity from the brief.
+A brief written earlier still works. Put it in the empty folder as `product-brief.md`, with `autonomy: afk` in its frontmatter, and a `product-spec.md` beside it if you have one. Then say "The product brief is in ./product-brief.md" in the prompt. The agent runs `init` and the build with no interview. With no spec it derives the modules from the brief, logs the reason for each one, and leaves an unclear module for you under `## Left for a human`.
 
 This is also the one case that runs headless, because no question is left to ask:
 

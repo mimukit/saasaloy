@@ -14,7 +14,7 @@ The build stops at a running, seeded, tested local app. A deploy, a vendor accou
 The setup skill confirms the brief and spec with the owner. The design skill confirms the design and starts this skill in the same session. The build uses those approved inputs.
 
 - **`docs/product-brief.md`**. It must be complete. `saasaloy-setup`, "Unattended run", defines complete: all ten answers present and filled, none tagged `weak:`. An answer tagged `weak-accepted:` counts as filled. Its frontmatter holds the run settings: `autonomy` and `deploy` (`preview` or `none`; a brief with no `deploy` field reads as `none`).
-- **`docs/product-spec.md`**: the modules the owner picked, one table for each entity in the owner's order, the wishes that are not in this build, and the steps left for the owner. Its `##` headings and the rows of each entity table are fixed by `.agents/skills/saasaloy-setup/product-spec-template.md`. A brief written before the spec existed has none: then the build adds the MVP set on `database-postgres` and builds one entity, as [Without a spec](#without-a-spec) says.
+- **`docs/product-spec.md`**: the modules the owner approved, each with its reason, one table for each entity in the owner's order, the wishes that are not in this build, and the steps left for the owner. Its `##` headings and the rows of each entity table are fixed by `.agents/skills/saasaloy-setup/product-spec-template.md`. A brief written before the spec existed has none: then the build derives the modules from the brief, as [Without a spec](#without-a-spec) says.
 - **`docs/product-design.md` and `docs/product-approvals.json`** hold the approved design and approval record. They are required for briefs marked `setup-review: required`.
 - **The env values are optional.** A missing `packages/env/.env` reads as an empty file, so `pnpm env:setup` writes the local default of each key in `packages/env/.env.example`. A person who has values puts them in `packages/env/.env`, or in a dotenv file beside the brief (`./env` or `./.env.local`).
 
@@ -63,8 +63,8 @@ Run them in this order. Each one ends with [The stage gate](#the-stage-gate).
 |-------|-------------|--------------|--------------------|
 | Intake | `## Intake` | makes the first commit, moves the brief, checks the brief and the spec, loads the env, opens the branch | `saasaloy-setup`, `saasaloy-env` |
 | Brand | `## Brand` | name, locale, landing copy, theme | `saasaloy-setup`, `saasaloy-landing-copy`, `saasaloy-design` |
-| Validate | `## Validate` | the modules whose `stage` is `validate`, and the spec's picks of that stage | each module's skill |
-| MVP | `## MVP` | the modules whose `stage` is `mvp`, and the spec's other picks | each module's skill |
+| Validate | `## Validate` | the spec's modules whose `Stage` is `validate` | each module's skill |
+| MVP | `## MVP` | the spec's other modules | each module's skill |
 | Feature | `## Feature: <table>`, one for each entity | each entity of the spec end to end, in the spec's order, one commit each | `saasaloy-feature` |
 | Handover | `## Left for a human` | the steps only a person can take | none |
 
@@ -77,7 +77,7 @@ Run them in this order. Each one ends with [The stage gate](#the-stage-gate).
 5. **Check the spec.** When `docs/product-spec.md` exists, it must hold each `##` heading of `.agents/skills/saasaloy-setup/product-spec-template.md`: `## Modules`, `## Entities`, `## Not in this build` and `## Left for the owner`. Each entity under `## Entities` must have a table with the rows `Table`, `Fields`, `Who may see it`, `Actions` and `Screens`. List each missing heading or row under `## Blocked` (`- Product spec: books has no Actions row`), and stop. Install no module. When the spec does not exist, note `- No product spec; the build follows "Without a spec".` for the log, and carry on.
 6. **Note each wish that is not in this build.** Take one log line for each item of the spec's `## Not in this build`: `- Not in this build: <the wish>.`
 7. **Load the env values.** When the person left a dotenv file beside the brief, run `saasaloy env --from-file <that file>`. It takes each key a module declares or `packages/env/.env.example` lists, such as `PUBLIC_SITE_URL`, and refuses the whole file on any other key. Never pass a secret with `--set`, which leaves it in shell history, and never invent a value. Then run `pnpm env:setup`. With no file, `pnpm env:setup` alone writes the local defaults.
-8. **Set the testing mode.** The MVP needs a route test. When the `<!-- saasaloy:testing -->` block in `AGENTS.md` says `off`, run `saasaloy testing tests-after` and log it.
+8. **Set the testing mode.** An entity needs a route test. When the spec has at least one entity and the `<!-- saasaloy:testing -->` block in `AGENTS.md` says `off`, run `saasaloy testing tests-after` and log it.
 9. **Open the branch.** Run `git switch build/mvp`, or `git switch -c build/mvp` when it does not exist.
 10. **Start the log.** Use `docs/build-log.md` with a `# Build log` title and an `## Intake` section that lists what this stage did, with the lines of steps 5 and 6.
 
@@ -87,31 +87,22 @@ Set `app.name` and `app.locale` with `saasaloy-setup` and write the landing copy
 
 ### Stage: Validate and Stage: MVP
 
-Pick the modules from data, never from memory:
+Install the modules the owner approved, and no others. No module is fixed: an MVP can be the landing page only. A module's `stage` in `saasaloy list --json` never adds it to the build.
 
-```sh
-saasaloy list --json
-```
+Read the spec's `## Modules` table. With no spec, derive the table first, as [Without a spec](#without-a-spec) says. Check each name against `saasaloy list --json`. For the Validate stage keep each row whose `Stage` is `validate`, and for the MVP stage each other row (`mvp`, `teams`, `money`, `scale`). Then apply these rules in order:
 
-Read `modules[]`. For the Validate stage keep each module whose `stage` is `validate`, and for the MVP stage each one whose `stage` is `mvp`. Then apply these rules in order:
-
-1. **Drop a module with a non-empty `needs`.** `cloudflare-paid`, `stripe`, `domain` and `vendor-account` each need a person with an account. Log each dropped module and its `needs` under `## Left for a human`.
+1. **Drop a module with a non-empty `needs`.** `cloudflare-paid`, `stripe`, `domain` and `vendor-account` each need a person with an account, so add its capability's local provider instead (rule 3). Log each dropped module and its `needs` under `## Left for a human`. `saasaloy-setup` already wrote the spec that way, so this only guards a hand-edited spec.
 2. **Pick `database-postgres` for `database`.** It is the only driver. A module in another module's `conflictsWith` list is never added beside it.
-3. **Pick one provider per other capability, the local one.** `logger-console` for `logger`, `email-console` for `email`: the provider whose name ends in `-console`, or in `-memory` when no `-console` provider exists.
-4. **Drop the optional extras the spec does not pick:** `waitlist` (the MVP has a real sign-up), `e2e` (it needs a browser download), `email-react`, `command`, `notification`, `auth-phone` (it pulls in `sms`, `ratelimit` and `kv`), `ci` and `infra-ci-deploy` (they set up a person's GitHub and Cloudflare deploy). Add one only when the spec's `## Modules` names it.
-5. **Add the agent set to the MVP stage: `agent`, `api-keys` and `api-keys-user`.** Every built product is usable by AI agents: `agent` serves an OpenAPI document, an MCP server and an `llms.txt` from the route statements, and an agent signs in with a user's key. `api-keys` and `api-keys-user` stay `scale` modules in `saasaloy list --json`; name them in the MVP stage's call anyway, as you name `database-postgres`. When the spec's `## Modules` picks `api-keys-organization`, or any entity's `Who may see it` is `the organization`, name `api-keys-organization` in place of `api-keys-user`: the two conflict, and a user's key acts for no organization, so every route of an organization entity would refuse it and the entity would be closed to agents. Read `saasaloy-agent` after the add. Then add the scope word of each installed shipped read to the key vocabulary, because it ships empty and a key holds only words the vocabulary lists: `notifications: ["read"]` with `notification` and `files: ["read"]` with `file-uploads` in `API_KEY_SCOPES` (`packages/auth/src/api-key-scopes.ts`), or `project: ["read"]` in `statements` (`packages/auth/src/access.ts`) under `api-keys-organization`. `saasaloy-agent` lists each shipped read and its word.
-6. **Add the spec's picks.** Each module the spec's `## Modules` table names joins the stage of its `Stage` column: `validate` joins the Validate stage, and any other stage (`mvp`, `teams`, `money`, `scale`) joins the MVP stage. A pick with a non-empty `needs` is never added: add its capability's local provider instead (rule 3), and put the vendor step under `## Left for a human`. `saasaloy-setup` already wrote it that way, so this only guards a hand-edited spec.
-7. **Add the rest in one call per stage**: `saasaloy add <modules...> --yes`. Name the picked driver or provider in the list itself (`database-postgres`, `email-console`, `queue-memory`), and `add` resolves `dependsOn` and the `requiresOneOf` choice from it. Pass `--with <module>` only when `add` exits 2 and names an unmet choice: `add` also exits 2 on a `--with` that answers no open choice.
-
-For the MVP stage this gives `shell`, `auth`, `app`, `admin`, `email`, `email-console`, `agent`, `api-keys` and `api-keys-user`, on top of the Validate stage's `database`, `database-postgres`, `api`, `logger`, `logger-console` and `validators`.
-
-That sentence names the set with no picks. The spec's picks come on top, each in its stage.
+3. **Pick one provider per other capability, the local one.** `logger-console` for `logger`, `email-console` for `email`: the provider whose name ends in `-console`, or in `-memory` when no `-console` provider exists. Name it even when the spec leaves it out.
+4. **Follow the agent set when the spec holds it.** When the spec lists `agent`, read `saasaloy-agent` after the add. Then add the scope word of each installed shipped read to the key vocabulary, because it ships empty and a key holds only words the vocabulary lists: `notifications: ["read"]` with `notification` and `files: ["read"]` with `file-uploads` in `API_KEY_SCOPES` (`packages/auth/src/api-key-scopes.ts`), or `project: ["read"]` in `statements` (`packages/auth/src/access.ts`) under `api-keys-organization`. `saasaloy-agent` lists each shipped read and its word. When any entity's `Who may see it` is `the organization`, name `api-keys-organization` in place of `api-keys-user`: the two conflict, and a user's key acts for no organization.
+5. **Add the rest in one call per stage**: `saasaloy add <modules...> --yes`. Name the picked driver or provider in the list itself (`database-postgres`, `email-console`, `queue-memory`), and `add` resolves `dependsOn` and the `requiresOneOf` choice from it. Pass `--with <module>` only when `add` exits 2 and names an unmet choice: `add` also exits 2 on a `--with` that answers no open choice.
+6. **Skip an empty stage.** When a stage has no module, run no `add`. Write `- No module: the spec lists none for this stage.` in its section, and commit the log alone as the stage's commit. A spec whose `## Modules` is `None.` builds the landing page only.
 
 After each `add`, run these steps in this order, from the project root:
 
 1. **Install.** Run `pnpm install --no-frozen-lockfile`. `add` runs no install, and with `CI=1` a plain `pnpm install` refuses the lockfile that `add` changed.
 2. **Wire up.** Read each new module's skill and follow its Wire-up section when it has one. `add` prints which skills need it.
-3. **Generate the migrations.** When `packages/db/src/schema/` holds a table file, run `pnpm --filter @repo/db db:generate`. The Validate stage adds no table, so skip this step there: `db:generate` fails with "No schema files found" on an empty schema folder. The MVP stage's `auth` adds the first tables.
+3. **Generate the migrations.** When `packages/db/src/schema/` holds a table file, run `pnpm --filter @repo/db db:generate`. The Validate stage adds no table, so skip this step there: `db:generate` fails with "No schema files found" on an empty schema folder. The first module with a table, such as `auth` or `waitlist`, adds the first tables.
 4. **Set up the database.** Run `pnpm db:setup`. With no migration it exits 0 and says so. On Postgres it also writes `DATABASE_URL` into `apps/api/.env`, which is why it runs before the env step.
 5. **Write the env files.** Run `pnpm env:setup`, after every `add`, because `add` rewrites the key list. When it fails and names a key with no default, follow [Fill a key with no default](#fill-a-key-with-no-default), then run it again.
 6. **Seed.** Run `pnpm db:seed`.
@@ -129,7 +120,7 @@ Write each one with `saasaloy env --set <KEY>=<value>`, log it, and list it unde
 
 ### Stage: Feature
 
-Build every entity of the spec's `## Entities`, in its order, with no limit on their number. For each entity:
+Build every entity of the spec's `## Entities`, in its order, with no limit on their number. When `## Entities` is `None.`, skip this stage: write a `## Feature` section with `- No entity: the spec builds the landing page only.`, and commit the log alone as `feat(build): feature`. For each entity:
 
 1. Add a `## Feature: <table>` section to the log, with the table name from the entity's `Table` row, such as `## Feature: books`.
 2. Run `saasaloy-feature` for that entity. It takes the columns, the actions, the access rule and the screens from the entity's table in the spec.
@@ -139,7 +130,12 @@ One entity is one commit. Do not put two entities in one commit, and do not star
 
 #### Without a spec
 
-A brief with no `docs/product-spec.md` gets one entity. Run `saasaloy-feature` for the entity the brief centres on: pick it from the brief's Problem and Differentiator answers, the thing the user makes, tracks or reads. Log the pick and the reason in a `## Feature: <table>` section, and commit it as `feat(build): feature <table>`.
+A brief with no `docs/product-spec.md` gets the modules that `.agents/skills/saasaloy-setup/module-triggers.md` derives from the brief. The brief's `autonomy: afk` is the author's consent to this judgement, so ask nothing.
+
+1. Read each row of `module-triggers.md` against the brief's answers. Take a row's modules only when the brief clearly calls for them. Use them as the `## Modules` table of the stages above.
+2. Log each module and its reason under `## MVP` as `- <module>: <reason>`.
+3. Leave out each module of an unclear row. Write it under `## Left for a human` as `- Decide on <module>: <the unclear answer>. Run saasaloy add <module> --yes to add it.`
+4. Build one entity only when the brief centres on one: the thing the user makes, tracks or reads, from the brief's Problem and Differentiator answers. Run `saasaloy-feature` for it. Log the pick and the reason in a `## Feature: <table>` section, and commit it as `feat(build): feature <table>`. With no such entity, follow the Feature stage's `None.` rule.
 
 ### Stage: Handover
 
@@ -149,6 +145,8 @@ Write `## Left for a human` as the last section, one list item per step. It alwa
 - Push the branch. The build never pushes.
 - Deploy with `pnpm deploy:production`, which the `saasaloy-deploy` skill covers.
 - Each module dropped for its `needs`, and the account it needs.
+- Each module left out as unclear, under [Without a spec](#without-a-spec).
+- With `email` absent and `auth` installed: "Users cannot reset a password. Run `saasaloy add email email-console --yes` to add the reset mail."
 - Each item of the spec's `## Left for the owner`, such as a vendor provider to add in place of a local one.
 - Each value that `saasaloy env --check` still reports as missing.
 - Each local value the build wrote with `saasaloy env --set`, to replace before a deploy.

@@ -455,7 +455,7 @@ _Avoid: AFK mode, autopilot. `afk` is only the field value._
 _Avoid: progress file, stop report._
 
 ### MVP bar
-The fixed list of checks an unattended run must pass to count as a finished local MVP, scored by the agent benchmark (`scripts/agent-bench.ts`). Plan 0074 defines the list, and plan 0109 adds three lines: the interview, each entity of the spec, and the preview.
+The list of checks an unattended run must pass to count as a finished local MVP, scored by the agent benchmark (`scripts/agent-bench.ts`). Plan 0074 defines the list, and plan 0109 adds three lines: the interview, each entity of the spec, and the preview. Since plan 0123 the build has no fixed module set, so a check of a module applies only when the approved spec lists that module.
 _Avoid: done criteria._
 
 ## Key-value, limits & flags

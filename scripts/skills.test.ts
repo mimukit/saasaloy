@@ -387,21 +387,16 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     assert.match(build, /`feat\(build\): feature <table>` commit/);
   });
 
-  it("picks database-postgres, takes the picks from the spec, and drops each optional extra", () => {
+  it("picks database-postgres and installs only the spec's modules (plan 0123)", () => {
     assert.match(build, /Pick `database-postgres` for `database`/);
     assert.match(build, /spec's `## Modules`/);
-    for (const extra of [
-      "ci",
-      "infra-ci-deploy",
-      "auth-phone",
-      "notification",
-    ]) {
-      assert.match(
-        build,
-        new RegExp(`\`${extra}\``),
-        `${extra} is not handled`
-      );
-    }
+    assert.match(
+      build,
+      /Install the modules the owner approved, and no others/
+    );
+    assert.match(build, /never adds it to the build/);
+    assert.doesNotMatch(build, /MVP set/);
+    assert.doesNotMatch(build, /^For the MVP stage this gives/m);
   });
 
   it("gives a picked module that needs an account its local provider", () => {
@@ -495,13 +490,17 @@ describe("every built product is usable by agents (plan 0110 phase 7)", () => {
     "utf-8"
   );
 
-  it("adds agent, api-keys and api-keys-user in the MVP stage, and api-keys stays scale", () => {
-    const sentence =
-      /^For the MVP stage this gives .*$/m.exec(build)?.[0] ?? "";
-    for (const name of ["agent", "api-keys", "api-keys-user"]) {
-      assert.match(sentence, new RegExp(`\`${name}\``), `${name} is missing`);
-    }
-    assert.match(build, /`api-keys` and `api-keys-user` stay `scale` modules/);
+  it("adds the agent set only when the spec lists agent (plan 0123)", () => {
+    assert.match(
+      build,
+      /\*\*Follow the agent set when the spec holds it\.\*\*/
+    );
+    const triggers = readFileSync(
+      join(BASE_SKILLS, "saasaloy-setup", "module-triggers.md"),
+      "utf-8"
+    );
+    assert.match(triggers, /`agent`, `api-keys`, `api-keys-user`/);
+    assert.match(triggers, /The owner may drop them/);
   });
 
   it("gives saasaloy-feature the four parts, and points at saasaloy-agent for them", () => {
@@ -524,10 +523,11 @@ describe("every built product is usable by agents (plan 0110 phase 7)", () => {
     assert.match(readBack, /each action of the entity is callable by agents/);
   });
 
-  it("leaves the agent set out of the capabilities question", () => {
-    assert.match(
-      setup,
-      /\*\*Leave out the MVP set\*\*[^\n]*`agent`, `api-keys`, `api-keys-user`/
-    );
+  it("derives every module in the proposal, with no fixed set (plan 0123)", () => {
+    assert.doesNotMatch(setup, /MVP set/);
+    assert.match(setup, /### The module proposal/);
+    assert.match(setup, /Apply `module-triggers\.md`/);
+    assert.match(setup, /Ask about each unclear row/);
+    assert.match(setup, /--dry-run --json/);
   });
 });
