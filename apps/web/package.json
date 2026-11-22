@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev --host",
-    "build": "astro build && pagefind --site dist/client",
-    "clean": "rimraf dist .astro .wrangler .lighthouseci",
+    "build": "pnpm run registry:build && astro build && pagefind --site dist/client",
+    "registry:build": "node --import ../../scripts/ts-resolve-hook.ts scripts/registry-build.ts",
+    "clean": "rimraf dist .astro .wrangler .lighthouseci public/r",
     "preview": "astro preview",
     "deploy:production": "pnpm run build && wrangler deploy",
     "deploy:release": "node scripts/deploy-release.ts",

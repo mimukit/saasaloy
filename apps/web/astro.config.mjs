@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
+import { createRequire } from "node:module";
 import cloudflare from "@astrojs/cloudflare";
 import { unified } from "@astrojs/markdown-remark";
 import react from "@astrojs/react";
@@ -37,7 +38,10 @@ function separateBuildCache() {
 
 // Every React component the dev server can render, for Vite's dependency scan. See the
 // `optimizeDeps` notes in `vite` below.
-const COMPONENT_ENTRIES = ["src/**/*.tsx"];
+const COMPONENT_ENTRIES = [
+  "src/**/*.tsx",
+  "../../packages/cli/templates/base/packages/ui/src/blocks/*.tsx",
+];
 
 // Static output — the marketing site is content-first, and every page here is
 // prerendered at build time. `output: "static"` is written out rather than left to the
@@ -104,6 +108,77 @@ const cliVersion = JSON.parse(
 // src/lib/build-info.ts.
 const buildInfo = readBuildInfo(repoRoot, cliVersion);
 
+// Saasaloy UI (plan 0121). The block pages under src/pages/ui/ render the base template's
+// own blocks, so a block has one source. `@repo/ui` and `@repo/config` resolve to the
+// template's packages, the names the blocks import. The template folder holds no
+// node_modules, so `dedupe` resolves the blocks' packages from apps/web.
+const templateUi = join(
+  repoRoot,
+  "packages/cli/templates/base/packages/ui/src"
+);
+const templateConfig = join(
+  repoRoot,
+  "packages/cli/templates/base/packages/config/src"
+);
+const TEMPLATE_ALIASES = [
+  {
+    find: /^@repo\/ui\/(blocks|components|content|lib)\/(.+)$/,
+    replacement: `${templateUi}/$1/$2`,
+  },
+  { find: /^@repo\/ui\/styles\/(.+)$/, replacement: `${templateUi}/styles/$1` },
+  { find: /^@repo\/ui$/, replacement: `${templateUi}/index.ts` },
+  { find: /^@repo\/config$/, replacement: `${templateConfig}/index.ts` },
+];
+const TEMPLATE_PACKAGES = /\/packages\/cli\/templates\/base\/packages\//;
+const TEMPLATE_SOURCE = /\/packages\/cli\/templates\/base\/packages\/.+\.tsx?$/;
+
+// Compiles the template's TypeScript for the preview. Vite's transform reads the nearest
+// tsconfig.json of each file, and the template's packages/ui and packages/config ones
+// extend `@repo/tsconfig/base.json`, which resolves only inside a generated project, so a
+// template file fails with "Tsconfig not found" and no Vite option turns the lookup off.
+// This transform runs first, with the lookup off (`tsconfig: false`) and the React JSX
+// runtime the blocks are written for, and hands Vite plain JavaScript.
+/** @returns {import("vite").Plugin} the plugin */
+function templateTransform() {
+  /** @type {Promise<typeof import("vite")> | undefined} */
+  let vite;
+  return {
+    name: "saasaloy-template-transform",
+    enforce: "pre",
+    async transform(code, id) {
+      const file = id.split("?")[0] ?? id;
+      if (!TEMPLATE_SOURCE.test(file)) {
+        return null;
+      }
+      // apps/web has no direct `vite` dependency; take the one Astro runs.
+      vite ??= import(
+        createRequire(import.meta.resolve("astro")).resolve("vite")
+      );
+      const { transformWithOxc } = await vite;
+      const result = await transformWithOxc(code, file, {
+        jsx: { runtime: "automatic", importSource: "react" },
+        tsconfig: false,
+      });
+      return { code: result.code, map: result.map, moduleType: "js" };
+    },
+  };
+}
+
+// The dependency scan bundles the template blocks too (COMPONENT_ENTRIES), and stops at
+// the same tsconfig lookup unless it is off. A failed scan pre-bundles nothing, so every
+// page finds its dependencies mid-request and reloads.
+const SCAN_WITHOUT_TSCONFIG = { tsconfig: false };
+
+const TEMPLATE_DEPENDENCIES = [
+  "react",
+  "react-dom",
+  "lucide-react",
+  "@base-ui/react",
+  "class-variance-authority",
+  "clsx",
+  "tailwind-merge",
+];
+
 export default defineConfig({
   site: "https://saasaloy.com",
   output: "static",
@@ -148,7 +223,13 @@ export default defineConfig({
     // and never supported v4. The theme lives in src/styles: the @source globs in
     // globals.css, the tokens in brand.css, and the landing utilities in web.css, which
     // imports brand.css and which Layout.astro imports via `@web/styles/web.css`.
-    plugins: [tailwindcss()],
+    plugins: [templateTransform(), tailwindcss()],
+    // The template's TypeScript is compiled by templateTransform() below, so Vite's own
+    // transform leaves it alone. See that function for why.
+    oxc: {
+      exclude: [/\.js$/, TEMPLATE_PACKAGES],
+      jsxRefreshExclude: [TEMPLATE_PACKAGES],
+    },
     define: { __BUILD_INFO__: JSON.stringify(buildInfo) },
     server: { strictPort: true },
     // Dev only: pre-bundle every dependency the React components import before the
@@ -160,20 +241,37 @@ export default defineConfig({
     // react-dom/server holds the old one, and every hook throws "Invalid hook call".
     // A glob, not an include list, so a new component is covered with no edit here.
     ssr: {
-      optimizeDeps: { entries: COMPONENT_ENTRIES },
+      optimizeDeps: {
+        entries: COMPONENT_ENTRIES,
+        rolldownOptions: SCAN_WITHOUT_TSCONFIG,
+      },
     },
     // The browser needs the same entries. Its scan reads an .astro page's <script> tags but
     // not the frontmatter that imports an island, so the islands' own dependencies arrive
     // mid-request. Vite re-bundles, renames the shared chunks, and deletes the ones the
     // page already asked for: "The file does not exist at .../deps/react-dom-<hash>.js
     // which is in the optimize deps directory", then a full reload.
-    optimizeDeps: { entries: COMPONENT_ENTRIES },
+    optimizeDeps: {
+      entries: COMPONENT_ENTRIES,
+      rolldownOptions: SCAN_WITHOUT_TSCONFIG,
+    },
     resolve: {
       // `@web` mirrors saasaloy.json's alias of the same name (apps/web/src) — that
       // alias only drives the CLI's file-placement when a module's files[] target
       // `@web/...`; this is what makes the dropped source's own `@web/...` imports
       // (e.g. a dropped page importing @web/components/*) actually resolve.
-      alias: { "@web": fileURLToPath(new URL("src", import.meta.url)) },
+      alias: [
+        {
+          find: "@web",
+          replacement: fileURLToPath(new URL("src", import.meta.url)),
+        },
+        ...TEMPLATE_ALIASES,
+      ],
+      dedupe: TEMPLATE_DEPENDENCIES,
+      // Astro turns tsconfig `paths` resolution on, which reads the nearest tsconfig of the
+      // importing file, and fails on a template file for the reason templateTransform()
+      // gives. The one path this site's tsconfig maps, `@web/*`, is the alias above.
+      tsconfigPaths: false,
     },
   },
 });

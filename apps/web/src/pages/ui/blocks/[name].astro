@@ -1,0 +1,263 @@
+---
+// /ui/blocks/<name>, one Saasaloy UI block (plan 0121, Phase 2), from the round 1 mockup the
+// owner approved on 2026-11-22: the breadcrumb, the registry name, the description, the
+// Preview and Code tabs, the install command, the base-* style note that names Saasaloy,
+// and the source link.
+//
+// The preview is an iframe of /ui/preview/<name> (assumption 18), which renders the
+// template's own block in the template's own stylesheet, so the site's cobalt brand never
+// reaches the block. The Code tab shows the public source: what `shadcn add` writes. Two
+// small inline scripts switch the tabs and size the frame to its content; the Copy button
+// of the code uses the clipboard and falls back to selecting the text.
+import UiLayout from "@web/layouts/UiLayout.astro";
+import InlineCode from "@web/components/InlineCode.astro";
+import { CommandField } from "@web/components/command-field";
+import { uiRegistry } from "@web/content/ui-registry";
+import { ui } from "@web/content/landing";
+import { interpolate } from "@web/lib/interpolate";
+import { publicSource, uiBlocks } from "@web/lib/ui-registry";
+import type { UiBlock } from "@web/lib/ui-registry";
+
+export function getStaticPaths() {
+  return uiBlocks().map((block) => ({
+    params: { name: block.name },
+    props: { block },
+  }));
+}
+
+interface Props {
+  block: UiBlock;
+}
+
+const { block } = Astro.props;
+const copy = uiRegistry.block;
+const command = `npx shadcn@latest add @saasaloy/${block.name}`;
+const code = publicSource(block);
+const tabClass =
+  "aria-selected:bg-primary aria-selected:text-primary-foreground aria-selected:border-primary border-highlight text-highlight hover:bg-muted focus-visible:outline-ring -mb-px h-10 cursor-pointer border px-6 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2";
+---
+
+<UiLayout
+  title={interpolate(uiRegistry.meta.blockTitle, { name: block.name })}
+  description={block.description}
+  current="blocks"
+>
+  <main
+    id="main"
+    tabindex="-1"
+    class="section-container-wide flex flex-col gap-6 pt-10 outline-none"
+  >
+    <nav aria-label={copy.breadcrumbLabel}>
+      <ol class="flex items-center gap-2 font-mono text-sm">
+        <li>
+          <a href="/ui" class="text-highlight underline underline-offset-4">
+            {copy.blocks}
+          </a>
+        </li>
+        <li aria-hidden="true" class="text-muted-foreground">
+          /
+        </li>
+        <li aria-current="page" class="text-foreground">
+          {block.name}
+        </li>
+      </ol>
+    </nav>
+
+    <header class="flex flex-col gap-3">
+      <h1 class="text-foreground font-mono text-4xl font-bold tracking-[-0.02em] sm:text-5xl">
+        {block.name}
+      </h1>
+      <p class="text-muted-foreground text-lg">{block.description}</p>
+    </header>
+
+    <div class="flex flex-col">
+      <div
+        role="tablist"
+        aria-label={copy.tabsLabel}
+        class="border-border flex border-b"
+        data-ui-tabs
+      >
+        <button
+          type="button"
+          role="tab"
+          id="tab-preview"
+          aria-selected="true"
+          aria-controls="panel-preview"
+          class={tabClass}
+        >
+          {copy.preview}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-code"
+          aria-selected="false"
+          aria-controls="panel-code"
+          tabindex="-1"
+          class={tabClass}
+        >
+          {copy.code}
+        </button>
+      </div>
+
+      <div
+        id="panel-preview"
+        role="tabpanel"
+        aria-labelledby="tab-preview"
+        class="border-border mt-6 border"
+      >
+        <iframe
+          src={`/ui/preview/${block.name}`}
+          title={interpolate(copy.previewTitle, { name: block.name })}
+          loading="lazy"
+          class="block h-[36rem] w-full"
+          data-ui-preview
+        ></iframe>
+      </div>
+
+      <div
+        id="panel-code"
+        role="tabpanel"
+        aria-labelledby="tab-code"
+        class="border-border bg-card relative mt-6 border"
+        hidden
+      >
+        <div class="border-border flex items-center justify-between gap-4 border-b px-4 py-2">
+          <p class="text-muted-foreground font-mono text-xs">{block.target}</p>
+          <button
+            type="button"
+            class="text-highlight hover:bg-muted focus-visible:outline-ring h-8 cursor-pointer px-3 text-sm font-medium focus-visible:outline-2"
+            data-copy-code
+            data-copied={copy.copiedCode}
+          >
+            {copy.copyCode}
+          </button>
+        </div>
+        <pre
+          tabindex="0"
+          aria-label={interpolate(copy.codeLabel, { path: block.target })}
+          class="text-foreground max-h-[36rem] overflow-auto p-4 font-mono text-xs leading-5"
+        ><code data-code>{code}</code></pre>
+        <p
+          class="sr-only"
+          role="status"
+          aria-live="polite"
+          data-copy-status
+        ></p>
+      </div>
+    </div>
+
+    <CommandField
+      command={command}
+      size="lg"
+      className="max-w-none"
+      client:visible
+    />
+
+    <div class="border-border bg-card flex flex-col gap-2 border px-5 py-4 text-sm">
+      <!-- prettier-ignore -->
+      <p class="text-foreground">{`${copy.styleNoteLead} ${copy.styleNoteBuilt} `}<a href="/" class="text-highlight underline underline-offset-4">{copy.styleNoteBrand}</a>{`. ${copy.styleNoteTail}`}</p>
+      <p class="text-muted-foreground">
+        <InlineCode
+          text={interpolate(copy.localName, { local: block.localImport })}
+        />
+      </p>
+    </div>
+
+    <p>
+      <a
+        href={block.sourceUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-highlight inline-flex items-center gap-2 text-sm font-medium underline underline-offset-4"
+      >
+        {copy.source}
+        <svg
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+          class="size-4"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="square"
+        >
+          <path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"></path>
+        </svg>
+        <span class="sr-only"> {ui.link.newTab}</span>
+      </a>
+    </p>
+  </main>
+</UiLayout>
+
+<script define:vars={{ announcement: uiRegistry.block.copiedAnnouncement }}>
+  // An inline script runs in the global scope, so the code sits in one function.
+  (() => {
+    // The Preview and Code tabs: a press or an arrow key selects a tab and shows its panel.
+    const tablist = document.querySelector("[data-ui-tabs]");
+    const tabs = tablist ? [...tablist.querySelectorAll('[role="tab"]')] : [];
+    function select(tab) {
+      for (const other of tabs) {
+        const selected = other === tab;
+        other.setAttribute("aria-selected", String(selected));
+        other.tabIndex = selected ? 0 : -1;
+        const panel = document.querySelector(
+          `#${other.getAttribute("aria-controls") ?? ""}`
+        );
+        if (panel) {
+          panel.hidden = !selected;
+        }
+      }
+      tab.focus();
+    }
+    for (const tab of tabs) {
+      tab.addEventListener("click", () => select(tab));
+      tab.addEventListener("keydown", (event) => {
+        const step =
+          event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+        if (step !== 0) {
+          event.preventDefault();
+          select(tabs[(tabs.indexOf(tab) + step + tabs.length) % tabs.length]);
+        }
+      });
+    }
+
+    // The preview frame takes the height of its content once it loads, and follows it.
+    for (const frame of document.querySelectorAll("[data-ui-preview]")) {
+      frame.addEventListener("load", () => {
+        const body = frame.contentDocument?.body;
+        if (!body) {
+          return;
+        }
+        const fit = () => {
+          frame.style.height = `${body.scrollHeight}px`;
+        };
+        new ResizeObserver(fit).observe(body);
+        fit();
+      });
+    }
+
+    // Copy the code. Without clipboard access, select it so the reader can copy by hand.
+    const copyButton = document.querySelector("[data-copy-code]");
+    const codeNode = document.querySelector("[data-code]");
+    const status = document.querySelector("[data-copy-status]");
+    copyButton?.addEventListener("click", async () => {
+      const label = copyButton.textContent;
+      try {
+        await navigator.clipboard.writeText(codeNode?.textContent ?? "");
+      } catch {
+        const range = document.createRange();
+        range.selectNodeContents(codeNode);
+        getSelection()?.removeAllRanges();
+        getSelection()?.addRange(range);
+        return;
+      }
+      copyButton.textContent = copyButton.dataset.copied ?? label;
+      if (status) {
+        status.textContent = announcement;
+      }
+      setTimeout(() => {
+        copyButton.textContent = label;
+      }, 2000);
+    });
+  })();
+</script>

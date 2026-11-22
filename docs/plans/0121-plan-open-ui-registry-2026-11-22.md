@@ -74,7 +74,7 @@ Attended: owner approval of the gallery and block page mockups, and of the kit-o
 
 Done when: a Design decisions row records the approval date, the round, the gist URL with the file prefix, the issue comment URL, and the kit-one name.
 
-### Phase 2: publish the base blocks as a registry
+### Phase 2: publish the base blocks as a registry (built 2026-11-22)
 
 - Add `"use client"` to each base block with browser state.
 - Add `apps/web/registry.json` that names the 15 base blocks as `<kit>-<block>`, with their files, npm dependencies and `registryDependencies` (shadcn names, a Saasaloy URL only for a primitive that differs from upstream).

@@ -1,0 +1,309 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "saasaloy",
+  "homepage": "https://saasaloy.com/ui",
+  "items": [
+    {
+      "name": "saasaloy-foundation",
+      "type": "registry:item",
+      "title": "Saasaloy foundation",
+      "description": "The layout, type and motion utilities and the helpers every Saasaloy UI block uses.",
+      "dependencies": ["lucide-react"],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/external-link.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/icons.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/inline-code.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/interpolate.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/theme.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "categories": ["foundation"]
+    },
+    {
+      "name": "ink-audience",
+      "type": "registry:block",
+      "title": "Audience",
+      "description": "A list of who the product is for, each with an icon and a line.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/audience.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/audience.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-cta",
+      "type": "registry:block",
+      "title": "Call to action",
+      "description": "A closing call to action with a command and two buttons.",
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/cta.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/cta.tsx"
+        }
+      ],
+      "categories": ["cta"]
+    },
+    {
+      "name": "ink-error-state",
+      "type": "registry:block",
+      "title": "Error state",
+      "description": "A 404 and 500 screen with a status, a title and a way back.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "card",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/error-state.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/error-state.tsx"
+        }
+      ],
+      "categories": ["error"]
+    },
+    {
+      "name": "ink-faq",
+      "type": "registry:block",
+      "title": "FAQ",
+      "description": "A list of common questions with answers that open in place.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/faq.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/faq.tsx"
+        }
+      ],
+      "categories": ["faq"]
+    },
+    {
+      "name": "ink-feature-grid",
+      "type": "registry:block",
+      "title": "Feature grid",
+      "description": "A grid of product features, each with an icon.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/feature-grid.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/feature-grid.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-footer",
+      "type": "registry:block",
+      "title": "Footer",
+      "description": "A footer with the brand, a row of links and social marks.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/footer.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/footer.tsx"
+        }
+      ],
+      "categories": ["navigation"]
+    },
+    {
+      "name": "ink-hero",
+      "type": "registry:block",
+      "title": "Hero",
+      "description": "A landing hero with a headline, two actions and a product frame.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/hero.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/hero.tsx"
+        }
+      ],
+      "categories": ["hero"]
+    },
+    {
+      "name": "ink-how-it-works",
+      "type": "registry:block",
+      "title": "How it works",
+      "description": "Numbered steps that explain how the product works.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/how-it-works.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/how-it-works.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-logo-cloud",
+      "type": "registry:block",
+      "title": "Logo cloud",
+      "description": "A row of customer logos under a short label.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/logo-cloud.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/logo-cloud.tsx"
+        }
+      ],
+      "categories": ["social-proof"]
+    },
+    {
+      "name": "ink-navbar",
+      "type": "registry:block",
+      "title": "Navbar",
+      "description": "A top bar with links, actions and a mobile menu.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json",
+        "https://saasaloy.com/r/ink-theme-toggle.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/navbar.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/navbar.tsx"
+        }
+      ],
+      "categories": ["navigation"]
+    },
+    {
+      "name": "ink-pain-points",
+      "type": "registry:block",
+      "title": "Pain points",
+      "description": "The problems the product solves, as a list of cards.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/pain-points.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/pain-points.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-pricing-table",
+      "type": "registry:block",
+      "title": "Pricing table",
+      "description": "Plan cards with a monthly and annual switch.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/pricing-table.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/pricing-table.tsx"
+        }
+      ],
+      "categories": ["pricing"]
+    },
+    {
+      "name": "ink-showcase",
+      "type": "registry:block",
+      "title": "Showcase",
+      "description": "Rows of product screens beside their copy.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/showcase.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/showcase.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-testimonials",
+      "type": "registry:block",
+      "title": "Testimonials",
+      "description": "A grid of customer quotes with names and roles.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/testimonials.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/testimonials.tsx"
+        }
+      ],
+      "categories": ["social-proof"]
+    },
+    {
+      "name": "ink-theme-toggle",
+      "type": "registry:block",
+      "title": "Theme toggle",
+      "description": "A light and dark switch button.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/theme-toggle.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/theme-toggle.tsx"
+        }
+      ],
+      "categories": ["navigation"]
+    }
+  ]
+}

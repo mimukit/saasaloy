@@ -1,0 +1,6 @@
+/* The stylesheet of the Saasaloy UI preview frame (/ui/preview/<name>, plan 0121). It is
+   the base template's own web stylesheet, so a block previews in the tokens and the
+   landing vocabulary it ships with, and the site's cobalt brand never reaches it. No
+   second copy: a change to the template's brand.css or web.css shows here on the next
+   build. Only src/pages/ui/preview/ imports this file. */
+@import "../../../../packages/cli/templates/base/packages/ui/src/styles/web.css";

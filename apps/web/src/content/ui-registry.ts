@@ -1,0 +1,77 @@
+// Every word the Saasaloy UI pages show (/ui, /ui/blocks/<name>), in one file, under the
+// same shape rules as ./landing.ts. The block names, titles and one-line descriptions come
+// from apps/web/registry.json, the file the registry build reads, so a block is described
+// once.
+//
+// `{name}` is a registry name (`ink-hero`). The install command names the `@saasaloy`
+// namespace; `registriesNote` tells a reader how to map it in components.json.
+
+export const uiRegistry = {
+  meta: {
+    title: "Saasaloy UI: free blocks for shadcn projects",
+    description:
+      "Free, MIT-licensed UI blocks for shadcn projects on the base-nova style. Install each block with one command.",
+    blockTitle: "{name} | Saasaloy UI",
+  },
+
+  header: {
+    /** The tag after the wordmark, the way /docs shows "Docs". */
+    tag: "UI",
+    navLabel: "Saasaloy UI",
+    homeLabel: "Saasaloy UI home",
+    cta: "Get Saasaloy",
+  },
+
+  /** The section links in the header and the footer bar. More join with later phases. */
+  nav: [{ id: "blocks", label: "Blocks", href: "/ui" }],
+
+  index: {
+    titleLead: "Free UI blocks for",
+    titleAccent: "shadcn projects",
+    lead: "Install open-source blocks with one command.",
+    sampleBlock: "ink-hero",
+    styleNote: "Built for the base-nova style. Works with any Base UI project.",
+    registriesNote:
+      'Map the namespace once: add `"@saasaloy": "https://saasaloy.com/r/{name}.json"` to `registries` in `components.json`.',
+    filterLabel: "Filter blocks by type",
+    all: "All",
+    gridLabel: "Blocks",
+  },
+
+  /** Filter chip labels, keyed by the registry `categories[0]` value. */
+  categories: {
+    hero: "Heroes",
+    features: "Features",
+    pricing: "Pricing",
+    "social-proof": "Social proof",
+    faq: "FAQ",
+    cta: "Calls to action",
+    navigation: "Navigation",
+    error: "Errors",
+  } as Record<string, string>,
+
+  block: {
+    breadcrumbLabel: "Breadcrumb",
+    blocks: "Blocks",
+    tabsLabel: "Block view",
+    preview: "Preview",
+    code: "Code",
+    previewTitle: "Live preview of {name}",
+    codeLabel: "The source shadcn writes to {path}",
+    copyCode: "Copy code",
+    copiedCode: "Copied",
+    copiedAnnouncement: "Code copied to the clipboard.",
+    styleNoteLead: "Needs a base-* style project (base-nova).",
+    styleNoteBuilt: "Built by",
+    styleNoteBrand: "Saasaloy",
+    styleNoteTail: "Install in any Base UI project.",
+    localName:
+      "In a Saasaloy project the same block ships as `{local}`, from the local `@repo/ui` package. Saasaloy UI is the public registry of those blocks.",
+    source: "View source on GitHub",
+  },
+
+  footer: {
+    navLabel: "Saasaloy UI sections",
+    license: "MIT licensed",
+  },
+};

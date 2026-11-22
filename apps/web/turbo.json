@@ -8,6 +8,10 @@
         "$TURBO_ROOT$/modules/*/registry-item.json",
         "$TURBO_ROOT$/packages/cli/package.json",
         "$TURBO_ROOT$/llms.txt",
+        "$TURBO_ROOT$/packages/cli/templates/base/packages/ui/src/**",
+        "$TURBO_ROOT$/packages/cli/templates/base/packages/config/src/**",
+        "$TURBO_ROOT$/scripts/ts-resolve-hook.ts",
+        "$TURBO_ROOT$/scripts/config-shim.ts",
         "$TURBO_ROOT$/docs/wiki/**",
         "$TURBO_ROOT$/docs/wiki/.wikimap.yaml"
       ]

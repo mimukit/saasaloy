@@ -1,0 +1,22 @@
+---
+// A content message with backtick-quoted code, for an .astro page: the same split as
+// lib/inline-code.ts, which builds React elements and so serves the React blocks only.
+interface Props {
+  text: string;
+}
+
+const parts = Astro.props.text.split("`");
+const balanced = parts.length % 2 === 1;
+---
+
+{balanced
+  ? parts.map((part, index) =>
+      index % 2 === 1 ? (
+        <code class="bg-muted text-foreground border-border border px-1 py-0.5 font-mono text-[0.85em]">
+          {part}
+        </code>
+      ) : (
+        part
+      )
+    )
+  : Astro.props.text}

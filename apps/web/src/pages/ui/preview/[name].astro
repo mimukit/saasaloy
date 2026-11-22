@@ -1,0 +1,85 @@
+---
+// /ui/preview/<name>, the frame the block page embeds (plan 0121, assumption 18). A bare
+// document: no site layout, no site stylesheet. It imports the template's own stylesheet
+// (styles/ui-preview.css) and renders the template's own block, with the sample name the
+// public copy uses, so the frame shows what `shadcn add` gives a project.
+//
+// The light or dark mode comes from `?mode=light|dark` when the URL names one (the
+// switcher of a later phase sets it). Otherwise the frame follows the page that embeds it,
+// and changes with it, or the system setting when it stands alone. A theme toggle inside
+// the frame flips the frame only, never the site's stored choice. Two blocks hold browser
+// state, so they hydrate: the navbar's menu and the pricing table's billing switch.
+import "@web/styles/ui-preview.css";
+import { Audience } from "@repo/ui/blocks/audience";
+import { Cta } from "@repo/ui/blocks/cta";
+import { ErrorState } from "@repo/ui/blocks/error-state";
+import { Faq } from "@repo/ui/blocks/faq";
+import { FeatureGrid } from "@repo/ui/blocks/feature-grid";
+import { Footer } from "@repo/ui/blocks/footer";
+import { Hero } from "@repo/ui/blocks/hero";
+import { HowItWorks } from "@repo/ui/blocks/how-it-works";
+import { LogoCloud } from "@repo/ui/blocks/logo-cloud";
+import { Navbar } from "@repo/ui/blocks/navbar";
+import { PainPoints } from "@repo/ui/blocks/pain-points";
+import { PricingTable } from "@repo/ui/blocks/pricing-table";
+import { Showcase } from "@repo/ui/blocks/showcase";
+import { Testimonials } from "@repo/ui/blocks/testimonials";
+import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
+import { locale } from "@web/site";
+import { SAMPLE_SITE_NAME } from "@web/lib/registry-inline";
+import { interpolate } from "@web/lib/interpolate";
+import { uiRegistry } from "@web/content/ui-registry";
+import { uiBlocks } from "@web/lib/ui-registry";
+
+export function getStaticPaths() {
+  return uiBlocks().map((block) => ({ params: { name: block.name } }));
+}
+
+const { name } = Astro.params;
+const siteName = SAMPLE_SITE_NAME;
+const title = interpolate(uiRegistry.block.previewTitle, { name });
+
+// Sets the mode before the first paint, then keeps it in step with the embedding page.
+const MODE_SCRIPT = `(function(){var d=document.documentElement;function a(k){d.classList.toggle("dark",k);d.style.colorScheme=k?"dark":"light";d.setAttribute("data-theme",k?"dark":"light")}var m=new URLSearchParams(location.search).get("mode");var p=null;try{p=window.parent!==window?window.parent.document.documentElement:null}catch(e){}if(m==="dark"||m==="light"){a(m==="dark")}else if(p){a(p.classList.contains("dark"));new MutationObserver(function(){a(p.classList.contains("dark"))}).observe(p,{attributes:true,attributeFilter:["class"]})}else{a(matchMedia("(prefers-color-scheme: dark)").matches)}document.addEventListener("click",function(e){var t=e.target instanceof Element?e.target.closest("[data-theme-toggle]"):null;if(t){a(!d.classList.contains("dark"))}})})();`;
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>{title}</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script is:inline set:html={MODE_SCRIPT} />
+  </head>
+  <body class="bg-background text-foreground font-sans antialiased">
+    {name === "ink-audience" && <Audience siteName={siteName} />}
+    {name === "ink-cta" && <Cta siteName={siteName} />}
+    {name === "ink-error-state" && (
+      <ErrorState code="404" className="min-h-[32rem]" />
+    )}
+    {name === "ink-faq" && <Faq siteName={siteName} />}
+    {name === "ink-feature-grid" && <FeatureGrid siteName={siteName} />}
+    {name === "ink-footer" && <Footer siteName={siteName} />}
+    {name === "ink-hero" && <Hero siteName={siteName} />}
+    {name === "ink-how-it-works" && <HowItWorks siteName={siteName} />}
+    {name === "ink-logo-cloud" && <LogoCloud />}
+    {name === "ink-navbar" && (
+      <div class="min-h-64">
+        <Navbar siteName={siteName} client:load />
+      </div>
+    )}
+    {name === "ink-pain-points" && <PainPoints siteName={siteName} />}
+    {name === "ink-pricing-table" && (
+      <PricingTable siteName={siteName} client:load />
+    )}
+    {name === "ink-showcase" && <Showcase siteName={siteName} />}
+    {name === "ink-testimonials" && <Testimonials siteName={siteName} />}
+    {name === "ink-theme-toggle" && (
+      <div class="flex min-h-48 items-center justify-center">
+        <ThemeToggle />
+      </div>
+    )}
+  </body>
+</html>
