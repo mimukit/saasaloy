@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/mimukit/saasaloy/compare/v0.11.0...v0.12.0) (2026-11-22)
+
+### Features
+
+* **web:** link footer notice and widen build link targets ([648de4d](https://github.com/mimukit/saasaloy/commit/648de4d329686c588f481e5cf032685d7b4f7819))
+* **web:** open footer getting started link in a new tab ([9d639e2](https://github.com/mimukit/saasaloy/commit/9d639e286626c566e1ce7177f1195c03f3dd0f08))
+
 ## [0.11.0](https://github.com/mimukit/saasaloy/compare/v0.10.0...v0.11.0) (2026-11-21)
 
 ### ⚠ BREAKING CHANGES
