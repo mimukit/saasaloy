@@ -4,6 +4,8 @@ import ember from "../../templates/themes/ember.json" with { type: "json" };
 import moss from "../../templates/themes/moss.json" with { type: "json" };
 import neutral from "../../templates/themes/neutral.json" with { type: "json" };
 import { RefusalError } from "./exit.js";
+import { THEME_NAMES } from "./theme-names.js";
+import type { ThemeName } from "./theme-names.js";
 import type { SaasaloyConfig } from "./schema.js";
 
 // A project's theme (plan 0121, Phase 4): one of the Saasaloy UI token sets, picked at
@@ -22,9 +24,8 @@ import type { SaasaloyConfig } from "./schema.js";
 // fingerprint, ADR 0027). `saasaloy.json` records a theme other than `neutral`, so a later
 // render of the project's set writes the same bytes and `outdated` sees no upstream change.
 
-export const THEME_NAMES = ["neutral", "cobalt", "ember", "moss"] as const;
-
-export type ThemeName = (typeof THEME_NAMES)[number];
+export { THEME_NAMES } from "./theme-names.js";
+export type { ThemeName } from "./theme-names.js";
 
 /** The theme an absent `theme` key reads as, and the answer with no terminal. */
 export const DEFAULT_THEME: ThemeName = "neutral";

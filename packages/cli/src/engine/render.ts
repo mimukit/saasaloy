@@ -58,6 +58,13 @@ import {
   WEB_DESIGN,
 } from "../lib/theme.js";
 import type { ThemeName } from "../lib/theme.js";
+import { composeLanding } from "../lib/landing-compose.js";
+import {
+  DEFAULT_BLOCKS,
+  DEFAULT_KIT,
+  isDefaultBlockList,
+} from "../lib/recipes.js";
+import type { KitName, PageBlock, TemplateName } from "../lib/recipes.js";
 import type { TestingMode } from "../lib/testing.js";
 import { whenHolds } from "../lib/when.js";
 import type { WhenContext } from "../lib/when.js";
@@ -99,6 +106,22 @@ export interface RenderOptions {
    * `neutral`, the template's own tokens.
    */
   theme?: ThemeName;
+  /**
+   * The Saasaloy UI template `init --template` started from (plan 0121, Phase 7).
+   * `saasaloy.json` records it; the page itself comes from `kit` and `blocks`.
+   */
+  template?: TemplateName;
+  /**
+   * The kit whose blocks replace the ink files of the same name. Absent reads as `ink`,
+   * the template's own blocks; another kit is recorded in `saasaloy.json`.
+   */
+  kit?: KitName;
+  /**
+   * The landing page's blocks, in order: index.astro, LANDING_SECTIONS and the navbar
+   * labels follow it (`lib/landing-compose.ts`). Absent reads as the base page; another
+   * list is recorded in `saasaloy.json`.
+   */
+  blocks?: readonly PageBlock[];
   /** The `{{VAR}}` values. `templateVars(projectName)` when absent. */
   vars?: TemplateVars;
 }
@@ -366,6 +389,21 @@ export function render(args: RenderArgs): RenderResult {
     });
   }
 
+  // The landing page (plan 0121, Phase 7): a kit's blocks over the ink files, and the
+  // page, its Markdown copy, the navbar labels and DESIGN.md composed from the block
+  // list. The base page and the ink kit change nothing.
+  const kit = options.kit ?? DEFAULT_KIT;
+  const blocks = options.blocks ?? DEFAULT_BLOCKS;
+  for (const [path, content] of composeLanding(
+    { blocks, kit },
+    (target) => files.get(target)?.content
+  )) {
+    const file = files.get(path);
+    if (file) {
+      files.set(path, { ...file, content });
+    }
+  }
+
   // The theme rewrites two `once` base files: the tokens, then the contract that
   // records them and fingerprints the tokens file (ADR 0027).
   const theme = options.theme ?? DEFAULT_THEME;
@@ -394,6 +432,9 @@ export function render(args: RenderArgs): RenderResult {
     name: options.projectName,
     testing: { mode: testingMode },
     ...(theme === DEFAULT_THEME ? {} : { theme }),
+    ...(options.template === undefined ? {} : { template: options.template }),
+    ...(kit === DEFAULT_KIT ? {} : { kit }),
+    ...(isDefaultBlockList(blocks) ? {} : { blocks: [...blocks] }),
   };
 
   // --- The set: refusals `add` makes before it writes ------------------------------

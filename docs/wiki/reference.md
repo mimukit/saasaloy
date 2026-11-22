@@ -46,7 +46,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 ## `saasaloy init`
 
 ```text
-saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>] [--theme=<neutral|cobalt|ember|moss>]
+saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>] [--theme=<neutral|cobalt|ember|moss>] [--template=<launch|focus|glow>] [--blocks=<list>]
 ```
 
 `<name>` may be a bare name (`my-app`), `.` for the current directory, or a path
@@ -61,10 +61,14 @@ match `^[a-z0-9][a-z0-9-]*$`. Omit it and the CLI prompts.
 | `--no-git` | do not run `git init` in the new project, and make no commit. |
 | `--testing=<mode>` | the project's [testing mode](#saasaloy-testing): `off`, `tests-after` or `tdd`. An unknown value exits 2 before anything is written. |
 | `--theme=<name>` | the [Saasaloy UI](https://saasaloy.com/ui/themes) theme written into `packages/ui/src/styles/brand.css`: `neutral` (the default), `cobalt`, `ember` or `moss`. An unknown value exits 2 before anything is written and lists the names. |
+| `--template=<name>` | a [Saasaloy UI](https://saasaloy.com/ui) template for the landing page: `launch` (the ink kit, `cobalt`, every section), `focus` (ink, `neutral`: navbar, hero, feature-grid, pricing-table, cta, footer) or `glow` (the dusk kit, `ember`). It sets the block kit, the theme and the block list. A `--theme` flag wins over the template's theme. An unknown name exits 2 before anything is written and lists the names. |
+| `--blocks=<list>` | the landing page's blocks in order, comma-separated: `navbar`, `hero`, `logo-cloud`, `pain-points`, `how-it-works`, `feature-grid`, `showcase`, `audience`, `testimonials`, `pricing-table`, `faq`, `cta`, `footer`. The navbar goes first and the footer last. It replaces a template's list, and with no `--template` the kit is ink. An unknown block, a block named twice or an empty entry exits 2 before anything is written. |
 
 `init` always writes `testing.mode` into `saasaloy.json`, and fills the testing block in the root `AGENTS.md` for that mode. With no `--testing` flag, an attended run (a terminal on stdin and stdout) asks once, and a run with no terminal writes `off`. `off` is the opt-in default, not a guess.
 
 A theme changes the colour tokens and the radius only. `init` writes the chosen theme's `:root` and `.dark` values and `--radius` into `brand.css`, names the theme in `apps/web/DESIGN.md`, and records the matching token fingerprint there (ADR 0027). A theme other than `neutral` is recorded as `theme` in `saasaloy.json`, so a later render writes the same bytes. With no `--theme` flag, an attended run asks once with `neutral` first, and `--yes` or a run with no terminal writes `neutral`. The theme files live in `packages/cli/templates/themes/`, the same files that the Saasaloy UI registry publishes as `theme-<name>`.
+
+A template or a block list changes the landing page only, and adds no module. `init` writes `apps/web/src/pages/index.astro` with the imports and lines of the listed blocks in that order, keeps the client directives on `Navbar` and `PricingTable`, writes the matching `LANDING_SECTIONS` in `apps/web/src/lib/landing-markdown.ts`, and blanks the navbar label of each left-out section in `landing.ts`. The left-out block files stay in `packages/ui/src/blocks/`. A kit other than `ink` writes its blocks over the ink files of the same names: `dusk` ships `hero`, `feature-grid`, `pricing-table`, `testimonials`, `faq` and `cta`. `saasaloy.json` records `template`, a `kit` other than `ink` and a `blocks` list other than the base page, so a later render writes the same bytes. These are `once` files: no command updates them after `init`. The recipes live in `packages/cli/templates/recipes/` and the kit blocks in `packages/cli/templates/kits/`.
 
 `init` runs `git init` in the scaffolded project before the install, because husky's
 `prepare` script installs its hooks during `pnpm install` and needs a repository to install

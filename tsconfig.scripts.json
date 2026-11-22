@@ -11,5 +11,10 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["scripts/**/*.ts", "modules/*/smoke.ts"]
+  "include": [
+    "scripts/**/*.ts",
+    "modules/*/smoke.ts",
+    // replay-update.ts types the CLI engine, which reads kit blocks as `?raw` text.
+    "packages/cli/src/raw.d.ts"
+  ]
 }

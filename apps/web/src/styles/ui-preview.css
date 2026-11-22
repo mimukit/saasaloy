@@ -12,3 +12,8 @@
 @source "../../../../modules/waitlist/files/ui/blocks/waitlist.tsx";
 @source "../../../../modules/shell/files/ui/components/shell/{button,field,input,spinner}.tsx";
 @source "../../registry/shell/brand-mark.tsx";
+
+/* The blocks of a second kit (plan 0121, Phase 7) sit beside the template, outside its
+   @source globs. In a generated project they replace the base block files at the same
+   path, so the template's own globs cover them there. */
+@source "../../../../packages/cli/templates/kits/*/blocks/*.tsx";

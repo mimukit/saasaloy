@@ -14,6 +14,7 @@ import { loadConfig } from "../lib/saasaloy-config.js";
 import type { LoadedConfig } from "../lib/saasaloy-config.js";
 import { readTestingMode } from "../lib/testing.js";
 import { readTheme } from "../lib/theme.js";
+import { readLanding } from "../lib/recipes.js";
 import { baseTemplateDir, templateVars } from "../lib/scaffold.js";
 import type { RenderOptions } from "./render.js";
 import { UNKNOWN_VERSION } from "../version.js";
@@ -349,6 +350,7 @@ export async function readProjectState(
       projectName: project.name,
       testingMode: readTestingMode(config),
       theme: readTheme(config),
+      ...readLanding(config),
     },
     requested,
     root,

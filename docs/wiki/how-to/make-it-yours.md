@@ -1,6 +1,6 @@
 # Make the project yours
 
-A freshly scaffolded project runs, but it knows nothing about your product: the site name is `Saasaloy`, the landing page describes Saasaloy itself, and the theme uses shadcn's `neutral` base color, unless you passed `--theme=<cobalt|ember|moss>` to `saasaloy init`. The page has thirteen sections; remove the ones you don't need by deleting their line in `apps/web/src/pages/index.astro` (the project README has the recipe). Three of the eleven agent skills that ship with the base fix that. They live as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
+A freshly scaffolded project runs, but it knows nothing about your product: the site name is `Saasaloy`, the landing page describes Saasaloy itself, and the theme uses shadcn's `neutral` base color, unless you passed `--theme=<cobalt|ember|moss>` to `saasaloy init`. The page has thirteen sections, or the ones a `--template` or `--blocks` flag to `saasaloy init` listed; remove the ones you don't need by deleting their line in `apps/web/src/pages/index.astro` (the project README has the recipe). Three of the eleven agent skills that ship with the base fix that. They live as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
 
 Start with setup. When you ask for a full MVP, setup leads to design approval and then the build. You can also run the landing copy and theme skills on their own.
 

@@ -714,8 +714,13 @@ function surfaceConstants(root: string): Record<string, string[]> {
     ),
     THEME_NAMES: arrayConstant(
       root,
-      "packages/cli/src/lib/theme.ts",
+      "packages/cli/src/lib/theme-names.ts",
       "THEME_NAMES"
+    ),
+    TEMPLATE_NAMES: arrayConstant(
+      root,
+      "packages/cli/src/lib/recipes.ts",
+      "TEMPLATE_NAMES"
     ),
     MODULE_TYPES: arrayConstant(
       root,

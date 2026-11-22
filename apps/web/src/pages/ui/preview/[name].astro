@@ -18,6 +18,9 @@
 // Module blocks (Phase 5) render through src/components/ui-module-previews.tsx, which hands
 // each one a stub `onSubmit`, and hydrate so the form shows its pending and done states.
 // The auth cards sit on `bg-sidebar`, the canvas the `app` module centres them on.
+//
+// The dusk kit (Phase 7) renders from packages/cli/templates/kits/dusk/blocks/ through the
+// `@saasaloy-kit/*` alias (astro.config.mjs). Its pricing table hydrates like ink's.
 import "@web/styles/ui-preview.css";
 import { Audience } from "@repo/ui/blocks/audience";
 import { Cta } from "@repo/ui/blocks/cta";
@@ -34,6 +37,12 @@ import { PricingTable } from "@repo/ui/blocks/pricing-table";
 import { Showcase } from "@repo/ui/blocks/showcase";
 import { Testimonials } from "@repo/ui/blocks/testimonials";
 import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
+import { Cta as DuskCta } from "@saasaloy-kit/dusk/cta";
+import { Faq as DuskFaq } from "@saasaloy-kit/dusk/faq";
+import { FeatureGrid as DuskFeatureGrid } from "@saasaloy-kit/dusk/feature-grid";
+import { Hero as DuskHero } from "@saasaloy-kit/dusk/hero";
+import { PricingTable as DuskPricingTable } from "@saasaloy-kit/dusk/pricing-table";
+import { Testimonials as DuskTestimonials } from "@saasaloy-kit/dusk/testimonials";
 import {
   SignInPreview,
   SignUpPreview,
@@ -108,6 +117,14 @@ const THEME_SCRIPT = `(function(){var d=document.documentElement;var names=${JSO
         <ThemeToggle />
       </div>
     )}
+    {name === "dusk-hero" && <DuskHero siteName={siteName} />}
+    {name === "dusk-feature-grid" && <DuskFeatureGrid siteName={siteName} />}
+    {name === "dusk-pricing-table" && (
+      <DuskPricingTable siteName={siteName} client:load />
+    )}
+    {name === "dusk-testimonials" && <DuskTestimonials siteName={siteName} />}
+    {name === "dusk-faq" && <DuskFaq siteName={siteName} />}
+    {name === "dusk-cta" && <DuskCta siteName={siteName} />}
     {name === "auth-sign-in" && (
       <div class="bg-sidebar flex min-h-[36rem] items-center justify-center p-4">
         <SignInPreview client:load />

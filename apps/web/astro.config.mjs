@@ -42,6 +42,7 @@ function separateBuildCache() {
 const COMPONENT_ENTRIES = [
   "src/**/*.tsx",
   "../../packages/cli/templates/base/packages/ui/src/blocks/*.tsx",
+  "../../packages/cli/templates/kits/*/blocks/*.tsx",
   "../../modules/auth/files/ui/blocks/auth/*.tsx",
   "../../modules/waitlist/files/ui/blocks/waitlist.tsx",
   ...["button", "field", "input", "spinner"].map(
@@ -151,7 +152,18 @@ const MODULE_ALIASES = [
     replacement: `${modulesRoot}/shell/files/ui/components/shell/$1`,
   },
 ];
+// The blocks of a second kit (plan 0121, Phase 7) live beside the template, at
+// packages/cli/templates/kits/<kit>/blocks/. The preview imports them as
+// `@saasaloy-kit/<kit>/<block>`, a name only this site uses; their own `@repo/ui` imports
+// resolve to the template like any base block's.
+const KIT_ALIASES = [
+  {
+    find: /^@saasaloy-kit\/([^/]+)\/(.+)$/,
+    replacement: `${join(repoRoot, "packages/cli/templates/kits")}/$1/blocks/$2`,
+  },
+];
 const TEMPLATE_ALIASES = [
+  ...KIT_ALIASES,
   ...MODULE_ALIASES,
   {
     find: /^@repo\/ui\/(blocks|components|content|lib)\/(.+)$/,
@@ -162,9 +174,9 @@ const TEMPLATE_ALIASES = [
   { find: /^@repo\/config$/, replacement: `${templateConfig}/index.ts` },
 ];
 const TEMPLATE_PACKAGES =
-  /\/(?:packages\/cli\/templates\/base\/packages|modules\/[^/]+\/files)\//;
+  /\/(?:packages\/cli\/templates\/(?:base\/packages|kits)|modules\/[^/]+\/files)\//;
 const TEMPLATE_SOURCE =
-  /\/(?:packages\/cli\/templates\/base\/packages|modules\/[^/]+\/files)\/.+\.tsx?$/;
+  /\/(?:packages\/cli\/templates\/(?:base\/packages|kits)|modules\/[^/]+\/files)\/.+\.tsx?$/;
 // A module block and the brand-mark stand-in read `siteName` from `@repo/ui`. The preview
 // answers them with the sample name the public copy inlines, the same name the base blocks
 // take as a prop, so the frame shows what an install gives.

@@ -31,14 +31,18 @@ export interface UiBlock {
   sourcePath: string;
   /** The Saasaloy module that ships the block (`auth`), or `undefined` for a kit block. */
   module: string | undefined;
+  /** The kit of a kit block (`ink`, `dusk`), or `undefined` for a module block. */
+  kit: string | undefined;
 }
 
 // The raw block sources, keyed by their path from this file. `?raw` keeps them as text.
-// Module blocks (plan 0121, Phase 5) sit in their module's files/ui/blocks/ folder.
+// Module blocks (plan 0121, Phase 5) sit in their module's files/ui/blocks/ folder, and
+// the blocks of a second kit (Phase 7) in packages/cli/templates/kits/<kit>/blocks/.
 const RAW_BLOCKS = import.meta.glob<string>(
   [
     "../../../../packages/cli/templates/base/packages/ui/src/blocks/*.tsx",
     "../../../../modules/*/files/ui/blocks/**/*.tsx",
+    "../../../../packages/cli/templates/kits/*/blocks/*.tsx",
   ],
   { query: "?raw", import: "default", eager: true }
 );
@@ -62,6 +66,7 @@ export function uiBlocks(): UiBlock[] {
         .replace(/^components\/blocks\//, "")
         .replace(/\.tsx$/, "");
       const fromRepo = file.path.replace(/^\.\.\/\.\.\//, "");
+      const module = /^modules\/([^/]+)\//.exec(fromRepo)?.[1];
       return {
         name: item.name,
         block,
@@ -72,7 +77,8 @@ export function uiBlocks(): UiBlock[] {
         sourceUrl: `${repoUrl}/blob/main/${fromRepo}`,
         localImport: `@repo/ui/blocks/${block}`,
         sourcePath: fromRepo,
-        module: /^modules\/([^/]+)\//.exec(fromRepo)?.[1],
+        module,
+        kit: module === undefined ? item.name.split("-")[0] : undefined,
       };
     });
 }

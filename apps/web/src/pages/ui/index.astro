@@ -5,8 +5,9 @@
 // blocks come from apps/web/registry.json (lib/ui-registry.ts), so a new item joins the
 // grid with no edit here.
 //
-// The chips filter with one small inline script: it hides the cards of other categories
-// and marks the pressed chip. Without JavaScript every card shows. The grid stretches its
+// The chips filter with one small inline script: it hides the cards of other kits or
+// categories and marks the pressed chip. The kit chips (ink, dusk; plan 0121, Phase 7)
+// come first. Without JavaScript every card shows. The grid stretches its
 // cards, so cards in one row share one height (DESIGN.md).
 import UiLayout from "@web/layouts/UiLayout.astro";
 import { BlockThumb } from "@web/components/block-thumb";
@@ -16,12 +17,18 @@ import InlineCode from "@web/components/InlineCode.astro";
 import { uiBlocks } from "@web/lib/ui-registry";
 
 const blocks = uiBlocks();
+// One chip for each kit, then one for each block type. A card carries both its kit and
+// its type, so either chip finds it.
+const kits = [...new Set(blocks.map((block) => block.kit ?? ""))]
+  .filter((kit) => Object.hasOwn(uiRegistry.kits, kit))
+  .map((kit) => ({ id: kit, label: uiRegistry.kits[kit] }));
 const categories = [...new Set(blocks.map((block) => block.category))]
   .filter((category) => Object.hasOwn(uiRegistry.categories, category))
   .map((category) => ({
     id: category,
     label: uiRegistry.categories[category],
   }));
+const chips = [...kits, ...categories];
 const copy = uiRegistry.index;
 const sampleCommand = `npx shadcn@latest add @saasaloy/${copy.sampleBlock}`;
 const chipClass =
@@ -93,20 +100,23 @@ const chipClass =
         >
           {copy.all}
         </button>
-        {categories.map((category) => (
+        {chips.map((chip) => (
           <button
             type="button"
             class={chipClass}
             aria-pressed="false"
-            data-filter={category.id}
+            data-filter={chip.id}
           >
-            {category.label}
+            {chip.label}
           </button>
         ))}
       </div>
       <ul class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" role="list">
         {blocks.map((block) => (
-          <li class="flex" data-category={block.category}>
+          <li
+            class="flex"
+            data-filters={[block.kit, block.category].filter(Boolean).join(" ")}
+          >
             <a
               href={`/ui/blocks/${block.name}`}
               class="group border-border bg-card hover:border-highlight focus-visible:outline-ring flex w-full flex-col border transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -133,7 +143,7 @@ const chipClass =
 <script>
   // The filter chips. A press marks the chip and hides every card of another category.
   const group = document.querySelector("[data-ui-filters]");
-  const cards = document.querySelectorAll<HTMLElement>("[data-category]");
+  const cards = document.querySelectorAll<HTMLElement>("[data-filters]");
   group?.addEventListener("click", (event) => {
     const chip =
       event.target instanceof Element
@@ -147,7 +157,9 @@ const chipClass =
       other.setAttribute("aria-pressed", String(other === chip));
     }
     for (const card of cards) {
-      card.hidden = filter !== "" && card.dataset.category !== filter;
+      card.hidden =
+        filter !== "" &&
+        !(card.dataset.filters ?? "").split(" ").includes(filter);
     }
   });
 </script>

@@ -57,6 +57,10 @@ const MODULE_BLOCKS: Record<string, string> = {
   "auth-sign-up": "modules/auth/files/ui/blocks/auth/sign-up.tsx",
   "waitlist-form": "modules/waitlist/files/ui/blocks/waitlist.tsx",
 };
+/** The kits after ink (plan 0121, Phase 7): each block is `<kit>-<block>` from its kit folder. */
+const SECOND_KITS = readdirSync(
+  join(REPO_ROOT, "packages/cli/templates/kits")
+).toSorted();
 /** The shell primitives the module blocks render, each a `shell-<name>` item. */
 const SHELL_PRIMITIVES = ["button", "field", "input", "spinner"];
 
@@ -126,6 +130,11 @@ function brandDeclarations(selector: string): Record<string, string> {
   );
 }
 
+/** apps/web/registry.json, the source the build reads. */
+const registrySource = JSON.parse(
+  readFileSync(join(WEB_ROOT, "registry.json"), "utf-8")
+) as { items: { name: string; files: { path: string }[] }[] };
+
 let out = "";
 let items: Item[] = [];
 
@@ -175,6 +184,41 @@ describe("registry", () => {
         item.files?.map((file) => file.target),
         [`components/blocks/${block}.tsx`]
       );
+    }
+  });
+
+  it("names each block of a second kit as <kit>-<block> from its kit folder", () => {
+    assert.ok(SECOND_KITS.length > 0);
+    for (const kit of SECOND_KITS) {
+      const files = readdirSync(
+        join(REPO_ROOT, "packages/cli/templates/kits", kit, "blocks")
+      )
+        .filter((name) => name.endsWith(".tsx"))
+        .map((name) => name.replace(/\.tsx$/, ""));
+      assert.ok(files.length > 0, `${kit} ships no block`);
+      for (const block of files) {
+        const item = blocks().find((one) => one.name === `${kit}-${block}`);
+        assert.ok(item, `${kit}-${block} is missing`);
+        assert.deepEqual(
+          item.files?.map((file) => file.target),
+          [`components/blocks/${block}.tsx`]
+        );
+        assert.ok(
+          (item.files?.[0]?.content ?? "").includes(
+            `// ${kit}-${block} from Saasaloy UI`
+          ),
+          `${kit}-${block} has no provenance line`
+        );
+        const source = registrySource.items.find(
+          (one) => one.name === `${kit}-${block}`
+        );
+        assert.deepEqual(
+          source?.files.map((file) => file.path),
+          [`../../packages/cli/templates/kits/${kit}/blocks/${block}.tsx`]
+        );
+        // Same name as an ink block, so a template swaps a file for a file.
+        assert.ok(BASE_BLOCKS.includes(block), `${block} has no ink block`);
+      }
     }
   });
 
@@ -334,7 +378,14 @@ describe("registry", () => {
           file.type === "registry:lib"
             ? `lib/${basename(file.path)}`
             : (file.target ?? file.path);
-        write(path, file.content ?? "");
+        // A second kit's block (dusk-hero) targets the same path as ink's; it gets its own
+        // folder, and its `@/` imports still reach the shared fixture root.
+        const kit = /^([a-z]+)-/.exec(item.name)?.[1];
+        const ownFolder =
+          item.type === "registry:block" &&
+          kit !== undefined &&
+          SECOND_KITS.includes(kit);
+        write(ownFolder ? `kits/${kit}/${path}` : path, file.content ?? "");
       }
     }
     // The primitives the items name by their shadcn name, and shadcn init's own utils.

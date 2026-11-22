@@ -306,6 +306,112 @@
       "categories": ["navigation"]
     },
     {
+      "name": "dusk-hero",
+      "type": "registry:block",
+      "title": "Hero",
+      "description": "A split hero with a headline, two actions and a glowing terminal frame.",
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/hero.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/hero.tsx"
+        }
+      ],
+      "categories": ["hero"]
+    },
+    {
+      "name": "dusk-feature-grid",
+      "type": "registry:block",
+      "title": "Feature grid",
+      "description": "A bento grid of rounded feature cards, the first one wide.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/feature-grid.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/feature-grid.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "dusk-pricing-table",
+      "type": "registry:block",
+      "title": "Pricing table",
+      "description": "Rounded plan cards with a raised featured tier and a monthly and annual switch.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/pricing-table.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/pricing-table.tsx"
+        }
+      ],
+      "categories": ["pricing"]
+    },
+    {
+      "name": "dusk-testimonials",
+      "type": "registry:block",
+      "title": "Testimonials",
+      "description": "Masonry quote cards with round initials avatars.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/testimonials.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/testimonials.tsx"
+        }
+      ],
+      "categories": ["social-proof"]
+    },
+    {
+      "name": "dusk-faq",
+      "type": "registry:block",
+      "title": "FAQ",
+      "description": "Questions and answers side by side, every answer visible.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/faq.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/faq.tsx"
+        }
+      ],
+      "categories": ["faq"]
+    },
+    {
+      "name": "dusk-cta",
+      "type": "registry:block",
+      "title": "Call to action",
+      "description": "A full-width call to action panel in the primary colour.",
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/cta.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/cta.tsx"
+        }
+      ],
+      "categories": ["cta"]
+    },
+    {
       "name": "shell-spinner",
       "type": "registry:ui",
       "title": "Shell spinner",

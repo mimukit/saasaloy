@@ -1,0 +1,16 @@
+{
+  "name": "focus",
+  "title": "Focus",
+  "description": "A short page in the ink kit with the neutral theme: the hero, the features, the prices and one call to action.",
+  "theme": "neutral",
+  "kit": "ink",
+  "blocks": [
+    "navbar",
+    "hero",
+    "feature-grid",
+    "pricing-table",
+    "cta",
+    "footer"
+  ],
+  "content": "base landing copy"
+}

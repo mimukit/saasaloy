@@ -36,7 +36,7 @@ saasaloy <command> [options]
 ## `saasaloy init`
 
 ```text
-saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>] [--theme=<neutral|cobalt|ember|moss>]
+saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>] [--theme=<neutral|cobalt|ember|moss>] [--template=<launch|focus|glow>] [--blocks=<list>]
 ```
 
 | Flag | Effect |
@@ -47,6 +47,8 @@ saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<o
 | `--no-git` | do not run git init or make the first commit |
 | `--testing=<mode>` | the testing mode: off (default), tests-after or tdd; asked on a terminal when absent |
 | `--theme=<name>` | the Saasaloy UI theme brand.css takes: neutral (default), cobalt, ember or moss; asked on a terminal when absent |
+| `--template=<name>` | a Saasaloy UI template for the landing page: launch, focus or glow; sets the block kit, the theme (a --theme flag wins) and the block list |
+| `--blocks=<list>` | the landing page's blocks in order, comma-separated (navbar first, footer last); overrides the template's list, and takes the ink kit with no --template |
 | `-h, --help` | show this help |
 
 ## `saasaloy add`

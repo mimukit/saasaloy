@@ -19,6 +19,9 @@
 // <html>, which every preview frame on the page follows, shows that theme's install
 // command above the block's, and is kept in localStorage for the next block page. The
 // site's own cobalt brand and light or dark mode never change.
+//
+// A block of the second kit (plan 0121, Phase 7) names the template that writes it into a
+// Saasaloy project, read from the CLI's recipes (packages/cli/src/lib/recipes.ts).
 import UiLayout from "@web/layouts/UiLayout.astro";
 import InlineCode from "@web/components/InlineCode.astro";
 import { CommandField } from "@web/components/command-field";
@@ -33,6 +36,7 @@ import {
   UI_THEMES,
 } from "@web/lib/ui-themes";
 import type { UiBlock } from "@web/lib/ui-registry";
+import { RECIPES } from "../../../../../../packages/cli/src/lib/recipes.ts";
 
 export function getStaticPaths() {
   return uiBlocks().map((block) => ({
@@ -51,6 +55,11 @@ const { wireUp } = uiRegistry;
 // A module block (Phase 5) shows its Saasaloy wire-up beside the plain shadcn command.
 const wire =
   block.module === undefined ? undefined : wireUp.modules[block.module];
+// A block of a kit other than ink (Phase 7) reaches a Saasaloy project through a template.
+const kitTemplate =
+  block.kit === undefined || block.kit === "ink"
+    ? undefined
+    : Object.values(RECIPES).find((recipe) => recipe.kit === block.kit);
 const commandPanelClass =
   "border-border bg-card flex flex-col gap-3 border p-5";
 const panelHeadingClass = "text-foreground text-base font-semibold";
@@ -298,7 +307,15 @@ const tabClass =
       <p class="text-foreground">{`${copy.styleNoteLead} ${copy.styleNoteBuilt} `}<a href="/" class="text-highlight underline underline-offset-4">{copy.styleNoteBrand}</a>{`. ${copy.styleNoteTail}`}</p>
       <p class="text-muted-foreground">
         <InlineCode
-          text={interpolate(copy.localName, { local: block.localImport })}
+          text={
+            kitTemplate === undefined
+              ? interpolate(copy.localName, { local: block.localImport })
+              : interpolate(copy.localNameKit, {
+                  kit: kitTemplate.kit,
+                  local: block.localImport,
+                  template: kitTemplate.name,
+                })
+          }
         />
       </p>
     </div>

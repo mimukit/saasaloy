@@ -39,10 +39,16 @@ export const uiRegistry = {
     styleNote: "Built for the base-nova style. Works with any Base UI project.",
     registriesNote:
       'Map the namespace once: add `"@saasaloy": "https://saasaloy.com/r/{name}.json"` to `registries` in `components.json`.',
-    filterLabel: "Filter blocks by type",
+    filterLabel: "Filter blocks by kit or type",
     all: "All",
     gridLabel: "Blocks",
   },
+
+  /** Kit chip labels, keyed by the kit name a block's registry name starts with. */
+  kits: {
+    ink: "Ink",
+    dusk: "Dusk",
+  } as Record<string, string>,
 
   /** Filter chip labels, keyed by the registry `categories[0]` value. */
   categories: {
@@ -101,6 +107,8 @@ export const uiRegistry = {
     styleNoteTail: "Install in any Base UI project.",
     localName:
       "In a Saasaloy project the same block ships as `{local}`, from the local `@repo/ui` package. Saasaloy UI is the public registry of those blocks.",
+    localNameKit:
+      "In a Saasaloy project, a template in the `{kit}` kit writes the same block as `{local}`, from the local `@repo/ui` package: `saasaloy init <name> --template={template}`.",
     source: "View source on GitHub",
   },
 

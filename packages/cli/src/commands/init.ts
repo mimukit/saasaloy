@@ -32,6 +32,15 @@ import {
   THEMES,
 } from "../lib/theme.js";
 import type { ThemeName } from "../lib/theme.js";
+import {
+  DEFAULT_BLOCKS,
+  DEFAULT_KIT,
+  parseBlockList,
+  parseTemplateName,
+  RECIPES,
+  TEMPLATE_NAMES,
+} from "../lib/recipes.js";
+import type { KitName, PageBlock, TemplateName } from "../lib/recipes.js";
 import { isInteractive, stripAnsi, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
@@ -66,6 +75,13 @@ export interface InitOptions {
    * so an unknown name is a refusal that lists the names.
    */
   theme?: string;
+  /**
+   * `--template=<name>`, raw (plan 0121, Phase 7). Parsed before anything is written: it
+   * picks the kit, the theme (unless `--theme` is given too) and the block list.
+   */
+  template?: string;
+  /** `--blocks=<comma list>`, raw: the landing page's blocks in order. */
+  blocks?: string;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
@@ -81,7 +97,9 @@ const KNOWN_FLAGS = new Set([
 ]);
 const TESTING_FLAG = "--testing=";
 const THEME_FLAG = "--theme=";
-const USAGE = `saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<${TESTING_MODES.join("|")}>] [--theme=<${THEME_NAMES.join("|")}>]`;
+const TEMPLATE_FLAG = "--template=";
+const BLOCKS_FLAG = "--blocks=";
+const USAGE = `saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<${TESTING_MODES.join("|")}>] [--theme=<${THEME_NAMES.join("|")}>] [--template=<${TEMPLATE_NAMES.join("|")}>] [--blocks=<list>]`;
 const HELP: CommandHelp = {
   name: "init",
   describe: DESCRIPTIONS.init,
@@ -96,6 +114,10 @@ const HELP: CommandHelp = {
       "the testing mode: off (default), tests-after or tdd; asked on a terminal when absent",
     "--theme=<name>":
       "the Saasaloy UI theme brand.css takes: neutral (default), cobalt, ember or moss; asked on a terminal when absent",
+    "--template=<name>":
+      "a Saasaloy UI template for the landing page: launch, focus or glow; sets the block kit, the theme (a --theme flag wins) and the block list",
+    "--blocks=<list>":
+      "the landing page's blocks in order, comma-separated (navbar first, footer last); overrides the template's list, and takes the ink kit with no --template",
   },
 };
 
@@ -105,6 +127,8 @@ export function parseArgs(argv: string[]): InitOptions {
   const unknown: string[] = [];
   let testing: string | undefined;
   let theme: string | undefined;
+  let template: string | undefined;
+  let blocks: string | undefined;
   for (const arg of argv) {
     if (!arg.startsWith("-")) {
       positional.push(arg);
@@ -112,6 +136,10 @@ export function parseArgs(argv: string[]): InitOptions {
       testing = arg.slice(TESTING_FLAG.length);
     } else if (arg.startsWith(THEME_FLAG)) {
       theme = arg.slice(THEME_FLAG.length);
+    } else if (arg.startsWith(TEMPLATE_FLAG)) {
+      template = arg.slice(TEMPLATE_FLAG.length);
+    } else if (arg.startsWith(BLOCKS_FLAG)) {
+      blocks = arg.slice(BLOCKS_FLAG.length);
     } else if (!KNOWN_FLAGS.has(arg)) {
       unknown.push(arg);
     }
@@ -127,6 +155,8 @@ export function parseArgs(argv: string[]): InitOptions {
     noGit: argv.includes("--no-git"),
     ...(testing === undefined ? {} : { testing }),
     ...(theme === undefined ? {} : { theme }),
+    ...(template === undefined ? {} : { template }),
+    ...(blocks === undefined ? {} : { blocks }),
     unknown,
   };
 }
@@ -182,6 +212,37 @@ export async function resolveInitTheme(
     return DEFAULT_THEME;
   }
   return prompt.ask();
+}
+
+/** The landing page `init` writes (plan 0121, Phase 7), from `--template` and `--blocks`. */
+export interface InitLanding {
+  template?: TemplateName;
+  /** The template's theme. A `--theme` flag wins over it. */
+  theme?: ThemeName;
+  kit: KitName;
+  blocks: readonly PageBlock[];
+}
+
+/**
+ * `--template` and `--blocks`, raw, as the page to write. A template gives the kit, the
+ * theme and the block list; `--blocks` replaces the list and its order, with or without a
+ * template, and with none the kit is ink. An unknown template, an unknown block or a block
+ * named twice is a refusal that lists the valid names, before anything is written.
+ */
+export function resolveInitLanding(
+  template: string | undefined,
+  blocks?: string
+): InitLanding {
+  const recipe =
+    template === undefined ? undefined : RECIPES[parseTemplateName(template)];
+  const list = blocks === undefined ? undefined : parseBlockList(blocks);
+  return {
+    ...(recipe === undefined
+      ? {}
+      : { template: recipe.name, theme: recipe.theme }),
+    kit: recipe?.kit ?? DEFAULT_KIT,
+    blocks: list ?? recipe?.blocks ?? DEFAULT_BLOCKS,
+  };
 }
 
 function askTheme(): Promise<ThemeName | symbol> {
@@ -421,6 +482,14 @@ async function initProject(opts: InitOptions): Promise<number> {
     }
   }
 
+  let landing: InitLanding;
+  try {
+    landing = resolveInitLanding(opts.template, opts.blocks);
+  } catch (error) {
+    cancel(`${errorMessage(error)} Usage: \`${USAGE}\`.`);
+    return EXIT_REFUSED;
+  }
+
   // `init` ignored every flag it did not know, while `add`/`remove`/`update` rejected
   // theirs — so `saasaloy init app --forse` scaffolded into a non-empty directory and
   // said nothing. One rule now (#98).
@@ -519,7 +588,8 @@ async function initProject(opts: InitOptions): Promise<number> {
     return EXIT_FAILURE;
   }
 
-  const theme = await resolveInitTheme(themeFlag, {
+  // A template's theme answers the question the way a flag does; `--theme` wins over it.
+  const theme = await resolveInitTheme(themeFlag ?? landing.theme, {
     interactive: isInteractive(),
     yes,
     ask: askTheme,
@@ -529,7 +599,13 @@ async function initProject(opts: InitOptions): Promise<number> {
     return EXIT_FAILURE;
   }
 
-  const scaffolded = await scaffold(target, projectName, testingMode, theme);
+  const scaffolded = await scaffold(
+    target,
+    projectName,
+    testingMode,
+    theme,
+    landing
+  );
   if (scaffolded !== undefined) {
     return scaffolded;
   }
@@ -703,6 +779,9 @@ export async function scaffoldProject(args: {
   projectName: string;
   testingMode: RenderOptions["testingMode"];
   theme?: RenderOptions["theme"];
+  template?: RenderOptions["template"];
+  kit?: RenderOptions["kit"];
+  blocks?: RenderOptions["blocks"];
 }): Promise<ApplyReport> {
   const cliVersion = await readVersion();
   const options: RenderOptions = {
@@ -711,6 +790,9 @@ export async function scaffoldProject(args: {
       ? {}
       : { testingMode: args.testingMode }),
     ...(args.theme === undefined ? {} : { theme: args.theme }),
+    ...(args.template === undefined ? {} : { template: args.template }),
+    ...(args.kit === undefined ? {} : { kit: args.kit }),
+    ...(args.blocks === undefined ? {} : { blocks: args.blocks }),
   };
   const { side } = await loadSide(
     { coordinates: new Map(), options, requested: [], version: cliVersion },
@@ -725,12 +807,21 @@ async function scaffold(
   target: string,
   projectName: string,
   testingMode: TestingMode,
-  theme: ThemeName
+  theme: ThemeName,
+  landing: InitLanding
 ): Promise<number | undefined> {
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
   try {
-    await scaffoldProject({ projectName, target, testingMode, theme });
+    await scaffoldProject({
+      projectName,
+      target,
+      testingMode,
+      theme,
+      ...(landing.template === undefined ? {} : { template: landing.template }),
+      kit: landing.kit,
+      blocks: landing.blocks,
+    });
   } catch (error) {
     s.stop(pc.red(`Couldn't scaffold ${projectName}`));
     cancel(errorMessage(error));

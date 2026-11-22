@@ -345,6 +345,8 @@ sure about, and anything still on the **Not mine to fix** list.
 
 ### Dropping a block is its own confirmation
 
+First read `saasaloy.json`. A `template`, `kit` or `blocks` key means `saasaloy init --template` or `--blocks` composed the page from a Saasaloy UI template: `index.astro` may already render fewer blocks than the base page, in another order, and the navbar labels of the left-out sections are already blank. A block file in `packages/ui/src/blocks/` that `index.astro` does not import is one of those left-out sections, not a section of the page. Write copy only for the sections the page imports, and leave the other `landing.ts` entries as they are, so a section added back later still has words.
+
 When the brief yields nothing a block can honestly carry — no pricing, no customer quotes,
 no customer logos, no screenshots for the showcase, no real sequence for how it works — you
 may propose removing that block. **Separately.** Never bundled into the copy write,
