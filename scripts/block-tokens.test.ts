@@ -8,11 +8,11 @@
 //   - a colour function (`rgb(`, `rgba(`, `hsl(`, `hsla(`, `oklch(`, `oklab(`, `lab(`,
 //     `lch(`, `hwb(`, `color(`). `color-mix(in oklch, …)` names a space, not a colour;
 //   - a Tailwind palette class (`bg-blue-500`, `text-zinc-400/80`), and `black` or `white`
-//     on any colour utility but `shadow-`.
+//     on any colour utility, `shadow-` included. A theme owns shadows, so a shadow tint
+//     reads a token (`shadow-foreground/5`), not `shadow-black/5`.
 //
-// Two exceptions, each an alpha value and not a colour. The `#000` inside a `mask-image`
-// gradient is the mask's opacity, so a theme has nothing to change there. A `shadow-black/5`
-// tints a shadow with an alpha, the way shadcn's own primitives do.
+// One exception, an alpha value and not a colour: the `#000` inside a `mask-image`
+// gradient is the mask's opacity, so a theme has nothing to change there.
 //
 // The folders are a list: kit blocks (packages/cli/templates/kits/<kit>/blocks/) join
 // through the glob, and a module block joins through its file in apps/web/registry.json.
@@ -53,7 +53,7 @@ const CHECKS: { rule: string; pattern: RegExp }[] = [
   {
     rule: "black or white class",
     pattern: new RegExp(
-      String.raw`(?<![\w-])(?!shadow-)(?:${COLOUR_UTILITIES})-(?:black|white)(?![\w-])`,
+      String.raw`(?<![\w-])(?:${COLOUR_UTILITIES})-(?:black|white)(?![\w-])`,
       "g"
     ),
   },
@@ -146,9 +146,17 @@ describe("block tokens", () => {
     );
   });
 
-  it("allows the #000 in a mask-image gradient and a shadow tint", () => {
-    const fixture = `<div className="[mask-image:radial-gradient(ellipse_at_center,#000,transparent_70%)] shadow-md shadow-black/5 [--grid-line:color-mix(in_oklch,var(--foreground)_5%,transparent)]" />`;
+  it("allows the #000 in a mask-image gradient and a token shadow tint", () => {
+    const fixture = `<div className="[mask-image:radial-gradient(ellipse_at_center,#000,transparent_70%)] shadow-md shadow-foreground/5 [--grid-line:color-mix(in_oklch,var(--foreground)_5%,transparent)]" />`;
     assert.deepEqual(findColours(fixture), []);
+  });
+
+  it("fails a black or white shadow tint", () => {
+    const fixture = `<div className="shadow-md shadow-black/5 drop-shadow-white" />`;
+    assert.deepEqual(
+      findColours(fixture).map((finding) => finding.text),
+      ["shadow-black", "drop-shadow-white"]
+    );
   });
 
   it("still fails a #000 outside a mask", () => {
