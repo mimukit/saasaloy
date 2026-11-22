@@ -318,6 +318,7 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
   const setup = read("saasaloy-setup");
   const build = read("saasaloy-build");
   const feature = read("saasaloy-feature");
+  const design = read("saasaloy-design");
   const agents = readFileSync(
     join(ROOT, "packages", "cli", "templates", "base", "AGENTS.md"),
     "utf-8"
@@ -329,12 +330,12 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     ...setup.matchAll(/^\| (\d+) \| \*\*([^*]+)\*\* \|/gm),
   ].map((match) => ({ number: Number(match[1]), name: match[2] ?? "" }));
 
-  it("asks about fourteen questions, numbered in order, with the preview last", () => {
+  it("asks about thirteen questions, numbered in order, with the capabilities last (plan 0122)", () => {
     assert.deepEqual(
       questions.map((question) => question.number),
-      Array.from({ length: 14 }, (_, index) => index + 1)
+      Array.from({ length: 13 }, (_, index) => index + 1)
     );
-    assert.equal(questions.at(-1)?.name, "Preview deploy");
+    assert.equal(questions.at(-1)?.name, "Capabilities");
   });
 
   it("asks for the entities and the capabilities, and not for a driver", () => {
@@ -346,26 +347,39 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     assert.match(setup, /saasaloy list --json/);
   });
 
-  it("records the preview choice in the frontmatter, and names the temporary database", () => {
-    assert.match(setup, /`deploy: preview`/);
-    assert.match(setup, /`deploy: none`/);
-    assert.match(setup, /preview runs on a temporary database/);
+  it("asks no preview question, and keeps a deploy setting the owner gave (plan 0122)", () => {
+    assert.ok(
+      !questions.some((question) => question.name === "Preview deploy"),
+      "a Preview deploy question"
+    );
+    assert.doesNotMatch(setup, /preview runs on a temporary database/);
+    assert.match(
+      setup,
+      /Preserve a deployment setting already supplied by the owner/
+    );
+    assert.match(build, /`deploy` \(`preview` or `none`/);
   });
 
-  it("ends with one read-back that accepts thin answers and sets autonomy", () => {
+  it("ends the product read-back with approval, and leaves autonomy to the design review (plan 0122)", () => {
     const readBack = section(setup, /^Step 1/) ?? "";
     assert.match(readBack, /### The read-back/);
     assert.match(readBack, /`weak-accepted:`/);
-    assert.match(readBack, /Set `autonomy: afk`/);
-    assert.match(readBack, /Ask nothing after the confirmation/);
+    assert.match(
+      readBack,
+      /\*\*Approve the product brief and spec and start design\?\*\*/
+    );
+    assert.match(readBack, /Keep `autonomy` unset/);
+    assert.doesNotMatch(readBack, /Set `autonomy: afk`/);
+    assert.match(design, /Set `autonomy: afk` in the brief after approval/);
     assert.doesNotMatch(setup, /Run the build unattended\?/);
   });
 
-  it("starts saasaloy-build in the same session", () => {
+  it("starts the design review after the product, and the build after the design (plan 0122)", () => {
     assert.match(
-      section(setup, /^Start the build$/) ?? "",
-      /`\.agents\/skills\/saasaloy-build\/SKILL\.md` and follow it, in this session/
+      section(setup, /^Start the design review$/) ?? "",
+      /`review` mode in `\.agents\/skills\/saasaloy-design\/SKILL\.md` in this session/
     );
+    assert.match(design, /Start `saasaloy-build` in the same session/);
   });
 
   it("writes the brief and the spec, and no longer says a scaffold has no commit", () => {
@@ -384,7 +398,10 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
     assert.match(featureStage, /with no limit on their number/);
     assert.match(featureStage, /`feat\(build\): feature <table>`/);
     assert.match(build, /`## Feature: <table>`/);
-    assert.match(build, /`feat\(build\): feature <table>` commit/);
+    assert.match(
+      build,
+      /commit the entity on its own: `feat\(build\): feature <table>`/
+    );
   });
 
   it("picks database-postgres and installs only the spec's modules (plan 0123)", () => {
@@ -464,17 +481,29 @@ describe("the interview joins the build (plan 0109 phase 6)", () => {
         `${name} stops while ./product-brief.md exists`
       );
     }
-    assert.match(rules.setup, /steps 1 and 2 found none/);
+    assert.match(rules.setup, /neither location holds one/);
     assert.match(setup, /`\.\/product-brief\.md` does/);
     assert.match(rules.llms, /holds no `product-brief\.md`/);
   });
 
-  it("gives one path in llms.txt and AGENTS.md: init, the interview, the build", () => {
+  it("gives one order in llms.txt and AGENTS.md: init, the product, the design, the build (plan 0122)", () => {
     assert.match(
       llms,
-      /One path, in one session: `init`, the interview, the build/
+      /Start with `init`\. Confirm product scope and design before the build\./
     );
-    assert.match(agents, /One path: `saasaloy init`, the interview, the build/);
+    const order = [
+      "init . --force --yes",
+      "`saasaloy-setup`",
+      "`saasaloy-design` review",
+      "Start `saasaloy-build` in the same session",
+    ].map((step) => llms.indexOf(step));
+    assert.ok(
+      order.every(
+        (at, index) => at !== -1 && (index === 0 || at > order[index - 1]!)
+      ),
+      `llms.txt lists the steps out of order: ${order.join(", ")}`
+    );
+    assert.match(agents, /\*\*Approve the product, then the design\.\*\*/);
     assert.doesNotMatch(llms, /Do not write the brief yourself/);
   });
 });
@@ -520,7 +549,10 @@ describe("every built product is usable by agents (plan 0110 phase 7)", () => {
 
   it("says at the read-back that each entity action is callable by agents", () => {
     const readBack = section(setup, /^Step 1/) ?? "";
-    assert.match(readBack, /each action of the entity is callable by agents/);
+    assert.match(
+      readBack,
+      /When the list holds `agent`, name the MCP scopes for those actions/
+    );
   });
 
   it("derives every module in the proposal, with no fixed set (plan 0123)", () => {
