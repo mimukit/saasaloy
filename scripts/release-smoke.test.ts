@@ -706,6 +706,16 @@ describe("missingEnvKeys", () => {
     ]);
   });
 
+  it("reads a conditional key without its condition label", () => {
+    const output =
+      'api has no value for EMAIL_FROM (required: EMAIL_PROVIDER!=console), EMAIL_PROVIDER, PLUNK_API_KEY (required: EMAIL_PROVIDER=plunk). Set them at the value source, or mark them "# Blank on purpose" in packages/env/.env.example.';
+    assert.deepEqual(missingEnvKeys(output), [
+      "EMAIL_FROM",
+      "EMAIL_PROVIDER",
+      "PLUNK_API_KEY",
+    ]);
+  });
+
   it("names a key two services miss once", () => {
     const output =
       "api has no value for KV_PROVIDER.\nadmin has no value for KV_PROVIDER.";
