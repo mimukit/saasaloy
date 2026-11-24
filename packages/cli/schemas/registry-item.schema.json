@@ -215,6 +215,35 @@
       "uniqueItems": true,
       "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
     },
+    "envRequiredWhen": {
+      "type": "object",
+      "description": "Keys from `envVars` that may stay empty unless another key holds a named value: NAME → `{ \"key\": \"EMAIL_PROVIDER\", \"is\": \"plunk\" }` or `{ \"key\": \"EMAIL_PROVIDER\", \"isNot\": \"console\" }`. The controlling value is read as a comma list: `is` holds when the list names the value, `isNot` holds when it does not. `saasaloy add` writes a `# @required-when KEY=value` or `# @required-when KEY!=value` line above the key in `packages/env/.env.example`, and `pnpm env:setup`, the deploy check and `createEnv` require the key only while the condition holds. Every name here must also appear in `envVars`, and not in `envOptional`.",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["key", "is"],
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+              "is": { "type": "string", "minLength": 1 }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["key", "isNot"],
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+              "isNot": { "type": "string", "minLength": 1 }
+            }
+          }
+        ]
+      }
+    },
     "devVars": {
       "type": "object",
       "description": "Local-development values for a subset of `envVars`: NAME → the value `saasaloy add` pre-fills into the generated `packages/env/.env.example`. Only for a value that is the same on every machine and is not a secret (a loopback URL, a fixed port). Every key here must also appear in `envVars`; a key absent here is written with an empty value for the owner to fill in.",

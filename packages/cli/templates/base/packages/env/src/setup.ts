@@ -1,5 +1,5 @@
 import path from "node:path";
-import { blankOnPurposeKeys, incompleteKeys } from "./check.ts";
+import { blankAllowedKeys, describeMissing, incompleteKeys } from "./check.ts";
 import { parseValues, planEnv } from "./dotenv.ts";
 import {
   readEnvFile,
@@ -63,6 +63,8 @@ export async function setupServices(options: {
 
   const planned: {
     service: FileService;
+    example: string[];
+    effective: Map<string, string>;
     target: string;
     exists: boolean;
     legacy: string | undefined;
@@ -99,15 +101,19 @@ export async function setupServices(options: {
         }
       }
 
+      // A `# @required-when` key reads its condition from the values this file gets.
+      const effective = new Map([...values, ...keep]);
       planned.push({
         service,
+        example,
+        effective,
         target,
         exists: existing.exists,
         legacy: legacy.size > 0 ? legacyPath : undefined,
         plan: planEnv({
           example,
           values,
-          blankOnPurpose: blankOnPurposeKeys(example),
+          blankOnPurpose: blankAllowedKeys(example, effective),
           keep,
           omit: service.omit,
         }),
@@ -120,9 +126,11 @@ export async function setupServices(options: {
     return keepComplete(root, services, error.message);
   }
 
-  const missing = planned.flatMap(({ service, plan }) =>
+  const missing = planned.flatMap(({ service, example, effective, plan }) =>
     plan.missingKeys.length > 0
-      ? [`${service.name} has no value for ${plan.missingKeys.join(", ")}`]
+      ? [
+          `${service.name} has no value for ${describeMissing(example, effective, plan.missingKeys).join(", ")}`,
+        ]
       : []
   );
   if (missing.length > 0) {
@@ -161,7 +169,9 @@ function keepComplete(
     const example = readExample(root, service.name);
     const missing = incompleteKeys(example, file.values, service.omit);
     return missing.length > 0
-      ? [`${service.file} has no value for ${missing.join(", ")}`]
+      ? [
+          `${service.file} has no value for ${describeMissing(example, file.values, missing).join(", ")}`,
+        ]
       : [];
   });
   if (problems.length > 0) {

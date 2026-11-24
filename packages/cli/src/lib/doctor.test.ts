@@ -372,6 +372,121 @@ describe("doctor — the conventions the schema cannot check", () => {
   });
 });
 
+describe("doctor — envRequiredWhen (#390)", () => {
+  async function checkDescriptor(
+    fields: Record<string, unknown>
+  ): Promise<ModuleReport | undefined> {
+    const dir = await mkdtemp(join(tmpdir(), "saasaloy-doctor-when-"));
+    try {
+      await mkdir(join(dir, "cond"));
+      await writeFile(
+        join(dir, "cond", "registry-item.json"),
+        JSON.stringify({
+          description: "A conditional key fixture.",
+          name: "cond",
+          type: "saasaloy:feature",
+          ...fields,
+        }),
+        "utf-8"
+      );
+      const [report] = await check(dir);
+      return report;
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  }
+
+  const envVars = {
+    MAIL_KEY: "The vendor key.",
+    MAIL_PROVIDER: "Which provider sends.",
+  };
+
+  it("passes a declared key with one condition", async () => {
+    const report = await checkDescriptor({
+      envRequiredWhen: { MAIL_KEY: { is: "vendor", key: "MAIL_PROVIDER" } },
+      envServices: { default: ["api"] },
+      envVars,
+    });
+
+    expect(report?.findings).toStrictEqual([]);
+    expect(report?.warnings).toStrictEqual([]);
+  });
+
+  it("reports a conditional key missing from envVars", async () => {
+    const report = await checkDescriptor({
+      envRequiredWhen: { GHOST_KEY: { is: "vendor", key: "MAIL_PROVIDER" } },
+      envServices: { default: ["api"] },
+      envVars,
+    });
+
+    expect(messages(report?.findings ?? [])).toStrictEqual([
+      "/envRequiredWhen/GHOST_KEY has no matching entry in envVars, so no key carries the condition",
+    ]);
+  });
+
+  it("reports a key in both envOptional and envRequiredWhen", async () => {
+    const report = await checkDescriptor({
+      envOptional: ["MAIL_KEY"],
+      envRequiredWhen: { MAIL_KEY: { is: "vendor", key: "MAIL_PROVIDER" } },
+      envServices: { default: ["api"] },
+      envVars,
+    });
+
+    expect(messages(report?.findings ?? [])).toStrictEqual([
+      "/envRequiredWhen/MAIL_KEY is also in envOptional — a key is either blank on purpose or required when a condition holds, not both",
+    ]);
+  });
+
+  it("reports a condition with both is and isNot, and one with neither", async () => {
+    const both = await checkDescriptor({
+      envRequiredWhen: {
+        MAIL_KEY: { is: "vendor", isNot: "console", key: "MAIL_PROVIDER" },
+      },
+      envServices: { default: ["api"] },
+      envVars,
+    });
+    const neither = await checkDescriptor({
+      envRequiredWhen: { MAIL_KEY: { key: "MAIL_PROVIDER" } },
+      envServices: { default: ["api"] },
+      envVars,
+    });
+
+    expect(messages(both?.findings ?? [])).toStrictEqual([
+      '/envRequiredWhen/MAIL_KEY names both "is" and "isNot" — set exactly one',
+    ]);
+    expect(messages(neither?.findings ?? [])).toStrictEqual([
+      '/envRequiredWhen/MAIL_KEY names neither "is" nor "isNot" — set exactly one',
+    ]);
+  });
+
+  it("warns when its own controlling key does not reach the key's services", async () => {
+    const report = await checkDescriptor({
+      envRequiredWhen: { MAIL_KEY: { is: "vendor", key: "MAIL_PROVIDER" } },
+      envServices: { MAIL_KEY: ["api", "web"], default: ["api"] },
+      envVars,
+    });
+
+    expect(report?.findings).toStrictEqual([]);
+    expect(report?.warnings.map((found) => found.where)).toStrictEqual([
+      "/envRequiredWhen/MAIL_KEY/key",
+    ]);
+    expect(report?.warnings[0]?.message).toContain(
+      "MAIL_PROVIDER does not reach web"
+    );
+  });
+
+  it("skips the routing check when another module declares the controlling key", async () => {
+    const report = await checkDescriptor({
+      envRequiredWhen: { MAIL_KEY: { is: "vendor", key: "OTHER_PROVIDER" } },
+      envServices: { default: ["web"] },
+      envVars,
+    });
+
+    expect(report?.findings).toStrictEqual([]);
+    expect(report?.warnings).toStrictEqual([]);
+  });
+});
+
 function manifestWith(files: Record<string, string>): ManifestV2 {
   const manifest = emptyManifestV2();
   for (const [target, module] of Object.entries(files)) {

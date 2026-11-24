@@ -7,7 +7,7 @@
 // that object to `createEnv`.
 
 export { createEnv, EnvValidationError } from "./define.ts";
-export type { CreateEnvOptions, EnvPreset } from "./define.ts";
+export type { CreateEnvOptions, EnvCondition, EnvPreset } from "./define.ts";
 export { definePreset } from "./define.ts";
 export type { StandardSchema } from "./schema.ts";
 export { z } from "./zod.ts";

@@ -237,3 +237,178 @@ describe("createEnv", () => {
     );
   });
 });
+
+// #390: a provider's key is required only while its provider is selected.
+describe("createEnv requiredWhen", () => {
+  /** A key's own schema for a conditional key: a non-empty string, or unset. */
+  function maybe(): StandardSchema<unknown, string | undefined> {
+    return {
+      "~standard": {
+        version: 1,
+        vendor: "test",
+        validate: (value) =>
+          value === undefined || (typeof value === "string" && value !== "")
+            ? { value }
+            : { issues: [{ message: "expected a string" }] },
+      },
+    };
+  }
+
+  /** A controlling key that defaults when unset and lowercases what it gets. */
+  function provider(fallback: string): StandardSchema<unknown, string> {
+    return {
+      "~standard": {
+        version: 1,
+        vendor: "test",
+        validate: (value) => ({
+          value: typeof value === "string" ? value.toLowerCase() : fallback,
+        }),
+      },
+    };
+  }
+
+  const email = definePreset({
+    module: "@repo/email",
+    server: { EMAIL_PROVIDER: required(), EMAIL_FROM: maybe() },
+    requiredWhen: { EMAIL_FROM: { key: "EMAIL_PROVIDER", isNot: "console" } },
+  });
+  const plunk = definePreset({
+    module: "email-plunk",
+    server: { PLUNK_API_KEY: maybe() },
+    requiredWhen: { PLUNK_API_KEY: { key: "EMAIL_PROVIDER", is: "plunk" } },
+  });
+
+  it("leaves a conditional key optional while its condition is false", () => {
+    const env = createEnv({ extends: [email, plunk] });
+    const values = env({
+      EMAIL_PROVIDER: "console",
+      EMAIL_FROM: "",
+      PLUNK_API_KEY: "",
+    });
+    assert.equal(values.PLUNK_API_KEY, undefined);
+  });
+
+  it("names the key, its module and the condition while it is true", () => {
+    const env = createEnv({ extends: [email, plunk] });
+    const error = caught(() =>
+      env({ EMAIL_PROVIDER: "plunk", EMAIL_FROM: "", PLUNK_API_KEY: "" })
+    );
+    assert.deepEqual(
+      error.issues.map(({ key, module, reason }) => ({ key, module, reason })),
+      [
+        {
+          key: "EMAIL_FROM",
+          module: "@repo/email",
+          reason: "unset; required when EMAIL_PROVIDER!=console",
+        },
+        {
+          key: "PLUNK_API_KEY",
+          module: "email-plunk",
+          reason: "unset; required when EMAIL_PROVIDER=plunk",
+        },
+      ]
+    );
+  });
+
+  it("passes once the key is set", () => {
+    const env = createEnv({ extends: [email, plunk] });
+    const values = env({
+      EMAIL_PROVIDER: "plunk",
+      EMAIL_FROM: "me@x.com",
+      PLUNK_API_KEY: "sk",
+    });
+    assert.equal(values.PLUNK_API_KEY, "sk");
+  });
+
+  it("reads the controlling key after it parses", () => {
+    const env = createEnv({
+      extends: [
+        definePreset({
+          module: "@repo/kv",
+          server: { KV_PROVIDER: provider("upstash"), KV_KEY_PREFIX: maybe() },
+          requiredWhen: {
+            KV_KEY_PREFIX: { key: "KV_PROVIDER", is: "upstash" },
+          },
+        }),
+      ],
+    });
+    // Unset, then a value the schema lowercases: both parse to `upstash`.
+    assert.deepEqual(
+      caught(() => env({})).issues.map((issue) => issue.key),
+      ["KV_KEY_PREFIX"]
+    );
+    assert.deepEqual(
+      caught(() => env({ KV_PROVIDER: "UPSTASH" })).issues.map(
+        (issue) => issue.key
+      ),
+      ["KV_KEY_PREFIX"]
+    );
+  });
+
+  it("reports a conditional key beside a key that failed its own schema", () => {
+    const env = createEnv({
+      extends: [email, plunk],
+      server: { A: required() },
+    });
+    const error = caught(() =>
+      env({ EMAIL_PROVIDER: "plunk", EMAIL_FROM: "x" })
+    );
+    assert.deepEqual(
+      error.issues.map((issue) => issue.key),
+      ["A", "PLUNK_API_KEY"]
+    );
+  });
+
+  it("skips a condition on a server key on the client", () => {
+    const env = createEnv({
+      extends: [email, plunk],
+      isServer: false,
+      runtimeEnvStrict: {},
+    });
+    assert.doesNotThrow(() => env());
+  });
+
+  it("matches a name in a list-valued controlling key", () => {
+    const payment = definePreset({
+      module: "payment-bkash",
+      server: { PAYMENT_PROVIDER: required(), BKASH_APP_KEY: maybe() },
+      requiredWhen: { BKASH_APP_KEY: { key: "PAYMENT_PROVIDER", is: "bkash" } },
+    });
+    const env = createEnv({ extends: [payment] });
+    assert.deepEqual(
+      caught(() => env({ PAYMENT_PROVIDER: "manual, bkash" })).issues.map(
+        (issue) => issue.key
+      ),
+      ["BKASH_APP_KEY"]
+    );
+    assert.doesNotThrow(() => env({ PAYMENT_PROVIDER: "manual,bkashx" }));
+  });
+
+  it("requires a key two presets make conditional when either condition holds", () => {
+    const kv = definePreset({
+      module: "kv-upstash",
+      server: { KV_PROVIDER: required(), KV_KEY_PREFIX: maybe() },
+      requiredWhen: { KV_KEY_PREFIX: { key: "KV_PROVIDER", is: "upstash" } },
+    });
+    const redis = definePreset({
+      module: "kv-redis",
+      server: { KV_KEY_PREFIX: maybe() },
+      requiredWhen: { KV_KEY_PREFIX: { key: "KV_PROVIDER", is: "redis" } },
+    });
+    const env = createEnv({ extends: [kv, redis] });
+    assert.equal(
+      caught(() => env({ KV_PROVIDER: "redis" })).issues[0]?.module,
+      "kv-redis"
+    );
+    assert.equal(
+      caught(() => env({ KV_PROVIDER: "upstash" })).issues[0]?.module,
+      "kv-upstash"
+    );
+    assert.doesNotThrow(() => env({ KV_PROVIDER: "memory" }));
+    // Both conditions hold: the key is reported once.
+    assert.equal(
+      caught(() => env({ KV_PROVIDER: "upstash,redis" })).issues.length,
+      1
+    );
+  });
+});

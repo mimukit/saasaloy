@@ -34,10 +34,13 @@ const BASE_PACKAGES = join(ROOT, "packages/cli/templates/base/packages");
 /** The services a `# @services` line and an `envServices` entry may name. */
 const SERVICES = new Set(["api", "web", "admin", "app", "deploy"]);
 
+type Condition = { key: string; is: string } | { key: string; isNot: string };
+
 interface Descriptor {
   envVars?: Record<string, string>;
   envServices?: Record<string, string[]>;
   envOptional?: string[];
+  envRequiredWhen?: Record<string, Condition>;
 }
 
 /** Every preset file a module ships, wherever the descriptor puts it. */
@@ -66,6 +69,52 @@ function declaredKeys(source: string): Set<string> {
     }
   }
   return keys;
+}
+
+/** One condition as text, `KEY: CONTROL=value` or `KEY: CONTROL!=value`, so two lists compare. */
+function conditionText(key: string, condition: Condition): string {
+  return "is" in condition
+    ? `${key}: ${condition.key}=${condition.is}`
+    : `${key}: ${condition.key}!=${condition.isNot}`;
+}
+
+/**
+ * The conditions a preset's `requiredWhen` block names, as `conditionText` prints them.
+ *
+ * The shape relied on is the repo's own: `requiredWhen: {` followed by one entry per key,
+ * `KEY: { key: "CONTROL", is: "value" },` or with `isNot`, on one line or split across
+ * lines, and the block closes at the first `}` that is not an entry's own. A block this
+ * cannot read yields nothing, and the two-way comparison below then fails on it.
+ */
+function presetConditions(source: string): string[] {
+  const found: string[] = [];
+  for (const block of source.matchAll(
+    /requiredWhen\s*:\s*\{((?:[^{}]|\{[^{}]*\})*)\}/g
+  )) {
+    for (const entry of (block[1] ?? "").matchAll(
+      /([A-Z][A-Z0-9_]*)\s*:\s*\{\s*key\s*:\s*"([^"]+)"\s*,\s*(is|isNot)\s*:\s*"([^"]+)"\s*,?\s*\}/g
+    )) {
+      const [, key, control, operator, value] = entry;
+      if (key && control && value) {
+        found.push(
+          conditionText(
+            key,
+            operator === "isNot"
+              ? { key: control, isNot: value }
+              : { key: control, is: value }
+          )
+        );
+      }
+    }
+  }
+  return found.toSorted();
+}
+
+/** The conditions a descriptor's `envRequiredWhen` names, as `conditionText` prints them. */
+function descriptorConditions(descriptor: Descriptor): string[] {
+  return Object.entries(descriptor.envRequiredWhen ?? {})
+    .map(([key, condition]) => conditionText(key, condition))
+    .toSorted();
 }
 
 function modules(): string[] {
@@ -131,6 +180,51 @@ describe("env presets and descriptors agree", () => {
         extra,
         [],
         `${module}'s preset declares ${extra.join(", ")}, which its envVars does not, so the key list never carries them.`
+      );
+    });
+  }
+});
+
+// #390: `envRequiredWhen` writes the `# @required-when` line that `env:setup` and the
+// deploy check read, and the preset's `requiredWhen` is what `createEnv` checks. The two
+// have to agree, or one check passes a blank vendor key the other refuses.
+describe("env presets and descriptors agree on conditional keys", () => {
+  it("reads a preset's requiredWhen block in the shape the repo writes", () => {
+    const source = [
+      "export const env = definePreset({",
+      '  module: "email-plunk",',
+      "  server: { PLUNK_API_KEY: z.string().optional() },",
+      "  requiredWhen: {",
+      '    PLUNK_API_KEY: { key: "EMAIL_PROVIDER", is: "plunk" },',
+      "    EMAIL_FROM: {",
+      '      key: "EMAIL_PROVIDER",',
+      '      isNot: "console",',
+      "    },",
+      "  },",
+      "});",
+    ].join("\n");
+    assert.deepEqual(presetConditions(source), [
+      "EMAIL_FROM: EMAIL_PROVIDER!=console",
+      "PLUNK_API_KEY: EMAIL_PROVIDER=plunk",
+    ]);
+  });
+
+  for (const module of modules()) {
+    const descriptor = descriptorOf(module);
+    const files = presetFiles(module);
+    const declared = descriptorConditions(descriptor);
+    const inPreset = files
+      .flatMap((file) => presetConditions(readFileSync(file, "utf-8")))
+      .toSorted();
+    if (declared.length === 0 && inPreset.length === 0) {
+      continue;
+    }
+
+    it(`${module}'s requiredWhen matches its envRequiredWhen`, () => {
+      assert.deepEqual(
+        inPreset,
+        declared,
+        `${module}'s preset requiredWhen (${inPreset.join("; ") || "none"}) and its envRequiredWhen (${declared.join("; ") || "none"}) disagree, so createEnv and env:setup check different conditions.`
       );
     });
   }

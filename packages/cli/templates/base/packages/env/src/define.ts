@@ -23,6 +23,13 @@ export const DEFAULT_CLIENT_PREFIX = "PUBLIC_";
 
 export type SchemaRecord = Record<string, StandardSchema>;
 
+/**
+ * When a conditional key is required: the controlling `key` holds `is`, or does not hold
+ * `isNot`. The controlling value is a comma list, so `manual,bkash` holds `bkash`.
+ */
+export type EnvCondition =
+  { key: string; is: string } | { key: string; isNot: string };
+
 /** The message a mis-prefixed client key reports instead of a type. */
 export type PrefixError<
   Key extends string,
@@ -50,6 +57,11 @@ export interface EnvPreset<
   server: Server;
   client: Client;
   shared: Shared;
+  /**
+   * Keys this preset requires only while a condition holds. The key's own schema accepts
+   * `undefined`; the gate reports it unset only while the condition is true.
+   */
+  requiredWhen?: Record<string, EnvCondition>;
 }
 
 /**
@@ -70,6 +82,8 @@ export function definePreset<
   server?: Server;
   client?: ClientShape<Client, typeof DEFAULT_CLIENT_PREFIX>;
   shared?: Shared;
+  /** Keys required only while a condition holds, such as a vendor's API key. */
+  requiredWhen?: Record<string, EnvCondition>;
 }): EnvPreset<Server, Client, Shared> {
   return {
     module: preset.module,
@@ -77,6 +91,7 @@ export function definePreset<
     server: (preset.server ?? {}) as Server,
     client: (preset.client ?? {}) as unknown as Client,
     shared: (preset.shared ?? {}) as Shared,
+    requiredWhen: preset.requiredWhen ?? {},
   };
 }
 
@@ -185,12 +200,14 @@ export function createEnv<
     server: (options.server ?? {}) as SchemaRecord,
     client: (options.client ?? {}) as unknown as SchemaRecord,
     shared: (options.shared ?? {}) as SchemaRecord,
+    requiredWhen: {},
   };
   const presets = [...(options.extends ?? []), own];
 
   const server = collect(presets, "server");
   const client = collect(presets, "client");
   const shared = collect(presets, "shared");
+  const conditions = collectConditions(presets);
 
   for (const key of client.keys()) {
     if (!key.startsWith(prefix)) {
@@ -219,6 +236,14 @@ export function createEnv<
             raw,
             emptyIsUnset,
             fields: [...(isServer ? server : new Map()), ...client, ...shared],
+            // On the client a server key is not in the bundle, so a condition on one, or
+            // read from one, cannot be checked here. The server checks it.
+            conditions: conditions.flatMap((rule) =>
+              isServer ||
+              !(serverOnly.has(rule.key) || serverOnly.has(rule.condition.key))
+                ? [rule]
+                : []
+            ),
             onValidationError: options.onValidationError,
           });
 
@@ -246,6 +271,57 @@ function collect(
   return fields;
 }
 
+/** One conditional key's rule, with the preset that declared it. */
+interface ConditionRule {
+  key: string;
+  condition: EnvCondition;
+  module: string;
+}
+
+/**
+ * Every preset's conditions, unioned: two presets that make one key conditional make it
+ * required when either condition holds (#390).
+ */
+function collectConditions(presets: EnvPreset[]): ConditionRule[] {
+  return flatten(presets).flatMap((preset) =>
+    Object.entries(preset.requiredWhen ?? {}).map(([key, condition]) => ({
+      key,
+      condition,
+      module: preset.module,
+    }))
+  );
+}
+
+/**
+ * Whether `condition` holds against `value`. The value is a comma list of names. `is`
+ * holds when the list names the value, and `isNot` when it does not, so a blank value
+ * makes `isNot` true. `check.ts` keeps the same rule for `.env.example`; it is repeated
+ * here because that file reads the dotenv parser and this one runs in a browser bundle.
+ */
+function conditionHolds(condition: EnvCondition, value: unknown): boolean {
+  const text =
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+      ? String(value)
+      : "";
+  const names = new Set(
+    text
+      .split(",")
+      .map((name) => name.trim())
+      .filter((name) => name !== "")
+  );
+  return "is" in condition
+    ? names.has(condition.is)
+    : !names.has(condition.isNot);
+}
+
+function describeCondition(condition: EnvCondition): string {
+  return "is" in condition
+    ? `${condition.key}=${condition.is}`
+    : `${condition.key}!=${condition.isNot}`;
+}
+
 /** Every preset a composition reaches, each one's own `extends` first. */
 export function flatten(presets: EnvPreset[]): EnvPreset[] {
   return presets.flatMap((preset) => [...flatten(preset.extends), preset]);
@@ -255,9 +331,10 @@ function validate(options: {
   raw: Record<string, unknown>;
   emptyIsUnset: boolean;
   fields: [string, { schema: StandardSchema; module: string }][];
+  conditions: ConditionRule[];
   onValidationError?: (issues: EnvIssue[]) => never;
 }): Record<string, unknown> {
-  const { raw, emptyIsUnset, fields } = options;
+  const { raw, emptyIsUnset, fields, conditions } = options;
   const parsed: Record<string, unknown> = { ...raw };
   const issues: EnvIssue[] = [];
 
@@ -278,6 +355,31 @@ function validate(options: {
       continue;
     }
     parsed[key] = result.value;
+  }
+
+  // A conditional key is checked after every key has parsed, so the condition reads the
+  // controlling key's final value, a default or a transform included. Its issue joins the
+  // same aggregate as a key that failed its own schema.
+  const failed = new Set(issues.map((issue) => issue.key));
+  const schemas = new Map(fields);
+  for (const { key, condition, module } of conditions) {
+    const given = raw[key];
+    const input = emptyIsUnset && given === "" ? undefined : given;
+    if (
+      input !== undefined ||
+      failed.has(key) ||
+      !conditionHolds(condition, parsed[condition.key])
+    ) {
+      continue;
+    }
+    failed.add(key);
+    const schema = schemas.get(key)?.schema;
+    issues.push({
+      key,
+      module,
+      reason: `unset; required when ${describeCondition(condition)}`,
+      description: schema === undefined ? undefined : describeSchema(schema),
+    });
   }
 
   if (issues.length > 0) {

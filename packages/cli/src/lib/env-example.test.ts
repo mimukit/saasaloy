@@ -8,6 +8,7 @@ import {
   isPublicVar,
   parseEnvExample,
   renderEnvExample,
+  REQUIRED_WHEN,
   servicesFor,
   writeEnvExample,
 } from "./env-example.js";
@@ -318,5 +319,75 @@ describe("blank-on-purpose keys", () => {
 
     expect(out).not.toContain(BLANK_ON_PURPOSE);
     expect(out).toContain("# Required prefix.\nKV_KEY_PREFIX=");
+  });
+});
+
+describe("required-when keys (#390)", () => {
+  const args = {
+    devVars: {},
+    envVars: {
+      EMAIL_FROM: "Sender.",
+      PLUNK_API_KEY: "Plunk key.",
+    },
+    services: { EMAIL_FROM: ["api"], PLUNK_API_KEY: ["api"] },
+    requiredWhen: {
+      EMAIL_FROM: [{ isNot: "console", key: "EMAIL_PROVIDER" }],
+      PLUNK_API_KEY: [{ is: "plunk", key: "EMAIL_PROVIDER" }],
+    },
+  } satisfies Omit<Parameters<typeof renderEnvExample>[0], "existing">;
+
+  it("writes the directive as the first comment line above the key", () => {
+    const out = renderEnvExample({ ...args, existing: {} });
+
+    expect(out).toContain(
+      `${REQUIRED_WHEN} EMAIL_PROVIDER=plunk\n# Plunk key.\nPLUNK_API_KEY=`
+    );
+    expect(out).toContain(
+      `${REQUIRED_WHEN} EMAIL_PROVIDER!=console\n# Sender.\nEMAIL_FROM=`
+    );
+    expect(out).not.toContain(BLANK_ON_PURPOSE);
+  });
+
+  it("writes one line per condition", () => {
+    const out = renderEnvExample({
+      ...args,
+      existing: {},
+      requiredWhen: {
+        PLUNK_API_KEY: [
+          { is: "plunk", key: "EMAIL_PROVIDER" },
+          { is: "plunk", key: "SMS_PROVIDER" },
+        ],
+      },
+    });
+
+    expect(out).toContain(
+      `${REQUIRED_WHEN} EMAIL_PROVIDER=plunk\n${REQUIRED_WHEN} SMS_PROVIDER=plunk\n# Plunk key.\nPLUNK_API_KEY=`
+    );
+  });
+
+  it("is stable on a second render", () => {
+    const first = renderEnvExample({ ...args, existing: {} });
+    const second = renderEnvExample({
+      ...args,
+      existing: parseEnvExample(first),
+    });
+
+    expect(second).toBe(first);
+  });
+
+  it("replaces an old directive on a declared key with no description", () => {
+    const first = renderEnvExample({
+      ...args,
+      envVars: { PLUNK_API_KEY: "" },
+      existing: {},
+    });
+    const second = renderEnvExample({
+      ...args,
+      envVars: { PLUNK_API_KEY: "" },
+      existing: parseEnvExample(first),
+    });
+
+    expect(second).toBe(first);
+    expect(second.split(REQUIRED_WHEN)).toHaveLength(2);
   });
 });

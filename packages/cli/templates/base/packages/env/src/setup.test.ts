@@ -163,6 +163,38 @@ describe("setupServices", () => {
     assert.equal(values.get("DATABASE_URL"), "postgres://branch");
   });
 
+  // #390: a vendor key is required only while its provider is selected.
+  it("allows a blank conditional key while its condition is false, and names it while true", async () => {
+    const root = makeRoot(
+      [
+        "# @services api",
+        "EMAIL_PROVIDER=",
+        "# @required-when EMAIL_PROVIDER!=console",
+        "EMAIL_FROM=",
+        "# @required-when EMAIL_PROVIDER=plunk",
+        "PLUNK_API_KEY=",
+        "",
+      ].join("\n")
+    );
+    const setup = async (provider: string) =>
+      await setupServices({
+        root,
+        environment: "dev",
+        services: [api],
+        source: fakeSource({ EMAIL_PROVIDER: provider }),
+        processEnv,
+      });
+    await assert.rejects(
+      setup("plunk"),
+      /api has no value for EMAIL_FROM \(required: EMAIL_PROVIDER!=console\), PLUNK_API_KEY \(required: EMAIL_PROVIDER=plunk\)\./
+    );
+    assert.equal(existsSync(path.join(root, "apps/api/.env")), false);
+    const report = await setup("console");
+    assert.equal(report.kind, "written");
+    const { values } = readEnvFile(path.join(root, "apps/api/.env"));
+    assert.equal(values.get("PLUNK_API_KEY"), "");
+  });
+
   it("names every key with no value and writes nothing", async () => {
     const root = makeRoot();
     await assert.rejects(

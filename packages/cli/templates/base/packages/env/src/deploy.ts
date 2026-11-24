@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { incompleteKeys } from "./check.ts";
+import { describeMissing, incompleteKeys } from "./check.ts";
 import { parseValues } from "./dotenv.ts";
 import { readExample } from "./example.ts";
 import { findService, SERVICES, serviceNames } from "./services.ts";
@@ -63,6 +63,8 @@ export interface Production {
   values: Map<string, string>;
   /** Keys the example lists for the service that hold no value. */
   missing: string[];
+  /** `missing` as the message prints it, each conditional key with its condition. */
+  missingLabels: string[];
 }
 
 /** The values under the current environment. A blank credential stays out. */
@@ -108,9 +110,11 @@ export async function loadProduction(options: {
       values.set(key, "");
     }
   }
+  const missing = incompleteKeys(example, values, service.omit);
   return {
     values,
-    missing: incompleteKeys(example, values, service.omit),
+    missing,
+    missingLabels: describeMissing(example, values, missing),
   };
 }
 
@@ -137,7 +141,7 @@ async function loadWithCredentials(options: {
       values.set(key, value);
     }
     if (loaded.missing.length > 0) {
-      problems.push(missingMessage(each, loaded.missing));
+      problems.push(missingMessage(each, loaded.missingLabels));
     }
   }
   const login = loginProblem(root, values, processEnv, loggedIn);
@@ -189,7 +193,7 @@ export async function checkProduction(options: {
   for (const service of SERVICES) {
     const loaded = await loadProduction({ root, service, source, processEnv });
     if (loaded.missing.length > 0) {
-      problems.push(missingMessage(service.name, loaded.missing));
+      problems.push(missingMessage(service.name, loaded.missingLabels));
     }
     if (service.name === DEPLOY_SERVICE) {
       credentials = loaded.values;

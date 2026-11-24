@@ -18,6 +18,7 @@ import {
   ENV_EXAMPLE,
   parseEnvExample,
   renderEnvExample,
+  requiredWhenLine,
   servicesFor,
 } from "../lib/env-example.js";
 import type { ServiceName } from "../lib/env-example.js";
@@ -47,7 +48,12 @@ import {
   templateVars,
 } from "../lib/scaffold.js";
 import type { TemplateVars } from "../lib/scaffold.js";
-import type { RegistryEntry, RegistryPatch, When } from "../lib/schema.js";
+import type {
+  EnvCondition,
+  RegistryEntry,
+  RegistryPatch,
+  When,
+} from "../lib/schema.js";
 import { DEFAULT_TESTING_MODE } from "../lib/testing.js";
 import type { TestingMode } from "../lib/testing.js";
 import { whenHolds } from "../lib/when.js";
@@ -563,6 +569,7 @@ export function render(args: RenderArgs): RenderResult {
         envVars: derived.envVars,
         existing,
         optional: derived.envOptional,
+        requiredWhen: derived.envRequiredWhen,
         services: derived.envServices,
       });
       put({
@@ -624,6 +631,8 @@ interface Derived {
   devVars: Record<string, string>;
   envServices: Record<string, ServiceName[]>;
   envOptional: string[];
+  /** Conditional keys, each with every distinct condition a declaring module gave it. */
+  envRequiredWhen: Record<string, EnvCondition[]>;
 }
 
 function deriveFromSet(
@@ -637,6 +646,7 @@ function deriveFromSet(
   const envServices: Record<string, ServiceName[]> = {};
   const declaredBy = new Map<string, Set<string>>();
   const optionalBy = new Map<string, Set<string>>();
+  const conditionalBy = new Map<string, Map<string, EnvCondition>>();
   for (const name of order) {
     const { item } = items(name);
     dependencies.push(...(item.dependencies ?? []));
@@ -646,6 +656,15 @@ function deriveFromSet(
     }
     for (const key of item.envOptional ?? []) {
       optionalBy.set(key, (optionalBy.get(key) ?? new Set()).add(name));
+    }
+    for (const [key, condition] of Object.entries(item.envRequiredWhen ?? {})) {
+      conditionalBy.set(
+        key,
+        (conditionalBy.get(key) ?? new Map<string, EnvCondition>()).set(
+          name,
+          condition
+        )
+      );
     }
     for (const [key, value] of Object.entries(item.envVars ?? {})) {
       envVars[key] = value;
@@ -658,18 +677,45 @@ function deriveFromSet(
       ];
     }
   }
-  // A key may stay blank only when every module declaring it says so (#249).
-  const envOptional = [...declaredBy]
-    .filter(([key, modules]) =>
-      [...modules].every((module) => optionalBy.get(key)?.has(module))
-    )
-    .map(([key]) => key)
-    .toSorted();
+  // The strictest rule wins (#249, #390): a module that requires a key outright beats one
+  // that requires it on a condition, which beats one that leaves it blank on purpose. Two
+  // conditions on one key mean required when either holds, so each keeps its own line.
+  const envRequiredWhen: Record<string, EnvCondition[]> = {};
+  const envOptional: string[] = [];
+  for (const [key, modules] of [...declaredBy].toSorted(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0
+  )) {
+    const conditions =
+      conditionalBy.get(key) ?? new Map<string, EnvCondition>();
+    const required = [...modules].some(
+      (module) => !optionalBy.get(key)?.has(module) && !conditions.has(module)
+    );
+    if (required) {
+      continue;
+    }
+    const distinct = new Map<string, EnvCondition>();
+    for (const module of modules) {
+      const condition = conditions.get(module);
+      if (condition !== undefined) {
+        distinct.set(requiredWhenLine(condition), condition);
+      }
+    }
+    if (distinct.size > 0) {
+      // Sorted by line, so the install order never reorders the file.
+      envRequiredWhen[key] = [...distinct.keys()].toSorted().flatMap((line) => {
+        const condition = distinct.get(line);
+        return condition === undefined ? [] : [condition];
+      });
+    } else {
+      envOptional.push(key);
+    }
+  }
   return {
     dependencies,
     devDependencies,
     devVars,
     envOptional,
+    envRequiredWhen,
     envServices,
     envVars,
   };
