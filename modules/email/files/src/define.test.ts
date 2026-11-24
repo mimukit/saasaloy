@@ -89,3 +89,59 @@ describe("defineEmail: provider selection", () => {
     );
   });
 });
+
+describe("defineEmail: sender resolution", () => {
+  const MESSAGE = { to: "user@example.com", subject: "Hi", html: "<p>Hi</p>" };
+
+  /** A recorder that carries a `defaultFrom`, the way `consoleEmail()` does. */
+  function withDefault(defaultFrom: string) {
+    const { provider, sent } = recorder("console");
+    return { provider: { ...provider, defaultFrom }, sent };
+  }
+
+  it("falls back to the provider's defaultFrom when EMAIL_FROM is unset", async () => {
+    const { provider, sent } = withDefault("dev@localhost");
+    await defineEmail({ providers: [provider] })
+      .create({ EMAIL_PROVIDER: "console" })
+      .send(MESSAGE);
+    assert.equal(sent[0]?.from, "dev@localhost");
+  });
+
+  it("treats a blank EMAIL_FROM as unset", async () => {
+    const { provider, sent } = withDefault("dev@localhost");
+    await defineEmail({ providers: [provider] })
+      .create({ EMAIL_PROVIDER: "console", EMAIL_FROM: "" })
+      .send(MESSAGE);
+    assert.equal(sent[0]?.from, "dev@localhost");
+  });
+
+  it("prefers EMAIL_FROM to defaultFrom, and the message's from to both", async () => {
+    const { provider, sent } = withDefault("dev@localhost");
+    const client = defineEmail({ providers: [provider] }).create({
+      EMAIL_PROVIDER: "console",
+      EMAIL_FROM: "app@example.com",
+    });
+    await client.send(MESSAGE);
+    await client.send({ ...MESSAGE, from: "ops@example.com" });
+    assert.deepEqual(
+      sent.map((message) => message.from),
+      ["app@example.com", "ops@example.com"]
+    );
+  });
+
+  it("throws invalid_message when no sender is named anywhere", async () => {
+    const { provider, sent } = recorder("plunk");
+    const client = defineEmail({ providers: [provider] }).create({
+      EMAIL_PROVIDER: "plunk",
+    });
+    await assert.rejects(
+      client.send(MESSAGE),
+      (error: unknown) =>
+        error instanceof EmailError &&
+        error.code === "invalid_message" &&
+        /set EMAIL_FROM/.test(error.message) &&
+        /plunk provider has no default sender/.test(error.message)
+    );
+    assert.equal(sent.length, 0);
+  });
+});

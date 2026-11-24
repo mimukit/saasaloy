@@ -13,7 +13,7 @@ An sms provider on the Khudebarta gateway for Bangladeshi numbers; needs a Khude
 | Tier | provider |
 | Stage | scale |
 | Needs | `vendor-account` |
-| Needs CLI | `>=0.10.0` |
+| Needs CLI | `>=0.13.0` |
 | Depends on | [`sms`](sms.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -23,9 +23,9 @@ An sms provider on the Khudebarta gateway for Bangladeshi numbers; needs a Khude
 
 | Variable | Services | Optional | What it does |
 |---|---|---|---|
-| `KHUDEBARTA_API_KEY` | api | no | Khudebarta API key, from the Khudebarta portal under the account's API settings, issued together with the secret key. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put KHUDEBARTA_API_KEY`) in production. Unset, every send through this provider throws SmsError("provider_error") before the request is built; set but wrong, the gateway rejects the send and it surfaces as SmsError("account_error") with providerCode "-66". |
+| `KHUDEBARTA_API_KEY` | api | no | Required while SMS_PROVIDER=khudebarta, and may stay blank under any other provider. Khudebarta API key, from the Khudebarta portal under the account's API settings, issued together with the secret key. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put KHUDEBARTA_API_KEY`) in production. Unset, every send through this provider throws SmsError("provider_error") before the request is built; set but wrong, the gateway rejects the send and it surfaces as SmsError("account_error") with providerCode "-66". |
 | `KHUDEBARTA_API_URL` | api | yes | Base URL of the Khudebarta gateway, without a trailing path. Optional: it defaults to https://portal.khudebarta.com:3770, and only an account Khudebarta assigned a different host or port needs to set it. It must use HTTPS. Cloudflare Workers strip a custom port from a plain `http://` subrequest, so an http URL with a port silently lands on port 80 and every send fails against the wrong service. The provider does not check this for you. |
-| `KHUDEBARTA_SECRET_KEY` | api | no | Khudebarta secret key, issued in the Khudebarta portal alongside KHUDEBARTA_API_KEY. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put KHUDEBARTA_SECRET_KEY`) in production. Unset, every send through this provider throws SmsError("provider_error") before the request is built; set but wrong, the gateway rejects the send and it surfaces as SmsError("account_error") with providerCode "-67". |
+| `KHUDEBARTA_SECRET_KEY` | api | no | Required while SMS_PROVIDER=khudebarta, and may stay blank under any other provider. Khudebarta secret key, issued in the Khudebarta portal alongside KHUDEBARTA_API_KEY. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put KHUDEBARTA_SECRET_KEY`) in production. Unset, every send through this provider throws SmsError("provider_error") before the request is built; set but wrong, the gateway rejects the send and it surfaces as SmsError("account_error") with providerCode "-67". |
 
 ## Files and workspaces it writes
 

@@ -22,7 +22,10 @@
 // subpath goes straight to the template source, since a section file only needs the helper.
 // `@repo/kv` maps onto `modules/kv/files/src/index.ts`, because `payment-bkash`'s provider
 // file imports the kv core for the store its token lives in (ADR 0057).
-// The map is deliberately closed — three entries — rather than a general workspace resolver,
+// `@repo/env` and `@repo/env/zod` map onto the base template's env sources, because every
+// module preset (`env.ts`, `env-preset.ts`) imports them, and a test that composes presets
+// through `createEnv` (#390) needs the real gate.
+// The map is deliberately closed — five entries — rather than a general workspace resolver,
 // because every other `@repo/*` package is scaffolded by a module and is not on disk in this
 // repo at all.
 
@@ -61,6 +64,18 @@ const WORKSPACES = new Map([
     "@repo/config/define",
     pathToFileURL(
       join(here, "../packages/cli/templates/base/packages/config/src/define.ts")
+    ).href,
+  ],
+  [
+    "@repo/env",
+    pathToFileURL(
+      join(here, "../packages/cli/templates/base/packages/env/src/index.ts")
+    ).href,
+  ],
+  [
+    "@repo/env/zod",
+    pathToFileURL(
+      join(here, "../packages/cli/templates/base/packages/env/src/zod.ts")
     ).href,
   ],
 ]);

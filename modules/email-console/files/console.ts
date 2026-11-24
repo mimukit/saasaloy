@@ -20,15 +20,21 @@ import type {
 // The factory is `consoleEmail`, not `console`, so the generated import in
 // packages/email/src/index.ts can't shadow the global `console`. The provider's *name*
 // — the value EMAIL_PROVIDER takes — is still plain "console".
+//
+// EMAIL_FROM may stay blank under this provider. The core then sends from the provider's
+// `defaultFrom`, which is `dev@localhost` unless `consoleEmail({ from })` names another.
 
 export interface ConsoleEmailOptions {
   /** Log the full HTML body as well as the plaintext. Off by default: it's noisy. */
   html?: boolean;
+  /** The sender used when neither the message nor EMAIL_FROM names one. */
+  from?: string;
 }
 
 export function consoleEmail(options: ConsoleEmailOptions = {}): EmailProvider {
   return {
     name: "console",
+    defaultFrom: options.from ?? "dev@localhost",
 
     async send(
       _env: EmailEnv,

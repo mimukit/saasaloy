@@ -56,6 +56,8 @@ The job runs on every deploy that installed this module, whether or not `PAYMENT
 
 ### The env vars
 
+The four credentials are required only while `PAYMENT_PROVIDER` lists `bkash`. `packages/env/.env.example` marks each with `# @required-when PAYMENT_PROVIDER=bkash`, so they may stay blank while the list names other providers only.
+
 | Key | What it is |
 |---|---|
 | `BKASH_APP_KEY` | the merchant app's key, sent as `X-APP-Key` on every non-token call |

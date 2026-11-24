@@ -12,7 +12,10 @@
 export interface EmailEnv {
   /** Which registered provider sends. Always required — there is no implicit default. */
   EMAIL_PROVIDER?: string;
-  /** Default sender address, used for any message that doesn't carry its own `from`. */
+  /**
+   * Default sender address, used for any message that doesn't carry its own `from`.
+   * Required for every provider except `console`; see `EmailProvider.defaultFrom`.
+   */
   EMAIL_FROM?: string;
   [key: string]: unknown;
 }
@@ -30,7 +33,8 @@ export interface EmailMessage {
 }
 
 /**
- * What a provider actually receives. The core resolves `from` (from `EMAIL_FROM`),
+ * What a provider actually receives. The core resolves `from` (from `EMAIL_FROM`, then the
+ * provider's `defaultFrom`),
  * derives `text` (from `html`) and normalizes `to` to an array first, so no provider
  * re-implements any of that.
  */
@@ -48,6 +52,12 @@ export interface EmailResult {
 export interface EmailProvider {
   /** The value `EMAIL_PROVIDER` must hold to select this provider (e.g. "cloudflare"). */
   name: string;
+  /**
+   * The sender this provider falls back to when neither the message nor `EMAIL_FROM`
+   * names one. Only a provider that sends no real mail sets it — `console` uses
+   * `dev@localhost` — so a real provider still fails loudly on a missing sender.
+   */
+  defaultFrom?: string;
   send(env: EmailEnv, message: ResolvedEmailMessage): Promise<EmailResult>;
 }
 

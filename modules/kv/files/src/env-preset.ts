@@ -12,8 +12,8 @@ import { kvEnvPresets } from "./env-preset.generated";
 // The kv core's own keys. Kept apart from `kvPreset` so a provider preset can tighten one.
 // `createEnv` walks `extends` in array order and the last declaration of a key wins, so
 // this preset stays the first entry and a provider preset appended after it overrides it:
-// `kv-upstash` makes `KV_KEY_PREFIX` required, because one Redis database is one flat
-// keyspace.
+// `kv-upstash` makes `KV_KEY_PREFIX` required while `KV_PROVIDER` is `upstash`, because one
+// Redis database is one flat keyspace.
 const kvCorePreset = definePreset({
   module: "@repo/kv",
   server: {

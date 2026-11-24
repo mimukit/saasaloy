@@ -26,10 +26,14 @@ export const emailPreset = definePreset({
     EMAIL_FROM: z
       .string()
       .min(1)
+      .optional()
       .describe(
-        "Default sender address, on a domain the selected provider may send from. Overridable per message."
+        "Default sender address, on a domain the selected provider may send from. Overridable per message. Required for every provider except console."
       ),
   },
+  // The console provider logs instead of sending and brings its own sender, so a project
+  // that develops on it needs no address. Every other provider sends real mail and needs one.
+  requiredWhen: { EMAIL_FROM: { key: "EMAIL_PROVIDER", isNot: "console" } },
 });
 
 /** The preset a service's `env.ts` folds in. */

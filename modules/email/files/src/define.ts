@@ -47,7 +47,7 @@ export function defineEmail(config: EmailConfig): EmailRegistry {
           // as `provider_error` would blame the wrong layer. It still throws an
           // `EmailError` — `invalid_message` — because this runs inside `send()`, and
           // `provider.ts` promises that `send()` throws exactly one kind of error.
-          const resolved = resolve(env, message);
+          const resolved = resolve(env, message, provider);
 
           try {
             return await provider.send(env, resolved);
@@ -105,13 +105,23 @@ function selectProvider(
   return provider;
 }
 
-function resolve(env: EmailEnv, message: EmailMessage): ResolvedEmailMessage {
-  const from = message.from ?? env.EMAIL_FROM;
+/**
+ * The sender is the message's own `from`, then `EMAIL_FROM`, then the provider's
+ * `defaultFrom`. A blank value counts as unset at each step, because a Worker sees a
+ * `KEY=` line in its `.env` as an empty string, not as a missing key.
+ */
+function resolve(
+  env: EmailEnv,
+  message: EmailMessage,
+  provider: EmailProvider
+): ResolvedEmailMessage {
+  const from = message.from || env.EMAIL_FROM || provider.defaultFrom;
   if (!from) {
     throw new EmailError(
       "invalid_message",
-      "No sender address: set EMAIL_FROM, or pass `from` on the message. It must be an " +
-        "address on a domain your provider is allowed to send from."
+      `No sender address: set EMAIL_FROM, or pass \`from\` on the message. The ${provider.name} ` +
+        "provider has no default sender of its own. The address must be on a domain your " +
+        "provider is allowed to send from."
     );
   }
 
