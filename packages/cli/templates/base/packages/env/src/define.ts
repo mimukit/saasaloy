@@ -240,7 +240,11 @@ export function createEnv<
             // read from one, cannot be checked here. The server checks it.
             conditions: conditions.flatMap((rule) =>
               isServer ||
-              !(serverOnly.has(rule.key) || serverOnly.has(rule.condition.key))
+              !(
+                serverOnly.has(rule.key) ||
+                (rule.condition !== undefined &&
+                  serverOnly.has(rule.condition.key))
+              )
                 ? [rule]
                 : []
             ),
@@ -271,25 +275,52 @@ function collect(
   return fields;
 }
 
-/** One conditional key's rule, with the preset that declared it. */
+/**
+ * One conditional key's rule, with the preset that declared it. A rule with no
+ * `condition` always holds: another preset requires the key outright.
+ */
 interface ConditionRule {
   key: string;
-  condition: EnvCondition;
+  condition: EnvCondition | undefined;
   module: string;
 }
 
 /**
  * Every preset's conditions, unioned: two presets that make one key conditional make it
  * required when either condition holds (#390).
+ *
+ * The strictest rule wins, as it does in the CLI's key list. A preset that declares a
+ * conditional key with a schema that refuses `undefined`, and no condition of its own,
+ * requires the key outright. That preset adds a rule with no condition, so the key stays
+ * required whatever order the presets come in.
  */
 function collectConditions(presets: EnvPreset[]): ConditionRule[] {
-  return flatten(presets).flatMap((preset) =>
+  const all = flatten(presets);
+  const rules: ConditionRule[] = all.flatMap((preset) =>
     Object.entries(preset.requiredWhen ?? {}).map(([key, condition]) => ({
       key,
       condition,
       module: preset.module,
     }))
   );
+  const conditional = new Set(rules.map((rule) => rule.key));
+  for (const preset of all) {
+    const own = preset.requiredWhen ?? {};
+    for (const part of [preset.server, preset.client, preset.shared]) {
+      for (const [key, schema] of Object.entries(part)) {
+        if (
+          conditional.has(key) &&
+          !(key in own) &&
+          // The schema is asked about an unset key, which is `undefined` by definition.
+          // oxlint-disable-next-line unicorn/no-useless-undefined
+          validateSync(schema, undefined).issues
+        ) {
+          rules.push({ key, condition: undefined, module: preset.module });
+        }
+      }
+    }
+  }
+  return rules;
 }
 
 /**
@@ -368,7 +399,8 @@ function validate(options: {
     if (
       input !== undefined ||
       failed.has(key) ||
-      !conditionHolds(condition, parsed[condition.key])
+      (condition !== undefined &&
+        !conditionHolds(condition, parsed[condition.key]))
     ) {
       continue;
     }
@@ -377,7 +409,10 @@ function validate(options: {
     issues.push({
       key,
       module,
-      reason: `unset; required when ${describeCondition(condition)}`,
+      reason:
+        condition === undefined
+          ? "unset"
+          : `unset; required when ${describeCondition(condition)}`,
       description: schema === undefined ? undefined : describeSchema(schema),
     });
   }

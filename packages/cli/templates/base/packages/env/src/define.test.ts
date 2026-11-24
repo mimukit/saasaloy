@@ -411,4 +411,30 @@ describe("createEnv requiredWhen", () => {
       1
     );
   });
+
+  it("keeps a key required when one preset requires it and another makes it conditional, in either order", () => {
+    const core = definePreset({
+      module: "core",
+      server: { P: required(), X: required() },
+    });
+    const vendor = definePreset({
+      module: "vendor",
+      server: { X: maybe() },
+      requiredWhen: { X: { key: "P", is: "vendor" } },
+    });
+    for (const presets of [
+      [core, vendor],
+      [vendor, core],
+    ]) {
+      const env = createEnv({ extends: presets });
+      assert.deepEqual(
+        caught(() => env({ P: "local", X: "" })).issues.map((issue) => [
+          issue.key,
+          issue.module,
+        ]),
+        [["X", "core"]]
+      );
+      assert.doesNotThrow(() => env({ P: "local", X: "set" }));
+    }
+  });
 });
