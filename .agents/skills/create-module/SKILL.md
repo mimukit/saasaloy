@@ -199,6 +199,13 @@ Field notes:
 - **`enablesTesting`** — `true` on a module whose whole point is tests (`e2e`). Adding it to a project with testing `off` sets `tests-after` after the apply succeeds and backfills. It leaves `tdd` alone, and `remove` never changes the mode.
 - **`envVars`** — keys the module needs (e.g. `RESEND_API_KEY`); surfaced to the user, never
   invented secrets committed to files.
+- **`envOptional`** and **`envRequiredWhen`** — how strict `pnpm env:setup`, the deploy check and
+  `createEnv` are about a blank key. `envOptional` lists keys that may always stay blank, and the CLI
+  writes `# Blank on purpose` above each one. `envRequiredWhen` maps a key to one condition on a
+  `<CAP>_PROVIDER` key, `{ "key": "EMAIL_PROVIDER", "is": "plunk" }` or `{ "key": …, "isNot": … }`,
+  and the CLI writes `# @required-when EMAIL_PROVIDER=plunk` above it. The env preset declares the
+  same condition in `requiredWhen`, with an `.optional()` schema. A key goes in one of the two, never
+  both. `envRequiredWhen` needs `requires.saasaloy` `>=0.13.0` (ADR 0070).
 - **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal. A registration table is never a patch: it is a generated file, declared in `tables` and filled from `entries` (below). Each op names its own target `file` and a codemod `kind`; the engine defines the payload per kind:
 
   | `kind` | What it does | Payload |

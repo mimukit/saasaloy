@@ -34,7 +34,7 @@ EMAIL_PROVIDER=plunk  uses email-plunk
 
 | Variable | Services | Optional | What it does |
 |---|---|---|---|
-| `EMAIL_FROM` | api | no | Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message. Required for every provider except `console`, which logs instead of sending and falls back to its own sender (`dev@localhost`) when EMAIL_FROM is blank. |
+| `EMAIL_FROM` | api | required when `EMAIL_PROVIDER!=console` | Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message. Required for every provider except `console`, which logs instead of sending and falls back to its own sender (`dev@localhost`) when EMAIL_FROM is blank. |
 | `EMAIL_PROVIDER` | api | no | Which installed provider sends: `cloudflare` (add email-cloudflare), `plunk` (add email-plunk) or `console` (add email-console). Always required — there is no default, so nothing sends by accident and nothing stops sending silently. |
 
 ## Files and workspaces it writes

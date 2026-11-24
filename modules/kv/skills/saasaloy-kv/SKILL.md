@@ -217,7 +217,7 @@ Put the production values in `packages/env/.env.prod`, and `pnpm deploy:producti
 
 **2. Set `KV_KEY_PREFIX`, which this provider requires.** One Redis database is one flat keyspace. Without a prefix, `list({})` scans every key in the database and hands back keys the project does not own, so the env gate refuses an empty or unset value while `KV_PROVIDER=upstash`: `pnpm env:setup` stops on it, and the api's `createEnv` throws `KV_KEY_PREFIX (kv-upstash): unset`. The provider also throws `provider_error` on a blank prefix, for a client built without the gate. `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and `KV_KEY_PREFIX` carry `# @required-when KV_PROVIDER=upstash` in `packages/env/.env.example`, so all three may stay blank while `KV_PROVIDER` names another provider.
 
-A project that added `kv-upstash` before saasaloy 0.8.0 still has `# Blank on purpose: this key may stay empty.` above `KV_KEY_PREFIX` in `packages/env/.env.example`. Delete that line, so `pnpm env:setup` checks the key too.
+A project that added `kv-upstash` before saasaloy 0.8.0 can still have `# Blank on purpose: this key may stay empty.` above `KV_KEY_PREFIX` in `packages/env/.env.example`. `saasaloy update` re-renders that comment block, so it drops the line and writes `# @required-when KV_PROVIDER=upstash`. If the line stays, delete it: it wins over the directive, and `pnpm env:setup` then never checks the key.
 
 ```sh
 # packages/env/.env (and packages/env/.env.prod for a deploy)

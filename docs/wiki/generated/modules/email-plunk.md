@@ -23,7 +23,7 @@ An email provider on Plunk over plain HTTP, with no SDK and no binding; needs a 
 
 | Variable | Services | Optional | What it does |
 |---|---|---|---|
-| `PLUNK_API_KEY` | api | no | Required while EMAIL_PROVIDER=plunk, and may stay blank under any other provider. Plunk secret key, the `sk_...` one from the Plunk dashboard under Project settings → API keys. It must be the secret key, not the public `pk_...` key, which cannot send. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put PLUNK_API_KEY`) in production. Unset, every send through this provider throws EmailError("provider_error") before the request leaves the Worker. |
+| `PLUNK_API_KEY` | api | required when `EMAIL_PROVIDER=plunk` | Required while EMAIL_PROVIDER=plunk, and may stay blank under any other provider. Plunk secret key, the `sk_...` one from the Plunk dashboard under Project settings → API keys. It must be the secret key, not the public `pk_...` key, which cannot send. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put PLUNK_API_KEY`) in production. Unset, every send through this provider throws EmailError("provider_error") before the request leaves the Worker. |
 | `PLUNK_API_URL` | api | yes | Base URL of the Plunk API, without a trailing path. Optional: it defaults to the hosted https://next-api.useplunk.com, and only a self-hosted Plunk instance needs to set it. It must use HTTPS (plain HTTP is accepted for localhost only) because the request carries PLUNK_API_KEY. Point it at a wrong host and every send fails with a 404 mapped to EmailError("provider_error"). |
 
 ## Files and workspaces it writes

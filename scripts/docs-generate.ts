@@ -56,6 +56,8 @@ interface Descriptor {
   conflictsWith: string[];
   envVars: Record<string, string>;
   envOptional: string[];
+  /** `KEY=value` or `KEY!=value` for each key the module makes conditional. */
+  envRequiredWhen: Record<string, string>;
   envServices: Record<string, string[]>;
   patches: Patch[];
   tables: Table[];
@@ -144,6 +146,30 @@ function fileEntries(value: unknown): FileEntry[] {
   });
 }
 
+/** Each `envRequiredWhen` condition as the text of its `# @required-when` marker. */
+function requiredWhen(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(asRecord(value))) {
+    const condition = asRecord(item);
+    const control = field(condition, "key");
+    if (typeof condition.is === "string") {
+      out[key] = `${control}=${condition.is}`;
+    } else if (typeof condition.isNot === "string") {
+      out[key] = `${control}!=${condition.isNot}`;
+    }
+  }
+  return out;
+}
+
+/** The Optional cell: `yes`, `no`, or the condition under which the key is required. */
+function optionalCell(item: Descriptor, key: string): string {
+  const condition = item.envRequiredWhen[key];
+  if (condition !== undefined) {
+    return `required when ${code(condition)}`;
+  }
+  return item.envOptional.includes(key) ? "yes" : "no";
+}
+
 function readDescriptor(root: string, folder: string): Descriptor | undefined {
   const path = join(root, "modules", folder, "registry-item.json");
   if (!existsSync(path)) {
@@ -166,6 +192,7 @@ function readDescriptor(root: string, folder: string): Descriptor | undefined {
     conflictsWith: strings(raw.conflictsWith),
     envVars: stringMap(raw.envVars),
     envOptional: strings(raw.envOptional),
+    envRequiredWhen: requiredWhen(raw.envRequiredWhen),
     envServices,
     patches: records(raw.patches).map((patch) => ({
       file: field(patch, "file"),
@@ -542,7 +569,7 @@ function modulePage(
           keys.map((key) => [
             code(key),
             servicesOf(item, key),
-            item.envOptional.includes(key) ? "yes" : "no",
+            optionalCell(item, key),
             item.envVars[key] ?? "",
           ])
         );
@@ -607,7 +634,7 @@ function envPage(all: readonly Descriptor[]): string {
           code(key),
           moduleLink(item.name, names, "modules/"),
           servicesOf(item, key),
-          item.envOptional.includes(key) ? "yes" : "no",
+          optionalCell(item, key),
           text,
         ],
       });
@@ -622,9 +649,9 @@ function envPage(all: readonly Descriptor[]): string {
     banner("the envVars of modules/*/registry-item.json"),
     "# Environment variables of the modules",
     notice(
-      "the `envVars`, `envServices` and `envOptional` fields of every descriptor"
+      "the `envVars`, `envServices`, `envOptional` and `envRequiredWhen` fields of every descriptor"
     ),
-    `Every module declares the values it reads in its descriptor. ${code("saasaloy env")} collects them into ${code("packages/env/.env")}, and each service reads the keys named in its Services column. A key with no declared services falls back to the ${code("PUBLIC_")} prefix rule, and the table marks it inferred. The environment of the CLI itself is on [the reference page](../reference.md#environment-variables).`,
+    `Every module declares the values it reads in its descriptor. ${code("saasaloy env")} collects them into ${code("packages/env/.env")}, and each service reads the keys named in its Services column. A key with no declared services falls back to the ${code("PUBLIC_")} prefix rule, and the table marks it inferred. An Optional cell such as "required when ${code("EMAIL_PROVIDER=plunk")}" marks a conditional key: it may stay blank while that condition is false. The environment of the CLI itself is on [the reference page](../reference.md#environment-variables).`,
     `${rows.length} variables.`,
     table(
       ["Variable", "Module", "Services", "Optional", "What it does"],
