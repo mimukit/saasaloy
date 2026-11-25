@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { moduleTierOf, pageDescription } from "./docs-text.ts";
+import {
+  docsTitle,
+  moduleDescription,
+  moduleTierOf,
+  pageDescription,
+} from "./docs-text.ts";
 
 describe("pageDescription", () => {
   it("takes the first paragraph in plain text", () => {
@@ -35,5 +40,64 @@ describe("moduleTierOf", () => {
       "capability"
     );
     assert.equal(moduleTierOf("no table"), undefined);
+  });
+});
+
+describe("docsTitle", () => {
+  it("gives the docs root its own title", () => {
+    assert.equal(
+      docsTitle("", false, "Acme"),
+      "Acme docs: an open source SaaS starter kit for Cloudflare"
+    );
+  });
+
+  it("names a module page as a module", () => {
+    assert.equal(
+      docsTitle("kv", true, "Acme"),
+      "kv module | Acme docs: SaaS starter kit"
+    );
+  });
+
+  it("falls back to the short title when the long one is too long", () => {
+    assert.equal(
+      docsTitle("Architecture decision records and more", false, "Acme"),
+      "Architecture decision records and more | Docs | Acme"
+    );
+  });
+});
+
+describe("moduleDescription", () => {
+  it("adds the module sentence to a short description", () => {
+    assert.equal(
+      moduleDescription(
+        "Keeps entries in memory.",
+        "kv-memory",
+        "provider",
+        "Acme"
+      ),
+      "Keeps entries in memory. A Acme provider module. Add it to a project with saasaloy add kv-memory."
+    );
+  });
+
+  it("cuts the joined description at a word", () => {
+    const out = moduleDescription(
+      "word ".repeat(20).trim(),
+      "kv",
+      "provider",
+      "Acme"
+    );
+    assert.ok(out.length <= 160 && out.endsWith("…"));
+  });
+
+  it("keeps a long description as it is", () => {
+    const long = "word ".repeat(30).trim();
+    assert.equal(moduleDescription(long, "kv", "capability", "Acme"), long);
+  });
+
+  it("keeps a description with no tier as it is", () => {
+    assert.equal(
+      moduleDescription("Short.", "kv", undefined, "Acme"),
+      "Short."
+    );
   });
 });

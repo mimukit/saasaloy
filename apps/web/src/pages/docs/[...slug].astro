@@ -6,9 +6,13 @@
 import { render } from "astro:content";
 
 import DocsLayout from "@web/layouts/DocsLayout.astro";
-import { docsUi } from "@web/content/docs";
 import { loadDocs } from "@web/lib/docs";
-import { moduleTierOf, pageDescription } from "@web/lib/docs-text";
+import {
+  docsTitle,
+  moduleDescription,
+  moduleTierOf,
+  pageDescription,
+} from "@web/lib/docs-text";
 import { siteName } from "@web/site";
 
 export async function getStaticPaths() {
@@ -23,12 +27,16 @@ const { page, entry, pages } = Astro.props;
 const { Content, headings } = await render(entry);
 
 const body = entry.body ?? "";
-const title =
-  page.slug === ""
-    ? `${docsUi.titleSuffix} | ${siteName}`
-    : `${page.title} | ${docsUi.titleSuffix} | ${siteName}`;
-const description = pageDescription(body) || undefined;
+const title = docsTitle(
+  page.slug === "" ? "" : page.title,
+  page.isModule,
+  siteName
+);
 const tier = page.isModule ? moduleTierOf(body) : undefined;
+const description =
+  (page.isModule
+    ? moduleDescription(pageDescription(body), page.title, tier, siteName)
+    : pageDescription(body)) || undefined;
 ---
 
 <DocsLayout

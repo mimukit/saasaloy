@@ -1,9 +1,17 @@
 // Small readers over a wiki page's raw Markdown: the meta description, and the tier tag of a
 // module page. Pure, so a node:test file holds them.
 
+import { docsUi } from "../content/docs.ts";
 import { fenceReader } from "./docs-fence.ts";
+import { interpolate } from "./interpolate.ts";
 
 const MAX_DESCRIPTION = 160;
+// Google cuts a result title near 60 characters and an SEO crawler calls one under about
+// 50 too short, so a title takes the long template only while it stays within this.
+const MAX_TITLE = 65;
+// A description under this length gets the module sentence, because crawlers flag a meta
+// description shorter than about 120 characters.
+const MIN_DESCRIPTION = 120;
 
 /** Plain text from one line of Markdown: links, code marks and emphasis stripped. */
 function plain(line: string): string {
@@ -33,7 +41,10 @@ export function pageDescription(markdown: string): string {
     }
     paragraph.push(text);
   }
-  const text = plain(paragraph.join(" "));
+  return clip(plain(paragraph.join(" ")));
+}
+
+function clip(text: string): string {
   if (text.length <= MAX_DESCRIPTION) {
     return text;
   }
@@ -44,4 +55,40 @@ export function pageDescription(markdown: string): string {
 /** The tier a generated module page states in its Facts table, such as `capability`. */
 export function moduleTierOf(markdown: string): string | undefined {
   return /^\| Tier \| ([a-z]+) \|$/m.exec(markdown)?.[1];
+}
+
+/** The tab title of a docs page. The docs root passes an empty `page`. */
+export function docsTitle(
+  page: string,
+  isModule: boolean,
+  siteName: string
+): string {
+  if (page === "") {
+    return interpolate(docsUi.rootTitle, { siteName });
+  }
+  const label = isModule
+    ? interpolate(docsUi.moduleTitle, { name: page })
+    : page;
+  const long = interpolate(docsUi.title, { page: label, siteName });
+  return long.length <= MAX_TITLE
+    ? long
+    : interpolate(docsUi.shortTitle, { page: label, siteName });
+}
+
+/** A module page's meta description: the first paragraph, with the module sentence when short. */
+export function moduleDescription(
+  description: string,
+  name: string,
+  tier: string | undefined,
+  siteName: string
+): string {
+  if (tier === undefined || description.length >= MIN_DESCRIPTION) {
+    return description;
+  }
+  const sentence = interpolate(docsUi.moduleDescription, {
+    siteName,
+    tier,
+    name,
+  });
+  return clip(description === "" ? sentence : `${description} ${sentence}`);
 }

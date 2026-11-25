@@ -4,8 +4,17 @@
 // next labels. A `{token}` is replaced by lib/interpolate.ts.
 
 export const docsUi = {
-  /** The Docs title in the page's tab: `{page} | Docs | {siteName}`. */
-  titleSuffix: "Docs",
+  /** The docs root's tab title. */
+  rootTitle: "{siteName} docs: an open source SaaS starter kit for Cloudflare",
+  /** A page's tab title, when it fits the length a search result shows. */
+  title: "{page} | {siteName} docs: SaaS starter kit",
+  /** A page's tab title, when `title` would be cut in a search result. */
+  shortTitle: "{page} | Docs | {siteName}",
+  /** A module page's `{page}` in its tab title. */
+  moduleTitle: "{name} module",
+  /** Added to a module page's meta description when its first paragraph is short. */
+  moduleDescription:
+    "A {siteName} {tier} module. Add it to a project with saasaloy add {name}.",
   /** The tag after the wordmark in the header, a link to the docs home. */
   headerTag: "Docs",
   breadcrumbLabel: "Breadcrumb",
