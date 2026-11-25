@@ -44,14 +44,14 @@ The experiment's diff in the issue is the reference. The plan keeps its shape bu
 
 Rejected: an `--port PORTS[app]` flag from the e2e config, which puts a tool-specific flag in the e2e config and leaves a human `pnpm preview` on port 4173. Rejected: a direct `pnpm --filter <app> build` in every run, which is always fresh but rebuilds on CI after `pnpm build` already did, once the turbo hash is complete.
 
-### Phase 1: hash the env files in the turbo build
+### Phase 1: hash the env files in the turbo build (built 2026-11-25)
 
 - In `packages/cli/templates/base/turbo.json`, add `inputs: ["$TURBO_DEFAULT$", ".env", ".env.local"]` and `env: ["PUBLIC_*"]` to the `build` task.
 - Add a note in `packages/cli/update-notes/`.
 
 Done when: in a `.dev` project, `pnpm turbo run build --filter=@repo/admin --dry=json` reports a different `@repo/admin#build` hash after a new key in `apps/admin/.env`, and again with `PUBLIC_API_URL` set in the process environment.
 
-### Phase 2: preview ports in the Vite apps
+### Phase 2: preview ports in the Vite apps (built 2026-11-25)
 
 - Add a `preview` block with `port` and `strictPort: true` to `modules/api/files/vite.config.ts`, `modules/admin/files/vite.config.ts` and `modules/app/files/vite.config.ts`. Compute the port once and share it between `server` and `preview`.
 - Add `cors: false` to the api's `preview` block.
@@ -59,7 +59,7 @@ Done when: in a `.dev` project, `pnpm turbo run build --filter=@repo/admin --dry
 
 Done when: in a `.dev` project with `pnpm dev:ports` run in a linked worktree, `pnpm --filter @repo/api build && pnpm --filter @repo/api preview` answers `GET /health` on the worktree's api port, and the admin and app previews answer on theirs.
 
-### Phase 3: built mode in the e2e config
+### Phase 3: built mode in the e2e config (built 2026-11-25)
 
 - Add `serveMode(env)` to `modules/e2e/files/lib/project.ts` and export the result as `SERVE`.
 - In `modules/e2e/files/playwright.config.ts`, rename `devCommand` to `serveCommand`, add the built branch, keep the api `tee-log.ts` wrapper for both modes, add `ASTRO_PREVIEW_BACKGROUND`, and make `timeout` and `reuseExistingServer` depend on the mode.
@@ -67,7 +67,7 @@ Done when: in a `.dev` project with `pnpm dev:ports` run in a linked worktree, `
 
 Done when: the `serveMode` test passes, `E2E_SERVE=bogus pnpm e2e` fails at config load naming `dev` and `built`, a second `E2E_SERVE=built pnpm e2e` with no change shows turbo cache hits for every app build, and after a built run no process listens on any app port.
 
-### Phase 4: documentation
+### Phase 4: documentation (built 2026-11-25)
 
 - Update `modules/e2e/skills/saasaloy-e2e/SKILL.md`: the two modes, the default, the start-up cost, the turbo cache, the reuse rule, and "stop `pnpm dev` before a built run".
 - Update the e2e note in `modules/ci/skills/saasaloy-ci/SKILL.md` so its `ci:e2e` recipe says CI runs built apps by default and reuses the `pnpm build` step's cache.
@@ -76,7 +76,7 @@ Done when: the `serveMode` test passes, `E2E_SERVE=bogus pnpm e2e` fails at conf
 
 Done when: `pnpm docs:check` and `pnpm docs:stale` pass and `pnpm lint` is clean.
 
-### Phase 5: verify against the target
+### Phase 5: verify against the target (built 2026-11-25)
 
 - In a `.dev` project with `api`, `admin`, `app`, `auth`, `auth-phone`, `sms-console`, `waitlist`, `command`, `ecommerce` and `payment-manual`, run the suite once with `E2E_SERVE=dev` and once with `E2E_SERVE=built`, sampling summed RSS every 5 seconds as the issue did.
 - Run the admin login spec once in built mode with a non-loopback host in `.devports.json`, and record the result in the skill.
