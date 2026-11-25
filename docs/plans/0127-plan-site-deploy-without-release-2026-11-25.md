@@ -42,14 +42,14 @@ The approach adds a second deploy path for site-only changes. It reuses the shap
 
 Rejected: a plain `main` deploy, because a reader copies a command for a module the published CLI does not have. Rejected: versioned docs (`/docs` and `/docs/next`), because two builds, a version switcher and per-version canonical URLs cost too much for this problem.
 
-### Phase 1: the content-path list and its drift guard
+### Phase 1: the content-path list and its drift guard (#401)
 
 - Add `apps/web/scripts/site-content.ts`. It exports `CONTENT_PATHS` (the four paths above) and `CODE_PATHS` (paths outside `apps/web` that are code and come from `main`; empty today).
 - Add `apps/web/scripts/site-content.test.ts`. It finds each relative path in `apps/web/src/**` and `apps/web/astro.config.mjs` that leaves `apps/web`. It resolves the path against its file, and it fails when the result is under neither list. Test fixtures inside `*.test.ts` files do not count.
 
 Done when: `pnpm --filter @saasaloy/web test` passes, and a temporary `import x from "../../../../README.md?raw"` in `src/pages/llms.txt.ts` makes the new test fail with the path in the message.
 
-### Phase 2: the site deploy script
+### Phase 2: the site deploy script (#401)
 
 - Add `apps/web/scripts/deploy-site.ts` with pure functions:
   - `contentTag(npmVersion)` returns `v<version>`, and it throws on an empty value or a prerelease version.
@@ -61,7 +61,7 @@ Done when: `pnpm --filter @saasaloy/web test` passes, and a temporary `import x 
 
 Done when: the tests pass, and `pnpm site:deploy --dry-run` prints the site commit and `v0.12.0`, builds, runs `wrangler deploy --dry-run`, and leaves no extra entry in `git worktree list`. A build from that run has the `noindex` rule in `dist/client/_headers` and `saasaloy v0.12.0` in the header of `/docs/cli`.
 
-### Phase 3: the record
+### Phase 3: the record (#401)
 
 - Write `docs/adr/0071-adr-the-site-deploys-from-main-with-content-from-the-release-tag-2026-11-25.md`. It records the split, the content paths, the overlay direction and the drift guard, and it supersedes plan 0114 grill Q14.
 - Edit `CONTRIBUTING.md` near line 598: keep the release deploy, add `pnpm site:deploy` for site-only changes, say that a docs change still waits for a release, and name the `wrangler rollback` command.
@@ -70,7 +70,7 @@ Done when: the tests pass, and `pnpm site:deploy --dry-run` prints the site comm
 
 Done when: `pnpm docs:check` and `pnpm lint` pass, and `grep -n "no other deploy path" CONTRIBUTING.md` prints nothing.
 
-### Phase 4: the first site deploy
+### Phase 4: the first site deploy (#401)
 
 Attended: a production deploy, which the owner approves and runs.
 
