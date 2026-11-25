@@ -52,7 +52,7 @@ export function BuiltOn({
     <section id={id} className="section-y">
       <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
         <div className="reveal min-w-0">
-          <h2 className="text-section-title text-primary max-w-[18ch] text-balance">
+          <h2 className="text-section-title text-primary max-w-[24ch] text-balance">
             {title}
           </h2>
           <p className="text-lead text-muted-foreground mt-6 max-w-xl text-pretty">

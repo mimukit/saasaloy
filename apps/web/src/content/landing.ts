@@ -156,7 +156,7 @@ export const landing = {
   // The `frameworks` and `libraries` groups are the drawing's two rings, so keep those
   // ids; `runtime` shows as chips only. The free tier claim repeats the README.
   builtOn: {
-    title: "Built on Cloudflare and tools you already know.",
+    title: "A SaaS starter kit built on Cloudflare and tools you already know.",
     description:
       "Every project runs on Cloudflare, where Workers, Hyperdrive, KV and R2 have free plans, with Postgres on Neon's free tier. Astro, TanStack Router and Hono build the apps, with Drizzle and Better Auth for data and sign-in.",
     groups: [
