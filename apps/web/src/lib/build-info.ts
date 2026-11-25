@@ -14,19 +14,25 @@ export interface BuildInfo {
   version: string;
   /** The full SHA of HEAD, or undefined when git cannot say (no git, or no repository). */
   commit: string | undefined;
+  /** The committer date of HEAD as `YYYY-MM-DD`, undefined whenever `commit` is. */
+  date: string | undefined;
 }
 
 /** The build info of the checkout at `root`. A missing git or repository leaves no commit. */
 export function readBuildInfo(root: string, version: string): BuildInfo {
-  let commit: string | undefined;
+  let output = "";
   try {
-    commit = execFileSync("git", ["rev-parse", "HEAD"], {
+    output = execFileSync("git", ["log", "-1", "--format=%H %cs", "HEAD"], {
       cwd: root,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
   } catch {
-    commit = undefined;
+    output = "";
   }
-  return { version, commit: commit === "" ? undefined : commit };
+  const [commit, date] = output.split(" ");
+  if (!commit || !date) {
+    return { version, commit: undefined, date: undefined };
+  }
+  return { version, commit, date };
 }

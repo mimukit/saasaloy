@@ -22,7 +22,7 @@ after(() => {
 });
 
 describe("readBuildInfo", () => {
-  it("reads the full HEAD commit beside the version", () => {
+  it("reads the full HEAD commit and its date beside the version", () => {
     const dir = tempDir();
     const git = (...args: string[]) =>
       execFileSync("git", args, { cwd: dir, encoding: "utf-8" }).trim();
@@ -36,6 +36,7 @@ describe("readBuildInfo", () => {
     assert.deepEqual(readBuildInfo(dir, "0.9.0"), {
       version: "0.9.0",
       commit: git("rev-parse", "HEAD"),
+      date: git("log", "-1", "--format=%cs", "HEAD"),
     });
   });
 
@@ -43,6 +44,7 @@ describe("readBuildInfo", () => {
     assert.deepEqual(readBuildInfo(tempDir(), "0.9.0"), {
       version: "0.9.0",
       commit: undefined,
+      date: undefined,
     });
   });
 });

@@ -14,6 +14,7 @@ import { Stages } from "@web/blocks/stages";
 import { Start } from "@web/blocks/start";
 import { landing, ui } from "@web/content/landing";
 import { agentPrompt } from "@web/content/prompts";
+import { build } from "@web/lib/build";
 import { interpolate } from "@web/lib/interpolate";
 import { loadModuleCatalog } from "@web/lib/module-registry";
 import { homeGraph } from "@web/lib/structured-data";
@@ -37,7 +38,17 @@ if (!Astro.site) {
     "Set `site` in astro.config.mjs; the home page JSON-LD needs it."
   );
 }
-const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
+const jsonLd = homeGraph({
+  site: Astro.site,
+  siteName,
+  description,
+  locale,
+  faq: landing.faq.items.map((item) => ({
+    question: interpolate(item.question, { siteName }),
+    answer: interpolate(item.answer, { siteName }),
+  })),
+  dateModified: build?.date,
+});
 ---
 
 {/*
