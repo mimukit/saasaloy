@@ -30,7 +30,7 @@ Target: all 16 inventoried places carry an Agent prompt tab, and a test fails wh
 | 10 | Docs | `how-to/deploy-to-cloudflare.md`, deploy | `deploy` |
 | 11 | Docs | `how-to/deploy-to-cloudflare.md`, roll back | `deploy` (Roll back section) |
 | 12 | Docs | `reference.md`, `saasaloy update` | `update` |
-| 13 | Docs | `runbooks/update-overwrote-my-work.md` | `update` (recovery section) |
+| 13 | Docs | `runbooks/update-overwrote-my-work.md` | `update`, with `page=runbooks/update-overwrote-my-work section="Stop it happening again"`, so the prompt fetches this runbook and not `reference.md`. The section is the one around the update command; the update task sentence does not fit the restore steps in "Get the work back". |
 | 14 | Docs | `runbooks/move-off-the-infra-module.md` | `migrate off infra` |
 | 15 | Docs | `generated/modules/database-postgres.md`, local setup | `database setup` |
 | 16 | Docs | `generated/modules/database-postgres.md`, production setup | `database setup` (production section) |
