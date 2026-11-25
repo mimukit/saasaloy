@@ -11,9 +11,11 @@
 # comment that each later run updates. It never fails the job. The `docs: none` label
 # says the pull request needs no docs change, so the job also runs when a label changes.
 #
-# This file has no deploy job, no secrets and no push trigger. The production deploy is
-# the `after:release` hook in `packages/cli/.release-it.js`, run by the owner (plan 0114,
-# Phase 6).
+# This file has no deploy job, no secrets and no push trigger. The owner deploys
+# production by hand on one of two paths. A release deploys the site at its tag through the
+# `after:release` hook in `packages/cli/.release-it.js` (plan 0114, Phase 6). A site-only
+# change deploys with `pnpm site:deploy`, which builds `origin/main` with the content of the
+# npm `latest` tag (ADR 0071).
 name: site
 
 on:

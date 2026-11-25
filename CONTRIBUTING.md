@@ -595,7 +595,7 @@ The tag push starts the `publish` workflow. A published CLI reads the modules at
 
 ### Deploying the docs site
 
-The same release deploys the docs site at saasaloy.com. After the tag, the push and the GitHub Release, release-it runs the `after:release` hook in `packages/cli/.release-it.js`. The hook runs `pnpm -w run release:deploy vX.Y.Z`, which runs `pnpm --filter @saasaloy/web run deploy:release -- vX.Y.Z`. That script builds `apps/web` and runs `wrangler deploy --tag vX.Y.Z --message "saasaloy vX.Y.Z"`, so the Worker version in Cloudflare carries the release tag. The build runs at the release commit, so the docs header shows `saasaloy vX.Y.Z`, and the footer of every page shows `vX.Y.Z` and the short commit, each linked to GitHub. `deploy:release` refuses to deploy when HEAD is not at the tag. Production has no other deploy path. A site-only fix ships with the next patch release.
+The same release deploys the docs site at saasaloy.com. After the tag, the push and the GitHub Release, release-it runs the `after:release` hook in `packages/cli/.release-it.js`. The hook runs `pnpm -w run release:deploy vX.Y.Z`, which runs `pnpm --filter @saasaloy/web run deploy:release -- vX.Y.Z`. That script builds `apps/web` and runs `wrangler deploy --tag vX.Y.Z --message "saasaloy vX.Y.Z"`, so the Worker version in Cloudflare carries the release tag. The build runs at the release commit, so the docs header shows `saasaloy vX.Y.Z`, and the footer of every page shows `vX.Y.Z` and the short commit, each linked to GitHub. `deploy:release` refuses to deploy when HEAD is not at the tag. A site-only change has a second deploy path, described in [Deploying a site-only change](#deploying-a-site-only-change).
 
 The hook needs `wrangler` logged in to the Brainaloy Labs account on the machine that runs `pnpm release`. Check it with `pnpm --filter @saasaloy/web exec wrangler whoami` before you release. The site can go live before the `publish` job finishes, because the hook does not wait for it.
 
@@ -606,6 +606,26 @@ git checkout vX.Y.Z && pnpm --filter @saasaloy/web deploy:production
 ```
 
 Return to `main` afterwards with `git checkout main`. `scripts/release-deploy.test.ts` checks the hook and the failure text with a fake failing command, and no test deploys.
+
+### Deploying a site-only change
+
+A change to the site itself, such as a layout, a title or a header rule under `apps/web/`, does not need a CLI release. Run this from a clean, pushed `main`:
+
+```sh
+pnpm site:deploy            # add --dry-run to build and check without uploading
+```
+
+The script builds the site code from `origin/main` and the content from the tag of the npm `latest` version: `docs/wiki/`, `modules/`, `packages/cli/package.json` and `llms.txt` (ADR [0071](docs/adr/0071-adr-the-site-deploys-from-main-with-content-from-the-release-tag-2026-11-25.md)). It builds in a temporary worktree, which it removes afterwards, and runs `wrangler deploy --tag site-<sha7> --message "site <sha7> with content vX.Y.Z"`. It warns when local `main` differs from `origin/main`, and it prints whether `PUBLIC_CF_ANALYTICS_TOKEN` is set in your shell, because the build reads the token from there.
+
+A docs change still waits for a release. A change under `docs/wiki/` or `modules/`, or a new CLI command, is content, and a site deploy takes the content from the release tag. A site change that needs newer content fails its build, and the script says the change waits for the next release. When the site reads a new path outside `apps/web`, add it to `CONTENT_PATHS` or `CODE_PATHS` in `apps/web/scripts/site-content.ts`; `site-content.test.ts` fails until you do.
+
+To return production to an earlier version, run:
+
+```sh
+pnpm --filter @saasaloy/web exec wrangler rollback
+```
+
+The `site-<sha7>` and `vX.Y.Z` tags in the Cloudflare version list name each version.
 
 ### Approving the publish
 
