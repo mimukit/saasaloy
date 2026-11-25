@@ -43,6 +43,7 @@ describe("siteDeployPlan", () => {
           "-C",
           TREE,
           "checkout",
+          "--no-overlay",
           "v0.12.0",
           "--",
           "docs/wiki",

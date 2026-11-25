@@ -6,7 +6,7 @@ saasaloy.com deployed only with a CLI release. The `after:release` hook in `pack
 
 **The content paths** are `docs/wiki/`, `modules/`, `packages/cli/package.json` and `llms.txt`, listed once as `CONTENT_PATHS` in `apps/web/scripts/site-content.ts`. These are the only paths outside `apps/web` that the site build reads. The docs header reads the version from `packages/cli/package.json`, so it shows the content release, and the footer shows the site commit from `git log -1`.
 
-**The overlay goes one way.** The build tree is `main`, and `git checkout vX -- <CONTENT_PATHS>` puts the content from the tag on top of it. The reverse, a tag tree with `apps/web` from `main`, pairs `main`'s `apps/web/package.json` with the tag's `pnpm-lock.yaml`, and the frozen install fails.
+**The overlay goes one way.** The build tree is `main`, and `git checkout --no-overlay vX -- <CONTENT_PATHS>` replaces the content with the tag's. `--no-overlay` also deletes each file under a content path that `main` added after the tag, so a wiki page or a module that is not released yet stays off the site. The reverse, a tag tree with `apps/web` from `main`, pairs `main`'s `apps/web/package.json` with the tag's `pnpm-lock.yaml`, and the frozen install fails.
 
 **A drift guard keeps the list true.** `apps/web/scripts/site-content.test.ts` scans `apps/web/src` and `apps/web/astro.config.mjs` for each relative path that leaves `apps/web`, and each repo-relative join on `repoRoot`. It fails when the path is under neither `CONTENT_PATHS` nor `CODE_PATHS`, so a new read that nobody classified fails a test, not a deploy.
 

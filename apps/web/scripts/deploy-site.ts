@@ -59,7 +59,18 @@ export function siteDeployPlan(
     },
     {
       name: "content",
-      command: ["git", "-C", worktree, "checkout", tag, "--", ...CONTENT_PATHS],
+      // `--no-overlay` also deletes the files `main` added after the tag, so a page or a
+      // module that is not released yet stays off the site.
+      command: [
+        "git",
+        "-C",
+        worktree,
+        "checkout",
+        "--no-overlay",
+        tag,
+        "--",
+        ...CONTENT_PATHS,
+      ],
     },
     {
       name: "install",
