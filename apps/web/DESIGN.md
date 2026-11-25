@@ -172,6 +172,30 @@ components:
   command-field-dark:
     backgroundColor: "{colors.dark-card}"
     textColor: "{colors.dark-foreground}"
+  command-strip:
+    backgroundColor: "{colors.muted}"
+    textColor: "{colors.muted-foreground}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.none}"
+    height: 1.75rem
+  command-tab-active:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.highlight}"
+  command-copy:
+    backgroundColor: "{colors.muted}"
+    textColor: "{colors.highlight}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.none}"
+    height: 1.75rem
+  copy-compact:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.highlight}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.none}"
+    height: 1.75rem
+  copy-compact-copied:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-foreground}"
   filter-tab:
     backgroundColor: "{colors.card}"
     textColor: "{colors.highlight}"
@@ -291,6 +315,10 @@ The landing page has seven sections in this order: hero, stages, catalog, provid
 - **Footer.** Option B of the footer layout mockup, approved by the owner on 2026-10-28. One row holds the tagline "Start small. Own the source." on the left and links to GitHub, Getting started, Changelog and the MIT license in `highlight` on the right. Under it, the `footer-wordmark` runs the full container width. Construction guides sit over it, from option 1 of the footer pattern mockup, approved on 2026-10-28: the x-height and baseline, the two side bearings, a construction circle on the first "s" and on the "y", and a crosshair at each corner. They are dashed hairlines in `highlight` at reduced opacity, drawn as one aria-hidden SVG, and they do not move. A dimension line in `highlight` sits under the wordmark: two hairline arms with an end tick each (`dimension-arm` in `web.css`) either side of a mono uppercase label, "Open source · MIT license · No cookies", which adds "Cookieless analytics" when the build loads the beacon. Under the line, a colophon in Geist Mono at `text-xs` and `muted-foreground` puts the copyright on the left, with the license holder linked to mimukit.com, and "Developed with ♥ from Bangladesh · sponsored by Brainaloy Labs" on the right. The two names are `foreground` links and the heart is `highlight`. On mobile every row stacks.
 
 The command field is the page's primary call to action. It is a bordered mono field with a prompt glyph, and a solid `primary` Copy button sits flush against its right edge. Both share the `2.5rem` height and square corners. The hero's field is `command-field-lg` (`size="lg"`): `3rem` tall, up to `32rem` wide, with a `base` command from `40rem`. The copy button shows its copied state in place and never moves the layout.
+
+The hero and the closing block pass the field an agent prompt, which puts a `command-strip` across the top of the field: two tabs on the left, "Agent prompt" first and selected, then "CLI", and a small Copy button on the right. The selected tab is a `command-tab-active` chip with a `border` hairline on the `muted` strip, and the other tab is plain `muted-foreground` text. Left and right arrow keys move between the tabs. The Copy button is `command-copy`: a copy icon and "Copy" in `highlight` with no fill, which turn into a check and "Copied" at the same width. The text below the strip gets the full width of the field. The agent tab shows the prompt, which wraps and never scrolls sideways; the CLI tab shows the command. The two panels share one box, so a switch never changes the field's height. On a coarse pointer the tabs and the button grow to 44px. With a prompt the hero's field is up to `42rem` wide and the closing block's up to `36rem`. The docs `saasaloy-command` block uses the same strip, and its CLI tab lists each command on its own line. The reference is option B of mockup round 2 of plan 0125, approved on 2026-11-25. It replaces round 1, whose solid Copy block was too large.
+
+The stages and the catalog tiles use the compact copy control from the same round, option B. Each `saasaloy add` command keeps its one mono line, and two small outlined `copy-compact` buttons follow it: "Prompt" copies the agent prompt that adds that module, and "CLI" copies the command. A pressed button turns solid `copy-compact-copied` with a check and "Copied" at the same width for two seconds, and a polite live region announces the copy. In a stage the buttons sit beside the command; on a tile they take their own line under it, so every tile in a row keeps one layout. The buttons are plain HTML with the `hidden` attribute, and one inline script on the landing page shows them, so the stages and the catalog stay static and a reader without JavaScript sees only the command.
 
 Illustrations are line art in `highlight` on the page background, with mono callouts on leader lines. One element per illustration fills with `primary` to mark the focus. Draw them as SVG so the stroke colour follows the theme tokens.
 

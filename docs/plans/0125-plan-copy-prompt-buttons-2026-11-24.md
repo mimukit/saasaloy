@@ -30,7 +30,7 @@ Target: all 16 inventoried places carry an Agent prompt tab, and a test fails wh
 | 10 | Docs | `how-to/deploy-to-cloudflare.md`, deploy | `deploy` |
 | 11 | Docs | `how-to/deploy-to-cloudflare.md`, roll back | `deploy` (Roll back section) |
 | 12 | Docs | `reference.md`, `saasaloy update` | `update` |
-| 13 | Docs | `runbooks/update-overwrote-my-work.md` | `update` (recovery section) |
+| 13 | Docs | `runbooks/update-overwrote-my-work.md` | `update`, with `page=runbooks/update-overwrote-my-work section="Stop it happening again"`, so the prompt fetches this runbook and not `reference.md`. The section is the one around the update command; the update task sentence does not fit the restore steps in "Get the work back". |
 | 14 | Docs | `runbooks/move-off-the-infra-module.md` | `migrate off infra` |
 | 15 | Docs | `generated/modules/database-postgres.md`, local setup | `database setup` |
 | 16 | Docs | `generated/modules/database-postgres.md`, production setup | `database setup` (production section) |
@@ -45,13 +45,13 @@ Out of scope on purpose: `curl` checks, `git diff`, `pnpm --filter … dev`, fla
 | Prompt pattern | `<Task>. Fetch https://saasaloy.com/docs/<slug>.md and follow its <Section> section.` The section is `Install` on a module page and `For agents` on a task page. Example: "Add the waitlist module to my Saasaloy project. Fetch https://saasaloy.com/docs/modules/waitlist.md and follow its Install section." (grill Q11) |
 | Section prompts | A prompt for one part of a page names the section in words, such as "follow its Roll back section". The raw route serves whole pages only, and no anchor is needed. (grill Q6) |
 | Init guard | The `init` prompt says "in a new empty directory", so an agent does not run `init` inside an existing project. (grill Q7) |
-| Default tab | Agent prompt first, CLI second, as in the reference. The Copy button reads "Copy prompt" on the agent tab and "Copy" on the CLI tab. |
+| Default tab | Agent prompt first, CLI second, as in the reference. The tabs and a small "Copy" text button share one strip across the top of the field, option B of mockup round 2. The button reads "Copy" on both tabs, and its accessible name says which text it copies. |
 | Target | Coverage, not copy rate. Cloudflare Web Analytics (`apps/web/src/lib/analytics.ts`) records no click events, so there is no copy-rate baseline. |
 | README | Gets one plain text line under the install block: "Or tell your agent:" and the `init` prompt. GitHub renders no button. |
 | One prompt source | Prompt sentences live in one content file, `apps/web/src/content/prompts.ts`, keyed by task, with `{name}` tokens filled by `apps/web/src/lib/interpolate.ts`. The landing blocks and the docs plugin read from it. No prompt text in a component. |
 | Landing field | Extend `CommandField` with an optional `prompt` prop. With a prompt it renders the two tabs; without one it renders as today. One island, `client:visible`, as now. |
 | Catalog and stages copy | `ModuleCatalog` and `Stages` stay static, with no React island. Their copy buttons are plain HTML with the `hidden` attribute, and one small inline script shows them and handles clicks, as `docs-code.ts` and the docs layout script do. (grill Q5) |
-| Catalog tile form | The Phase 1 mockup decides between two tabs and a compact form on a catalog tile. (grill Q10) |
+| Catalog tile form | Compact form, option B of mockup round 1: each tile keeps one `$ saasaloy add <name>` line and two small outlined copy buttons, "Prompt" and "CLI". The tile shows no prompt text, so tiles stay short and equal height. The pressed button turns solid `primary` with a check and "Copied" at the same width. The stages block uses the same compact control. (grill Q10, approved 2026-11-25) |
 | Docs fence | A new `saasaloy-command` fence, added to `BLOCK_LANGUAGES` in `apps/web/src/lib/docs-blocks.ts` and rendered through the existing `docs-blocks-client.ts` island path. With JavaScript off, the reader sees the prompt and the command as plain text. An unknown task key fails the build, as the other `saasaloy-*` fences do. |
 | Fence syntax | The arguments name the task and the module: `` ```saasaloy-command task=add name=waitlist ``. The body holds only the CLI commands, verbatim. A raw Markdown reader (GitHub, `/docs/<slug>.md`) sees the commands and no prompt, because an agent that reads raw Markdown needs the commands. (grill Q3) |
 | Copy button in the fence | The `saasaloy-command` block has its own Copy button and `docs-code.ts` skips it. Other code blocks keep their plain Copy button. (grill Q9) |
@@ -60,7 +60,8 @@ Out of scope on purpose: `curl` checks, `git diff`, `pnpm --filter … dev`, fla
 | Generated page agent text | The `For agents` text on `generated/modules/database-postgres.md` comes from that module's skill through `docs-generate.ts`. No hand edit of a generated page. (grill Q12) |
 | Coverage test | A `node --test` test in `apps/web/src/lib/`, beside `docs-blocks.test.ts`, scans every wiki page. A `bash` or `sh` line that starts with `saasaloy` or `npx saasaloy` plus `init`, `add`, `remove` or `update`, and has no `--dry-run`, `--abort` or `--done`, must sit in a `saasaloy-command` fence. Exceptions go in an allowlist inside the test, each with a reason. `node --test` is the runner `apps/web` already uses (`apps/web/package.json` `test`). (grill Q8) |
 | UI house rules | From `apps/web/DESIGN.md`: square corners (`rounded.none`) on the field, tabs and button; no new colour, radius, shadow or type size; tabs use `code-sm`; the copied state never moves the layout; interface motion at or under 200ms on `--ease-out-soft`; links that leave the site open in a new tab. New for this plan: the Copy button label tracks the active tab. |
-| Visual reference | The two Neon screenshots the owner shared on 2026-11-24 set the interaction. The Saasaloy look comes from the mockup round in Phase 1. Not approved yet. |
+| Visual reference | The two Neon screenshots the owner shared on 2026-11-24 set the interaction. The Saasaloy look comes from the mockup round in Phase 1. |
+| Mockup approved | Round 2, approved by the owner on 2026-11-25 with option B, the toolbar strip, for the landing command field and the docs block. Files `0125-r2-command-field-*.png` in the same gist (for example https://gist.githubusercontent.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a/raw/0125-r2-command-field-b-light-1513.png). Issue comment: https://github.com/mimukit/saasaloy/issues/396#issuecomment-7157971148. Round 2 replaces the round 1 Copy button, which the owner found too large. Round 1,  approved by the owner on 2026-11-25 with catalog option B. Gist: https://gist.github.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a, files `0125-r1-*.png` (for example https://gist.githubusercontent.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a/raw/0125-r1-hero-light-1440.png). Issue comment: https://github.com/mimukit/saasaloy/issues/396#issuecomment-7155959936. The round shows the hero, the stages, the catalog in options A and B, and the docs block, in light and dark, at 1440 and 390. Two images carry text errors that the build ignores: `catalog-a-dark` shows invented prompt text, and `catalog-b-light` shows an invented heading and a two-column grid. The build keeps the settled prompt pattern and the four-column catalog. |
 | Outward actions | The grill commits this plan to `main` and pushes it. Issues are filed later with `issuekit`, not by the grill. (grill Q4) |
 
 ## Approach
@@ -86,16 +87,16 @@ Attended: the owner approves the mockup screenshots before any build.
 
 Done when: this plan has a Design decisions row that names the approved mockup round, its approval date and the catalog tile form.
 
-### Phase 2: Prompt content and the tabbed CommandField (#396)
+### Phase 2: Prompt content and the tabbed CommandField (#396) (built 2026-11-25)
 
 - Add `apps/web/src/content/prompts.ts` with the eight task prompts: `init`, `add`, `remove`, `update`, `deploy`, `contribute`, `database-setup`, `migrate-off-infra`. Each holds the task sentence, the docs slug it fetches and the section it names, in the settled prompt pattern.
 - Extend `CommandField` with the `prompt` prop, the two tabs, the per-tab Copy label, and the accessible names and live-region text in `landing.ts` `ui.commandField`.
 - Pass the `init` prompt to the hero and the closing block in `apps/web/src/pages/index.astro`.
 - Update the `command-field` entries in `apps/web/DESIGN.md`.
 
-Done when: on the built site, the hero and the closing block open on the Agent prompt tab, "Copy prompt" puts the `init` prompt from `prompts.ts` on the clipboard (it names a new empty directory and `https://saasaloy.com/docs/getting-started.md` with its For agents section), and the CLI tab copies `npx saasaloy init my-app`.
+Done when: on the built site, the hero and the closing block open on the Agent prompt tab, the Copy button on that tab puts the `init` prompt from `prompts.ts` on the clipboard (it names a new empty directory and `https://saasaloy.com/docs/getting-started.md` with its For agents section), and the CLI tab copies `npx saasaloy init my-app`.
 
-### Phase 3: Stages and catalog (#396)
+### Phase 3: Stages and catalog (#396) (built 2026-11-25)
 
 - Render the copy controls in `apps/web/src/blocks/stages.tsx` and `apps/web/src/blocks/module-catalog.tsx` as plain HTML with `hidden`, in the form the mockup approved.
 - Add one small inline script in `apps/web/src/pages/index.astro` that shows the controls and handles the copy. Add no React island.
@@ -103,7 +104,7 @@ Done when: on the built site, the hero and the closing block open on the Agent p
 
 Done when: on the built landing page, each stage and each catalog tile copies an `add` prompt that names its own module and its own `/docs/modules/<name>.md` page, and the page adds no new `astro-island` element.
 
-### Phase 4: The docs fence and the module pages (#396)
+### Phase 4: The docs fence and the module pages (#396) (built 2026-11-25)
 
 - Add `saasaloy-command` to `BLOCK_LANGUAGES` in `apps/web/src/lib/docs-blocks.ts`, its data in `docs-blocks-data.ts`, and its island in `docs-blocks-client.ts`. Fail the build on an unknown task key.
 - Make `docs-code.ts` skip the Copy button on a `saasaloy-command` block.
@@ -112,7 +113,7 @@ Done when: on the built landing page, each stage and each catalog tile copies an
 
 Done when: `pnpm --filter web test` passes, `pnpm docs:check` passes, and `/docs/modules/waitlist` shows the tabbed block with the waitlist prompt above the ordered Install steps.
 
-### Phase 5: Task pages, README and the coverage test (#396)
+### Phase 5: Task pages, README and the coverage test (#396) (built 2026-11-25)
 
 - Add a `## For agents` section to each of the eight hand-written task pages in Design decisions.
 - Replace the task blocks at places 6 to 16 with `saasaloy-command` fences. Keep the flag-variant and debugging blocks as plain code.
@@ -124,7 +125,7 @@ Done when: the coverage test passes, the built site shows a `saasaloy-command` b
 
 ## Open questions
 
-None. The catalog tile form is settled by the Phase 1 mockup.
+None. Mockup round 1 settled the catalog tile form on 2026-11-25: option B, the compact form.
 
 ## Non-goals
 

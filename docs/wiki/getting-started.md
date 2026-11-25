@@ -3,6 +3,17 @@
 By the end of this page you have the `saasaloy` CLI on your `PATH`, a scaffolded project
 on disk, and its landing page running at `http://localhost:3000`.
 
+## For agents
+
+Run these from a new empty directory, never inside an existing project. `--yes` runs `pnpm install` without a prompt, and with no terminal `init` sets the testing mode to `off`.
+
+```saasaloy-command task=init
+npx saasaloy init my-app --yes
+cd my-app
+```
+
+To confirm success, run `npx saasaloy doctor` in `my-app`. It exits 0 on a healthy project.
+
 ## Before you begin
 
 - **Node 24.15.0 or newer.** The root `package.json`, `packages/cli`, the base template and
@@ -31,7 +42,7 @@ pnpm add -g saasaloy
 You can also skip the install and run it once. Every command on this page then needs the
 `npx saasaloy` prefix in place of `saasaloy`:
 
-```bash
+```saasaloy-command task=init
 npx saasaloy init my-app
 ```
 
@@ -53,7 +64,7 @@ You should see the eleven commands: `init`, `add`, `env`, `testing`, `outdated`,
 
 Move somewhere outside the clone and run:
 
-```bash
+```saasaloy-command task=init
 cd ~
 saasaloy init my-app
 ```

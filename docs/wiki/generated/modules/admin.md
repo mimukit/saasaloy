@@ -6,6 +6,20 @@
 
 An apps/admin TanStack Router SPA behind the auth session, for the site's staff.
 
+## Install
+
+```saasaloy-command task=add name=admin
+saasaloy add admin
+saasaloy env
+pnpm install
+```
+
+1. Run `saasaloy add admin --dry-run` to print the plan and write nothing. Check the files it writes and the modules it adds first.
+2. Run `saasaloy add admin --yes` to write the files.
+3. Run `saasaloy env` to fill the environment values the new modules declare. With no terminal, pass each value as `--set KEY=VALUE`.
+4. Run `pnpm install` to fetch the new dependencies.
+5. Read the module's skill under [What your agent reads](#what-your-agent-reads) and follow it to use the module in your code.
+
 ## Facts
 
 | Field | Value |

@@ -19,8 +19,10 @@ import { fileURLToPath } from "node:url";
 import { catalogRows } from "../apps/web/src/lib/module-catalog.ts";
 import type { RegistryDescriptor } from "../apps/web/src/lib/module-catalog.ts";
 import {
+  forAgentsFences,
   generate,
   rewriteLinks,
+  splitForAgents,
   stalePaths,
   writeGenerated,
 } from "./docs-generate.ts";
@@ -183,6 +185,46 @@ describe("a module page", () => {
     assert.ok(skillPart.includes(firstSentence));
   });
 
+  it("opens with an Install section: the command fence, then the ordered steps", () => {
+    const page = generated.get("docs/wiki/generated/modules/waitlist.md") ?? "";
+    const install = page.slice(
+      page.indexOf("## Install"),
+      page.indexOf("## Facts")
+    );
+    assert.ok(page.indexOf("## Install") > 0);
+    assert.ok(
+      install.includes(
+        "```saasaloy-command task=add name=waitlist\nsaasaloy add waitlist\nsaasaloy env\npnpm install\n```"
+      )
+    );
+    const steps = install
+      .split("\n")
+      .filter((line) => /^\d+\. /.test(line))
+      .map((line) => /`([^`]+)`/.exec(line)?.[1]);
+    assert.deepEqual(steps.slice(0, 4), [
+      "saasaloy add waitlist --dry-run",
+      "saasaloy add waitlist --yes",
+      "saasaloy env",
+      "pnpm install",
+    ]);
+    assert.ok(install.includes("](#what-your-agent-reads)"));
+  });
+
+  it("lifts the database-postgres For agents section out of the skill text", () => {
+    const page =
+      generated.get("docs/wiki/generated/modules/database-postgres.md") ?? "";
+    const [head = "", skillPart = ""] = page.split("## What your agent reads");
+    assert.ok(head.indexOf("## For agents") < head.indexOf("## Facts"));
+    assert.ok(head.includes("```saasaloy-command task=database-setup\n"));
+    assert.ok(
+      head.includes(
+        '```saasaloy-command task=database-setup section="Production setup"\n'
+      )
+    );
+    assert.equal(skillPart.includes("For agents"), false);
+    assert.equal(skillPart.includes("saasaloy-command"), false);
+  });
+
   it("names the providers of a capability and the dry-run command", () => {
     const page = generated.get("docs/wiki/generated/modules/email.md") ?? "";
     assert.ok(page.includes("[`email-plunk`](email-plunk.md)"));
@@ -265,5 +307,46 @@ describe("rewriteLinks", () => {
       out,
       "[a](../../../adr/0001-adr-all-in-on-cloudflare-2026-07-22.md#x) [b](nope.md) [c](#top)"
     );
+  });
+});
+
+describe("a skill's For agents section", () => {
+  const SKILL = [
+    "# x",
+    "## For agents",
+    "Run it.",
+    "```bash",
+    "## not a heading",
+    "pnpm a",
+    "```",
+    "### Production",
+    "```sh",
+    "pnpm b",
+    "```",
+    "```ts",
+    "const c = 1;",
+    "```",
+    "## Next",
+    "More.",
+  ].join("\n");
+
+  it("splits at the next level-two heading outside a fence", () => {
+    const { forAgents, rest } = splitForAgents(SKILL);
+    assert.ok(forAgents.startsWith("## For agents"));
+    assert.ok(forAgents.includes("pnpm b"));
+    assert.equal(rest, "# x\n## Next\nMore.");
+    assert.deepEqual(splitForAgents("# x\n\nBody."), {
+      forAgents: "",
+      rest: "# x\n\nBody.",
+    });
+  });
+
+  it("turns each bash or sh block into a fence that names its sub-heading", () => {
+    const out = forAgentsFences(splitForAgents(SKILL).forAgents, "t");
+    assert.ok(out.includes("```saasaloy-command task=t\n## not a heading"));
+    assert.ok(
+      out.includes('```saasaloy-command task=t section="Production"\npnpm b')
+    );
+    assert.ok(out.includes("```ts\nconst c"));
   });
 });

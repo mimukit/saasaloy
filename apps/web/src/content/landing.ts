@@ -542,6 +542,19 @@ export const ui = {
     copyLabel: "Copy the command {command}",
     /** Announced through a polite live region once the copy lands. */
     copiedAnnouncement: "Command copied to the clipboard.",
+    /** Accessible name for the tab list that switches the field between its two forms. */
+    tabsLabel: "Copy as",
+    agentTab: "Agent prompt",
+    cliTab: "CLI",
+    /** Accessible name for the button on the Agent prompt tab. */
+    copyPromptLabel: "Copy the agent prompt",
+    promptCopiedAnnouncement: "Prompt copied to the clipboard.",
+    /** The compact copy buttons beside a stage's or a catalog tile's command. */
+    compactPrompt: "Prompt",
+    compactCli: "CLI",
+    /** Accessible names for the compact buttons; `{name}` is the module. */
+    compactPromptLabel: "Copy the agent prompt that adds the {name} module",
+    compactCliLabel: "Copy the command that adds the {name} module",
   },
 
   footer: {

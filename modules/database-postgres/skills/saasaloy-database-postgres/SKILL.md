@@ -30,6 +30,25 @@ without the flag the Worker fails to start.
 Read `saasaloy-database` first for how to add a table or write a repository. Nothing below changes
 those steps.
 
+## For agents
+
+Set up the development database. `db:setup` starts the container from the root `compose.yaml`, creates this branch's database, writes `DATABASE_URL` and applies every migration. `db:status` checks the result. Run the production setup only when the owner asks for it.
+
+```bash
+pnpm db:setup
+pnpm db:seed
+pnpm db:status
+```
+
+### Production setup
+
+Store the production connection string as a Workers secret, then migrate the production database. `db:prod:migrate` dumps the database before it migrates.
+
+```bash
+wrangler secret put DATABASE_URL --config apps/api/wrangler.jsonc
+pnpm db:prod:migrate
+```
+
 ## The connection string: `DATABASE_URL`, or Hyperdrive
 
 `getDb` takes the Worker's whole `env` and resolves one connection string from it:

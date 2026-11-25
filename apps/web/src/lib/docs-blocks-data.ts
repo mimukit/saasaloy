@@ -1,9 +1,12 @@
-// The facts the two `saasaloy-*` docs blocks show, built from the module descriptors. Pure
-// and import-free apart from module-catalog.ts, so the remark plugin (which runs in Node at
-// build time), the React islands (which run in the browser) and `node --test` all load it.
-// The plugin serialises one `GraphData` or `ProvidersData` into the block's markup, and the
-// island reads it back, so the two never read the registry on their own.
+// The facts the `saasaloy-*` docs blocks show, built from the module descriptors and the
+// agent prompts. Pure, and it imports only module-catalog.ts and content/prompts.ts, so the
+// remark plugin (which runs in Node at build time), the React islands (which run in the
+// browser) and `node --test` all load it. The plugin serialises one `GraphData`,
+// `ProvidersData` or `CommandData` into the block's markup, and the island reads it back,
+// so the two never read the registry on their own.
 
+import { agentPrompt, isPromptTask, prompts } from "../content/prompts.ts";
+import type { AgentPrompt } from "../content/prompts.ts";
 import { catalogRows } from "./module-catalog.ts";
 import type { CatalogVariant, RegistryDescriptor } from "./module-catalog.ts";
 
@@ -120,25 +123,87 @@ export function providersData(
   };
 }
 
-/** The `key=value` words after the language of a fenced block, such as `focus=email`. */
+/**
+ * The `key=value` words after the language of a fenced block, such as `focus=email`. A value
+ * in double quotes may hold spaces: `section="Roll back"`.
+ */
 export function parseBlockArgs(
   meta: string | null | undefined,
   allowed: readonly string[],
   language: string
 ): Record<string, string> {
+  const fail = (word: string): Error =>
+    new Error(
+      `${language}: cannot read "${word}". The block takes ${
+        allowed.length === 0
+          ? "no argument"
+          : allowed.map((name) => `${name}=<name>`).join(" ")
+      }.`
+    );
+  const source = meta ?? "";
+  if (source.split('"').length % 2 === 0) {
+    throw fail(source.trim());
+  }
   const args: Record<string, string> = {};
-  for (const word of (meta ?? "").split(/\s+/).filter(Boolean)) {
-    const [key, value, ...rest] = word.split("=");
-    if (!key || !value || rest.length > 0 || !allowed.includes(key)) {
-      throw new Error(
-        `${language}: cannot read "${word}". The block takes ${
-          allowed.length === 0
-            ? "no argument"
-            : allowed.map((name) => `${name}=<name>`).join(" ")
-        }.`
-      );
+  for (const word of source.match(/(?:[^\s"]+|"[^"]*")+/g) ?? []) {
+    const [, key = "", quoted, bare] =
+      /^([^="]+)=(?:"([^"]*)"|([^="]+))$/.exec(word) ?? [];
+    const value = quoted ?? bare ?? "";
+    if (value.trim() === "" || !allowed.includes(key)) {
+      throw fail(word);
     }
     args[key] = value;
   }
   return args;
+}
+
+/** What a `saasaloy-command` block shows: the agent prompt and the commands the CLI tab copies. */
+export interface CommandData {
+  prompt: string;
+  /** One command for each line, in the order the fence body lists them. */
+  commands: string[];
+}
+
+/**
+ * The prompt and the commands of one `saasaloy-command` fence. Throws on an unknown task, a
+ * `name` the task does not take or that names no module, a missing `name`, a `page` that is
+ * not a docs slug, and an empty body.
+ */
+export function commandData(
+  descriptors: readonly BlockDescriptor[],
+  args: Record<string, string>,
+  body: string
+): CommandData {
+  const { task, name, page, section } = args;
+  if (task === undefined || !isPromptTask(task)) {
+    throw new Error(
+      `saasaloy-command: ${task === undefined ? "the block needs task=<task>" : `task=${task} is not a prompt task`}. Use one of: ${Object.keys(prompts).join(", ")}.`
+    );
+  }
+  const entry: AgentPrompt = prompts[task];
+  const takesName = `${entry.task}${entry.slug}`.includes("{name}");
+  if (takesName && name === undefined) {
+    throw new Error(`saasaloy-command: task=${task} needs name=<module>.`);
+  }
+  if (!takesName && name !== undefined) {
+    throw new Error(`saasaloy-command: task=${task} takes no name.`);
+  }
+  if (name !== undefined && !descriptors.some((item) => item.name === name)) {
+    throw new Error(`saasaloy-command: name=${name} is not a module.`);
+  }
+  if (page !== undefined && !/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(page)) {
+    throw new Error(
+      `saasaloy-command: page=${page} is not a docs slug, such as runbooks/update-overwrote-my-work.`
+    );
+  }
+  const commands = body
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== "");
+  if (commands.length === 0) {
+    throw new Error(
+      `saasaloy-command: task=${task} has no command. Write the CLI commands in the fence body.`
+    );
+  }
+  return { prompt: agentPrompt(task, { name, page, section }), commands };
 }

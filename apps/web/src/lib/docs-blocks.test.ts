@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { agentPrompt } from "../content/prompts.ts";
 import { blockFor, remarkDocsBlocks } from "./docs-blocks.ts";
 import {
   graphData,
@@ -127,6 +128,117 @@ describe("parseBlockArgs", () => {
     assert.throws(() => parseBlockArgs("email", ["focus"], "x"), /"email"/);
     assert.throws(() => parseBlockArgs("size=2", ["focus"], "x"), /size=2/);
   });
+
+  it("reads a quoted value with spaces and rejects an unclosed quote", () => {
+    assert.deepEqual(
+      parseBlockArgs(
+        'task=deploy section="Roll back"',
+        ["task", "section"],
+        "x"
+      ),
+      { task: "deploy", section: "Roll back" }
+    );
+    assert.throws(
+      () => parseBlockArgs('section="Roll back', ["section"], "x"),
+      /cannot read/
+    );
+    assert.throws(
+      () => parseBlockArgs('section=""', ["section"], "x"),
+      /cannot read/
+    );
+  });
+});
+
+describe("the saasaloy-command block", () => {
+  const BODY = "saasaloy add email\nsaasaloy env\n\npnpm install\n";
+
+  it("writes the prompt and the commands as plain text and as the island's JSON", () => {
+    const node = blockFor(
+      "saasaloy-command",
+      "task=add name=email",
+      REGISTRY,
+      BODY
+    );
+    const prompt = agentPrompt("add", { name: "email" });
+    assert.equal(node.data?.hProperties?.["data-saasaloy-block"], "command");
+    assert.deepEqual(node.data?.hProperties?.className, [
+      "saasaloy-block",
+      "saasaloy-command",
+    ]);
+    const [first, second] = node.children ?? [];
+    assert.equal(first?.type, "paragraph");
+    assert.equal(first?.children?.[0]?.value, `Agent prompt: ${prompt}`);
+    assert.equal(second?.type, "code");
+    assert.equal(
+      second?.value,
+      "saasaloy add email\nsaasaloy env\npnpm install"
+    );
+    assert.deepEqual(
+      JSON.parse(String(node.data?.hProperties?.["data-props"])),
+      {
+        prompt,
+        commands: ["saasaloy add email", "saasaloy env", "pnpm install"],
+      }
+    );
+    assert.match(
+      prompt,
+      /^Add the email module to my Saasaloy project\. Fetch https:\/\/saasaloy\.com\/docs\/modules\/email\.md and follow its Install section\.$/
+    );
+  });
+
+  it("fetches the page a page= argument gives", () => {
+    const node = blockFor(
+      "saasaloy-command",
+      'task=update page=runbooks/update-overwrote-my-work section="Stop it happening again"',
+      REGISTRY,
+      "npx saasaloy@latest update --yes"
+    );
+    const props = JSON.parse(String(node.data?.hProperties?.["data-props"]));
+    assert.ok(
+      props.prompt.includes(
+        "/docs/runbooks/update-overwrote-my-work.md and follow its Stop it happening again section."
+      )
+    );
+  });
+
+  it("refuses a page= value that is not a docs slug", () => {
+    assert.throws(
+      () =>
+        blockFor(
+          "saasaloy-command",
+          "task=update page=../secrets.md",
+          REGISTRY,
+          "npx saasaloy@latest update --yes"
+        ),
+      /page=\.\.\/secrets\.md is not a docs slug/
+    );
+  });
+
+  it("names the section a quoted section= argument gives", () => {
+    const node = blockFor(
+      "saasaloy-command",
+      'task=deploy section="Roll back"',
+      REGISTRY,
+      "pnpm deploy:production"
+    );
+    const props = JSON.parse(String(node.data?.hProperties?.["data-props"]));
+    assert.equal(props.prompt, agentPrompt("deploy", { section: "Roll back" }));
+    assert.ok(props.prompt.endsWith("follow its Roll back section."));
+  });
+
+  it("fails on an unknown task, a missing or stray name, an unknown module and no body", () => {
+    const run =
+      (meta: string, body = "saasaloy add email") =>
+      () =>
+        blockFor("saasaloy-command", meta, REGISTRY, body);
+    assert.throws(run("task=ad name=email"), /task=ad is not a prompt task/);
+    assert.throws(run("name=email"), /needs task=<task>/);
+    assert.throws(run("task=add"), /task=add needs name=<module>/);
+    assert.throws(run("task=init name=email"), /task=init takes no name/);
+    assert.throws(run("task=add name=nope"), /name=nope is not a module/);
+    assert.throws(run("task=add name=email", "\n"), /has no command/);
+    assert.throws(run("task=add name=email size=2"), /cannot read "size=2"/);
+  });
 });
 
 describe("blockFor", () => {
@@ -168,14 +280,15 @@ describe("remarkDocsBlocks", () => {
     type: string;
     lang?: string;
     meta?: string;
+    value?: string;
     data?: { hProperties?: Record<string, unknown> };
     children?: Node[];
   }
-  const tree = (lang: string, meta?: string): Node => ({
+  const tree = (lang: string, meta?: string, value?: string): Node => ({
     type: "root",
     children: [
       { type: "paragraph", children: [] },
-      { type: "blockquote", children: [{ type: "code", lang, meta }] },
+      { type: "blockquote", children: [{ type: "code", lang, meta, value }] },
     ],
   });
 
@@ -195,6 +308,33 @@ describe("remarkDocsBlocks", () => {
       email.variants.filter((v: { tier: string }) => v.tier === "provider")
         .length,
       3
+    );
+  });
+
+  it("reads the body of a saasaloy-command fence", () => {
+    const root = tree(
+      "saasaloy-command",
+      "task=add name=waitlist",
+      "saasaloy add waitlist"
+    );
+    remarkDocsBlocks({ repoRoot: ROOT })(root);
+    const props = JSON.parse(
+      String(
+        root.children?.[1]?.children?.[0]?.data?.hProperties?.["data-props"]
+      )
+    );
+    assert.deepEqual(props.commands, ["saasaloy add waitlist"]);
+    assert.equal(props.prompt, agentPrompt("add", { name: "waitlist" }));
+  });
+
+  it("fails the build on a saasaloy-command fence with no module name", () => {
+    assert.throws(
+      () =>
+        remarkDocsBlocks({ repoRoot: ROOT })(
+          tree("saasaloy-command", "task=add", "saasaloy add waitlist"),
+          { path: "docs/wiki/x.md" }
+        ),
+      /task=add needs name=<module>.*docs\/wiki\/x\.md/
     );
   });
 

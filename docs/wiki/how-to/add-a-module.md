@@ -3,6 +3,18 @@
 `saasaloy add` puts a module in the lock's `requested` list, renders the project with it, and writes the difference: the module's files, the files of whatever it depends on, its patches into files other modules own, and the generated table files its rows go into (such as `apps/api/src/routes.generated.ts`). It records each file it wrote in `.saasaloy/manifest.json`. Run it from anywhere inside a Saasaloy project; the
 CLI walks up to the directory holding `saasaloy.json`.
 
+## For agents
+
+Replace `waitlist` with the module name, and add `--with <module>` beside `--yes` when `add` names a driver choice.
+
+```saasaloy-command task=add name=waitlist
+saasaloy add waitlist --dry-run
+saasaloy add waitlist --yes
+pnpm install
+```
+
+Set each variable the plan lists with `saasaloy env --set KEY=VALUE`. To confirm success, run `saasaloy env --check`. It exits 0 when no variable is missing.
+
 ## See what's available
 
 ```bash
@@ -13,7 +25,7 @@ Names only, read from the default registry `mimukit/saasaloy`. Pass an `owner/re
 
 ## Install one
 
-```bash
+```saasaloy-command task=add name=waitlist
 saasaloy add waitlist
 ```
 

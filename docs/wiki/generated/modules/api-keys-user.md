@@ -6,6 +6,20 @@
 
 User-owned API keys with their own scopes and rules, for a project with no organizations.
 
+## Install
+
+```saasaloy-command task=add name=api-keys-user
+saasaloy add api-keys-user
+saasaloy env
+pnpm install
+```
+
+1. Run `saasaloy add api-keys-user --dry-run` to print the plan and write nothing. Check the files it writes and the modules it adds first.
+2. Run `saasaloy add api-keys-user --yes` to write the files.
+3. Run `saasaloy env` to fill the environment values the new modules declare. With no terminal, pass each value as `--set KEY=VALUE`.
+4. Run `pnpm install` to fetch the new dependencies.
+5. This module ships no skill. Read the `api-keys` skill under [What your agent reads](api-keys.md#what-your-agent-reads) and follow it to use the module in your code.
+
 ## Facts
 
 | Field | Value |
