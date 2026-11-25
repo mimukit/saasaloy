@@ -2,11 +2,22 @@
 
 One command deploys the whole project:
 
-```bash
+```saasaloy-command task=deploy
 pnpm deploy:production
 ```
 
 It checks the branch, the tree, origin, CI and new migrations, then every production value. Then it builds and deploys each Worker with wrangler, one at a time in a fixed order, requests the live hosts, and tags the commit. Preview all of it with `pnpm deploy:production --dry-run`, which builds, uploads, migrates and tags nothing. The secrets go up with the code, and wrangler creates the KV, R2 and queue resources the first time. The Postgres database is the one resource wrangler does not create: it lives at a Postgres host such as Neon. There is no Pulumi stack, no extra module and no staging environment. Production is the only target.
+
+## For agents
+
+Commit and push first. Run the dry run, report what it lists, and run the deploy only after the owner says so in this session.
+
+```saasaloy-command task=deploy
+pnpm deploy:production --dry-run
+pnpm deploy:production
+```
+
+To confirm success, run `git tag --points-at HEAD --list "deploy-*"`. It prints the deploy tag the run pushed.
 
 ## Before you begin
 
@@ -122,9 +133,13 @@ No sign-up becomes the first superadmin. Make one before the api origin is publi
 
 ## When a deploy fails partway
 
-The run stops at the failed step and writes no tag. A Worker that deployed before the failure stays live, so a run can leave the api on the new version and the web app on the old one, or a migration applied with the old api still serving. The run prints a rollback command for each Worker it deployed:
+The run stops at the failed step and writes no tag. A Worker that deployed before the failure stays live, so a run can leave the api on the new version and the web app on the old one, or a migration applied with the old api still serving.
 
-```bash
+### Roll back
+
+The run prints a rollback command for each Worker it deployed:
+
+```saasaloy-command task=deploy section="Roll back"
 pnpm --filter @repo/api exec env-deploy --run api -- wrangler rollback
 ```
 

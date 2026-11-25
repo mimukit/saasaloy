@@ -4,6 +4,20 @@ Everything the CLI declares: its commands, their flags, the coordinate grammar, 
 environment variables it reads, and the files it writes. Nothing here is aspirational — if
 a flag isn't listed, it doesn't exist.
 
+## For agents
+
+To update a project, commit first, because `update` refuses a dirty tree. `@latest` moves the project to the newest release.
+
+```saasaloy-command task=update
+npx saasaloy@latest update --dry-run
+npx saasaloy@latest update --yes
+pnpm install
+```
+
+An exit of 3 means a file holds conflict markers or an update note is pending. Resolve each marker, and clear each note with the `--done <id>` command the report names.
+
+To confirm success, run `npx saasaloy@latest outdated --check`. It exits 0 when nothing has moved and no note is pending.
+
 ## Commands
 
 ```text

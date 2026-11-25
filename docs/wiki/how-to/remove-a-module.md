@@ -4,9 +4,21 @@
 
 The render reads the payload of the lock's release from the user cache (`~/.cache/saasaloy/payload/`), and fetches it from the registry when the cache does not hold it. With a cold cache and no network, a run that must merge a file refuses with exit 2.
 
+## For agents
+
+Replace `waitlist` with the module name. Commit first, and report each warning the run prints to the owner.
+
+```saasaloy-command task=remove name=waitlist
+saasaloy remove waitlist --dry-run
+saasaloy remove waitlist --yes
+pnpm install
+```
+
+To confirm success, run `saasaloy list --installed`. The module is no longer in the list.
+
 ## Take one out
 
-```bash
+```saasaloy-command task=remove name=waitlist
 saasaloy remove waitlist
 ```
 

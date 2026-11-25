@@ -6,6 +6,18 @@ Nothing in your Cloudflare account changes. The same Workers and the same data s
 
 The releases that shipped `infra` kept the database on D1, through a driver Saasaloy no longer ships ([Why Postgres, not D1](../why-postgres.md)). This runbook moves the deploys only. Moving the data to Postgres is yours to plan, and no Saasaloy release does it.
 
+## For agents
+
+Never run `pulumi destroy`. Commit first, and make the edits of steps 2 and 3. Then remove the module with the 0.9.0 CLI:
+
+```saasaloy-command task=migrate-off-infra
+pnpm dlx saasaloy@0.9.0 remove infra --yes
+```
+
+Make the step 4 edits, then run `pnpm install`. Deploy (step 6) only after the owner says so in this session.
+
+To confirm success, run `pnpm deploy:production --dry-run`. Its closing list names nothing that would stop a real run.
+
 ## Never run `pulumi destroy`
 
 `pulumi destroy` deletes every resource in the stack: the Workers and the database, with its data. Nothing in this runbook needs it. Do not run `pnpm --filter @repo/infra run destroy` either; it is the same command.
@@ -40,7 +52,7 @@ With the `local` value source, put both keys in `packages/env/.env.prod`, with t
 
 ## 4. Remove the module
 
-```bash
+```saasaloy-command task=migrate-off-infra
 pnpm dlx saasaloy@0.9.0 remove infra
 ```
 

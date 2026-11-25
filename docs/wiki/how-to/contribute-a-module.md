@@ -2,6 +2,16 @@
 
 A module is a folder under [`modules/`](../../../modules/) in this repo. A plain `saasaloy add` can install the module after the next CLI release.
 
+## For agents
+
+Work in a clone of `mimukit/saasaloy` and follow the `create-module` skill. Replace `my-module`, the tier and the dependencies.
+
+```saasaloy-command task=contribute
+saasaloy new module my-module --type saasaloy:feature --depends-on api
+```
+
+To confirm success, run `saasaloy doctor modules/my-module`. It exits 0 when the descriptor is valid. Before the PR, run the seven scripts that [Submitting](#submitting) names.
+
 ## Read these first
 
 Two guides carry the actual rules, and this page does not repeat them:
@@ -44,7 +54,7 @@ A module never writes a row into a list in a file the owner keeps. A list that o
 
 The CLI writes the skeleton, so you never start from a blank file:
 
-```bash
+```saasaloy-command task=contribute
 saasaloy new module <name> --type <tier> --depends-on api,database
 ```
 

@@ -2,6 +2,16 @@
 
 `saasaloy update` at 0.1.x could replace files the project owns with the template's copies. If your favicon came back, your blocks lost their edits, or `packages/ui/src/styles/globals.css` turned back into the shipped theme, this is what happened and this is how to get the work back.
 
+## For agents
+
+Restore the files the last `update` run overwrote from the backup that run wrote:
+
+```bash
+saasaloy update --abort
+```
+
+If the run wrote no backup, restore each file you own with `git checkout HEAD -- <path>`, as [Get the work back](#get-the-work-back) lists. To confirm success, run `git status --short`. It lists none of the restored files.
+
 ## Symptoms
 
 One `saasaloy update` run rewrites files nobody expected it to touch:
@@ -58,5 +68,11 @@ Upgrade the CLI. From 0.2.0, the release carrying ADR 0034:
 - a dirty git working tree is refused without `--force`.
 
 Commit or stash before any update anyway. It costs one command and it is the only recovery that never depends on the tool behaving.
+
+Then update with the newest CLI:
+
+```saasaloy-command task=update
+npx saasaloy@latest update --yes
+```
 
 _Verified against `main`@`e2830008` on 2026-11-22._

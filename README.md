@@ -64,6 +64,10 @@ pnpm dev
 # landing page on http://localhost:3000
 ```
 
+Or tell your agent:
+
+> Create a new Saasaloy project in a new empty directory. Fetch https://saasaloy.com/docs/getting-started.md and follow its For agents section.
+
 Then add modules as the product grows:
 
 ```bash
