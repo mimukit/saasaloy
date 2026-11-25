@@ -1,0 +1,6 @@
+# Cloudflare static assets read this file from dist/client. Each docs page also ships as raw
+# Markdown at /docs/<slug>.md for agents (src/pages/docs/[...slug].md.ts). Search engines
+# must index only the HTML page, or the two copies compete as duplicate content. Agents and
+# llms.txt readers fetch the .md files directly, so noindex does not hide them.
+/docs/*.md
+  X-Robots-Tag: noindex
