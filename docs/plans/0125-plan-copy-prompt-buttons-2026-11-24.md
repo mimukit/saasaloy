@@ -75,7 +75,7 @@ Rejected alternatives:
 - Lateral: one site-wide "Set up with your agent" prompt that points at `llms.txt`. Rejected as the only surface because it gives no help at the point of a task. It stays a possible later addition.
 - New per-task agent pages such as `/docs/agents/add.md`. Rejected because they add a second source beside the how-to pages.
 
-### Phase 1: Mockup round
+### Phase 1: Mockup round (#396)
 
 Attended: the owner approves the mockup screenshots before any build.
 
@@ -86,7 +86,7 @@ Attended: the owner approves the mockup screenshots before any build.
 
 Done when: this plan has a Design decisions row that names the approved mockup round, its approval date and the catalog tile form.
 
-### Phase 2: Prompt content and the tabbed CommandField
+### Phase 2: Prompt content and the tabbed CommandField (#396)
 
 - Add `apps/web/src/content/prompts.ts` with the eight task prompts: `init`, `add`, `remove`, `update`, `deploy`, `contribute`, `database-setup`, `migrate-off-infra`. Each holds the task sentence, the docs slug it fetches and the section it names, in the settled prompt pattern.
 - Extend `CommandField` with the `prompt` prop, the two tabs, the per-tab Copy label, and the accessible names and live-region text in `landing.ts` `ui.commandField`.
@@ -95,7 +95,7 @@ Done when: this plan has a Design decisions row that names the approved mockup r
 
 Done when: on the built site, the hero and the closing block open on the Agent prompt tab, "Copy prompt" puts the `init` prompt from `prompts.ts` on the clipboard (it names a new empty directory and `https://saasaloy.com/docs/getting-started.md` with its For agents section), and the CLI tab copies `npx saasaloy init my-app`.
 
-### Phase 3: Stages and catalog
+### Phase 3: Stages and catalog (#396)
 
 - Render the copy controls in `apps/web/src/blocks/stages.tsx` and `apps/web/src/blocks/module-catalog.tsx` as plain HTML with `hidden`, in the form the mockup approved.
 - Add one small inline script in `apps/web/src/pages/index.astro` that shows the controls and handles the copy. Add no React island.
@@ -103,7 +103,7 @@ Done when: on the built site, the hero and the closing block open on the Agent p
 
 Done when: on the built landing page, each stage and each catalog tile copies an `add` prompt that names its own module and its own `/docs/modules/<name>.md` page, and the page adds no new `astro-island` element.
 
-### Phase 4: The docs fence and the module pages
+### Phase 4: The docs fence and the module pages (#396)
 
 - Add `saasaloy-command` to `BLOCK_LANGUAGES` in `apps/web/src/lib/docs-blocks.ts`, its data in `docs-blocks-data.ts`, and its island in `docs-blocks-client.ts`. Fail the build on an unknown task key.
 - Make `docs-code.ts` skip the Copy button on a `saasaloy-command` block.
@@ -112,7 +112,7 @@ Done when: on the built landing page, each stage and each catalog tile copies an
 
 Done when: `pnpm --filter web test` passes, `pnpm docs:check` passes, and `/docs/modules/waitlist` shows the tabbed block with the waitlist prompt above the ordered Install steps.
 
-### Phase 5: Task pages, README and the coverage test
+### Phase 5: Task pages, README and the coverage test (#396)
 
 - Add a `## For agents` section to each of the eight hand-written task pages in Design decisions.
 - Replace the task blocks at places 6 to 16 with `saasaloy-command` fences. Keep the flag-variant and debugging blocks as plain code.
