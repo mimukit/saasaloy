@@ -110,6 +110,8 @@ To add a CI step of your own, add a `ci:prepare:<name>` script to the root `pack
 
 The `e2e` module adds no `ci:*` script. `ci:prepare:env` writes every `apps/<app>/.env` from the example's defaults, but a key with no default stays blank there. With the Postgres driver, `packages/env/.env.example` also leaves `DATABASE_URL` blank, and `db:seed` reads the job's `DATABASE_URL` ahead of `apps/api/.env`. To run the suite in CI, add a `ci:prepare:e2e` script that writes `packages/env/.env`, runs `pnpm env:setup` (which replaces the files `ci:prepare:env` wrote) and runs `pnpm e2e:install --with-deps`. Then add a `ci:e2e` script that runs `pnpm e2e`, and give the seed a project database rather than the server URL.
 
+On CI, `pnpm e2e` serves built apps rather than dev servers, because `CI` is set and `E2E_SERVE` is unset. Each app's build goes through turbo, and the job's `pnpm build` step runs first, so an app whose `.env` files did not change since that step is a cache hit. `db:setup` can write a new `DATABASE_URL` into `apps/api/.env`, and then the api builds again. Set `E2E_SERVE=dev` in the `ci:e2e` script to use dev servers. The `saasaloy-e2e` skill explains the two modes.
+
 #### The deploy gate
 
 `pnpm deploy:production` checks that `ci.yml` passed on `HEAD` before it deploys, because the module set `ciWorkflow: "ci.yml"` in `packages/tooling/src/deploy.config.ts`. `pnpm deploy:production --dry-run` prints the gate as on. To turn it off, set `ciWorkflow` back to `undefined`. The patch writes only while the value reads `undefined`, so a value you set stays.
