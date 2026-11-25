@@ -9,6 +9,15 @@ import { defineConfig, loadEnv } from "vite";
 
 const ENV_LOCAL = "apps/api/.env.local";
 
+/** This workspace's dev port, which `vite preview` takes too. */
+function portFor(mode: string): number {
+  return devPort(
+    loadEnv(mode, process.cwd(), "DEV_PORT").DEV_PORT,
+    4000,
+    ENV_LOCAL
+  );
+}
+
 export default defineConfig(({ mode }) => ({
   // `restartOnLockfile()` restarts the dev server after an install, so a package added
   // while it runs resolves on the next request. Dev only.
@@ -28,13 +37,7 @@ export default defineConfig(({ mode }) => ({
   // the same request works under `wrangler dev`. It also reflects every loopback
   // origin, so the allowlist looked wider than it is. Off, both dev paths behave
   // identically.
-  server: {
-    cors: false,
-    port: devPort(
-      loadEnv(mode, process.cwd(), "DEV_PORT").DEV_PORT,
-      4000,
-      ENV_LOCAL
-    ),
-    strictPort: true,
-  },
+  server: { cors: false, port: portFor(mode), strictPort: true },
+  // `vite preview` takes `strictPort`, `cors` and `host` from `server`, but not the port.
+  preview: { port: portFor(mode) },
 }));
