@@ -70,7 +70,7 @@ pnpm deploy:production --dry-run
 pnpm --filter @repo/web run deploy -- --dry-run
 ```
 
-The first command reports every deploy gate, the deploy order and the smoke checks, and runs the env check, which names every blank production key. It builds nothing. The second builds the web app with the production values and uploads nothing. Wrangler prints "Using redirected Wrangler configuration" for `apps/web`.
+The first command reports every deploy gate, the deploy order and the smoke checks, and runs the env check, which names every blank production key that the selected providers need. It builds nothing. The second builds the web app with the production values and uploads nothing. Wrangler prints "Using redirected Wrangler configuration" for `apps/web`.
 
 ## 6. Deploy
 
@@ -92,4 +92,4 @@ Before step 7, restore `infra/` and the files step 4 changed from git, run `pnpm
 
 A later module named `infra-ci-deploy` (issue #199) writes a GitHub Actions workflow that runs `pnpm deploy:production` on a push to `main`. It has nothing to do with the deleted `infra` module, holds no Pulumi program, and needs no step from this runbook.
 
-_Verified against `main`@`33bc729b` on 2026-11-21._
+_Verified against `main`@`be6eca1e` on 2026-11-25._
