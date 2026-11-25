@@ -51,7 +51,7 @@ Out of scope on purpose: `curl` checks, `git diff`, `pnpm --filter … dev`, fla
 | One prompt source | Prompt sentences live in one content file, `apps/web/src/content/prompts.ts`, keyed by task, with `{name}` tokens filled by `apps/web/src/lib/interpolate.ts`. The landing blocks and the docs plugin read from it. No prompt text in a component. |
 | Landing field | Extend `CommandField` with an optional `prompt` prop. With a prompt it renders the two tabs; without one it renders as today. One island, `client:visible`, as now. |
 | Catalog and stages copy | `ModuleCatalog` and `Stages` stay static, with no React island. Their copy buttons are plain HTML with the `hidden` attribute, and one small inline script shows them and handles clicks, as `docs-code.ts` and the docs layout script do. (grill Q5) |
-| Catalog tile form | The Phase 1 mockup decides between two tabs and a compact form on a catalog tile. (grill Q10) |
+| Catalog tile form | Compact form, option B of mockup round 1: each tile keeps one `$ saasaloy add <name>` line and two small outlined copy buttons, "Prompt" and "CLI". The tile shows no prompt text, so tiles stay short and equal height. The pressed button turns solid `primary` with a check and "Copied" at the same width. The stages block uses the same compact control. (grill Q10, approved 2026-11-25) |
 | Docs fence | A new `saasaloy-command` fence, added to `BLOCK_LANGUAGES` in `apps/web/src/lib/docs-blocks.ts` and rendered through the existing `docs-blocks-client.ts` island path. With JavaScript off, the reader sees the prompt and the command as plain text. An unknown task key fails the build, as the other `saasaloy-*` fences do. |
 | Fence syntax | The arguments name the task and the module: `` ```saasaloy-command task=add name=waitlist ``. The body holds only the CLI commands, verbatim. A raw Markdown reader (GitHub, `/docs/<slug>.md`) sees the commands and no prompt, because an agent that reads raw Markdown needs the commands. (grill Q3) |
 | Copy button in the fence | The `saasaloy-command` block has its own Copy button and `docs-code.ts` skips it. Other code blocks keep their plain Copy button. (grill Q9) |
@@ -60,7 +60,8 @@ Out of scope on purpose: `curl` checks, `git diff`, `pnpm --filter … dev`, fla
 | Generated page agent text | The `For agents` text on `generated/modules/database-postgres.md` comes from that module's skill through `docs-generate.ts`. No hand edit of a generated page. (grill Q12) |
 | Coverage test | A `node --test` test in `apps/web/src/lib/`, beside `docs-blocks.test.ts`, scans every wiki page. A `bash` or `sh` line that starts with `saasaloy` or `npx saasaloy` plus `init`, `add`, `remove` or `update`, and has no `--dry-run`, `--abort` or `--done`, must sit in a `saasaloy-command` fence. Exceptions go in an allowlist inside the test, each with a reason. `node --test` is the runner `apps/web` already uses (`apps/web/package.json` `test`). (grill Q8) |
 | UI house rules | From `apps/web/DESIGN.md`: square corners (`rounded.none`) on the field, tabs and button; no new colour, radius, shadow or type size; tabs use `code-sm`; the copied state never moves the layout; interface motion at or under 200ms on `--ease-out-soft`; links that leave the site open in a new tab. New for this plan: the Copy button label tracks the active tab. |
-| Visual reference | The two Neon screenshots the owner shared on 2026-11-24 set the interaction. The Saasaloy look comes from the mockup round in Phase 1. Not approved yet. |
+| Visual reference | The two Neon screenshots the owner shared on 2026-11-24 set the interaction. The Saasaloy look comes from the mockup round in Phase 1. |
+| Mockup approved | Round 1, approved by the owner on 2026-11-25 with catalog option B. Gist: https://gist.github.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a, files `0125-r1-*.png` (for example https://gist.githubusercontent.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a/raw/0125-r1-hero-light-1440.png). Issue comment: https://github.com/mimukit/saasaloy/issues/396#issuecomment-7155959936. The round shows the hero, the stages, the catalog in options A and B, and the docs block, in light and dark, at 1440 and 390. Two images carry text errors that the build ignores: `catalog-a-dark` shows invented prompt text, and `catalog-b-light` shows an invented heading and a two-column grid. The build keeps the settled prompt pattern and the four-column catalog. |
 | Outward actions | The grill commits this plan to `main` and pushes it. Issues are filed later with `issuekit`, not by the grill. (grill Q4) |
 
 ## Approach
@@ -124,7 +125,7 @@ Done when: the coverage test passes, the built site shows a `saasaloy-command` b
 
 ## Open questions
 
-None. The catalog tile form is settled by the Phase 1 mockup.
+None. Mockup round 1 settled the catalog tile form on 2026-11-25: option B, the compact form.
 
 ## Non-goals
 
