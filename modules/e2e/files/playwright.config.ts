@@ -9,6 +9,7 @@ import {
   READY,
   readConfig,
   ROOT,
+  SERVE,
   SPEC_TAGS,
 } from "./lib/project.ts";
 import type { App } from "./lib/project.ts";
@@ -25,7 +26,9 @@ import type { App } from "./lib/project.ts";
 //
 // **Which apps are started.** `webServer` gets one entry per installed app on its pinned
 // dev port. Playwright owns those processes and kills every one it started, so a headless
-// run leaves nothing holding a port.
+// run leaves nothing holding a port. `E2E_SERVE` picks how each app starts: `dev` runs its
+// dev server, `built` builds it through turbo and serves the build with its `preview`
+// script. Unset, CI gets `built` and a local run gets `dev` (`serveMode` in `lib/project.ts`).
 //
 // The database is NOT set up here. `prepare.ts` does it, and the `e2e` script runs that
 // before `playwright test`, because the api Worker reads `apps/api/.env` when it boots — a
@@ -45,39 +48,54 @@ function uncollected(): RegExp | undefined {
 }
 
 /**
- * The command that starts `app`. Each app reads its own port from `DEV_PORT`, which
- * `pnpm dev:ports` writes, so the command names none.
+ * The command that starts `app` in this run's serve mode. Each app reads its own port from
+ * `DEV_PORT`, which `pnpm dev:ports` writes, for `dev` and `preview` alike, so the command
+ * names none.
+ *
+ * The built mode builds through turbo, so a build that `pnpm build` already made for the
+ * same sources and env files is a cache hit rather than a second build. `--only` keeps
+ * each entry to its own app: every entry starts at once, and without it two entries would
+ * build `apps/api` into the same `dist` together.
  *
  * The api's output also goes to `API_LOG`, through `lib/tee-log.ts`, for every project: a
  * spec runs in a worker process and cannot read the `webServer` pipe, so a spec that needs
  * what the api printed, such as a code the console SMS provider wrote, reads that file.
  */
-function devCommand(app: App): string {
-  const dev = `pnpm --filter @repo/${app} dev`;
+function serveCommand(app: App): string {
+  const start =
+    SERVE === "built"
+      ? `pnpm turbo run build --filter=@repo/${app} --only --ui=stream && pnpm --filter @repo/${app} preview`
+      : `pnpm --filter @repo/${app} dev`;
   if (app !== "api") {
-    return dev;
+    return start;
   }
   const tee = path.relative(
     ROOT,
     path.resolve(import.meta.dirname, "lib/tee-log.ts")
   );
-  return `node "${tee}" "${path.relative(ROOT, API_LOG)}" ${dev}`;
+  // One quoted argument, so the `&&` of the built command runs inside the tee as well.
+  return `node "${tee}" "${path.relative(ROOT, API_LOG)}" "${start}"`;
 }
 
 const webServer = installedApps(config).map((app) => ({
-  command: devCommand(app),
+  command: serveCommand(app),
   cwd: ROOT,
   url: READY[app],
-  // Astro's `astro dev` detaches itself when it detects an AI-agent environment, and a
-  // detached server is one Playwright cannot own or kill. `ASTRO_DEV_BACKGROUND` turns that
-  // detection off; the name reads backwards, but it is the only lever the CLI exposes, and
-  // `--background` stays the opt-in. Harmless for the two vite apps, which never detach.
-  env: { ASTRO_DEV_BACKGROUND: "1" },
-  // Start a fresh API when tests write to the database checked by prepare.ts.
+  // `astro dev` and `astro preview` detach themselves when they detect an AI-agent
+  // environment, and a detached server is one Playwright cannot own or kill. These two
+  // variables turn that detection off; the names read backwards, but they are the only
+  // lever the CLI exposes. Harmless for the vite apps, which never detach.
+  env: { ASTRO_DEV_BACKGROUND: "1", ASTRO_PREVIEW_BACKGROUND: "1" },
+  // Start a fresh API when tests write to the database checked by prepare.ts. A built run
+  // reuses nothing: the server already on the port is most likely `pnpm dev`, and a pass
+  // against it would say nothing about the build.
   reuseExistingServer:
-    !process.env.CI && (app !== "api" || !hasModule(config, "database")),
-  // A cold `vite dev` in a fresh checkout compiles the whole graph on first request.
-  timeout: 120_000,
+    SERVE === "dev" &&
+    !process.env.CI &&
+    (app !== "api" || !hasModule(config, "database")),
+  // A cold `vite dev` in a fresh checkout compiles the whole graph on first request; a
+  // built run builds first, which takes longer on a cache miss.
+  timeout: SERVE === "built" ? 300_000 : 120_000,
   stdout: "pipe" as const,
   stderr: "pipe" as const,
 }));
