@@ -474,12 +474,12 @@ export default defineConfig({
     },
 
     // --- The public site's tests run on node:test too ----------------------
-    // `apps/web` runs `src/**/*.test.ts` with `node --test` through its own `test`
-    // script, the same runner as `scripts/`, so it installs no test framework for one
+    // `apps/web` runs `src/**/*.test.ts` and `scripts/**/*.test.ts` with `node --test`
+    // through its own `test` script, the same runner as `scripts/`, so it installs no test framework for one
     // pure function (plan 0091, Tests row). Same two vitest rules off, for the same
     // reason: they point the file at a runner it cannot use.
     {
-      files: ["apps/web/src/**/*.test.ts"],
+      files: ["apps/web/{src,scripts}/**/*.test.ts"],
       plugins: ["vitest"],
       rules: {
         "vitest/no-import-node-test": "off",
