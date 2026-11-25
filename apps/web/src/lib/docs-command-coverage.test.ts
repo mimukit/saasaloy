@@ -14,8 +14,7 @@ const SHELL_LANGUAGES = new Set(["", "bash", "sh", "shell", "zsh", "console"]);
 // run a task, so none of them hides a line from the check.
 const TASK_LINE =
   /^\s*(?:\$\s+)?(?:[A-Z][A-Z0-9_]*=\S*\s+)*(?:npx\s+|pnpm\s+dlx\s+)?saasaloy(?:@\S+)?\s+(?:init|add|remove|update)(?:\s|$)/;
-// `--diff` is a preview like `--dry-run`: it stops before the prompt and writes nothing.
-const FLAG_VARIANT = /\s--(?:dry-run|diff|abort|done)(?:\s|=|$)/;
+const FLAG_VARIANT = /\s--(?:dry-run|abort|done)(?:\s|=|$)/;
 
 /**
  * Task lines that stay plain shell on purpose, keyed by page and the exact trimmed line. An
@@ -49,6 +48,22 @@ const ALLOWED: { page: string; line: string; reason: string }[] = [
     line: "saasaloy add someone/their-repo                    # picker over that repo",
     reason:
       "A third-party coordinate has no module page for a prompt to fetch.",
+  },
+  {
+    page: "how-to/add-a-module.md",
+    line: "saasaloy add waitlist --diff       # print the plan plus a per-file diff, write nothing",
+    reason: "A preview that writes nothing, not the install task.",
+  },
+  {
+    page: "how-to/remove-a-module.md",
+    line: "saasaloy remove waitlist --diff",
+    reason: "A preview that writes nothing, not the remove task.",
+  },
+  {
+    page: "how-to/contribute-a-module.md",
+    line: "SAASALOY_REGISTRY_DIR=/path/to/your/saasaloy/modules saasaloy add my-module --diff",
+    reason:
+      "A preview that writes nothing, run against a local registry by a module author.",
   },
   {
     page: "runbooks/bad-descriptor-on-main.md",
@@ -191,7 +206,6 @@ describe("plainTaskLines", () => {
       "```",
       "```bash",
       "saasaloy add waitlist --dry-run",
-      "saasaloy remove waitlist --diff",
       "saasaloy update --abort",
       "saasaloy update --done base/0001 --yes",
       "saasaloy env",
