@@ -86,11 +86,37 @@ Before the first run, every app needs its `.env`. Run `saasaloy env` (or copy `p
 
 1. `prepare.ts` checks Chromium is downloaded and every app it will start has its `.env`.
 2. When `database` is installed, `prepare.ts` runs `pnpm db:setup`, then `pnpm db:seed`.
-3. Playwright starts one dev server per installed app and waits for each to answer.
+3. Playwright starts each installed app in the [serve mode](#dev-servers-or-built-apps) and waits for each to answer.
 4. The specs run, one at a time.
 5. `global-teardown.ts` runs `pnpm db:drop`, **on CI only**.
 
 Steps 1 and 2 are a script rather than a `globalSetup` hook because of step 3. The api Worker reads `apps/api/.env` when it boots, so a `DATABASE_URL` written after the server started is a value it never sees.
+
+#### Dev servers or built apps
+
+`E2E_SERVE` picks how Playwright starts each app. `serveMode` in `lib/project.ts` reads it.
+
+| `E2E_SERVE` | Each app runs | Default when unset |
+| --- | --- | --- |
+| `dev` | its `dev` script | off CI |
+| `built` | `pnpm turbo run build --filter=@repo/<app> --only`, then its `preview` script | on CI (`CI` is set) |
+
+Any other value fails the run when the config loads and names the two values.
+
+Built mode tests the code that ships, and it uses much less memory. On one project with 32 specs, the dev servers peaked at 5.6 GB and the built apps at 3.5 GB, and the built run was faster. Use it on a CI runner with a memory limit, and before a release. Dev mode is the fast local loop: no build before the first spec, and it can reuse a `pnpm dev` that is already running.
+
+In built mode:
+
+- The build goes through turbo, so a build that `pnpm build` already made for the same sources and env files is a cache hit. The turbo `build` task hashes each workspace's `.env`, `.env.local` and every `PUBLIC_*` variable, so a changed origin rebuilds the app.
+- Playwright waits up to 300 seconds for each app, because the build runs first. Dev mode waits 120 seconds.
+- Playwright never reuses a running server. Stop `pnpm dev` before a built run, or Playwright fails because the port is already used.
+- `vite preview` and `astro preview` serve on the app's dev port, so the origins `pnpm dev:ports` wrote still match.
+- The `preview` scripts listen on every interface, like the `dev` scripts, so a run on a `pnpm dev:ports --host <host>` record works. Use an IP address for `<host>`, such as `10.211.0.2`. Vite refuses a host name it does not know, such as `devaloy-metal`, with 403 "Blocked request" in dev and built mode alike, until `server.allowedHosts` in the app's `vite.config.ts` lists it.
+
+```sh
+E2E_SERVE=built pnpm e2e    # build every app, then serve the builds
+E2E_SERVE=dev pnpm e2e      # dev servers, also on CI
+```
 
 #### Ports
 
@@ -101,7 +127,7 @@ Steps 1 and 2 are a script rather than a `globalSetup` hook because of step 3. T
 | `apps/admin` | 3001 | `admin` is installed |
 | `apps/app` | 3002 | `app` is installed |
 
-These are the project's pinned dev ports, the same ones in `AGENTS.md`. `lib/project.ts` reads `.devports.json` at the repository root when `pnpm dev:ports` wrote one, and takes the host and each app's port from it, so a linked worktree tests its own servers. With no record it uses these pinned ports on `localhost`, and a record that does not parse fails the run. Off CI, Playwright can reuse running app servers. For projects with a database, Playwright starts a fresh API so it reads the checked database URL. Stop any API server on the test port before you run the suite. On CI, Playwright starts every server.
+These are the project's pinned dev ports, the same ones in `AGENTS.md`. `lib/project.ts` reads `.devports.json` at the repository root when `pnpm dev:ports` wrote one, and takes the host and each app's port from it, so a linked worktree tests its own servers. With no record it uses these pinned ports on `localhost`, and a record that does not parse fails the run. Off CI in dev mode, Playwright can reuse running app servers. For projects with a database, Playwright starts a fresh API so it reads the checked database URL. Stop any API server on the test port before you run the suite. On CI, Playwright starts every server.
 
 Playwright waits on the api's `/health` (`http://localhost:4000/health` in the main checkout), not on its origin. The Worker answers `GET /` with a 404 envelope, and Playwright reads any status at or above 400 as "not ready".
 
@@ -195,7 +221,7 @@ This module adds no workflow. A project that wants the suite on CI writes its ow
 
 #### What this suite is not
 
-No visual regression, no accessibility assertions, no performance budget, no load or contract testing. One browser engine, Chromium. Nothing runs against a deployed preview or production: every flow drives a dev server on localhost with a development database.
+No visual regression, no accessibility assertions, no performance budget, no load or contract testing. One browser engine, Chromium. Nothing runs against a deployed preview or production: every flow drives a dev server or a local build on localhost with a development database.
 
 #### Next
 

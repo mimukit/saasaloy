@@ -103,6 +103,31 @@ export function portsFrom(text?: string): {
   };
 }
 
+/** How the suite starts each app: its dev server, or its build and then its preview. */
+export type ServeMode = "dev" | "built";
+
+/**
+ * The serve mode for this run, from `E2E_SERVE`. Unset, it is `built` on CI and `dev`
+ * elsewhere: a CI runner has a memory limit that the dev servers' module graphs exceed,
+ * and a local run keeps the fast loop. Any other value throws, so a typo cannot quietly
+ * run the mode the developer did not ask for.
+ */
+export function serveMode(env: { E2E_SERVE?: string; CI?: string }): ServeMode {
+  const value = env.E2E_SERVE;
+  if (value === undefined || value === "") {
+    return env.CI ? "built" : "dev";
+  }
+  if (value === "dev" || value === "built") {
+    return value;
+  }
+  throw new Error(
+    `E2E_SERVE is "${value}". Set it to dev or built, or leave it unset.`
+  );
+}
+
+/** This run's serve mode. */
+export const SERVE: ServeMode = serveMode(process.env);
+
 const DEV_PORTS_FILE = path.resolve(ROOT, ".devports.json");
 
 const devPorts = portsFrom(

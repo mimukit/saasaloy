@@ -6,7 +6,7 @@
     "dev": "vite dev --host",
     "build": "vite build",
     "clean": "rimraf -g dist .wrangler \"*.tsbuildinfo\"",
-    "preview": "vite preview",
+    "preview": "vite preview --host",
     "deploy": "env-deploy admin",
     "typecheck": "tsr generate && tsc --noEmit"
   },

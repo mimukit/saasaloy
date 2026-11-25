@@ -14,6 +14,15 @@ import type { Plugin } from "vite";
 // customer app talks to apps/api over the credentialed CORS spine instead.
 const ENV_LOCAL = "apps/app/.env.local";
 
+/** This workspace's dev port, which `vite preview` takes too. */
+function portFor(mode: string): number {
+  return devPort(
+    loadEnv(mode, process.cwd(), "DEV_PORT").DEV_PORT,
+    3002,
+    ENV_LOCAL
+  );
+}
+
 // The tab title and the favicon come from the project, not from index.html: the title is
 // the product name from `@repo/config`, and the icon is the shell's light brand mark
 // (packages/ui/src/assets/shell/brand-mark-light.svg). The plugin runs before Vite reads
@@ -122,12 +131,7 @@ export default defineConfig(({ mode }) => ({
   // `CORS_ORIGINS` and auth's trusted origins come from the same run, so the port and the
   // allow-lists move together. `strictPort` turns a busy port into a loud failure
   // instead of a silent +1 that later shows up as an unexplained CORS rejection.
-  server: {
-    port: devPort(
-      loadEnv(mode, process.cwd(), "DEV_PORT").DEV_PORT,
-      3002,
-      ENV_LOCAL
-    ),
-    strictPort: true,
-  },
+  server: { port: portFor(mode), strictPort: true },
+  // `vite preview` takes `strictPort`, `cors` and `host` from `server`, but not the port.
+  preview: { port: portFor(mode) },
 }));
