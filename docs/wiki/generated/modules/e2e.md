@@ -111,6 +111,7 @@ In built mode:
 - Playwright waits up to 300 seconds for each app, because the build runs first. Dev mode waits 120 seconds.
 - Playwright never reuses a running server. Stop `pnpm dev` before a built run, or Playwright fails because the port is already used.
 - `vite preview` and `astro preview` serve on the app's dev port, so the origins `pnpm dev:ports` wrote still match.
+- The `preview` scripts listen on every interface, like the `dev` scripts, so a run on a `pnpm dev:ports --host <host>` record works. Use an IP address for `<host>`, such as `10.211.0.2`. Vite refuses a host name it does not know, such as `devaloy-metal`, with 403 "Blocked request" in dev and built mode alike, until `server.allowedHosts` in the app's `vite.config.ts` lists it.
 
 ```sh
 E2E_SERVE=built pnpm e2e    # build every app, then serve the builds

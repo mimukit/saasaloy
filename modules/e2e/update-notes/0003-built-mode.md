@@ -10,7 +10,7 @@ title: The e2e suite serves built apps on CI
 
 Built apps use much less memory than dev servers, so a CI runner with a memory limit runs the suite reliably (issue #399).
 
-This needs three other notes: the base note `0012-turbo-build-env-inputs`, which makes a changed origin rebuild the app, and the `preview-port` notes of `api`, `admin` and `app`, which serve each preview on its dev port. Apply them first, or a built run answers on port 4173 and Playwright times out.
+This needs other notes: the base note `0012-turbo-build-env-inputs`, which makes a changed origin rebuild the app, the base note `0013-web-preview-host`, and the `preview-port` notes of `api`, `admin` and `app`, which serve each preview on its dev port and on every interface. Apply them first, or a built run answers on port 4173 and Playwright times out.
 
 ## What update merges
 
