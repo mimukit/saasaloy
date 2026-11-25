@@ -55,6 +55,7 @@
     "release:dry": "GITHUB_TOKEN=\"${GITHUB_TOKEN:-$(gh auth token)}\" pnpm --filter saasaloy run release:dry",
     "readme:cli": "node scripts/build-cli-readme.ts",
     "release:deploy": "node scripts/release-deploy.ts",
+    "site:deploy": "pnpm --filter @saasaloy/web run deploy:site",
     "release:preflight": "node scripts/release-preflight.ts",
     "release:smoke": "node scripts/release-smoke.ts",
     "scaffold:check": "node scripts/scaffold-check.ts",
