@@ -70,7 +70,7 @@ export const landing = {
     description:
       "{siteName} is an open source SaaS starter kit for Cloudflare. Start with a landing page, then add the API, database, auth and more as source files you own.",
     imageAlt:
-      "The {siteName} wordmark beside a module map: api, auth, database, email and payment.",
+      'The {siteName} wordmark on a blue blueprint grid, above the tagline "start small. own the source." and the command npx saasaloy init my-app.',
   },
 
   // Header. Every navbar link leaves the page, so each one opens in a new tab through
