@@ -6,6 +6,15 @@ import { ui } from "@web/content/landing";
 import { interpolate } from "@web/lib/interpolate";
 import { cn } from "@web/lib/utils";
 
+import {
+  COPY_BUTTON,
+  COPY_ICON,
+  STRIP,
+  TAB,
+  TAB_ACTIVE,
+  TAB_INACTIVE,
+} from "./command-strip";
+
 // The page's primary call to action: a bordered mono field holding one command, with a
 // solid Copy button flush against its right edge (the `command-field` component in
 // apps/web/DESIGN.md). Both share the 2.5rem height and square corners. `size="lg"` is
@@ -21,17 +30,17 @@ import { cn } from "@web/lib/utils";
 // width that fits either label, so the field never moves. A polite live region
 // announces the copy, and the button returns to rest after COPIED_MS.
 //
-// With `agentPrompt` the field gains two tabs, "Agent prompt" first and "CLI", over one
-// Copy button whose label follows the tab. Both panels share one grid cell and the
-// hidden one keeps its box, so switching tabs never changes the field's height. Below
-// `sm` the button drops under the text as a full-width bar, because the prompt needs the
-// width. Mockup round 1 of plan 0125, approved 2026-11-25.
+// With `agentPrompt` the field gains a strip with two tabs, "Agent prompt" first and
+// "CLI", and one small Copy button at its right end. The text below gets the full width.
+// Both panels share one grid cell and the hidden one keeps its box, so switching tabs
+// never changes the field's height. Option B of mockup round 2 of plan 0125, approved
+// 2026-11-25.
 
 const COPIED_MS = 2000;
 
 // Each icon mounts fresh when the state flips, so it settles in from a little smaller.
 const ICON_SWAP =
-  "size-4 motion-safe:transition-[opacity,scale] motion-safe:duration-150 motion-safe:ease-out-soft motion-safe:starting:scale-75 motion-safe:starting:opacity-0";
+  "motion-safe:transition-[opacity,scale] motion-safe:duration-150 motion-safe:ease-out-soft motion-safe:starting:scale-75 motion-safe:starting:opacity-0";
 
 type Tab = "agent" | "cli";
 
@@ -136,12 +145,6 @@ export function CommandField({
       agent: { text: agentPrompt, ref: promptRef },
       cli: { text: command, ref: commandRef },
     };
-    let buttonLabel: string = ui.commandField.copied;
-    if (copied === null) {
-      buttonLabel =
-        tab === "agent" ? ui.commandField.copyPrompt : ui.commandField.copy;
-    }
-
     return (
       <div
         className={cn(
@@ -150,64 +153,30 @@ export function CommandField({
           className
         )}
       >
-        <div
-          role="tablist"
-          aria-label={ui.commandField.tabsLabel}
-          className="border-border flex border-b"
-        >
-          {TABS.map((name) => (
-            <button
-              key={name}
-              ref={(node) => {
-                tabRefs.current[name] = node;
-              }}
-              type="button"
-              role="tab"
-              id={`${id}-${name}-tab`}
-              aria-selected={tab === name}
-              aria-controls={`${id}-${name}-panel`}
-              tabIndex={tab === name ? 0 : -1}
-              onClick={() => select(name)}
-              onKeyDown={onTabKey}
-              className={cn(
-                "border-border focus-visible:outline-ring motion-safe:ease-out-soft -mt-px -ml-px cursor-pointer border-r px-4 py-2 font-mono text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 motion-safe:transition-colors motion-safe:duration-150",
-                tab === name
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-muted text-highlight hover:text-foreground"
-              )}
-            >
-              {TAB_LABELS[name]}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-col sm:flex-row">
-          <div className="grid min-w-0 flex-1 grid-cols-1">
+        <div className={STRIP}>
+          <div
+            role="tablist"
+            aria-label={ui.commandField.tabsLabel}
+            className="flex min-w-0 gap-1"
+          >
             {TABS.map((name) => (
-              <p
+              <button
                 key={name}
-                role="tabpanel"
-                id={`${id}-${name}-panel`}
-                aria-labelledby={`${id}-${name}-tab`}
+                ref={(node) => {
+                  tabRefs.current[name] = node;
+                }}
+                type="button"
+                role="tab"
+                id={`${id}-${name}-tab`}
+                aria-selected={tab === name}
+                aria-controls={`${id}-${name}-panel`}
                 tabIndex={tab === name ? 0 : -1}
-                className={cn(
-                  "focus-visible:outline-ring flex min-w-0 gap-2 px-3 py-3 font-mono text-[0.8125rem] [grid-area:1/1] focus-visible:outline-2 focus-visible:-outline-offset-2 sm:px-4 sm:text-sm",
-                  large ? "min-h-12 sm:gap-3" : "min-h-10",
-                  name === "agent"
-                    ? "items-start wrap-break-word"
-                    : "items-center overflow-x-auto whitespace-nowrap",
-                  tab !== name && "invisible"
-                )}
+                onClick={() => select(name)}
+                onKeyDown={onTabKey}
+                className={cn(TAB, tab === name ? TAB_ACTIVE : TAB_INACTIVE)}
               >
-                <span aria-hidden="true" className="text-highlight select-none">
-                  {prompt}
-                </span>
-                <code
-                  ref={panels[name].ref}
-                  className="text-foreground min-w-0"
-                >
-                  {panels[name].text}
-                </code>
-              </p>
+                {TAB_LABELS[name]}
+              </button>
             ))}
           </div>
           <button
@@ -218,15 +187,49 @@ export function CommandField({
                 ? ui.commandField.copyPromptLabel
                 : interpolate(ui.commandField.copyLabel, { command })
             }
-            className="bg-primary text-primary-foreground focus-visible:outline-ring press -mx-px -mb-px inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-2 px-4 text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 sm:ml-0 sm:h-auto sm:min-w-36"
+            className={cn(COPY_BUTTON, "press")}
           >
             {copied === null ? (
-              <CopyIcon aria-hidden="true" className={ICON_SWAP} />
+              <CopyIcon
+                aria-hidden="true"
+                className={cn(ICON_SWAP, COPY_ICON)}
+              />
             ) : (
-              <CheckIcon aria-hidden="true" className={ICON_SWAP} />
+              <CheckIcon
+                aria-hidden="true"
+                className={cn(ICON_SWAP, COPY_ICON)}
+              />
             )}
-            <span aria-hidden="true">{buttonLabel}</span>
+            <span aria-hidden="true">
+              {copied === null ? ui.commandField.copy : ui.commandField.copied}
+            </span>
           </button>
+        </div>
+        <div className="grid min-w-0 grid-cols-1">
+          {TABS.map((name) => (
+            <p
+              key={name}
+              role="tabpanel"
+              id={`${id}-${name}-panel`}
+              aria-labelledby={`${id}-${name}-tab`}
+              tabIndex={tab === name ? 0 : -1}
+              className={cn(
+                "focus-visible:outline-ring flex min-w-0 gap-2 px-3 py-3 font-mono text-[0.8125rem] [grid-area:1/1] focus-visible:outline-2 focus-visible:-outline-offset-2 sm:px-4 sm:text-sm",
+                large && "sm:gap-3",
+                name === "agent"
+                  ? "items-start wrap-break-word"
+                  : "items-center overflow-x-auto whitespace-nowrap",
+                tab !== name && "invisible"
+              )}
+            >
+              <span aria-hidden="true" className="text-highlight select-none">
+                {prompt}
+              </span>
+              <code ref={panels[name].ref} className="text-foreground min-w-0">
+                {panels[name].text}
+              </code>
+            </p>
+          ))}
         </div>
         <span role="status" aria-live="polite" className="sr-only">
           {copied === "agent"
@@ -274,9 +277,9 @@ export function CommandField({
         )}
       >
         {copied ? (
-          <CheckIcon aria-hidden="true" className={ICON_SWAP} />
+          <CheckIcon aria-hidden="true" className={cn(ICON_SWAP, "size-4")} />
         ) : (
-          <CopyIcon aria-hidden="true" className={ICON_SWAP} />
+          <CopyIcon aria-hidden="true" className={cn(ICON_SWAP, "size-4")} />
         )}
         <span aria-hidden="true">
           {copied ? ui.commandField.copied : ui.commandField.copy}

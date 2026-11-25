@@ -172,22 +172,21 @@ components:
   command-field-dark:
     backgroundColor: "{colors.dark-card}"
     textColor: "{colors.dark-foreground}"
-  command-tab:
+  command-strip:
+    backgroundColor: "{colors.muted}"
+    textColor: "{colors.muted-foreground}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.none}"
+    height: 1.75rem
+  command-tab-active:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.highlight}"
+  command-copy:
     backgroundColor: "{colors.muted}"
     textColor: "{colors.highlight}"
     typography: "{typography.code-sm}"
     rounded: "{rounded.none}"
-  command-tab-active:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-foreground}"
-  docs-command-tab:
-    backgroundColor: "{colors.card}"
-    textColor: "{colors.muted-foreground}"
-    typography: "{typography.code-sm}"
-    rounded: "{rounded.none}"
-  docs-command-tab-active:
-    backgroundColor: "{colors.card}"
-    textColor: "{colors.highlight}"
+    height: 1.75rem
   copy-compact:
     backgroundColor: "{colors.card}"
     textColor: "{colors.highlight}"
@@ -317,7 +316,7 @@ The landing page has seven sections in this order: hero, stages, catalog, provid
 
 The command field is the page's primary call to action. It is a bordered mono field with a prompt glyph, and a solid `primary` Copy button sits flush against its right edge. Both share the `2.5rem` height and square corners. The hero's field is `command-field-lg` (`size="lg"`): `3rem` tall, up to `32rem` wide, with a `base` command from `40rem`. The copy button shows its copied state in place and never moves the layout.
 
-The hero and the closing block pass the field an agent prompt, which adds two tabs: "Agent prompt" first and selected, then "CLI". The tabs are `command-tab`, square and in `code-sm`, and the selected one is solid `command-tab-active`. Left and right arrow keys move between them. The agent tab shows the prompt, which wraps and never scrolls sideways; the CLI tab shows the command. The two panels share one box, so a switch never changes the field's height. One Copy button serves both tabs, and its label follows the tab: "Copy prompt" on the agent tab, "Copy" on the CLI tab, and "Copied" in the copied state. Its minimum width fits the longest label, so a label change never moves the layout. From `40rem` the button sits on the right of the text; below that it is a full-width bar under the text. With a prompt the hero's field is up to `42rem` wide and the closing block's up to `36rem`. The reference is mockup round 1 of plan 0125, approved on 2026-11-25. The docs `saasaloy-command` block underlines its active tab instead, as approved in mockup round 1: `docs-command-tab-active` sets `highlight` text over a 2px `primary` underline on the `card` background, the inactive `docs-command-tab` is `muted-foreground`, and the landing field fills its active tab.
+The hero and the closing block pass the field an agent prompt, which puts a `command-strip` across the top of the field: two tabs on the left, "Agent prompt" first and selected, then "CLI", and a small Copy button on the right. The selected tab is a `command-tab-active` chip with a `border` hairline on the `muted` strip, and the other tab is plain `muted-foreground` text. Left and right arrow keys move between the tabs. The Copy button is `command-copy`: a copy icon and "Copy" in `highlight` with no fill, which turn into a check and "Copied" at the same width. The text below the strip gets the full width of the field. The agent tab shows the prompt, which wraps and never scrolls sideways; the CLI tab shows the command. The two panels share one box, so a switch never changes the field's height. On a coarse pointer the tabs and the button grow to 44px. With a prompt the hero's field is up to `42rem` wide and the closing block's up to `36rem`. The docs `saasaloy-command` block uses the same strip, and its CLI tab lists each command on its own line. The reference is option B of mockup round 2 of plan 0125, approved on 2026-11-25. It replaces round 1, whose solid Copy block was too large.
 
 The stages and the catalog tiles use the compact copy control from the same round, option B. Each `saasaloy add` command keeps its one mono line, and two small outlined `copy-compact` buttons follow it: "Prompt" copies the agent prompt that adds that module, and "CLI" copies the command. A pressed button turns solid `copy-compact-copied` with a check and "Copied" at the same width for two seconds, and a polite live region announces the copy. In a stage the buttons sit beside the command; on a tile they take their own line under it, so every tile in a row keeps one layout. The buttons are plain HTML with the `hidden` attribute, and one inline script on the landing page shows them, so the stages and the catalog stay static and a reader without JavaScript sees only the command.
 

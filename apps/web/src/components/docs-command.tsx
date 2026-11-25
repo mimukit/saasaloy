@@ -7,17 +7,24 @@ import type { CommandData } from "@web/lib/docs-blocks-data";
 import { interpolate } from "@web/lib/interpolate";
 import { cn } from "@web/lib/utils";
 
+import {
+  COPY_BUTTON,
+  COPY_ICON,
+  STRIP,
+  TAB,
+  TAB_ACTIVE,
+  TAB_INACTIVE,
+} from "./command-strip";
+
 // The `saasaloy-command` block's island (plan 0125 Phase 4): the landing page's tabbed
 // command field (components/command-field.tsx) in the docs, with the same tabs, labels and
-// copied state. The Copy button sits at the right end of the tab strip, because the CLI
-// tab holds several lines and a button beside them would stretch to their height. Mockup
-// round 1 of plan 0125, approved 2026-11-25. Without JavaScript the plugin's paragraph and
-// code block say the same (lib/docs-blocks.ts).
+// copied state. Without JavaScript the plugin's paragraph and code block say the same
+// (lib/docs-blocks.ts).
 
 const COPIED_MS = 2000;
 
 const ICON_SWAP =
-  "size-4 motion-safe:transition-[opacity,scale] motion-safe:duration-150 motion-safe:ease-out-soft motion-safe:starting:scale-75 motion-safe:starting:opacity-0";
+  "motion-safe:transition-[opacity,scale] motion-safe:duration-150 motion-safe:ease-out-soft motion-safe:starting:scale-75 motion-safe:starting:opacity-0";
 
 type Tab = "agent" | "cli";
 
@@ -90,19 +97,13 @@ export function DocsCommand({ data }: { data: CommandData }) {
     tabRefs.current[next]?.focus();
   }
 
-  let buttonLabel: string = ui.commandField.copied;
-  if (copied === null) {
-    buttonLabel =
-      tab === "agent" ? ui.commandField.copyPrompt : ui.commandField.copy;
-  }
-
   return (
     <div className="border-border bg-card flex w-full flex-col border">
-      <div className="border-border flex border-b">
+      <div className={STRIP}>
         <div
           role="tablist"
           aria-label={ui.commandField.tabsLabel}
-          className="flex min-w-0 flex-1"
+          className="flex min-w-0 gap-1"
         >
           {TABS.map((name) => (
             <button
@@ -118,13 +119,7 @@ export function DocsCommand({ data }: { data: CommandData }) {
               tabIndex={tab === name ? 0 : -1}
               onClick={() => select(name)}
               onKeyDown={onTabKey}
-              className={cn(
-                // The inactive tab keeps a transparent underline, so a switch never moves the strip.
-                "focus-visible:outline-ring motion-safe:ease-out-soft -mb-px cursor-pointer border-b-2 px-4 py-2 font-mono text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 motion-safe:transition-colors motion-safe:duration-150",
-                tab === name
-                  ? "border-primary text-highlight"
-                  : "text-muted-foreground hover:text-foreground border-transparent"
-              )}
+              className={cn(TAB, tab === name ? TAB_ACTIVE : TAB_INACTIVE)}
             >
               {TAB_LABELS[name]}
             </button>
@@ -139,14 +134,19 @@ export function DocsCommand({ data }: { data: CommandData }) {
               : interpolate(ui.commandField.copyLabel, { command: script })
           }
           data-pagefind-ignore=""
-          className="bg-primary text-primary-foreground focus-visible:outline-ring press -mt-px -mr-px inline-flex min-w-36 shrink-0 cursor-pointer items-center justify-center gap-2 px-4 text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+          className={cn(COPY_BUTTON, "press")}
         >
           {copied === null ? (
-            <CopyIcon aria-hidden="true" className={ICON_SWAP} />
+            <CopyIcon aria-hidden="true" className={cn(ICON_SWAP, COPY_ICON)} />
           ) : (
-            <CheckIcon aria-hidden="true" className={ICON_SWAP} />
+            <CheckIcon
+              aria-hidden="true"
+              className={cn(ICON_SWAP, COPY_ICON)}
+            />
           )}
-          <span aria-hidden="true">{buttonLabel}</span>
+          <span aria-hidden="true">
+            {copied === null ? ui.commandField.copy : ui.commandField.copied}
+          </span>
         </button>
       </div>
       <div className="grid grid-cols-1">

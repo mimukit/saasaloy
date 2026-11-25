@@ -546,8 +546,6 @@ export const ui = {
     tabsLabel: "Copy as",
     agentTab: "Agent prompt",
     cliTab: "CLI",
-    /** The copy button's label at rest on the Agent prompt tab. */
-    copyPrompt: "Copy prompt",
     /** Accessible name for the button on the Agent prompt tab. */
     copyPromptLabel: "Copy the agent prompt",
     promptCopiedAnnouncement: "Prompt copied to the clipboard.",
