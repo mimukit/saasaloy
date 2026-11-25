@@ -72,8 +72,8 @@ export function isPromptTask(key: string): key is PromptTask {
 }
 
 /**
- * The full prompt for a task. `name` fills `{name}`; `section` replaces the section the
- * task names by default. Throws on an unknown task, or on a `{name}` left unfilled, so a
+ * The full prompt for a task. `name` fills `{name}`; `page` and `section` replace the docs
+ * slug and the section the task names by default. Throws on an unknown task, or on a `{name}` left unfilled, so a
  * bad docs fence fails the build instead of shipping a prompt with a hole in it.
  *
  * ```ts
@@ -83,7 +83,7 @@ export function isPromptTask(key: string): key is PromptTask {
  */
 export function agentPrompt(
   task: string,
-  options: { name?: string; section?: string } = {}
+  options: { name?: string; page?: string; section?: string } = {}
 ): string {
   if (!isPromptTask(task)) {
     throw new Error(
@@ -96,7 +96,7 @@ export function agentPrompt(
   const text = interpolate(PATTERN, {
     task: interpolate(entry.task, values),
     origin: siteOrigin,
-    slug: interpolate(entry.slug, values),
+    slug: options.page ?? interpolate(entry.slug, values),
     section: options.section ?? entry.section,
   });
   if (text.includes("{name}")) {

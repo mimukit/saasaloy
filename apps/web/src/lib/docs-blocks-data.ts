@@ -166,14 +166,15 @@ export interface CommandData {
 
 /**
  * The prompt and the commands of one `saasaloy-command` fence. Throws on an unknown task, a
- * `name` the task does not take or that names no module, a missing `name`, and an empty body.
+ * `name` the task does not take or that names no module, a missing `name`, a `page` that is
+ * not a docs slug, and an empty body.
  */
 export function commandData(
   descriptors: readonly BlockDescriptor[],
   args: Record<string, string>,
   body: string
 ): CommandData {
-  const { task, name, section } = args;
+  const { task, name, page, section } = args;
   if (task === undefined || !isPromptTask(task)) {
     throw new Error(
       `saasaloy-command: ${task === undefined ? "the block needs task=<task>" : `task=${task} is not a prompt task`}. Use one of: ${Object.keys(prompts).join(", ")}.`
@@ -190,6 +191,11 @@ export function commandData(
   if (name !== undefined && !descriptors.some((item) => item.name === name)) {
     throw new Error(`saasaloy-command: name=${name} is not a module.`);
   }
+  if (page !== undefined && !/^[a-z0-9-]+(?:\/[a-z0-9-]+)*$/.test(page)) {
+    throw new Error(
+      `saasaloy-command: page=${page} is not a docs slug, such as runbooks/update-overwrote-my-work.`
+    );
+  }
   const commands = body
     .split("\n")
     .map((line) => line.trimEnd())
@@ -199,5 +205,5 @@ export function commandData(
       `saasaloy-command: task=${task} has no command. Write the CLI commands in the fence body.`
     );
   }
-  return { prompt: agentPrompt(task, { name, section }), commands };
+  return { prompt: agentPrompt(task, { name, page, section }), commands };
 }

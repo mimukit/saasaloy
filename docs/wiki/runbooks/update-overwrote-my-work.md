@@ -71,7 +71,7 @@ Commit or stash before any update anyway. It costs one command and it is the onl
 
 Then update with the newest CLI:
 
-```saasaloy-command task=update
+```saasaloy-command task=update page=runbooks/update-overwrote-my-work section="Stop it happening again"
 npx saasaloy@latest update --yes
 ```
 

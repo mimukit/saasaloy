@@ -187,7 +187,11 @@ export function blockFor(
   body = ""
 ): MdastNode {
   if (language === "saasaloy-command") {
-    const args = parseBlockArgs(meta, ["task", "name", "section"], language);
+    const args = parseBlockArgs(
+      meta,
+      ["task", "name", "page", "section"],
+      language
+    );
     return commandBlock(commandData(descriptors, args, body));
   }
   if (language === "saasaloy-graph") {

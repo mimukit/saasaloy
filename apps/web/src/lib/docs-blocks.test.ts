@@ -186,6 +186,34 @@ describe("the saasaloy-command block", () => {
     );
   });
 
+  it("fetches the page a page= argument gives", () => {
+    const node = blockFor(
+      "saasaloy-command",
+      'task=update page=runbooks/update-overwrote-my-work section="Stop it happening again"',
+      REGISTRY,
+      "npx saasaloy@latest update --yes"
+    );
+    const props = JSON.parse(String(node.data?.hProperties?.["data-props"]));
+    assert.ok(
+      props.prompt.includes(
+        "/docs/runbooks/update-overwrote-my-work.md and follow its Stop it happening again section."
+      )
+    );
+  });
+
+  it("refuses a page= value that is not a docs slug", () => {
+    assert.throws(
+      () =>
+        blockFor(
+          "saasaloy-command",
+          "task=update page=../secrets.md",
+          REGISTRY,
+          "npx saasaloy@latest update --yes"
+        ),
+      /page=\.\.\/secrets\.md is not a docs slug/
+    );
+  });
+
   it("names the section a quoted section= argument gives", () => {
     const node = blockFor(
       "saasaloy-command",

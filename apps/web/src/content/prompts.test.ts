@@ -36,6 +36,16 @@ describe("agentPrompt", () => {
     }
   });
 
+  it("fetches the page the override gives", () => {
+    assert.equal(
+      agentPrompt("update", {
+        page: "runbooks/update-overwrote-my-work",
+        section: "Stop it happening again",
+      }),
+      "Update my Saasaloy project to the latest release. Fetch https://saasaloy.com/docs/runbooks/update-overwrote-my-work.md and follow its Stop it happening again section."
+    );
+  });
+
   it("names the section the override gives", () => {
     assert.equal(
       agentPrompt("deploy", { section: "Roll back" }),

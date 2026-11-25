@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -245,5 +245,21 @@ describe("docs/wiki task commands", () => {
         )
     );
     assert.deepEqual(stale, []);
+  });
+});
+
+describe("saasaloy-command page= targets", () => {
+  it("names a wiki page that exists", () => {
+    const missing = wikiPages(WIKI).flatMap((path) =>
+      [
+        ...readFileSync(path, "utf-8").matchAll(
+          /^\s*`{3,}saasaloy-command\s.*\bpage=(\S+)/gm
+        ),
+      ]
+        .map((match) => match[1] ?? "")
+        .filter((slug) => !existsSync(join(WIKI, `${slug}.md`)))
+        .map((slug) => `${relative(WIKI, path)}: page=${slug}`)
+    );
+    assert.deepEqual(missing, []);
   });
 });
