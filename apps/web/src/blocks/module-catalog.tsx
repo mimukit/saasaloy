@@ -1,3 +1,4 @@
+import { CompactCopy } from "@web/components/compact-copy";
 import { landing } from "@web/content/landing";
 import { ModuleInventory } from "@web/illustrations/module-inventory";
 import { interpolate } from "@web/lib/interpolate";
@@ -33,6 +34,10 @@ import { cn } from "@web/lib/utils";
 // a module has none), then at the foot the "Needs" line, the provider and driver chips,
 // and the `saasaloy add` command under a hairline. Each tab radio carries the id
 // `catalogTabId` gives, so a stage in ./stages.tsx can select it through a <label>.
+//
+// Under the command, the compact copy control from mockup round 1 of plan 0125 (option B,
+// 2026-11-25) copies the module's agent prompt or the command. It sits on its own line,
+// so tiles in one row keep one layout whatever the module name's length.
 //
 // The tabs are real radio inputs and "Show all modules" is a real checkbox. The
 // `module-catalog` utility in ../styles/web.css reads both through `:has()` and hides
@@ -213,6 +218,10 @@ export function ModuleCatalog({
                   </span>
                   {interpolate(addCommand, { name: row.name })}
                 </p>
+                <CompactCopy
+                  name={row.name}
+                  command={interpolate(addCommand, { name: row.name })}
+                />
               </div>
             </li>
           ))}

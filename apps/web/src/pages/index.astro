@@ -12,7 +12,8 @@ import { Providers } from "@web/blocks/providers";
 import { SiteSource } from "@web/blocks/site-source";
 import { Stages } from "@web/blocks/stages";
 import { Start } from "@web/blocks/start";
-import { landing } from "@web/content/landing";
+import { landing, ui } from "@web/content/landing";
+import { agentPrompt } from "@web/content/prompts";
 import { interpolate } from "@web/lib/interpolate";
 import { loadModuleCatalog } from "@web/lib/module-registry";
 import { homeGraph } from "@web/lib/structured-data";
@@ -26,6 +27,8 @@ import Layout from "../layouts/Layout.astro";
 
 // The catalog rows come from modules/*/registry-item.json, read once at build time.
 const catalogRows = loadModuleCatalog();
+
+const initPrompt = agentPrompt("init");
 
 const description = interpolate(landing.meta.description, { siteName });
 // The graph names the public origin, never the dev host, so a missing `site` fails the build.
@@ -58,7 +61,10 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
                                     paint, and the closing one waits for the scroll.
                                     Before it hydrates, or with JavaScript off, the
                                     command is plain selectable text.
-  Every other block ships no JavaScript at all. The FAQ opens and closes with native
+  Every other block ships no island. The stages and the catalog carry the compact copy
+  buttons as hidden HTML, and the one inline script at the foot of <main> shows them and
+  copies their `data-copy-text`, so they add no React to the page.
+  Beyond that the blocks ship no JavaScript at all. The FAQ opens and closes with native
   <details>, the catalog filter and the stages highlight are CSS `:has()`, and all motion
   is CSS. The theme
   toggle sits inside the navbar and needs no island of its own: the pre-paint script
@@ -83,6 +89,7 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
         client:visible
         size="lg"
         command={landing.hero.command}
+        agentPrompt={initPrompt}
       />
     </Hero>
     <Stages rows={catalogRows} />
@@ -104,8 +111,52 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
         slot="commandField"
         client:visible
         command={landing.start.command}
+        agentPrompt={initPrompt}
       />
     </Start>
+    <span
+      role="status"
+      aria-live="polite"
+      class="sr-only"
+      data-copy-status=""
+    ></span>
+    <script
+      is:inline
+      define:vars={{
+        announcements: {
+          prompt: ui.commandField.promptCopiedAnnouncement,
+          cli: ui.commandField.copiedAnnouncement,
+        },
+      }}
+    >
+      const status = document.querySelector("[data-copy-status]");
+      for (const group of document.querySelectorAll("[data-copy-controls]")) {
+        group.hidden = false;
+      }
+      const timers = new WeakMap();
+      document.addEventListener("click", async (event) => {
+        const button = event.target.closest?.("[data-copy-text]");
+        if (!button) {
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(button.dataset.copyText);
+        } catch {
+          // No clipboard access: the command stays on screen to copy by hand.
+          return;
+        }
+        button.dataset.copied = "";
+        status.textContent = announcements[button.dataset.copyKind];
+        clearTimeout(timers.get(button));
+        timers.set(
+          button,
+          setTimeout(() => {
+            delete button.dataset.copied;
+            status.textContent = "";
+          }, 2000)
+        );
+      });
+    </script>
   </main>
   <Footer siteName={siteName} />
 </Layout>

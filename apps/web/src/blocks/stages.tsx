@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 
+import { CompactCopy } from "@web/components/compact-copy";
 import { landing } from "@web/content/landing";
 import { SourceSlabs } from "@web/illustrations/source-slabs";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
@@ -30,6 +31,10 @@ import type { CatalogRow, CatalogStage } from "@web/lib/module-catalog";
 //
 // Every word comes from ../content/landing.ts. Each name links to its module's docs and
 // opens in a new tab.
+//
+// Beside each command, the compact copy control from ../components/compact-copy.tsx copies
+// the stage module's agent prompt or its full command. It is hidden until the page's
+// inline script runs, so the block itself still ships no script.
 
 export interface Stage {
   id: CatalogStage;
@@ -54,6 +59,8 @@ export interface StagesProps {
   /** The stage names: the catalog's tab labels. */
   names?: Record<CatalogStage, string>;
   items?: Stage[];
+  /** The full command the CLI button copies. Takes `{name}`. */
+  addCommand?: string;
 }
 
 export function Stages({
@@ -65,6 +72,7 @@ export function Stages({
   modulesLabel = landing.stages.modulesLabel,
   names = landing.catalog.tabs,
   items = landing.stages.items as Stage[],
+  addCommand = landing.catalog.addCommand,
 }: StagesProps) {
   return (
     <section id={id} className="section-y stage-list" data-loop-in-view="">
@@ -112,6 +120,12 @@ export function Stages({
                       <code className="bg-secondary text-secondary-foreground px-1.5 py-0.5 font-mono text-xs">
                         {stage.command}
                       </code>
+                      <CompactCopy
+                        name={stage.module}
+                        command={interpolate(addCommand, {
+                          name: stage.module,
+                        })}
+                      />
                     </p>
                     <p className="text-muted-foreground font-mono text-xs leading-5">
                       {stage.description}

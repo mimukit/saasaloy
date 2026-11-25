@@ -13,6 +13,7 @@ import { rehypeCodeFrame } from "./src/lib/docs-code.ts";
 import { remarkDocsLinks } from "./src/lib/docs-links.ts";
 import { readBuildInfo } from "./src/lib/build-info.ts";
 import { remarkDropStamp, remarkDropTitle } from "./src/lib/docs-title.ts";
+import { siteOrigin } from "./src/site.ts";
 
 // `astro build` gets its own Vite cache. Both commands keep pre-bundled dependencies under
 // node_modules/.vite, each stamped with a hash of the config that made them. The two
@@ -105,7 +106,7 @@ const cliVersion = JSON.parse(
 const buildInfo = readBuildInfo(repoRoot, cliVersion);
 
 export default defineConfig({
-  site: "https://saasaloy.com",
+  site: siteOrigin,
   output: "static",
   // Sessions off. Left unset, the Cloudflare adapter reads this key, decides sessions are
   // wanted, and writes a `SESSION` KV namespace binding with no id into the config it

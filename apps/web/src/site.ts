@@ -2,8 +2,8 @@
 // file replaces the base template's `@repo/config` and `@repo/env` for this app, because
 // the public site has one deployment and calls no API, so it has no per-deployment value.
 //
-// The public origin is not here. It is `site` in astro.config.mjs, and a page reads it as
-// `Astro.site`.
+// A page reads the public origin as `Astro.site`. `siteOrigin` is for code that runs
+// outside Astro, such as the agent prompts a remark plugin and a node:test file load.
 
 /** The brand every block and page shows. */
 export const siteName = "Saasaloy";
@@ -13,3 +13,6 @@ export const locale = "en";
 
 /** The source repository, which every GitHub link and the JSON-LD `sameAs` build on. */
 export const repoUrl = "https://github.com/mimukit/saasaloy";
+
+/** The public origin, which astro.config.mjs sets as `site`. Change wrangler.jsonc with it. */
+export const siteOrigin = "https://saasaloy.com";
