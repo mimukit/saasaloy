@@ -57,4 +57,4 @@ You want to publish a module other projects can install.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) covers development in this repo: the
   `.dev/playground`, the scripts, and the dependency update flow.
 
-_Verified against `main`@`07d89b7c` on 2026-11-25._
+_Verified against `main`@`612d1337` on 2026-11-25._
