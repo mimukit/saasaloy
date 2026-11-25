@@ -119,10 +119,11 @@ export function DocsCommand({ data }: { data: CommandData }) {
               onClick={() => select(name)}
               onKeyDown={onTabKey}
               className={cn(
-                "border-border focus-visible:outline-ring motion-safe:ease-out-soft -mt-px -ml-px cursor-pointer border-r px-4 py-2 font-mono text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 motion-safe:transition-colors motion-safe:duration-150",
+                // The inactive tab keeps a transparent underline, so a switch never moves the strip.
+                "focus-visible:outline-ring motion-safe:ease-out-soft -mb-px cursor-pointer border-b-2 px-4 py-2 font-mono text-xs focus-visible:outline-2 focus-visible:-outline-offset-2 motion-safe:transition-colors motion-safe:duration-150",
                 tab === name
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-muted text-highlight hover:text-foreground"
+                  ? "border-primary text-highlight"
+                  : "text-muted-foreground hover:text-foreground border-transparent"
               )}
             >
               {TAB_LABELS[name]}
