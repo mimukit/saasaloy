@@ -13,7 +13,7 @@ A packages/email workspace with the provider interface, the escaping html tag an
 | Tier | capability |
 | Stage | mvp |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.10.0` |
+| Needs CLI | `>=0.13.0` |
 | Depends on | [`api`](api.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -34,7 +34,7 @@ EMAIL_PROVIDER=plunk  uses email-plunk
 
 | Variable | Services | Optional | What it does |
 |---|---|---|---|
-| `EMAIL_FROM` | api | no | Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message. |
+| `EMAIL_FROM` | api | required when `EMAIL_PROVIDER!=console` | Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message. Required for every provider except `console`, which logs instead of sending and falls back to its own sender (`dev@localhost`) when EMAIL_FROM is blank. |
 | `EMAIL_PROVIDER` | api | no | Which installed provider sends: `cloudflare` (add email-cloudflare), `plunk` (add email-plunk) or `console` (add email-console). Always required — there is no default, so nothing sends by accident and nothing stops sending silently. |
 
 ## Files and workspaces it writes
@@ -154,11 +154,14 @@ and `EmailError.retryable` is the flag it will read.
 | Var | What | Required |
 |---|---|---|
 | `EMAIL_PROVIDER` | Which registered provider sends: `cloudflare`, `plunk`, `console`, … | **Always**, even with one provider installed |
-| `EMAIL_FROM` | Default sender (`hello@x.com`), on a domain that provider may send from | Unless every message passes its own `from` |
+| `EMAIL_FROM` | Default sender (`hello@x.com`), on a domain that provider may send from | While `EMAIL_PROVIDER` is not `console`. The env check skips it under `console`, which falls back to `dev@localhost` |
+| `PLUNK_API_KEY` | Plunk secret key (`email-plunk` only) | While `EMAIL_PROVIDER=plunk`. It may stay blank under any other provider |
 
 `EMAIL_PROVIDER` has **no default** on purpose. A default would mean a production deploy can
 silently stop sending, or a test run can silently start — both are worse than a startup error that
 names the providers you actually have.
+
+`EMAIL_FROM` and `PLUNK_API_KEY` are conditional keys. `packages/env/.env.example` writes `# @required-when EMAIL_PROVIDER!=console` above `EMAIL_FROM` and `# @required-when EMAIL_PROVIDER=plunk` above `PLUNK_API_KEY`. `pnpm env:setup`, the deploy check and `createEnv` require each key only while its condition holds. A project with `email-plunk` installed can develop on `console` with both keys blank, and the checks name the keys as soon as `EMAIL_PROVIDER` is `plunk`.
 
 #### Templates: `(props) => { subject, html, text? }`
 
@@ -300,6 +303,8 @@ Worker's log, and `send()` returns a synthetic `console-<uuid>` message id. Beca
 registered through the same registry, the code path under test is the real one — only the transport
 differs.
 
+`EMAIL_FROM` may stay blank under `console`. The core then takes the sender from the provider's `defaultFrom`, which is `dev@localhost`. To show another sender in the log, set `EMAIL_FROM`. A test that builds its own registry can pass `consoleEmail({ from: "app@test.local" })` instead. Do not edit `providers.generated.ts`, because the CLI rewrites it on every run.
+
 > [!WARNING]
 > **Never set `EMAIL_PROVIDER=console` in a deployed environment.** Writing the message to the log
 > is the whole point of this provider, so it logs the body in full — which means recipient
@@ -425,8 +430,12 @@ export const email = defineEmail({ providers: [...emailProviders, postmark()] })
 
 Contract notes:
 
-- The core hands you a **resolved** message: `from` filled in from `EMAIL_FROM`, `to` normalized to
-  an array, `text` derived from `html`. Don't re-implement any of that.
+- The core hands you a **resolved** message: `from` filled in from the message, then `EMAIL_FROM`,
+  then your provider's optional `defaultFrom`; `to` normalized to an array; `text` derived from
+  `html`. Don't re-implement any of that. Leave `defaultFrom` unset on a provider that sends real
+  mail, so a missing sender fails as `invalid_message`. Only a provider that sends nothing, such as
+  `console`, sets it. A real provider also needs `EMAIL_FROM` in the env check: the email core
+  requires it for every provider except `console`.
 - Normalize failures into `EmailError` with one of the four `code` values a provider may raise
   (`sender_not_verified`, `rate_limited`, `too_large`, `provider_error` — `invalid_message` is the
   core's, for a message that never reached you), set `retryable` honestly, and keep the vendor's
@@ -515,7 +524,7 @@ Every route or job that imports `@repo/email` stops compiling. Search for the im
 
 - `EMAIL_PROVIDER is not set.` thrown by `createEmail(env)`. The key is required even with one provider installed. Set it in `packages/env/.env` and run `pnpm env:setup`.
 - `EMAIL_PROVIDER is "<x>", which is not registered.` The value names a provider that is not installed. The message lists the registered names. Fix the value or `saasaloy add email-<x>`.
-- `EmailError("invalid_message")` with `No sender address: set EMAIL_FROM, or pass \`from\` on the message.` Set `EMAIL_FROM` or pass `from`.
+- `EmailError("invalid_message")` with `No sender address: set EMAIL_FROM, or pass \`from\` on the message. The <name> provider has no default sender of its own.` Set `EMAIL_FROM` or pass `from`.
 - `EmailError("invalid_message")` with `No recipients`. The `to` array is empty. Check the caller.
 - `EmailError("provider_error")` with ``No `<binding>` Email Sending binding on this Worker's env.`` from `email-cloudflare`. Add the `send_email` entry to `apps/api/wrangler.jsonc`.
 - `EmailError("provider_error")` with ``No `PLUNK_API_KEY` on this Worker's env.`` from `email-plunk`. Set the key in `packages/env/.env` and run `pnpm env:setup`, or `wrangler secret put PLUNK_API_KEY` for a deployed Worker.

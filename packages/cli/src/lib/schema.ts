@@ -271,6 +271,13 @@ export const MODULE_NEEDS = [
 ] as const;
 export type ModuleNeed = (typeof MODULE_NEEDS)[number];
 
+/**
+ * When a conditional key is required: the controlling key holds `is` in its comma list, or
+ * does not hold `isNot`.
+ */
+export type EnvCondition =
+  { key: string; is: string } | { key: string; isNot: string };
+
 export interface RegistryItem {
   name: string;
   type: "saasaloy:capability" | "saasaloy:feature";
@@ -301,6 +308,11 @@ export interface RegistryItem {
   envServices?: Record<string, string[]>;
   /** Keys from `envVars` that may stay empty; each gets a `# Blank on purpose` line in the key list. */
   envOptional?: string[];
+  /**
+   * Keys from `envVars` that may stay empty unless another key holds a named value: key →
+   * `{ key, is }` or `{ key, isNot }`. Each gets a `# @required-when` line in the key list.
+   */
+  envRequiredWhen?: Record<string, EnvCondition>;
   /** Local-dev values for a subset of `envVars`, pre-filled into `packages/env/.env.example`. Never a secret: a loopback URL or a fixed port, the same on every machine. */
   devVars?: Record<string, string>;
   /** Warnings persisted at add time and printed before this module is removed. */

@@ -203,6 +203,10 @@ Where `pnpm env:setup` gets its values, selected by `ENV_SOURCE`. The built-in `
 ### Checkout-owned key
 A key listed in `CHECKOUT_OWNED_KEYS` whose value on disk survives every `pnpm env:setup`, whoever wrote it. A per-branch `DATABASE_URL` is the case it exists for. `packages/env` never learns what a database is, only that some key is the checkout's to set.
 
+### Conditional key
+A key that may stay blank unless a `<CAP>_PROVIDER` key selects a named provider, such as `PLUNK_API_KEY` while `EMAIL_PROVIDER=plunk`. The descriptor declares the condition in `envRequiredWhen` and the [preset](#preset) in `requiredWhen`, and the [key list](#key-list) carries it as a `# @required-when` line above the key. `pnpm env:setup`, the deploy check and `createEnv` read the same condition ([ADR 0070](docs/adr/0070-adr-a-provider-key-is-required-only-while-its-provider-is-selected-2026-11-24.md)).
+_Avoid: optional key for this. An optional key carries `# Blank on purpose` and may always stay blank._
+
 ### Preset
 A capability package's `src/env-preset.ts`: the `definePreset` call naming the keys that package reads, with a schema and a description for each. A service's `env.ts` folds the presets it installed into one `createEnv` (the api spreads the `api.envPresets` table), and a provider module adds its own preset as a [table row](#table-row) in the capability's `<cap>.envPresets` table. `scripts/env-presets.test.ts` fails when a preset and its descriptor's `envVars` disagree.
 _Avoid: schema for this. The schema is one key's validator; the preset is the set._

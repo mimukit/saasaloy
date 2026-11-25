@@ -114,6 +114,8 @@ saasaloy env --check    # report what is still missing, prompt for nothing, exit
 pnpm env:setup          # write each service's .env from packages/env/.env
 ```
 
+A provider module's vendor keys are conditional keys. `pnpm env:setup` accepts them blank while the capability's `<CAP>_PROVIDER` key selects another provider, so a project develops on `EMAIL_PROVIDER=console` with `PLUNK_API_KEY` blank. The `# @required-when` line above each key in `packages/env/.env.example` names its condition.
+
 `env` only fills blanks at the prompt. A value you already typed is never rewritten, except by `--set KEY=VALUE` or `--from-file <path>`, which answer the prompts on the command line. It refuses to write a file git does not ignore. Production secrets are printed as the commands to run, not run for you.
 
 ## Re-running

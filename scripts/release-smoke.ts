@@ -141,15 +141,21 @@ const PLACEHOLDER_VALUE = "release-smoke-placeholder-0123456789abcdef";
 
 /**
  * Every key `pnpm env:setup` names as having no value, once each, in the order it names
- * them. It prints one `<service> has no value for A, B.` line per service. Exported for
- * its own test.
+ * them. It prints one `<service> has no value for A, B.` line per service, and a
+ * conditional key carries its condition in brackets, as in
+ * `EMAIL_FROM (required: EMAIL_PROVIDER!=console)` (#390). Exported for its own test.
  */
 export function missingEnvKeys(output: string): string[] {
   const keys = new Set<string>();
-  for (const match of output.matchAll(/has no value for ([A-Z0-9_, ]+)\./g)) {
-    for (const key of (match[1] ?? "").split(",")) {
-      if (key.trim() !== "") {
-        keys.add(key.trim());
+  const entry = String.raw`[A-Z0-9_]+(?: \(required: [^)]*\))?`;
+  const list = new RegExp(
+    String.raw`has no value for (${entry}(?:, ${entry})*)\.`,
+    "g"
+  );
+  for (const match of output.matchAll(list)) {
+    for (const key of (match[1] ?? "").matchAll(/(?:^|, )([A-Z0-9_]+)/g)) {
+      if (key[1] !== undefined) {
+        keys.add(key[1]);
       }
     }
   }

@@ -30,7 +30,7 @@ The command runs `packages/tooling/src/deploy-production.ts`. It stops at the fi
    - no file matching `migrations` (`packages/db/migrations/*.sql`) changed since the last deploy tag, unless you pass `--migrate`. With no tag yet, every migration file counts as new.
 
    A failed gate stops the run before anything builds, and every message ends with the command that clears it.
-2. **Env check.** `node packages/env/src/deploy.ts --check` loads the production values of every service and exits non-zero, naming each blank key, when one is missing.
+2. **Env check.** `node packages/env/src/deploy.ts --check` loads the production values of every service and exits non-zero, naming each blank key, when one is missing. A provider's key that carries `# @required-when` in `packages/env/.env.example` counts only while its condition holds, so a blank `PLUNK_API_KEY` stops the deploy under `EMAIL_PROVIDER=plunk` and passes under `console`.
 3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`. It dumps the production database first, then applies the pending migrations. A failed or empty dump stops the migration. No deploy migrates without the flag.
 4. **Workers**, one at a time, lowest `order` first from `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`: `api` (10), `admin` (20), `app` (25), `web` (30), for the workspaces the project has. The base ships only the `web` row. Each module adds its own row to `targets.generated.ts`, which the CLI writes on every run and `DEPLOY_TARGETS` spreads. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the run. Each Worker runs `pnpm --filter <package> run deploy`, which is `env-deploy <service>`:
    - load that service's production values and the Cloudflare credentials into memory,
@@ -115,6 +115,8 @@ Two kinds of setup stay manual:
 | `waitlist` | `PUBLIC_API_URL` |
 
 `BETTER_AUTH_SECRET` is marked blank on purpose, because local dev on a loopback `BETTER_AUTH_URL` runs without one, so the check lets it through. In production it is required: `auth` throws while the Worker initializes when it is unset, and `wrangler deploy` reports that startup failure. Set it in the production values.
+
+A provider's own keys are conditional keys. They may stay blank while the `<CAP>_PROVIDER` key selects another provider, and the check refuses them while it selects theirs. For example, `PLUNK_API_KEY` is required while `EMAIL_PROVIDER=plunk`, and `EMAIL_FROM` while `EMAIL_PROVIDER!=console`. The Optional column of [the environment reference](../generated/env.md) names each condition.
 
 No sign-up becomes the first superadmin. Make one before the api origin is public: `pnpm db:prod:superadmin --email <you>`.
 

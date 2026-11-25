@@ -53,7 +53,7 @@ The chosen approach adds one concept, a **conditional key**: a key that may stay
 
 Rejected alternatives, one line each: the issue's `requires: [{ key, when(values), reason }]` is runtime-only and leaves the deploy check blind; a whole-object refine on `createEnv` is runtime-only too and gives no per-key module in the error; plain `.optional()` provider keys lose the gate.
 
-### Phase 1: Conditional keys in the env core and the CLI
+### Phase 1: Conditional keys in the env core and the CLI (built 2026-11-24)
 
 1. Add the `envRequiredWhen` descriptor field to `packages/cli/src/lib/schema.ts` and the published descriptor JSON schema: key name to `{ key, is }` or `{ key, isNot }`.
 2. Add doctor checks: each named key is in `envVars`, a key is not in both `envOptional` and `envRequiredWhen` of one module, exactly one of `is` and `isNot` is set, and the controlling key routes to the same service.
@@ -65,7 +65,7 @@ Rejected alternatives, one line each: the issue's `requires: [{ key, when(values
 
 Done when: `pnpm test` passes with new cases in `define.test.ts` (optional while false, fails with module and reason while true, passes once set, checked after every key parses, skipped on the client, list value matched by name), in `check.test.ts` (setup and deploy skip or report by condition), and in the env-example renderer tests (marker line written and stable on regeneration).
 
-### Phase 2: Email
+### Phase 2: Email (built 2026-11-24)
 
 1. In `modules/email/files/src/env-preset.ts`, make `EMAIL_FROM` `.optional()` and add `requiredWhen: { EMAIL_FROM: { key: "EMAIL_PROVIDER", isNot: "console" } }`. Add the matching `envRequiredWhen` row to `modules/email/registry-item.json`.
 2. In `modules/email-plunk/files/env.ts`, make `PLUNK_API_KEY` `.optional()` with `requiredWhen` on `EMAIL_PROVIDER` `is: "plunk"`, and fix the comment that says installing the provider makes its keys required. Add the descriptor row.
@@ -75,7 +75,7 @@ Done when: `pnpm test` passes with new cases in `define.test.ts` (optional while
 
 Done when: in a `.dev` project with `email`, `email-console` and `email-plunk`, `pnpm env:setup` passes with `EMAIL_PROVIDER=console` and both keys blank, a console send logs a mail from the default sender, and the deploy check refuses `EMAIL_PROVIDER=plunk` with a blank `PLUNK_API_KEY`.
 
-### Phase 3: The five other provider presets
+### Phase 3: The five other provider presets (built 2026-11-24)
 
 Apply the Phase 2 shape to each preset and descriptor:
 
@@ -89,7 +89,7 @@ The provider names are checked against each provider's registered `name`: `khude
 
 Done when: `pnpm test:scripts` passes, and each provider's existing tests plus one gate case (blank keys pass under the local provider, fail under the vendor) pass.
 
-### Phase 4: Docs, ADR and skills
+### Phase 4: Docs, ADR and skills (built 2026-11-24)
 
 1. Record an ADR: a provider key is conditional on the `<CAP>_PROVIDER` value, declared as data and checked at setup, deploy and runtime.
 2. Update the `saasaloy-env` skill in the base template with a "Required when" section beside "Blank on purpose", and the `create-provider` skill so a new provider declares its keys conditional.

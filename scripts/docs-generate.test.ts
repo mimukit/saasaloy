@@ -188,6 +188,22 @@ describe("a module page", () => {
     assert.ok(page.includes("[`email-plunk`](email-plunk.md)"));
     assert.ok(page.includes("saasaloy add email --dry-run"));
   });
+
+  it("names the condition of a conditional key in the Optional column", () => {
+    const plunk =
+      generated.get("docs/wiki/generated/modules/email-plunk.md") ?? "";
+    assert.ok(
+      plunk.includes(
+        "| `PLUNK_API_KEY` | api | required when `EMAIL_PROVIDER=plunk` |"
+      )
+    );
+    const env = generated.get("docs/wiki/generated/env.md") ?? "";
+    assert.ok(
+      env.includes(
+        "| `EMAIL_FROM` | [`email`](modules/email.md) | api | required when `EMAIL_PROVIDER!=console` |"
+      )
+    );
+  });
 });
 
 describe("a descriptor change", () => {

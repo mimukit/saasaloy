@@ -74,6 +74,15 @@ Six rules hold for every mode:
    provider SDK (ADR 0020).
 6. **A vendor type is an `import type`, never an ambient global.** The barrel imports every registered provider, so any workspace that imports the capability compiles your file, `packages/email-react` included, and it lists no vendor types of its own. Write `import type { KVNamespace } from "@cloudflare/workers-types"`, not a bare `KVNamespace` that resolves only where a tsconfig lists the package in `types`. Pin the types package as a `devDependencies` entry of the capability's `package.json` with a `package-json-dependency` patch, as rule 5 does for an SDK. The core lists neither the package nor a `types` entry, so a project with only the local provider installs nothing from the vendor (issue #253). Two cores are exceptions, and both for one reason: `cloudflare:workers` is a module only the ambient declarations name, so no `import type` can replace it. `packages/subscription` keeps the package and the `types` entry because `subscription-stripe` imports `cloudflare:workers`. `packages/queue` keeps them because its `jobs` array imports the `@repo/subscription` barrel, and `queue-cloudflare` adds no patch. Both providers still import their own types explicitly.
 
+A provider that reads **vendor keys** declares each one conditional on its own name, so a project develops on the local provider with the key blank (ADR 0070). Four parts go together:
+
+- the descriptor's `envRequiredWhen`: `"envRequiredWhen": { "PLUNK_API_KEY": { "key": "EMAIL_PROVIDER", "is": "plunk" } }`. The CLI writes it into `packages/env/.env.example` as `# @required-when EMAIL_PROVIDER=plunk`.
+- the preset's `requiredWhen`, with the same key and condition: `requiredWhen: { PLUNK_API_KEY: { key: "EMAIL_PROVIDER", is: "plunk" } }`.
+- an `.optional()` schema on the key in the preset, so `createEnv` accepts it blank while another provider is selected.
+- `requires.saasaloy` set to `>=0.13.0`, the first CLI that reads `envRequiredWhen` (ADR 0044).
+
+The `is` value is the provider's `name`, the value `<CAP>_PROVIDER` holds to select it. For a list-valued key such as `PAYMENT_PROVIDER`, `is` holds when the list names the provider. Do not put the key in `envOptional` too; doctor reports a key in both. `scripts/env-presets.test.ts` fails when the descriptor and the preset disagree. A key with a default, such as `PLUNK_API_URL`, stays in `envOptional`.
+
 A provider that carries a **checked-in constant** — a page size, a default the vendor does not supply — puts it in a config section rather than in its one runtime file or in an env var. That is a second file (`files/config/<capability>-<provider>.ts` → `@config/sections/…`) and a second `entries` row, in the `config.sections` table. Think twice first: a value that differs between two deployments of one project is an `envVars` entry, and a value the capability owns belongs in the *capability's* section, not the provider's. See `create-module`'s `config` bullet and ADR 0052.
 
 Provider modules ship **no skill folder of their own**. The capability's skill is where a provider
@@ -136,7 +145,8 @@ Contract points that are easy to get wrong:
 
 - **The message arrives resolved.** `from` is already filled in from `EMAIL_FROM`, `to` is already
   an array, `text` is already derived from `html`. Don't redo any of it, and don't add defaults of
-  your own.
+  your own. The one exception is `defaultFrom`: a provider that never reaches a real inbox, such as
+  `console`, may set it, and the core uses it when the message and `EMAIL_FROM` name no sender.
 - **`name` is the `EMAIL_PROVIDER` value**, and it must be unique across providers. It is *not*
   required to match the exported factory — `email-console`'s factory is `consoleEmail` precisely so
   the generated import can't shadow the global `console`.
@@ -157,9 +167,12 @@ Contract points that are easy to get wrong:
   "name": "email-resend",
   "type": "saasaloy:feature",
   "dependsOn": ["email"],
-  "requires": { "saasaloy": ">=0.10.0" },   // the first CLI that reads `entries`
+  "requires": { "saasaloy": ">=0.13.0" },   // the first CLI that reads `envRequiredWhen`
   "dependencies": [],                       // stays empty — see the patch below
   "envVars": { "RESEND_API_KEY": "…" },     // provider-owned, never in the core
+  "envRequiredWhen": {                      // required only while EMAIL_PROVIDER=resend
+    "RESEND_API_KEY": { "key": "EMAIL_PROVIDER", "is": "resend" }
+  },
   "patches": [
     { "file": "packages/email/package.json", "kind": "package-json-dependency",
       "section": "dependencies", "name": "resend", "range": "4.0.1" }
@@ -690,13 +703,15 @@ That resolves `email` first, scaffolds `packages/email`, drops your file, applie
 - [ ] `modules/<capability>-<provider>/registry-item.json`, `name` matching the directory.
 - [ ] `type: saasaloy:feature`, `dependsOn: ["<capability>"]`, `scaffolds: []`.
 - [ ] Exactly one file, targeted at `@<capability>/providers/<provider>.ts`.
-- [ ] An `entries` row registering it in the capability's `<capability>.providers` table, and `requires.saasaloy` set to `>=0.10.0`.
+- [ ] An `entries` row registering it in the capability's `<capability>.providers` table, and `requires.saasaloy` set to `>=0.10.0` or later (`>=0.13.0` with `envRequiredWhen`).
 - [ ] A non-`fetch` Worker export, if any, registered with a second `entries` row in the `worker.handlers` table, and gated on the capability's `<CAP>_PROVIDER` variable.
 - [ ] Any npm dependency patched into the **capability's** `package.json`, exact-pinned.
 - [ ] Vendor types named with `import type`, and the types package pinned as a devDependency of
       the capability (rule 6).
 - [ ] `envVars` declares every secret the provider reads; none baked into files. A value that
       cannot differ between two deployments of one project is a config section (ADR 0052).
+- [ ] Each vendor key is conditional on the provider's name: an `envRequiredWhen` row, the same
+      `requiredWhen` in the preset, an `.optional()` schema, and `requires.saasaloy` `>=0.13.0`.
 - [ ] Failures normalized into the capability's error type, `retryable` set honestly.
 - [ ] No skill folder — the capability's skill gains a row (and a runbook section if it needs one).
 - [ ] Installed twice on a clean playground: second run changes nothing.

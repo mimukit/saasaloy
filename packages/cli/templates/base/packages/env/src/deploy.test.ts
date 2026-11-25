@@ -287,6 +287,26 @@ describe("checkProduction", () => {
     );
   });
 
+  // #390: a vendor key is required in production only while its provider is selected.
+  it("refuses a blank conditional key while its condition holds", async () => {
+    const root = makeRoot();
+    writeFileSync(
+      path.join(root, "packages/env/.env.example"),
+      `${EXAMPLE}# @services api\nEMAIL_PROVIDER=\n# @required-when EMAIL_PROVIDER=plunk\nPLUNK_API_KEY=\n`
+    );
+    const check = async (provider: string) =>
+      await checkProduction({
+        root,
+        source: local,
+        processEnv: { EMAIL_PROVIDER: provider },
+        loggedIn: loggedOut,
+      });
+    assert.deepEqual(await check("plunk"), [
+      "api has no production value for PLUNK_API_KEY (required: EMAIL_PROVIDER=plunk).",
+    ]);
+    assert.deepEqual(await check("console"), []);
+  });
+
   it("never reads the dev values", async () => {
     await assert.rejects(
       checkProduction({

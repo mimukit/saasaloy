@@ -13,7 +13,7 @@ A subscription provider on Stripe through stripe and @better-auth/stripe; needs 
 | Tier | provider |
 | Stage | money |
 | Needs | `stripe` |
-| Needs CLI | `>=0.10.0` |
+| Needs CLI | `>=0.13.0` |
 | Depends on | [`subscription`](subscription.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -23,8 +23,8 @@ A subscription provider on Stripe through stripe and @better-auth/stripe; needs 
 
 | Variable | Services | Optional | What it does |
 |---|---|---|---|
-| `STRIPE_SECRET_KEY` | api | no | Your Stripe secret key (sk_test_… while you develop, sk_live_… in production). Required once SUBSCRIPTION_PROVIDER=stripe. The client is built on first use, so a project that keeps SUBSCRIPTION_PROVIDER=console runs the whole capability — sign-in included — with this unset; the throw then names the key on the first call that reaches Stripe. |
-| `STRIPE_WEBHOOK_SECRET` | api | no | The signing secret of the endpoint you registered at https://dashboard.stripe.com/webhooks, pointing at https://<your-api>/auth/stripe/webhook. The plugin verifies every delivery against it, so an unsigned POST is refused before any handler runs. |
+| `STRIPE_SECRET_KEY` | api | required when `SUBSCRIPTION_PROVIDER=stripe` | Your Stripe secret key (sk_test_… while you develop, sk_live_… in production). Required once SUBSCRIPTION_PROVIDER=stripe. The client is built on first use, so a project that keeps SUBSCRIPTION_PROVIDER=console runs the whole capability — sign-in included — with this unset; the throw then names the key on the first call that reaches Stripe. |
+| `STRIPE_WEBHOOK_SECRET` | api | required when `SUBSCRIPTION_PROVIDER=stripe` | Required while SUBSCRIPTION_PROVIDER=stripe, and may stay blank under any other provider. The signing secret of the endpoint you registered at https://dashboard.stripe.com/webhooks, pointing at https://<your-api>/auth/stripe/webhook. The plugin verifies every delivery against it, so an unsigned POST is refused before any handler runs. |
 
 ## Files and workspaces it writes
 

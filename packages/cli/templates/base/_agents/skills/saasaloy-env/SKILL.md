@@ -1,6 +1,6 @@
 ---
 name: saasaloy-env
-description: Runbook for the env capability in packages/env — the one tracked key list, the pnpm env:setup distribution command, the pnpm deploy:production deploy with env-deploy, and the typed createEnv gate each service reads its values through. Use when deploying to Cloudflare, when a deploy stops naming a blank production key, adding an environment key, when a build or a request fails naming an unset key, when choosing which services read a key, when a value must stay blank, when a key is checkout-owned, when giving a worktree its own dev ports with pnpm dev:ports or DEV_HOST, when picking a value source, or when a leftover .dev.vars is hiding .env from wrangler.
+description: Runbook for the env capability in packages/env — the one tracked key list, the pnpm env:setup distribution command, the pnpm deploy:production deploy with env-deploy, and the typed createEnv gate each service reads its values through. Use when deploying to Cloudflare, when a deploy stops naming a blank production key, adding an environment key, when a build or a request fails naming an unset key, when choosing which services read a key, when a value must stay blank, when a provider's key is required only while that provider is selected, when a key is checkout-owned, when giving a worktree its own dev ports with pnpm dev:ports or DEV_HOST, when picking a value source, or when a leftover .dev.vars is hiding .env from wrangler.
 ---
 
 # env — one key list, one command, one typed gate
@@ -81,6 +81,38 @@ The `runtimeEnvStrict` map in those files is hand-written, one literal `import.m
 STORAGE_PROXY_URL=
 ```
 
+## Required when
+
+A provider's key is a *conditional key*. It may stay blank unless the capability's `<CAP>_PROVIDER` key selects that provider. A `# @required-when` directive above the key names the condition:
+
+```
+# @required-when EMAIL_PROVIDER=plunk
+# Plunk secret key, the sk_... one from the Plunk dashboard.
+PLUNK_API_KEY=
+```
+
+- `KEY=value` holds when `KEY` names `value`. A list such as `PAYMENT_PROVIDER=manual,bkash` names each of its items.
+- `KEY!=value` holds when `KEY` does not name `value`. `EMAIL_FROM` carries `# @required-when EMAIL_PROVIDER!=console`, because the `console` provider sends from `dev@localhost`.
+- A blank controlling key makes `=` false and `!=` true. The blank controlling key then fails on its own.
+- Two directive lines above one key mean required when either one holds.
+
+`pnpm env:setup` and the deploy check read the directive against the values of the same service. They accept a blank conditional key while the condition is false. While it holds, they name the key with its condition: `PLUNK_API_KEY (required: EMAIL_PROVIDER=plunk)`. `createEnv` applies the same condition at runtime and reports `unset; required when EMAIL_PROVIDER=plunk` with the module.
+
+The CLI writes the directive from the descriptor's `envRequiredWhen` on every render, so do not edit it by hand. The preset declares the same condition, and the key's schema is `.optional()`:
+
+```ts
+// packages/email/src/env/plunk.ts
+export const plunkEnvPreset = definePreset({
+  module: "email-plunk",
+  server: {
+    PLUNK_API_KEY: z.string().min(1).optional().describe("Plunk secret key."),
+  },
+  requiredWhen: { PLUNK_API_KEY: { key: "EMAIL_PROVIDER", is: "plunk" } },
+});
+```
+
+Use `isNot` in place of `is` for a `!=` condition. A `# Blank on purpose` line wins over a directive above the same key, so do not put both above one key.
+
 ## Checkout-owned keys
 
 `CHECKOUT_OWNED_KEYS` in `packages/env/src/services.ts` lists keys this checkout sets for itself. A key named there keeps whatever value is already on disk, whoever wrote it, so a per-branch `DATABASE_URL` survives every `pnpm env:setup`. `packages/env` never learns what a database is — only that some key is the checkout's to set.
@@ -140,7 +172,7 @@ Three more forms:
 - `env-deploy --run <service> -- <command> [args...]` runs one command with that service's `prod` values and the credentials. The `db:prod:migrate` and `db:prod:dump` scripts use it with `--run api`, because `DATABASE_URL` is an `api` key.
 - `env-deploy --check` is step 1 on its own.
 
-Two things the flow does not do. `--secrets-file` only adds: a secret you removed from the value source stays on the Worker until you run `wrangler secret delete <KEY>` in its workspace. And a key marked `# Blank on purpose` passes the check even where production needs it, such as `BETTER_AUTH_SECRET`; the Worker's own `createEnv` gate is what refuses it.
+Two things the flow does not do. `--secrets-file` only adds: a secret you removed from the value source stays on the Worker until you run `wrangler secret delete <KEY>` in its workspace. And a key marked `# Blank on purpose` passes the check even where production needs it, such as `BETTER_AUTH_SECRET`; the Worker's own `createEnv` gate is what refuses it. A conditional key is different: the check reads its `# @required-when` directive against the `prod` values, and refuses the key while the condition holds.
 
 ## `.dev.vars` is gone
 

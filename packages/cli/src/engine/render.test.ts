@@ -227,6 +227,68 @@ describe(render, () => {
   });
 });
 
+describe("env key list merge (#249, #390)", () => {
+  const example = (result: RenderResult): string =>
+    result.files.get("packages/env/.env.example")?.content ?? "";
+
+  const kv = moduleOf({
+    envOptional: ["KV_KEY_PREFIX"],
+    envServices: { default: ["api"] },
+    envVars: { KV_KEY_PREFIX: "Prefix." },
+    name: "kv",
+  });
+  const upstash = moduleOf({
+    dependsOn: ["kv"],
+    envRequiredWhen: {
+      KV_KEY_PREFIX: { is: "upstash", key: "KV_PROVIDER" },
+    },
+    envServices: { default: ["api"] },
+    envVars: { KV_KEY_PREFIX: "Prefix, required under upstash." },
+    name: "kv-upstash",
+  });
+
+  it("gives an optional key a second module makes conditional the condition, not Blank on purpose", () => {
+    const out = example(renderOf(payloadOf([kv, upstash]), ["kv-upstash"]));
+
+    expect(out).toContain(
+      "# @required-when KV_PROVIDER=upstash\n# Prefix, required under upstash.\nKV_KEY_PREFIX="
+    );
+    expect(out).not.toContain("Blank on purpose");
+  });
+
+  it("drops the condition when a third module requires the key outright", () => {
+    const strict = moduleOf({
+      envServices: { default: ["api"] },
+      envVars: { KV_KEY_PREFIX: "Prefix, always required." },
+      name: "strict",
+    });
+    const out = example(
+      renderOf(payloadOf([kv, upstash, strict]), ["kv-upstash", "strict"])
+    );
+
+    expect(out).not.toContain("@required-when");
+    expect(out).not.toContain("Blank on purpose");
+  });
+
+  it("writes one line per distinct condition from two modules", () => {
+    const other = moduleOf({
+      envRequiredWhen: {
+        KV_KEY_PREFIX: { is: "redis", key: "KV_PROVIDER" },
+      },
+      envServices: { default: ["api"] },
+      envVars: { KV_KEY_PREFIX: "Prefix, required under redis." },
+      name: "kv-redis",
+    });
+    const out = example(
+      renderOf(payloadOf([kv, upstash, other]), ["kv-redis", "kv-upstash"])
+    );
+
+    expect(out).toContain(
+      "# @required-when KV_PROVIDER=redis\n# @required-when KV_PROVIDER=upstash\n"
+    );
+  });
+});
+
 describe("generated tables (plan 0116, Phase 7)", () => {
   const owner = moduleOf(
     {

@@ -3,7 +3,7 @@ import { parseModule } from "magicast";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
 import { BASE_MODULE } from "./base.js";
-import { ENV_EXAMPLE } from "./env-example.js";
+import { ENV_EXAMPLE, servicesFor } from "./env-example.js";
 import {
   hashContent,
   joinModulePath,
@@ -414,6 +414,8 @@ export async function checkModule(
     }
   }
 
+  checkRequiredWhen(item, module, findings, warnings);
+
   // Every `devVars` key is a local value for an env var the module declares. A key with
   // no `envVars` entry is written to nothing, which the schema documents and cannot check.
   for (const key of Object.keys(asRecord(item.devVars))) {
@@ -465,6 +467,83 @@ export async function checkModule(
   );
 
   return report();
+}
+
+/**
+ * The `envRequiredWhen` rules (#390). A conditional key is one the module declares, is not
+ * also blank on purpose, and names exactly one of `is` and `isNot`. Its controlling key
+ * should reach the same services, or `pnpm env:setup` reads the condition against a file
+ * that never holds the value. A controlling key another module declares is skipped: this
+ * descriptor alone does not say where it goes.
+ */
+function checkRequiredWhen(
+  item: Record<string, unknown>,
+  module: string,
+  findings: Finding[],
+  warnings: Finding[]
+): void {
+  const envVars = asRecord(item.envVars);
+  const optional = new Set(asArray(item.envOptional));
+  const routes: Record<string, string[]> = {};
+  for (const [key, list] of Object.entries(asRecord(item.envServices))) {
+    routes[key] = asArray(list).filter(
+      (name): name is string => typeof name === "string"
+    );
+  }
+  const declaresRoutes = item.envServices === undefined ? undefined : routes;
+
+  for (const [key, raw] of Object.entries(asRecord(item.envRequiredWhen))) {
+    const where = `/envRequiredWhen/${key}`;
+    if (!(key in envVars)) {
+      findings.push(
+        finding(
+          module,
+          where,
+          "has no matching entry in envVars, so no key carries the condition"
+        )
+      );
+    }
+    if (optional.has(key)) {
+      findings.push(
+        finding(
+          module,
+          where,
+          "is also in envOptional — a key is either blank on purpose or required when a condition holds, not both"
+        )
+      );
+    }
+    const condition = asRecord(raw);
+    const operators = ["is", "isNot"].filter(
+      (name) => condition[name] !== undefined
+    );
+    if (operators.length !== 1) {
+      findings.push(
+        finding(
+          module,
+          where,
+          operators.length === 0
+            ? 'names neither "is" nor "isNot" — set exactly one'
+            : 'names both "is" and "isNot" — set exactly one'
+        )
+      );
+    }
+    const control = condition.key;
+    if (typeof control !== "string" || !(control in envVars)) {
+      continue;
+    }
+    const mine = servicesFor(key, declaresRoutes);
+    const theirs = servicesFor(control, declaresRoutes);
+    const unrouted = mine.filter((service) => !theirs.includes(service));
+    if (unrouted.length > 0) {
+      warnings.push(
+        finding(
+          module,
+          `${where}/key`,
+          `${control} does not reach ${unrouted.join(", ")}, where ${key} goes, so \`pnpm env:setup\` reads the condition against a file without it`
+        )
+      );
+    }
+  }
 }
 
 async function checkSourcePath(

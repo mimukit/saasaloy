@@ -307,6 +307,8 @@ Locally, forward them with `stripe listen --forward-to localhost:4000/auth/strip
 | `subscription-stripe` | `stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `stripe` 22.6.1 + `@better-auth/stripe` 1.7.3 | yes — mounts the endpoints and the webhook |
 | `subscription-console` | `console` | nothing | no |
 
+The env check requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` only while `SUBSCRIPTION_PROVIDER=stripe`. A project with `subscription-stripe` installed can develop on `console` with both keys blank.
+
 **`subscription-console` is how you develop.** It completes checkout, portal, change-plan, cancel and restore with no account and no network, by handing the route a `CheckoutResult.event` the route enqueues. With `queue-memory` installed the consumer runs inline, so the row is there by the time the route answers. Its ids are `console_sub_…` and `console_cus_…`, derived from the subject, so a `console_`-prefixed id in a production table is a loud signal that the wrong provider is selected.
 
 `cancel` and `restore` carry no plan of their own, so the route reads the live row and passes it as `SubjectInput.current`. `subscription-stripe` ignores that field — its webhook carries the whole record — and `subscription-console` throws `not_found` without it rather than inventing a plan and writing the invention over the real row.

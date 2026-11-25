@@ -13,7 +13,7 @@ A kv provider on Upstash Redis over HTTPS; needs an Upstash account and two REST
 | Tier | provider |
 | Stage | scale |
 | Needs | `vendor-account` |
-| Needs CLI | `>=0.10.0` |
+| Needs CLI | `>=0.13.0` |
 | Depends on | [`kv`](kv.md) |
 | Requires one of | none |
 | Conflicts with | none |
@@ -23,9 +23,9 @@ A kv provider on Upstash Redis over HTTPS; needs an Upstash account and two REST
 
 | Variable | Services | Optional | What it does |
 |---|---|---|---|
-| `KV_KEY_PREFIX` | api | no | Prefix put in front of every key `buildKey` produces (e.g. `staging:` or your project name). Required once KV_PROVIDER=upstash, and it must not be blank: one Redis database is one flat keyspace, so without a prefix `list` would scan every key in it and two environments sharing a database would collide. `createEnv` and `pnpm env:setup` both refuse a blank value. |
-| `UPSTASH_REDIS_REST_TOKEN` | api | no | REST token for the same database, from the same panel. Use the read-write token — the read-only one cannot `SET`, `DEL` or run the limiter's `EVAL`. Store it as a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_TOKEN`), never in wrangler.jsonc, and rotate it in the Upstash console if it leaks. A wrong token surfaces as KvError("provider_error") with providerCode `401` and retryable false, because retrying a bad credential only burns request budget. |
-| `UPSTASH_REDIS_REST_URL` | api | no | REST endpoint of your Upstash Redis database, the `https://<name>-<id>.upstash.io` one from the database page under REST API. Required once KV_PROVIDER=upstash. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_URL`) in production. There is no default: unset, every call through this provider throws KvError("provider_error") before a request leaves the Worker. |
+| `KV_KEY_PREFIX` | api | required when `KV_PROVIDER=upstash` | Prefix put in front of every key `buildKey` produces (e.g. `staging:` or your project name). Required once KV_PROVIDER=upstash, and it must not be blank: one Redis database is one flat keyspace, so without a prefix `list` would scan every key in it and two environments sharing a database would collide. `createEnv` and `pnpm env:setup` both refuse a blank value. |
+| `UPSTASH_REDIS_REST_TOKEN` | api | required when `KV_PROVIDER=upstash` | Required while KV_PROVIDER=upstash, and may stay blank under any other provider. REST token for the same database, from the same panel. Use the read-write token — the read-only one cannot `SET`, `DEL` or run the limiter's `EVAL`. Store it as a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_TOKEN`), never in wrangler.jsonc, and rotate it in the Upstash console if it leaks. A wrong token surfaces as KvError("provider_error") with providerCode `401` and retryable false, because retrying a bad credential only burns request budget. |
+| `UPSTASH_REDIS_REST_URL` | api | required when `KV_PROVIDER=upstash` | REST endpoint of your Upstash Redis database, the `https://<name>-<id>.upstash.io` one from the database page under REST API. Required once KV_PROVIDER=upstash. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_URL`) in production. There is no default: unset, every call through this provider throws KvError("provider_error") before a request leaves the Worker. |
 
 ## Files and workspaces it writes
 

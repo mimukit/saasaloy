@@ -5,12 +5,16 @@
   "description": "A subscription provider on Stripe through stripe and @better-auth/stripe; needs a Stripe account.",
   "stage": "money",
   "needs": ["stripe"],
-  "requires": { "saasaloy": ">=0.10.0" },
+  "requires": { "saasaloy": ">=0.13.0" },
   "dependsOn": ["subscription"],
   "dependencies": [],
   "envVars": {
     "STRIPE_SECRET_KEY": "Your Stripe secret key (sk_test_… while you develop, sk_live_… in production). Required once SUBSCRIPTION_PROVIDER=stripe. The client is built on first use, so a project that keeps SUBSCRIPTION_PROVIDER=console runs the whole capability — sign-in included — with this unset; the throw then names the key on the first call that reaches Stripe.",
-    "STRIPE_WEBHOOK_SECRET": "The signing secret of the endpoint you registered at https://dashboard.stripe.com/webhooks, pointing at https://<your-api>/auth/stripe/webhook. The plugin verifies every delivery against it, so an unsigned POST is refused before any handler runs."
+    "STRIPE_WEBHOOK_SECRET": "Required while SUBSCRIPTION_PROVIDER=stripe, and may stay blank under any other provider. The signing secret of the endpoint you registered at https://dashboard.stripe.com/webhooks, pointing at https://<your-api>/auth/stripe/webhook. The plugin verifies every delivery against it, so an unsigned POST is refused before any handler runs."
+  },
+  "envRequiredWhen": {
+    "STRIPE_SECRET_KEY": { "key": "SUBSCRIPTION_PROVIDER", "is": "stripe" },
+    "STRIPE_WEBHOOK_SECRET": { "key": "SUBSCRIPTION_PROVIDER", "is": "stripe" }
   },
   "envServices": {
     "default": ["api"]

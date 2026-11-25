@@ -5,12 +5,15 @@
   "description": "A packages/email workspace with the provider interface, the escaping html tag and safeUrl; add one email provider.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.10.0" },
+  "requires": { "saasaloy": ">=0.13.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
     "EMAIL_PROVIDER": "Which installed provider sends: `cloudflare` (add email-cloudflare), `plunk` (add email-plunk) or `console` (add email-console). Always required — there is no default, so nothing sends by accident and nothing stops sending silently.",
-    "EMAIL_FROM": "Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message."
+    "EMAIL_FROM": "Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message. Required for every provider except `console`, which logs instead of sending and falls back to its own sender (`dev@localhost`) when EMAIL_FROM is blank."
+  },
+  "envRequiredWhen": {
+    "EMAIL_FROM": { "key": "EMAIL_PROVIDER", "isNot": "console" }
   },
   "envServices": {
     "default": ["api"]
