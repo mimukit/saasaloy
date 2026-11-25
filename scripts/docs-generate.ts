@@ -4,7 +4,8 @@
 // files that own the facts and writes Markdown into `docs/wiki/generated/`:
 //
 //   modules.md           the catalog table of every module in `modules/`
-//   modules/<name>.md    one page for each module: descriptor facts, then its skill text
+//   modules/<name>.md    one page for each module: install steps, descriptor facts, then its
+//                        skill text
 //   env.md               every `envVars` key, with its module and the services that read it
 //   cli.md               every command, its usage line and flags, and the exit codes
 //   glossary.md          `CONTEXT.md`
@@ -455,11 +456,83 @@ function catalog(all: readonly Descriptor[]): string {
 
 // --- modules/<name>.md -------------------------------------------------------
 
-function skillText(root: string, item: Descriptor, pageFile: string): string {
+// The agent prompt task (apps/web/src/content/prompts.ts) that each module's skill
+// `## For agents` section stands for. A skill with that section and no task here fails the
+// run, because its page would show commands with no prompt beside them.
+const FOR_AGENTS_TASKS: Record<string, string> = {
+  "database-postgres": "database-setup",
+};
+
+const FOR_AGENTS = "## For agents";
+
+/**
+ * A skill body split at its `## For agents` section, which runs to the next heading of
+ * level one or two outside a code fence. `forAgents` is empty when the skill has none.
+ */
+export function splitForAgents(body: string): {
+  forAgents: string;
+  rest: string;
+} {
+  const inFence = fenceReader();
+  const forAgents: string[] = [];
+  const rest: string[] = [];
+  let inSection = false;
+  for (const line of body.split("\n")) {
+    if (!inFence(line) && /^#{1,2}\s/.test(line)) {
+      inSection = line.trim() === FOR_AGENTS;
+    }
+    (inSection ? forAgents : rest).push(line);
+  }
+  return {
+    forAgents: forAgents.join("\n").trim(),
+    rest: rest.join("\n").replaceAll(/\n{3,}/g, "\n\n"),
+  };
+}
+
+/**
+ * A skill's `## For agents` section with each `bash` or `sh` block turned into a
+ * `saasaloy-command` fence for `task`. A block under a `###` heading names that heading as
+ * the prompt's section, so the prompt points at the part of the page that holds it.
+ */
+export function forAgentsFences(section: string, task: string): string {
+  let open = false;
+  let heading: string | undefined;
+  return section
+    .split("\n")
+    .map((line) => {
+      if (!open && /^###\s/.test(line)) {
+        heading = line.replace(/^###\s+/, "").trim();
+      }
+      if (!line.startsWith("```")) {
+        return line;
+      }
+      open = !open;
+      if (!open || !/^```(?:bash|sh)\s*$/.test(line)) {
+        return line;
+      }
+      const named = heading === undefined ? "" : ` section="${heading}"`;
+      return `\`\`\`saasaloy-command task=${task}${named}`;
+    })
+    .join("\n");
+}
+
+interface SkillParts {
+  /** The skill text for "What your agent reads", without its `## For agents` section. */
+  text: string;
+  /** The page's `## For agents` section, lifted from a skill, or empty. */
+  forAgents: string;
+}
+
+function skillParts(
+  root: string,
+  item: Descriptor,
+  pageFile: string
+): SkillParts {
   if (item.skills.length === 0) {
-    return "This module ships no skill.";
+    return { text: "This module ships no skill.", forAgents: "" };
   }
   const parts: string[] = [];
+  const lifted: string[] = [];
   for (const skill of item.skills) {
     const file = posix.join("modules", item.name, skill, "SKILL.md");
     const path = join(root, file);
@@ -468,15 +541,68 @@ function skillText(root: string, item: Descriptor, pageFile: string): string {
         `${item.name}: agent.skills names ${skill}, which has no SKILL.md`
       );
     }
-    const body = stripFrontmatter(readFileSync(path, "utf-8")).trim();
+    const { forAgents, rest } = splitForAgents(
+      stripFrontmatter(readFileSync(path, "utf-8"))
+    );
+    if (forAgents !== "") {
+      const task = FOR_AGENTS_TASKS[item.name];
+      if (task === undefined) {
+        throw new Error(
+          `${item.name}: ${file} has a "${FOR_AGENTS}" section and no prompt task in FOR_AGENTS_TASKS`
+        );
+      }
+      lifted.push(
+        forAgentsFences(rewriteLinks(root, forAgents, file, pageFile), task)
+      );
+    }
     parts.push(
       `Skill source: ${code(file)}\n\n${demoteHeadings(
-        rewriteLinks(root, body, file, pageFile),
+        rewriteLinks(root, rest.trim(), file, pageFile),
         2
       )}`
     );
   }
-  return parts.join("\n\n");
+  return { text: parts.join("\n\n"), forAgents: lifted.join("\n\n") };
+}
+
+/**
+ * The page's `## Install` section: the `saasaloy-command` fence the `add` prompt sits on,
+ * then the steps an agent follows. The fence body has no `--dry-run` and no `--yes`,
+ * because a person who copies it sees the plan at the confirmation prompt.
+ */
+function installSection(item: Descriptor, all: readonly Descriptor[]): string {
+  const names = new Set(all.map((other) => other.name));
+  const add = `saasaloy add ${item.name}`;
+  const choice =
+    item.requiresOneOf.length > 1
+      ? `Run ${code(`${add} --yes --with <module>`)} to write the files, with one of ${item.requiresOneOf.map((name) => moduleLink(name, names, "")).join(", ")} as the module.`
+      : `Run ${code(`${add} --yes`)} to write the files.`;
+  const parent = parentOf(item);
+  const parentItem = all.find((other) => other.name === parent);
+  let skill: string | undefined;
+  if (item.skills.length > 0) {
+    skill =
+      "Read the module's skill under [What your agent reads](#what-your-agent-reads) and follow it to use the module in your code.";
+  } else if (parent !== undefined && parentItem?.skills.length) {
+    skill = `This module ships no skill. Read the ${code(parent)} skill under [What your agent reads](${parent}.md#what-your-agent-reads) and follow it to use the module in your code.`;
+  }
+  const steps = [
+    `Run ${code(`${add} --dry-run`)} to print the plan and write nothing. Check the files it writes and the modules it adds first.`,
+    choice,
+    `Run ${code("saasaloy env")} to fill the environment values the new modules declare. With no terminal, pass each value as ${code("--set KEY=VALUE")}.`,
+    `Run ${code("pnpm install")} to fetch the new dependencies.`,
+    ...(skill === undefined ? [] : [skill]),
+  ];
+  return [
+    [
+      `\`\`\`saasaloy-command task=add name=${item.name}`,
+      add,
+      "saasaloy env",
+      "pnpm install",
+      "```",
+    ].join("\n"),
+    steps.map((step, index) => `${index + 1}. ${step}`).join("\n"),
+  ].join("\n\n");
 }
 
 function scaffoldLines(item: Descriptor): string[] {
@@ -543,11 +669,15 @@ function modulePage(
     facts.push(["Drivers", list(drivers)]);
   }
 
+  const skill = skillParts(root, item, pageFile);
   const sections: string[] = [
     banner(`modules/${item.name}/registry-item.json and its skill`),
     `# ${item.name}`,
     notice(`${code(`modules/${item.name}/registry-item.json`)} and its skill`),
     item.description,
+    "## Install",
+    installSection(item, all),
+    ...(skill.forAgents === "" ? [] : [skill.forAgents]),
     "## Facts",
     table(["Field", "Value"], facts),
   ];
@@ -616,7 +746,7 @@ function modulePage(
     "## See the rest",
     `Run ${code(`saasaloy add ${item.name} --dry-run`)} to print every file and patch the module writes, in install order, and write nothing.`,
     "## What your agent reads",
-    skillText(root, item, pageFile)
+    skill.text
   );
   return `${sections.join("\n\n")}\n`;
 }

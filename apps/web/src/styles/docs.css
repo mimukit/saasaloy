@@ -452,6 +452,11 @@
   margin-top: 0.375rem;
 }
 
+/* The base reset strips every list's markers, and a numbered step needs its number. */
+.docs-prose ol {
+  list-style: decimal;
+}
+
 .docs-prose ol > li::marker {
   color: var(--highlight);
   font-family: var(--font-mono);
@@ -544,6 +549,11 @@
 
 .docs-prose .saasaloy-list > li + li {
   margin-top: 0;
+}
+
+/* The plain prompt and code block a `saasaloy-command` block shows until its island mounts. */
+.docs-prose .saasaloy-command > * + * {
+  margin-top: 1rem;
 }
 
 /* A table scrolls inside its own box instead of widening the page. */

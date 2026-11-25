@@ -3,7 +3,11 @@
 // that draws the same facts. Nothing loads on a page with no block, and a block whose
 // props do not parse keeps its list.
 
-import type { GraphData, ProvidersData } from "./docs-blocks-data.ts";
+import type {
+  CommandData,
+  GraphData,
+  ProvidersData,
+} from "./docs-blocks-data.ts";
 
 export async function mountDocsBlocks(root: ParentNode = document) {
   const hosts = [
@@ -19,7 +23,12 @@ export async function mountDocsBlocks(root: ParentNode = document) {
   for (const host of hosts) {
     try {
       const props: unknown = JSON.parse(host.dataset.props ?? "");
-      if (host.dataset.saasaloyBlock === "graph") {
+      if (host.dataset.saasaloyBlock === "command") {
+        const { DocsCommand } = await import("@web/components/docs-command");
+        createRoot(host).render(
+          createElement(DocsCommand, { data: props as CommandData })
+        );
+      } else if (host.dataset.saasaloyBlock === "graph") {
         const { DocsGraph } = await import("@web/components/docs-graph");
         createRoot(host).render(
           createElement(DocsGraph, { data: props as GraphData })

@@ -20,21 +20,25 @@ function element(
   return { type: "element", tagName, properties, children };
 }
 
-function frame(pre: HastNode): HastNode {
+function frame(pre: HastNode, copy: boolean): HastNode {
   return element("div", { className: ["docs-code"], "data-docs-code": "" }, [
     pre,
-    element(
-      "button",
-      {
-        type: "button",
-        className: ["docs-copy"],
-        hidden: true,
-        "data-docs-copy": "",
-        "data-pagefind-ignore": "",
-      },
-      [{ type: "text", value: "Copy" }]
-    ),
+    ...(copy ? [copyButton()] : []),
   ]);
+}
+
+function copyButton(): HastNode {
+  return element(
+    "button",
+    {
+      type: "button",
+      className: ["docs-copy"],
+      hidden: true,
+      "data-docs-copy": "",
+      "data-pagefind-ignore": "",
+    },
+    [{ type: "text", value: "Copy" }]
+  );
 }
 
 /**
@@ -54,7 +58,13 @@ function scrollBox(table: HastNode): HastNode {
   );
 }
 
-function wrap(node: HastNode): void {
+/** True for the `saasaloy-command` block of lib/docs-blocks.ts, which has its own Copy button. */
+function isCommandBlock(node: HastNode): boolean {
+  const names = node.properties?.className;
+  return Array.isArray(names) && names.includes("saasaloy-command");
+}
+
+function wrap(node: HastNode, copy = true): void {
   const { children } = node;
   if (children === undefined) {
     return;
@@ -62,16 +72,19 @@ function wrap(node: HastNode): void {
   for (const [index, child] of children.entries()) {
     if (child.type === "element" && child.tagName === "pre") {
       child.properties = { ...child.properties, tabIndex: 0 };
-      children[index] = frame(child);
+      children[index] = frame(child, copy);
     } else if (child.type === "element" && child.tagName === "table") {
       children[index] = scrollBox(child);
     } else {
-      wrap(child);
+      wrap(child, copy && !isCommandBlock(child));
     }
   }
 }
 
-/** Frames every `<pre>` with a hidden Copy button and every `<table>` in a scroll box. */
+/**
+ * Frames every `<pre>` with a hidden Copy button, except inside a `saasaloy-command` block,
+ * and every `<table>` in a scroll box.
+ */
 export function rehypeCodeFrame() {
   return (tree: HastNode): void => {
     wrap(tree);

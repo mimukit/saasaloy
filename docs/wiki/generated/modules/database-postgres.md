@@ -6,6 +6,39 @@
 
 The Postgres database driver over postgres.js, with a Hyperdrive-aware getDb and a withDb helper.
 
+## Install
+
+```saasaloy-command task=add name=database-postgres
+saasaloy add database-postgres
+saasaloy env
+pnpm install
+```
+
+1. Run `saasaloy add database-postgres --dry-run` to print the plan and write nothing. Check the files it writes and the modules it adds first.
+2. Run `saasaloy add database-postgres --yes` to write the files.
+3. Run `saasaloy env` to fill the environment values the new modules declare. With no terminal, pass each value as `--set KEY=VALUE`.
+4. Run `pnpm install` to fetch the new dependencies.
+5. Read the module's skill under [What your agent reads](#what-your-agent-reads) and follow it to use the module in your code.
+
+## For agents
+
+Set up the development database. `db:setup` starts the container from the root `compose.yaml`, creates this branch's database, writes `DATABASE_URL` and applies every migration. `db:status` checks the result. Run the production setup only when the owner asks for it.
+
+```saasaloy-command task=database-setup
+pnpm db:setup
+pnpm db:seed
+pnpm db:status
+```
+
+### Production setup
+
+Store the production connection string as a Workers secret, then migrate the production database. `db:prod:migrate` dumps the database before it migrates.
+
+```saasaloy-command task=database-setup section="Production setup"
+wrangler secret put DATABASE_URL --config apps/api/wrangler.jsonc
+pnpm db:prod:migrate
+```
+
 ## Facts
 
 | Field | Value |

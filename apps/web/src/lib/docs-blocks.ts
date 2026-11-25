@@ -9,7 +9,8 @@
 // React island that takes the list's place. The facts come from `modules/*/registry-item.json`
 // at build time, so a block cannot go stale. The body of the fence is the block's data for a
 // reader of the raw Markdown (GitHub, an agent): the generator writes it, the plugin ignores
-// it. A fence whose language starts with `saasaloy-` and names no block, or a block with a
+// it. `saasaloy-command` is the exception: its body is the commands its CLI tab copies, and
+// its arguments pick the agent prompt from content/prompts.ts. A fence whose language starts with `saasaloy-` and names no block, or a block with a
 // bad argument, fails the build like a link to a missing page does (see lib/docs.ts), so a
 // typo never ships as a code block.
 //
@@ -20,17 +21,20 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  commandData,
   graphData,
   parseBlockArgs,
   providersData,
 } from "./docs-blocks-data.ts";
 import type {
   BlockDescriptor,
+  CommandData,
   GraphData,
   ProvidersData,
 } from "./docs-blocks-data.ts";
 
 export const BLOCK_LANGUAGES = [
+  "saasaloy-command",
   "saasaloy-graph",
   "saasaloy-providers",
 ] as const;
@@ -75,7 +79,7 @@ function bulletList(items: MdastNode[][]): MdastNode {
 
 function block(
   kind: string,
-  props: GraphData | ProvidersData,
+  props: CommandData | GraphData | ProvidersData,
   children: MdastNode[]
 ): MdastNode {
   return {
@@ -83,7 +87,7 @@ function block(
     data: {
       hName: "div",
       hProperties: {
-        className: ["saasaloy-block"],
+        className: ["saasaloy-block", `saasaloy-${kind}`],
         "data-saasaloy-block": kind,
         "data-props": JSON.stringify(props),
       },
@@ -152,6 +156,17 @@ function providersBlock(data: ProvidersData): MdastNode {
   ]);
 }
 
+/**
+ * The command block as the prompt in a paragraph over the commands in a code block, so a
+ * reader without JavaScript can copy either by hand.
+ */
+function commandBlock(data: CommandData): MdastNode {
+  return block("command", data, [
+    paragraph([text(`Agent prompt: ${data.prompt}`)]),
+    { type: "code", lang: "bash", value: data.commands.join("\n") },
+  ]);
+}
+
 function readDescriptors(repoRoot: string): BlockDescriptor[] {
   const modules = join(repoRoot, "modules");
   return readdirSync(modules, { withFileTypes: true })
@@ -168,8 +183,13 @@ function readDescriptors(repoRoot: string): BlockDescriptor[] {
 export function blockFor(
   language: string,
   meta: string | null | undefined,
-  descriptors: readonly BlockDescriptor[]
+  descriptors: readonly BlockDescriptor[],
+  body = ""
 ): MdastNode {
+  if (language === "saasaloy-command") {
+    const args = parseBlockArgs(meta, ["task", "name", "section"], language);
+    return commandBlock(commandData(descriptors, args, body));
+  }
   if (language === "saasaloy-graph") {
     const args = parseBlockArgs(meta, ["focus"], language);
     return graphBlock(graphData(descriptors, args.focus));
@@ -196,7 +216,7 @@ function replace(
   }
   for (const [index, child] of children.entries()) {
     if (child.type === "code" && child.lang?.startsWith("saasaloy-")) {
-      children[index] = blockFor(child.lang, child.meta, load());
+      children[index] = blockFor(child.lang, child.meta, load(), child.value);
     } else {
       replace(child, load);
     }

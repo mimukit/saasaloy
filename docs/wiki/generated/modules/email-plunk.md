@@ -6,6 +6,20 @@
 
 An email provider on Plunk over plain HTTP, with no SDK and no binding; needs a Plunk API key.
 
+## Install
+
+```saasaloy-command task=add name=email-plunk
+saasaloy add email-plunk
+saasaloy env
+pnpm install
+```
+
+1. Run `saasaloy add email-plunk --dry-run` to print the plan and write nothing. Check the files it writes and the modules it adds first.
+2. Run `saasaloy add email-plunk --yes` to write the files.
+3. Run `saasaloy env` to fill the environment values the new modules declare. With no terminal, pass each value as `--set KEY=VALUE`.
+4. Run `pnpm install` to fetch the new dependencies.
+5. This module ships no skill. Read the `email` skill under [What your agent reads](email.md#what-your-agent-reads) and follow it to use the module in your code.
+
 ## Facts
 
 | Field | Value |

@@ -6,6 +6,20 @@
 
 A payment provider with a fake hosted checkout page for development, with no network and no secret.
 
+## Install
+
+```saasaloy-command task=add name=payment-console
+saasaloy add payment-console
+saasaloy env
+pnpm install
+```
+
+1. Run `saasaloy add payment-console --dry-run` to print the plan and write nothing. Check the files it writes and the modules it adds first.
+2. Run `saasaloy add payment-console --yes` to write the files.
+3. Run `saasaloy env` to fill the environment values the new modules declare. With no terminal, pass each value as `--set KEY=VALUE`.
+4. Run `pnpm install` to fetch the new dependencies.
+5. This module ships no skill. Read the `payment` skill under [What your agent reads](payment.md#what-your-agent-reads) and follow it to use the module in your code.
+
 ## Facts
 
 | Field | Value |
