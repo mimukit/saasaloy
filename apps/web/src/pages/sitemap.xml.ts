@@ -8,8 +8,18 @@
 import type { APIRoute } from "astro";
 
 import { loadDocs } from "@web/lib/docs";
+import { uiBlocks } from "@web/lib/ui-registry";
 
-const PATHS = ["/"];
+// The Saasaloy UI index, the themes, templates and builder pages, and each block page. The
+// preview frames are `noindex`.
+const PATHS = [
+  "/",
+  "/ui",
+  "/ui/themes",
+  "/ui/templates",
+  "/ui/builder",
+  ...uiBlocks().map((block) => `/ui/blocks/${block.name}`),
+];
 
 export const GET: APIRoute = async ({ site }) => {
   const { pages } = await loadDocs();

@@ -1,13 +1,18 @@
 import { landing } from "@repo/ui/content/landing";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { describe, expect, it } from "vitest";
-import { LANDING_SECTIONS, landingMarkdown } from "./landing-markdown";
+import {
+  ALL_LANDING_SECTIONS,
+  LANDING_SECTIONS,
+  landingMarkdown,
+} from "./landing-markdown";
 
 // The Markdown copy of the home page that `/index.md` serves, built from the same
-// `landing.ts` the page renders.
+// `landing.ts` the page renders. Most cases write every section the file knows, so they
+// hold whichever sections the page renders; the last case pins the page's own list.
 
 describe(landingMarkdown, () => {
-  const text = landingMarkdown(landing, "Acme");
+  const text = landingMarkdown(landing, "Acme", ALL_LANDING_SECTIONS);
 
   it("opens with the hero headline as the one h1", () => {
     expect(text.startsWith(`# ${landing.hero.title}\n`)).toBeTruthy();
@@ -63,7 +68,8 @@ describe(landingMarkdown, () => {
   it("drops a section whose title is blank", () => {
     const blank = landingMarkdown(
       { ...landing, faq: { ...landing.faq, title: "" } },
-      "Acme"
+      "Acme",
+      ALL_LANDING_SECTIONS
     );
     expect(blank).not.toContain(landing.faq.items[0]?.answer ?? "-");
   });

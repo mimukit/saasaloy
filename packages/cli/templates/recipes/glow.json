@@ -1,0 +1,19 @@
+{
+  "name": "glow",
+  "title": "Glow",
+  "description": "A soft page in the dusk kit with the ember theme: rounded cards, a glowing hero and a full-width closing panel.",
+  "theme": "ember",
+  "kit": "dusk",
+  "blocks": [
+    "navbar",
+    "hero",
+    "logo-cloud",
+    "feature-grid",
+    "testimonials",
+    "pricing-table",
+    "faq",
+    "cta",
+    "footer"
+  ],
+  "content": "base landing copy"
+}

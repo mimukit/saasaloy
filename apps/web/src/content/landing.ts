@@ -80,6 +80,7 @@ export const landing = {
       { id: "docs", label: "Docs", href: DOCS },
       { id: "github", label: "GitHub", href: REPO },
       { id: "guide", label: "Guide", href: `${DOCS}/getting-started` },
+      { id: "ui", label: "UI", href: "/ui" },
     ],
   },
 

@@ -1,0 +1,23 @@
+{
+  "name": "launch",
+  "title": "Launch",
+  "description": "The full landing page in the ink kit with the cobalt theme: every section, from the hero to the FAQ.",
+  "theme": "cobalt",
+  "kit": "ink",
+  "blocks": [
+    "navbar",
+    "hero",
+    "logo-cloud",
+    "pain-points",
+    "how-it-works",
+    "feature-grid",
+    "showcase",
+    "audience",
+    "testimonials",
+    "pricing-table",
+    "faq",
+    "cta",
+    "footer"
+  ],
+  "content": "base landing copy"
+}

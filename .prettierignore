@@ -34,3 +34,6 @@ packages/cli/test/fixtures
 **/.turbo
 **/.astro
 **/.wrangler
+
+# The Saasaloy UI registry JSON, written by apps/web's `registry:build` and gitignored.
+apps/web/public/r

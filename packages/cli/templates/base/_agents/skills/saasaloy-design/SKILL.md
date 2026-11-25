@@ -152,7 +152,7 @@ Ask only for design facts that the brief does not contain. Cover the color mood,
 
 ### 2. Choose the registry style
 
-Accept a `registry:style` URL from `https://ui.shadcn.com/create`, `https://tweakcn.com`, or another compatible registry. Do not invent a Saasaloy palette catalogue.
+Accept a `registry:style` URL from `https://ui.shadcn.com/create`, `https://tweakcn.com`, or another compatible registry. A Saasaloy UI theme is also allowed: a `registry:theme` item at `https://saasaloy.com/r/theme-<name>.json` for `neutral`, `cobalt`, `ember` or `moss`, the same token sets `saasaloy init --theme=<name>` writes. Do not invent a palette.
 
 Preview the URL and the files that the command can change. Get approval before you run the command.
 
@@ -173,6 +173,8 @@ Stop and report the failure when the preset removes a required rule or changes `
 Run the shared extraction process against the merged `brand.css`, the landing vocabulary in `web.css`, and their usage. Update the token front matter and only the prose sections that the new tokens affect.
 
 Use the product brief to update Overview and Do's and Don'ts. Do not add product claims that the brief does not support.
+
+The Overview names the theme in one sentence ("Its theme is `neutral`, …"). After a Saasaloy UI theme, write its name there. After any other preset, replace the sentence with the preset's name and URL.
 
 Recompute and replace the fingerprint stamp. Run the official linter.
 

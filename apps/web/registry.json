@@ -1,0 +1,560 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "saasaloy",
+  "homepage": "https://saasaloy.com/ui",
+  "items": [
+    {
+      "name": "saasaloy-foundation",
+      "type": "registry:item",
+      "title": "Saasaloy foundation",
+      "description": "The layout, type and motion utilities and the helpers every Saasaloy UI block uses.",
+      "dependencies": ["lucide-react"],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/external-link.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/icons.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/inline-code.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/interpolate.ts",
+          "type": "registry:lib"
+        },
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/lib/theme.ts",
+          "type": "registry:lib"
+        }
+      ],
+      "categories": ["foundation"]
+    },
+    {
+      "name": "ink-audience",
+      "type": "registry:block",
+      "title": "Audience",
+      "description": "A list of who the product is for, each with an icon and a line.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/audience.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/audience.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-cta",
+      "type": "registry:block",
+      "title": "Call to action",
+      "description": "A closing call to action with a command and two buttons.",
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/cta.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/cta.tsx"
+        }
+      ],
+      "categories": ["cta"]
+    },
+    {
+      "name": "ink-error-state",
+      "type": "registry:block",
+      "title": "Error state",
+      "description": "A 404 and 500 screen with a status, a title and a way back.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "card",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/error-state.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/error-state.tsx"
+        }
+      ],
+      "categories": ["error"]
+    },
+    {
+      "name": "ink-faq",
+      "type": "registry:block",
+      "title": "FAQ",
+      "description": "A list of common questions with answers that open in place.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/faq.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/faq.tsx"
+        }
+      ],
+      "categories": ["faq"]
+    },
+    {
+      "name": "ink-feature-grid",
+      "type": "registry:block",
+      "title": "Feature grid",
+      "description": "A grid of product features, each with an icon.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/feature-grid.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/feature-grid.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-footer",
+      "type": "registry:block",
+      "title": "Footer",
+      "description": "A footer with the brand, a row of links and social marks.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/footer.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/footer.tsx"
+        }
+      ],
+      "categories": ["navigation"]
+    },
+    {
+      "name": "ink-hero",
+      "type": "registry:block",
+      "title": "Hero",
+      "description": "A landing hero with a headline, two actions and a product frame.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/hero.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/hero.tsx"
+        }
+      ],
+      "categories": ["hero"]
+    },
+    {
+      "name": "ink-how-it-works",
+      "type": "registry:block",
+      "title": "How it works",
+      "description": "Numbered steps that explain how the product works.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/how-it-works.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/how-it-works.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-logo-cloud",
+      "type": "registry:block",
+      "title": "Logo cloud",
+      "description": "A row of customer logos under a short label.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/logo-cloud.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/logo-cloud.tsx"
+        }
+      ],
+      "categories": ["social-proof"]
+    },
+    {
+      "name": "ink-navbar",
+      "type": "registry:block",
+      "title": "Navbar",
+      "description": "A top bar with links, actions and a mobile menu.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json",
+        "https://saasaloy.com/r/ink-theme-toggle.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/navbar.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/navbar.tsx"
+        }
+      ],
+      "categories": ["navigation"]
+    },
+    {
+      "name": "ink-pain-points",
+      "type": "registry:block",
+      "title": "Pain points",
+      "description": "The problems the product solves, as a list of cards.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/pain-points.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/pain-points.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-pricing-table",
+      "type": "registry:block",
+      "title": "Pricing table",
+      "description": "Plan cards with a monthly and annual switch.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/pricing-table.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/pricing-table.tsx"
+        }
+      ],
+      "categories": ["pricing"]
+    },
+    {
+      "name": "ink-showcase",
+      "type": "registry:block",
+      "title": "Showcase",
+      "description": "Rows of product screens beside their copy.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/showcase.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/showcase.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "ink-testimonials",
+      "type": "registry:block",
+      "title": "Testimonials",
+      "description": "A grid of customer quotes with names and roles.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/testimonials.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/testimonials.tsx"
+        }
+      ],
+      "categories": ["social-proof"]
+    },
+    {
+      "name": "ink-theme-toggle",
+      "type": "registry:block",
+      "title": "Theme toggle",
+      "description": "A light and dark switch button.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/base/packages/ui/src/blocks/theme-toggle.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/theme-toggle.tsx"
+        }
+      ],
+      "categories": ["navigation"]
+    },
+    {
+      "name": "dusk-hero",
+      "type": "registry:block",
+      "title": "Hero",
+      "description": "A split hero with a headline, two actions and a glowing terminal frame.",
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/hero.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/hero.tsx"
+        }
+      ],
+      "categories": ["hero"]
+    },
+    {
+      "name": "dusk-feature-grid",
+      "type": "registry:block",
+      "title": "Feature grid",
+      "description": "A bento grid of rounded feature cards, the first one wide.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/feature-grid.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/feature-grid.tsx"
+        }
+      ],
+      "categories": ["features"]
+    },
+    {
+      "name": "dusk-pricing-table",
+      "type": "registry:block",
+      "title": "Pricing table",
+      "description": "Rounded plan cards with a raised featured tier and a monthly and annual switch.",
+      "dependencies": ["lucide-react"],
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/pricing-table.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/pricing-table.tsx"
+        }
+      ],
+      "categories": ["pricing"]
+    },
+    {
+      "name": "dusk-testimonials",
+      "type": "registry:block",
+      "title": "Testimonials",
+      "description": "Masonry quote cards with round initials avatars.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/testimonials.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/testimonials.tsx"
+        }
+      ],
+      "categories": ["social-proof"]
+    },
+    {
+      "name": "dusk-faq",
+      "type": "registry:block",
+      "title": "FAQ",
+      "description": "Questions and answers side by side, every answer visible.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/faq.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/faq.tsx"
+        }
+      ],
+      "categories": ["faq"]
+    },
+    {
+      "name": "dusk-cta",
+      "type": "registry:block",
+      "title": "Call to action",
+      "description": "A full-width call to action panel in the primary colour.",
+      "registryDependencies": [
+        "button",
+        "https://saasaloy.com/r/saasaloy-foundation.json"
+      ],
+      "files": [
+        {
+          "path": "../../packages/cli/templates/kits/dusk/blocks/cta.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/cta.tsx"
+        }
+      ],
+      "categories": ["cta"]
+    },
+    {
+      "name": "shell-spinner",
+      "type": "registry:ui",
+      "title": "Shell spinner",
+      "description": "The loading spinner the Saasaloy shell button shows.",
+      "dependencies": ["lucide-react"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/spinner.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/spinner.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-button",
+      "type": "registry:ui",
+      "title": "Shell button",
+      "description": "The Saasaloy shell button, with a loading state.",
+      "dependencies": ["@base-ui/react", "class-variance-authority"],
+      "registryDependencies": ["https://saasaloy.com/r/shell-spinner.json"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/button.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/button.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-field",
+      "type": "registry:ui",
+      "title": "Shell field",
+      "description": "The Saasaloy shell form field, label and description.",
+      "dependencies": ["@base-ui/react"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/field.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/field.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-input",
+      "type": "registry:ui",
+      "title": "Shell input",
+      "description": "The Saasaloy shell text input.",
+      "dependencies": ["@base-ui/react"],
+      "files": [
+        {
+          "path": "../../modules/shell/files/ui/components/shell/input.tsx",
+          "type": "registry:ui",
+          "target": "components/ui/shell/input.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "shell-brand-mark",
+      "type": "registry:component",
+      "title": "Brand mark",
+      "description": "A square mark with the first letter of the product name. Replace it with your logo.",
+      "files": [
+        {
+          "path": "registry/shell/brand-mark.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/shell/brand-mark.tsx"
+        }
+      ],
+      "categories": ["shell"]
+    },
+    {
+      "name": "auth-card",
+      "type": "registry:component",
+      "title": "Auth card",
+      "description": "The frame the sign-in and sign-up blocks share: brand, title, form and footer.",
+      "registryDependencies": ["https://saasaloy.com/r/shell-brand-mark.json"],
+      "files": [
+        {
+          "path": "../../modules/auth/files/ui/blocks/auth/auth-card.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/auth/auth-card.tsx"
+        }
+      ],
+      "categories": ["auth"]
+    },
+    {
+      "name": "auth-sign-in",
+      "type": "registry:block",
+      "title": "Sign in",
+      "description": "An email and password sign-in card that hands the values to your onSubmit.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/auth-card.json",
+        "https://saasaloy.com/r/shell-button.json",
+        "https://saasaloy.com/r/shell-field.json",
+        "https://saasaloy.com/r/shell-input.json"
+      ],
+      "files": [
+        {
+          "path": "../../modules/auth/files/ui/blocks/auth/sign-in.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/auth/sign-in.tsx"
+        }
+      ],
+      "categories": ["auth"]
+    },
+    {
+      "name": "auth-sign-up",
+      "type": "registry:block",
+      "title": "Sign up",
+      "description": "A name, email and password sign-up card that hands the values to your onSubmit.",
+      "registryDependencies": [
+        "https://saasaloy.com/r/auth-card.json",
+        "https://saasaloy.com/r/shell-button.json",
+        "https://saasaloy.com/r/shell-field.json",
+        "https://saasaloy.com/r/shell-input.json"
+      ],
+      "files": [
+        {
+          "path": "../../modules/auth/files/ui/blocks/auth/sign-up.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/auth/sign-up.tsx"
+        }
+      ],
+      "categories": ["auth"]
+    },
+    {
+      "name": "waitlist-form",
+      "type": "registry:block",
+      "title": "Waitlist form",
+      "description": "An email form for early access that hands the address to your onSubmit.",
+      "registryDependencies": ["button", "input", "label"],
+      "files": [
+        {
+          "path": "../../modules/waitlist/files/ui/blocks/waitlist.tsx",
+          "type": "registry:component",
+          "target": "components/blocks/waitlist.tsx"
+        }
+      ],
+      "categories": ["waitlist"]
+    }
+  ]
+}

@@ -12,8 +12,8 @@ import { interpolate } from "@repo/ui/lib/interpolate";
 
 type Landing = typeof landingContent;
 
-/** The landing sections in page order. The navbar and the footer carry no content. */
-export const LANDING_SECTIONS = [
+/** Every section this file can write, in the base page's order. */
+export const ALL_LANDING_SECTIONS = [
   "hero",
   "logos",
   "painPoints",
@@ -27,7 +27,25 @@ export const LANDING_SECTIONS = [
   "cta",
 ] as const;
 
-export type LandingSection = (typeof LANDING_SECTIONS)[number];
+export type LandingSection = (typeof ALL_LANDING_SECTIONS)[number];
+
+/**
+ * The sections the page renders, in page order. The navbar and the footer carry no
+ * content. Delete or move a line here as you delete or move a block in index.astro.
+ */
+export const LANDING_SECTIONS: readonly LandingSection[] = [
+  "hero",
+  "logos",
+  "painPoints",
+  "howItWorks",
+  "features",
+  "showcase",
+  "audience",
+  "testimonials",
+  "pricing",
+  "faq",
+  "cta",
+];
 
 type Fill = (message: string) => string;
 

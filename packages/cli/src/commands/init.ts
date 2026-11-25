@@ -25,6 +25,22 @@ import {
   TESTING_MODES,
 } from "../lib/testing.js";
 import type { TestingMode } from "../lib/testing.js";
+import {
+  DEFAULT_THEME,
+  parseThemeName,
+  THEME_NAMES,
+  THEMES,
+} from "../lib/theme.js";
+import type { ThemeName } from "../lib/theme.js";
+import {
+  DEFAULT_BLOCKS,
+  DEFAULT_KIT,
+  parseBlockList,
+  parseTemplateName,
+  RECIPES,
+  TEMPLATE_NAMES,
+} from "../lib/recipes.js";
+import type { KitName, PageBlock, TemplateName } from "../lib/recipes.js";
 import { isInteractive, stripAnsi, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
@@ -54,6 +70,18 @@ export interface InitOptions {
    * bad value is a refusal rather than a scaffold with a guessed mode.
    */
   testing?: string;
+  /**
+   * `--theme=<name>`, raw (plan 0121). Parsed before anything is written, like `--testing`,
+   * so an unknown name is a refusal that lists the names.
+   */
+  theme?: string;
+  /**
+   * `--template=<name>`, raw (plan 0121, Phase 7). Parsed before anything is written: it
+   * picks the kit, the theme (unless `--theme` is given too) and the block list.
+   */
+  template?: string;
+  /** `--blocks=<comma list>`, raw: the landing page's blocks in order. */
+  blocks?: string;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
@@ -68,18 +96,28 @@ const KNOWN_FLAGS = new Set([
   "-h",
 ]);
 const TESTING_FLAG = "--testing=";
-const USAGE = `saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<${TESTING_MODES.join("|")}>]`;
+const THEME_FLAG = "--theme=";
+const TEMPLATE_FLAG = "--template=";
+const BLOCKS_FLAG = "--blocks=";
+const USAGE = `saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<${TESTING_MODES.join("|")}>] [--theme=<${THEME_NAMES.join("|")}>] [--template=<${TEMPLATE_NAMES.join("|")}>] [--blocks=<list>]`;
 const HELP: CommandHelp = {
   name: "init",
   describe: DESCRIPTIONS.init,
   usage: USAGE,
   flags: {
     "--force": "scaffold into a directory that is not empty",
-    "-y, --yes": "run pnpm install with no prompt",
+    "-y, --yes":
+      "run pnpm install with no prompt, and take the template's theme, or neutral with no --template, when --theme is absent",
     "--no-install": "never run pnpm install, and never ask",
     "--no-git": "do not run git init or make the first commit",
     "--testing=<mode>":
       "the testing mode: off (default), tests-after or tdd; asked on a terminal when absent",
+    "--theme=<name>":
+      "the Saasaloy UI theme brand.css takes: neutral (default), cobalt, ember or moss; asked on a terminal when absent",
+    "--template=<name>":
+      "a Saasaloy UI template for the landing page: launch, focus or glow; sets the block kit, the theme (a --theme flag wins) and the block list",
+    "--blocks=<list>":
+      "the landing page's blocks in order, comma-separated (navbar first, footer last); overrides the template's list, and takes the ink kit with no --template",
   },
 };
 
@@ -88,11 +126,20 @@ export function parseArgs(argv: string[]): InitOptions {
   const positional: string[] = [];
   const unknown: string[] = [];
   let testing: string | undefined;
+  let theme: string | undefined;
+  let template: string | undefined;
+  let blocks: string | undefined;
   for (const arg of argv) {
     if (!arg.startsWith("-")) {
       positional.push(arg);
     } else if (arg.startsWith(TESTING_FLAG)) {
       testing = arg.slice(TESTING_FLAG.length);
+    } else if (arg.startsWith(THEME_FLAG)) {
+      theme = arg.slice(THEME_FLAG.length);
+    } else if (arg.startsWith(TEMPLATE_FLAG)) {
+      template = arg.slice(TEMPLATE_FLAG.length);
+    } else if (arg.startsWith(BLOCKS_FLAG)) {
+      blocks = arg.slice(BLOCKS_FLAG.length);
     } else if (!KNOWN_FLAGS.has(arg)) {
       unknown.push(arg);
     }
@@ -107,6 +154,9 @@ export function parseArgs(argv: string[]): InitOptions {
     yes: argv.includes("--yes") || argv.includes("-y"),
     noGit: argv.includes("--no-git"),
     ...(testing === undefined ? {} : { testing }),
+    ...(theme === undefined ? {} : { theme }),
+    ...(template === undefined ? {} : { template }),
+    ...(blocks === undefined ? {} : { blocks }),
     unknown,
   };
 }
@@ -134,6 +184,78 @@ export async function resolveInitTestingMode(
     return DEFAULT_TESTING_MODE;
   }
   return prompt.ask();
+}
+
+export interface ThemePrompt {
+  /** Whether a person can answer: stdin and stdout are terminals (`isInteractive`). */
+  interactive: boolean;
+  /** `--yes`: the run asks nothing it can default, so the theme reads `neutral`. */
+  yes: boolean;
+  /** Ask for the theme. Resolves to clack's cancel symbol when the person backs out. */
+  ask: () => Promise<ThemeName | symbol>;
+}
+
+/**
+ * The theme `init` writes (plan 0121), the same way `--testing` resolves. A flag wins.
+ * With no flag, a terminal gets one question; `--yes` or no terminal reads `neutral`, the
+ * template's own tokens. Exported with the prompt injected, so it is tested without a
+ * terminal.
+ */
+export async function resolveInitTheme(
+  flag: ThemeName | undefined,
+  prompt: ThemePrompt
+): Promise<ThemeName | symbol> {
+  if (flag !== undefined) {
+    return flag;
+  }
+  if (prompt.yes || !prompt.interactive) {
+    return DEFAULT_THEME;
+  }
+  return prompt.ask();
+}
+
+/** The landing page `init` writes (plan 0121, Phase 7), from `--template` and `--blocks`. */
+export interface InitLanding {
+  template?: TemplateName;
+  /** The template's theme. A `--theme` flag wins over it. */
+  theme?: ThemeName;
+  kit: KitName;
+  blocks: readonly PageBlock[];
+}
+
+/**
+ * `--template` and `--blocks`, raw, as the page to write. A template gives the kit, the
+ * theme and the block list; `--blocks` replaces the list and its order, with or without a
+ * template, and with none the kit is ink. An unknown template, an unknown block or a block
+ * named twice is a refusal that lists the valid names, before anything is written.
+ */
+export function resolveInitLanding(
+  template: string | undefined,
+  blocks?: string
+): InitLanding {
+  const recipe =
+    template === undefined ? undefined : RECIPES[parseTemplateName(template)];
+  const list = blocks === undefined ? undefined : parseBlockList(blocks);
+  return {
+    ...(recipe === undefined
+      ? {}
+      : { template: recipe.name, theme: recipe.theme }),
+    kit: recipe?.kit ?? DEFAULT_KIT,
+    blocks: list ?? recipe?.blocks ?? DEFAULT_BLOCKS,
+  };
+}
+
+function askTheme(): Promise<ThemeName | symbol> {
+  return select<ThemeName>({
+    answeredBy: "`--theme=<name>`",
+    message: "Theme?",
+    options: THEME_NAMES.map((name) => ({
+      value: name,
+      label: THEMES[name].title,
+      hint: THEMES[name].description,
+    })),
+    initialValue: DEFAULT_THEME,
+  });
 }
 
 function askTestingMode(): Promise<TestingMode | symbol> {
@@ -350,6 +472,23 @@ async function initProject(opts: InitOptions): Promise<number> {
       return EXIT_REFUSED;
     }
   }
+  let themeFlag: ThemeName | undefined;
+  if (opts.theme !== undefined) {
+    try {
+      themeFlag = parseThemeName(opts.theme);
+    } catch (error) {
+      cancel(`${errorMessage(error)} Usage: \`${USAGE}\`.`);
+      return EXIT_REFUSED;
+    }
+  }
+
+  let landing: InitLanding;
+  try {
+    landing = resolveInitLanding(opts.template, opts.blocks);
+  } catch (error) {
+    cancel(`${errorMessage(error)} Usage: \`${USAGE}\`.`);
+    return EXIT_REFUSED;
+  }
 
   // `init` ignored every flag it did not know, while `add`/`remove`/`update` rejected
   // theirs — so `saasaloy init app --forse` scaffolded into a non-empty directory and
@@ -449,7 +588,24 @@ async function initProject(opts: InitOptions): Promise<number> {
     return EXIT_FAILURE;
   }
 
-  const scaffolded = await scaffold(target, projectName, testingMode);
+  // A template's theme answers the question the way a flag does; `--theme` wins over it.
+  const theme = await resolveInitTheme(themeFlag ?? landing.theme, {
+    interactive: isInteractive(),
+    yes,
+    ask: askTheme,
+  });
+  if (isCancel(theme)) {
+    cancel("init cancelled");
+    return EXIT_FAILURE;
+  }
+
+  const scaffolded = await scaffold(
+    target,
+    projectName,
+    testingMode,
+    theme,
+    landing
+  );
   if (scaffolded !== undefined) {
     return scaffolded;
   }
@@ -622,6 +778,10 @@ export async function scaffoldProject(args: {
   target: string;
   projectName: string;
   testingMode: RenderOptions["testingMode"];
+  theme?: RenderOptions["theme"];
+  template?: RenderOptions["template"];
+  kit?: RenderOptions["kit"];
+  blocks?: RenderOptions["blocks"];
 }): Promise<ApplyReport> {
   const cliVersion = await readVersion();
   const options: RenderOptions = {
@@ -629,6 +789,10 @@ export async function scaffoldProject(args: {
     ...(args.testingMode === undefined
       ? {}
       : { testingMode: args.testingMode }),
+    ...(args.theme === undefined ? {} : { theme: args.theme }),
+    ...(args.template === undefined ? {} : { template: args.template }),
+    ...(args.kit === undefined ? {} : { kit: args.kit }),
+    ...(args.blocks === undefined ? {} : { blocks: args.blocks }),
   };
   const { side } = await loadSide(
     { coordinates: new Map(), options, requested: [], version: cliVersion },
@@ -642,12 +806,22 @@ export async function scaffoldProject(args: {
 async function scaffold(
   target: string,
   projectName: string,
-  testingMode: TestingMode
+  testingMode: TestingMode,
+  theme: ThemeName,
+  landing: InitLanding
 ): Promise<number | undefined> {
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
   try {
-    await scaffoldProject({ projectName, target, testingMode });
+    await scaffoldProject({
+      projectName,
+      target,
+      testingMode,
+      theme,
+      ...(landing.template === undefined ? {} : { template: landing.template }),
+      kit: landing.kit,
+      blocks: landing.blocks,
+    });
   } catch (error) {
     s.stop(pc.red(`Couldn't scaffold ${projectName}`));
     cancel(errorMessage(error));

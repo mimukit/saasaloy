@@ -177,3 +177,6 @@ routeTree.gen.ts
 
 # verifykit proof bundles; the assets live on refs/verify-assets/*
 docs/verify/
+
+# ---- Saasaloy UI registry JSON (apps/web `registry:build` writes it on every build) ----
+/apps/web/public/r/

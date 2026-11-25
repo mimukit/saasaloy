@@ -1,0 +1,165 @@
+---
+// /ui/templates, the Saasaloy UI templates (plan 0121, Phase 7), from round r3 of the
+// templates mockup (0121-r3-templates-light-1440.png, decided by the afkkit run on
+// 2026-11-22). Three equal-height cards, one per recipe in packages/cli/templates/recipes/:
+// a tall thumbnail of the page, the name, the kit and theme tags, the block count, the
+// description, "Open in builder" and "Copy command".
+//
+// The thumbnail is the composed preview frame (/ui/preview/page) of the template, drawn at
+// a fixed scale of 0.3: the frame is 1 / 0.3 of the card's width and height (container
+// query units), so the page lays out at a desktop width with no script. The block count
+// comes from the recipe (assumption 21). The command is the CLI's own `initCommand`, and
+// one small inline script copies it.
+import UiLayout from "@web/layouts/UiLayout.astro";
+import InlineCode from "@web/components/InlineCode.astro";
+import { buttonVariants } from "@web/components/button";
+import { uiRegistry } from "@web/content/ui-registry";
+import { interpolate } from "@web/lib/interpolate";
+import { cn } from "@web/lib/utils";
+import {
+  builderQuery,
+  builderCommand,
+  previewQuery,
+  RECIPES,
+  TEMPLATE_NAMES,
+  templateState,
+} from "@web/lib/ui-builder";
+
+const copy = uiRegistry.templates;
+const templates = TEMPLATE_NAMES.map((name) => {
+  const state = templateState(name);
+  return {
+    recipe: RECIPES[name],
+    builderHref: `/ui/builder?${builderQuery(state)}`,
+    previewSrc: `/ui/preview/page?${previewQuery(state)}`,
+    command: builderCommand(state),
+  };
+});
+const tagClass =
+  "border-highlight text-highlight border px-2 py-0.5 font-mono text-sm";
+---
+
+<UiLayout
+  title={uiRegistry.meta.templatesTitle}
+  description={uiRegistry.meta.templatesDescription}
+  current="templates"
+>
+  <main
+    id="main"
+    tabindex="-1"
+    class="section-container-hero flex flex-col gap-8 pt-12 outline-none"
+  >
+    <header class="flex flex-col gap-3">
+      <h1 class="text-foreground text-4xl font-bold tracking-[-0.02em] sm:text-5xl">
+        {copy.title}
+      </h1>
+      <p class="text-muted-foreground text-lg">{copy.lead}</p>
+    </header>
+
+    <ul
+      class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+      role="list"
+      aria-label={copy.gridLabel}
+    >
+      {templates.map(({ recipe, builderHref, previewSrc, command }) => (
+        <li class="flex">
+          <article
+            class="border-border bg-card flex w-full min-w-0 flex-col border"
+            aria-labelledby={`template-${recipe.name}`}
+          >
+            <div class="border-border bg-background border-b p-3">
+              <div class="border-border relative aspect-3/4 overflow-hidden border [container-type:size]">
+                <iframe
+                  src={previewSrc}
+                  title={interpolate(copy.previewTitle, {
+                    template: recipe.name,
+                  })}
+                  loading="lazy"
+                  tabindex="-1"
+                  aria-hidden="true"
+                  class="pointer-events-none absolute top-0 left-0 h-[calc(100cqh/0.3)] w-[calc(100cqw/0.3)] origin-top-left scale-[0.3]"
+                ></iframe>
+              </div>
+            </div>
+            <div class="flex flex-1 flex-col gap-4 p-5">
+              <h2
+                id={`template-${recipe.name}`}
+                class="text-foreground font-mono text-2xl font-semibold"
+              >
+                {recipe.name}
+              </h2>
+              <div class="text-muted-foreground flex flex-wrap items-center gap-3 font-mono text-sm">
+                <ul class="flex gap-2" role="list" aria-label={copy.tagsLabel}>
+                  <li class={tagClass}>{recipe.kit}</li>
+                  <li class={tagClass}>{recipe.theme}</li>
+                </ul>
+                <span aria-hidden="true" class="bg-border h-5 w-px"></span>
+                <span>
+                  {interpolate(copy.blocks, {
+                    count: String(recipe.blocks.length),
+                  })}
+                </span>
+              </div>
+              <p class="text-muted-foreground flex-1 text-sm">
+                {recipe.description}
+              </p>
+              <p class="text-foreground bg-background border-border border px-3 py-2 font-mono text-xs break-all">
+                {command}
+              </p>
+              <div class="grid gap-3 sm:grid-cols-2">
+                <a href={builderHref} class={cn(buttonVariants(), "w-full")}>
+                  {copy.open}
+                </a>
+                <button
+                  type="button"
+                  class={cn(buttonVariants({ variant: "outline" }), "w-full")}
+                  data-copy-command={command}
+                  data-template={recipe.name}
+                >
+                  {copy.copy}
+                </button>
+              </div>
+            </div>
+          </article>
+        </li>
+      ))}
+    </ul>
+
+    <p class="text-muted-foreground text-sm">
+      <InlineCode text={copy.note} />
+    </p>
+    <p class="sr-only" role="status" aria-live="polite" data-copy-status></p>
+  </main>
+</UiLayout>
+
+<script
+  define:vars={{
+    copiedLabel: uiRegistry.templates.copied,
+    announcement: uiRegistry.templates.copiedAnnouncement,
+  }}
+>
+  // Copy a template's command. The label shows the copied state for two seconds.
+  (() => {
+    const status = document.querySelector("[data-copy-status]");
+    for (const button of document.querySelectorAll("[data-copy-command]")) {
+      const label = button.textContent;
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(button.dataset.copyCommand ?? "");
+        } catch {
+          return;
+        }
+        button.textContent = copiedLabel;
+        if (status) {
+          status.textContent = announcement.replace(
+            "{template}",
+            button.dataset.template ?? ""
+          );
+        }
+        setTimeout(() => {
+          button.textContent = label;
+        }, 2000);
+      });
+    }
+  })();
+</script>

@@ -285,7 +285,12 @@ function findSpokenLiterals(source: string): Finding[] {
 
 /** Every rule's findings, before deduplication — one string can appear under two rules. */
 function scanAll(source: string): Finding[] {
-  const clean = stripComments(source);
+  // A block with browser state opens with the `"use client"` directive (plan 0121). It is
+  // a directive, not copy, so it is blanked before the prose rule reads the literals.
+  const clean = stripComments(source).replace(
+    /^(["'])use client\1;/,
+    (directive) => " ".repeat(directive.length)
+  );
   return [
     ...findProseLiterals(stripClassNames(clean)),
     ...findJsxText(blankLiterals(clean)),

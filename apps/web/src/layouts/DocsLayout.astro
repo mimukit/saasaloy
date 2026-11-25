@@ -70,7 +70,7 @@ const build = __BUILD_INFO__;
 const stamp = stampOf(Astro.props.stampSource ?? "");
 // The header's links, in the approved order. The Docs tag after the wordmark stands in for
 // the landing page's Docs link.
-const headerLinks = (["guide", "github"] as const).flatMap((id) =>
+const headerLinks = (["guide", "ui", "github"] as const).flatMap((id) =>
   landing.navbar.links.filter(
     (link) => link.id === id && link.label !== "" && link.href !== ""
   )

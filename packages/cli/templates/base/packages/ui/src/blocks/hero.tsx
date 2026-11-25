@@ -174,7 +174,7 @@ export function Hero({
           <a
             href={announcementHref}
             {...externalLinkProps(announcementHref)}
-            className="group bg-background hover:bg-muted blur-in flex items-center gap-4 rounded-full border py-1 pr-1 pl-4 text-sm shadow-md shadow-black/5 transition-colors"
+            className="group bg-background hover:bg-muted blur-in shadow-foreground/5 flex items-center gap-4 rounded-full border py-1 pr-1 pl-4 text-sm shadow-md transition-colors"
           >
             <span className="shine-text">{announcement}</span>
             {newTabHint(announcementHref)}

@@ -137,6 +137,23 @@ export interface SaasaloyConfig {
    * existed still validates; `readTestingMode` reads an absent key as `off`.
    */
   testing?: { mode: TestingMode };
+  /**
+   * The project's Saasaloy UI theme (plan 0121), written by `saasaloy init --theme=<name>`
+   * when it is not `neutral`. Optional: `readTheme` reads an absent key as `neutral`.
+   */
+  theme?: string;
+  /**
+   * The Saasaloy UI template `saasaloy init --template=<name>` started from (plan 0121).
+   * Absent when the project took no template.
+   */
+  template?: string;
+  /** The block kit `init` wrote, when it is not `ink`. Absent reads as `ink`. */
+  kit?: string;
+  /**
+   * The landing page's blocks in order, when they are not the base page's. Absent reads
+   * as the base page. `readLanding` reads both keys back for a later render.
+   */
+  blocks?: string[];
   installed: string[];
 }
 

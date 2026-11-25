@@ -42,6 +42,9 @@ Target: none, by owner decision (grill 2026-11-22). No number gates a phase, and
 | UI house rules | The gallery and the builder follow `apps/web/DESIGN.md`: external links open in a new tab, the theme toggle has light and dark only, and cards in one row share one height. |
 | Visual approval | One mockup round for each new screen, each kit and each theme. A module block gets its round in its own module's plan. Mockup images go to the `mockups: mimukit/saasaloy` gist (grill Q8). |
 | Attended phases | Phases 1, 3 and 6 are attended mockup rounds. Each comes right before the build phase it feeds (grill Q17). |
+| Phase 1 mockup approved | 2026-11-22, round 1 (gallery index and block page, light and dark, 1440 and 390 px). Gist: https://gist.github.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a with file prefix `0121-r1`. Issue comment: https://github.com/mimukit/saasaloy/issues/384#issuecomment-7076034604. Kit-one name: `ink`, locked by the owner on 2026-11-22. |
+| Phase 3 mockup approved | Decided by the afkkit run on 2026-11-22, pending owner review. Round r2 (landing page in each theme, light and dark, 1440 px; block-page switcher, light and dark, 1440 px and light 390 px; themes page, light 1440 px), local file prefix `0121-r2`. Gist: pending. Issue comment: pending. Themes: `neutral` (default, today's brand.css), `cobalt`, `ember`, `moss`. |
+| Phase 6 mockup approved | Decided by the afkkit run on 2026-11-22, pending owner review. Round r3 (dusk kit, neutral, light and dark, 1440 px; templates `launch` in cobalt, `focus` in neutral and `glow` in ember, light, 1440 px; templates page, light, 1440 px; builder, light and dark, 1440 px and light 390 px), local file prefix `0121-r3`. Gist: pending. Issue comment: pending. Kit two: `dusk` (hero, feature-grid, pricing-table, testimonials, faq, cta). Templates: `launch`, `focus`, `glow`. Builder: two panes, controls left (template, theme, ordered block list with up, down and remove, an add-block select, the command), live preview right, no drag and drop. |
 
 ## Approach
 
@@ -62,7 +65,7 @@ Alternatives considered:
 - **Ideal: builder first.** Build the gallery, the theme switcher and the builder before the content grows. It builds a picker with one kit and one theme to pick from.
 - **Lateral: contribute upstream.** Add Saasaloy blocks to an existing directory and build no site. The traffic then lands on another site, and the funnel to Saasaloy breaks.
 
-### Phase 1: gallery mockup
+### Phase 1: gallery mockup (built 2026-11-22)
 
 Attended: owner approval of the gallery and block page mockups, and of the kit-one name.
 
@@ -73,7 +76,7 @@ Attended: owner approval of the gallery and block page mockups, and of the kit-o
 
 Done when: a Design decisions row records the approval date, the round, the gist URL with the file prefix, the issue comment URL, and the kit-one name.
 
-### Phase 2: publish the base blocks as a registry
+### Phase 2: publish the base blocks as a registry (built 2026-11-22)
 
 - Add `"use client"` to each base block with browser state.
 - Add `apps/web/registry.json` that names the 15 base blocks as `<kit>-<block>`, with their files, npm dependencies and `registryDependencies` (shadcn names, a Saasaloy URL only for a primitive that differs from upstream).
@@ -84,7 +87,7 @@ Done when: a Design decisions row records the approval date, the round, the gist
 
 Done when: `pnpm test` runs both scripts green; `block-tokens.test.ts` fails on a fixture block with `bg-blue-500`; and in the `qakit` step, in an empty Next.js app with a `base-*` style, `pnpm dlx shadcn add ./apps/web/public/r/<kit>-hero.json` writes a hero that renders with no type error.
 
-### Phase 3: theme mockup
+### Phase 3: theme mockup (built 2026-11-22)
 
 Attended: owner approval of three or four theme presets.
 
@@ -93,7 +96,7 @@ Attended: owner approval of three or four theme presets.
 
 Done when: a Design decisions row records the theme approval in the same form as Phase 1.
 
-### Phase 4: themes, the switcher and `init --theme`
+### Phase 4: themes, the switcher and `init --theme` (built 2026-11-22)
 
 Starts after issue #365 merges.
 
@@ -104,7 +107,7 @@ Starts after issue #365 merges.
 
 Done when: `saasaloy init app --theme=<name> --yes` in `.dev` writes a `brand.css` with that theme's tokens, `pnpm build` passes in the new project, and `DESIGN.md` names the theme.
 
-### Phase 5: module blocks in the registry
+### Phase 5: module blocks in the registry (built 2026-11-22)
 
 - Add the presentational block of each UI-bearing module to `registry.json` as `<module>-<block>`: `auth` forms, `subscription` pricing and invoice list, `teams` member list and invite dialog, `api-keys` key table.
 - Each block page shows the Saasaloy wire-up next to the plain `shadcn add` command.
@@ -112,7 +115,7 @@ Done when: `saasaloy init app --theme=<name> --yes` in `.dev` writes a `brand.cs
 
 Done when: `scripts/registry.test.ts` covers each listed module block, and in the `qakit` step each one installs with `shadcn add` in the Phase 2 Next.js app and renders with stub props.
 
-### Phase 6: second kit and templates mockup
+### Phase 6: second kit and templates mockup (built 2026-11-22)
 
 Attended: owner approval of the second kit, of each template, and of the builder page.
 
@@ -122,7 +125,7 @@ Attended: owner approval of the second kit, of each template, and of the builder
 
 Done when: a Design decisions row records the approval in the same form as Phase 1.
 
-### Phase 7: second kit, templates and the builder
+### Phase 7: second kit, templates and the builder (built 2026-11-22)
 
 Starts after issue #365 merges.
 

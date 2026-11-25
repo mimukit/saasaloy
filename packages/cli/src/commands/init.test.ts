@@ -20,10 +20,13 @@ import { readVersion } from "../version.js";
 import { stripAnsi } from "../lib/tui.js";
 import { TESTING_BLOCKS } from "../lib/testing.js";
 import type { TestingMode } from "../lib/testing.js";
+import { THEMES, tokenFingerprint } from "../lib/theme.js";
+import type { ThemeName } from "../lib/theme.js";
 import {
   initGitRepo,
   parseArgs,
   resolveInitTestingMode,
+  resolveInitTheme,
   runInit,
 } from "./init.js";
 
@@ -136,6 +139,15 @@ describe("init — parseArgs", () => {
     expect(parseArgs(["my-app"]).testing).toBeUndefined();
   });
 
+  it("reads --theme=<name> raw, leaving the check to runInit (plan 0121)", () => {
+    expect(parseArgs(["my-app", "--theme=ember"])).toMatchObject({
+      theme: "ember",
+      unknown: [],
+    });
+    expect(parseArgs(["my-app", "--theme=bogus"]).theme).toBe("bogus");
+    expect(parseArgs(["my-app"]).theme).toBeUndefined();
+  });
+
   it("keeps --help out of the unknown list, so help can answer it", () => {
     expect(parseArgs(["--help"]).unknown).toStrictEqual([]);
     expect(parseArgs(["-h"]).unknown).toStrictEqual([]);
@@ -189,6 +201,21 @@ describe("runInit — refusals before anything is written", () => {
     expect(code).toBe(2);
     expect(out).toContain('Unknown testing mode "bogus"');
     await expect(pathExists(join(dir, "testing-bogus"))).resolves.toBeFalsy();
+  });
+
+  it("refuses a bad --theme value, lists the themes, and scaffolds nothing (plan 0121)", async () => {
+    const { code, out } = await run([
+      "theme-bogus",
+      "--theme=bogus",
+      "--no-install",
+      "--no-git",
+    ]);
+
+    expect(code).toBe(2);
+    expect(out).toContain(
+      'Unknown theme "bogus". Use one of: neutral, cobalt, ember, moss.'
+    );
+    await expect(pathExists(join(dir, "theme-bogus"))).resolves.toBeFalsy();
   });
 
   it("prints help without scaffolding", async () => {
@@ -436,6 +463,137 @@ describe("resolveInitTestingMode — the attended prompt (#242)", () => {
     await expect(
       resolveInitTestingMode(undefined, {
         interactive: true,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe(cancelled);
+  });
+});
+
+describe("runInit — the theme (plan 0121)", () => {
+  const BRAND = "packages/ui/src/styles/brand.css";
+  const DESIGN = "apps/web/DESIGN.md";
+
+  async function scaffold(project: string, flags: string[]) {
+    const target = join(dir, project);
+    const { code } = await run([project, "--no-install", "--no-git", ...flags]);
+    const read = (rel: string) => readFile(join(target, rel), "utf-8");
+    return {
+      code,
+      target,
+      brand: await read(BRAND),
+      design: await read(DESIGN),
+      config: JSON.parse(await read("saasaloy.json")) as { theme?: string },
+    };
+  }
+
+  it("writes --theme=ember into brand.css, DESIGN.md and saasaloy.json", async () => {
+    const result = await scaffold("theme-ember", ["--theme=ember"]);
+    try {
+      expect(result.code).toBe(0);
+      expect(result.brand).toContain(
+        `--primary: ${THEMES.ember.light.primary};`
+      );
+      expect(result.brand).toContain(`--radius: ${THEMES.ember.radius};`);
+      expect(result.design).toContain("Its theme is `ember`");
+      expect(result.design).toContain(
+        `tokens sha256:${tokenFingerprint(result.brand)} of packages/ui/src/styles/brand.css`
+      );
+      expect(result.config.theme).toBe("ember");
+      // The manifest records the themed bytes, so `doctor` and `outdated` see no drift.
+      const state = await readManifestState(result.target);
+      const entries = state.kind === "v2" ? state.manifest.files : {};
+      expect(entries[BRAND]?.hash).toBe(hashContent(result.brand));
+      expect(entries[DESIGN]?.hash).toBe(hashContent(result.design));
+    } finally {
+      await rm(result.target, { recursive: true, force: true });
+    }
+  });
+
+  it("writes the template's own tokens and no theme key with no flag and no terminal", async () => {
+    const template = await readFile(
+      join(
+        import.meta.dirname,
+        "../../templates/base/packages/ui/src/styles/brand.css"
+      ),
+      "utf-8"
+    );
+    const result = await scaffold("theme-default", []);
+    try {
+      expect(result.code).toBe(0);
+      expect(result.brand).toBe(template);
+      expect(result.design).toContain("Its theme is `neutral`");
+      expect(result.design).toContain(
+        `tokens sha256:${tokenFingerprint(template)}`
+      );
+      expect(result.config.theme).toBeUndefined();
+    } finally {
+      await rm(result.target, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("resolveInitTheme — the attended prompt (plan 0121)", () => {
+  function asker(answer: ThemeName | symbol) {
+    const calls: number[] = [];
+    return {
+      calls,
+      ask: () => {
+        calls.push(1);
+        return Promise.resolve(answer);
+      },
+    };
+  }
+
+  it("asks once on a terminal with no flag, and takes the answer", async () => {
+    const prompt = asker("moss");
+    await expect(
+      resolveInitTheme(undefined, {
+        interactive: true,
+        yes: false,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe("moss");
+    expect(prompt.calls).toHaveLength(1);
+  });
+
+  it("never asks when the flag names the theme", async () => {
+    const prompt = asker("moss");
+    await expect(
+      resolveInitTheme("cobalt", {
+        interactive: true,
+        yes: false,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe("cobalt");
+    expect(prompt.calls).toHaveLength(0);
+  });
+
+  it("reads neutral under --yes or without a terminal, and never asks", async () => {
+    const prompt = asker("moss");
+    await expect(
+      resolveInitTheme(undefined, {
+        interactive: true,
+        yes: true,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe("neutral");
+    await expect(
+      resolveInitTheme(undefined, {
+        interactive: false,
+        yes: false,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe("neutral");
+    expect(prompt.calls).toHaveLength(0);
+  });
+
+  it("passes a cancelled prompt back to the caller", async () => {
+    const cancelled = Symbol("cancel");
+    const prompt = asker(cancelled);
+    await expect(
+      resolveInitTheme(undefined, {
+        interactive: true,
+        yes: false,
         ask: prompt.ask,
       })
     ).resolves.toBe(cancelled);

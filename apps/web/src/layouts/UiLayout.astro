@@ -1,0 +1,124 @@
+---
+// The shell of the Saasaloy UI pages (/ui and /ui/blocks/<name>), from the round 1 mockup
+// of plan 0121 that the owner approved on 2026-11-22. It wraps Layout.astro, which owns
+// <html>, the theme and the skip link. The header holds the `saasaloy / UI` wordmark the
+// way /docs shows `saasaloy / Docs`, the section links, the theme toggle and the "Get
+// Saasaloy" button to the home page. The footer bar repeats the section links and links
+// the MIT license. The section list lives in content/ui-registry.ts. From `md` the links
+// sit in the header row; below it they move to a second row of their own, so the four
+// links never crowd the wordmark at 390 px and no menu button is needed.
+import Layout from "@web/layouts/Layout.astro";
+import { ThemeToggle } from "@web/blocks/theme-toggle";
+import { buttonVariants } from "@web/components/button";
+import { uiRegistry } from "@web/content/ui-registry";
+import { ui } from "@web/content/landing";
+import { interpolate } from "@web/lib/interpolate";
+import { cn } from "@web/lib/utils";
+import { repoUrl, siteName } from "@web/site";
+
+interface Props {
+  title: string;
+  description?: string;
+  /** The `nav` id of the current section, marked `aria-current`. */
+  current?: string;
+}
+
+const { title, description, current } = Astro.props;
+const licenseHref = `${repoUrl}/blob/main/LICENSE`;
+const navLinkClass =
+  "text-highlight aria-[current=page]:text-foreground text-sm font-medium underline-offset-4 hover:underline";
+---
+
+<Layout title={title} description={description}>
+  <header class="border-border bg-background/90 sticky top-0 z-40 border-b">
+    <div class="section-container-hero flex h-14 items-center justify-between gap-4">
+      <div class="flex min-w-0 items-center gap-3 sm:gap-8">
+        <div class="flex items-center gap-3">
+          <a
+            href="/"
+            aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
+            class="text-primary text-2xl leading-8 font-semibold tracking-[-0.02em] lowercase"
+          >
+            <span aria-hidden="true">{siteName}</span>
+          </a>
+          <span
+            class="text-muted-foreground font-mono text-sm"
+            aria-hidden="true"
+          >
+            /
+          </span>
+          <a
+            href="/ui"
+            aria-label={uiRegistry.header.homeLabel}
+            class="text-foreground hover:text-primary font-mono text-sm font-medium tracking-[0.06em] uppercase underline-offset-4 hover:underline"
+          >
+            {uiRegistry.header.tag}
+          </a>
+        </div>
+        <nav
+          aria-label={uiRegistry.header.navLabel}
+          class="hidden items-center gap-6 md:flex"
+        >
+          {uiRegistry.nav.map((link) => (
+            <a
+              href={link.href}
+              aria-current={current === link.id ? "page" : undefined}
+              class={navLinkClass}
+            >
+              {link.label}
+            </a>
+          ))}
+        </nav>
+      </div>
+      <div class="flex items-center gap-2">
+        <ThemeToggle />
+        <a
+          href="/"
+          class={cn(buttonVariants({ size: "sm" }), "hidden sm:inline-flex")}
+        >
+          {uiRegistry.header.cta}
+        </a>
+      </div>
+    </div>
+    <nav
+      aria-label={uiRegistry.header.navLabel}
+      class="border-border section-container-hero flex h-11 items-center gap-6 overflow-x-auto border-t md:hidden"
+    >
+      {uiRegistry.nav.map((link) => (
+        <a
+          href={link.href}
+          aria-current={current === link.id ? "page" : undefined}
+          class={cn(navLinkClass, "shrink-0")}
+        >
+          {link.label}
+        </a>
+      ))}
+    </nav>
+  </header>
+
+  <slot />
+
+  <footer class="border-border mt-16 border-t">
+    <div class="section-container-hero flex flex-wrap items-center justify-between gap-x-8 gap-y-3 py-6 text-sm">
+      <nav aria-label={uiRegistry.footer.navLabel} class="flex flex-wrap gap-6">
+        {uiRegistry.nav.map((link) => (
+          <a
+            href={link.href}
+            class="text-highlight font-medium underline-offset-4 hover:underline"
+          >
+            {link.label}
+          </a>
+        ))}
+      </nav>
+      <a
+        href={licenseHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+      >
+        {uiRegistry.footer.license}
+        <span class="sr-only"> {ui.link.newTab}</span>
+      </a>
+    </div>
+  </footer>
+</Layout>
