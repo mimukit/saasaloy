@@ -85,6 +85,12 @@ const CORES: Core[] = [
     mode: "required",
   },
   {
+    module: "ai",
+    envKey: "AI_PROVIDER",
+    factory: "defineAi",
+    mode: "required",
+  },
+  {
     module: "logger",
     envKey: "LOGGER_PROVIDER",
     factory: "defineLogger",
@@ -213,8 +219,8 @@ describe("provider selection: the table", () => {
     );
   });
 
-  it("guards 8 cores", () => {
-    assert.equal(CORES.length, 8);
+  it("guards 9 cores", () => {
+    assert.equal(CORES.length, 9);
   });
 });
 

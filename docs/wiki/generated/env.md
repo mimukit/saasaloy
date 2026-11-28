@@ -6,10 +6,12 @@
 
 Every module declares the values it reads in its descriptor. `saasaloy env` collects them into `packages/env/.env`, and each service reads the keys named in its Services column. A key with no declared services falls back to the `PUBLIC_` prefix rule, and the table marks it inferred. An Optional cell such as "required when `EMAIL_PROVIDER=plunk`" marks a conditional key: it may stay blank while that condition is false. The environment of the CLI itself is on [the reference page](../reference.md#environment-variables).
 
-51 variables.
+53 variables.
 
 | Variable | Module | Services | Optional | What it does |
 |---|---|---|---|---|
+| `AI_MODEL` | [`ai`](modules/ai.md) | api | yes | Optional model id for every feature that has no id of its own, in the gateway's `vendor/model` form (e.g. `openai/gpt-6-luna`). Blank uses `config.ai.defaultModel`. A feature's own `<FEATURE>_MODEL` key wins over it. |
+| `AI_PROVIDER` | [`ai`](modules/ai.md) | api | no | Which installed provider serves models: `gateway` (add ai-gateway) or `mock` (add ai-mock). Always required — there is no default, so a deploy never answers from the mock and a test run never spends tokens on a real gateway. |
 | `AUTH_COOKIE_PREFIX` | [`auth`](modules/auth.md) | api | yes | Optional, dev only. Lowercase letters, digits and hyphens. When set and BETTER_AUTH_URL is an http: URL, both session cookies become <prefix>-client.session_token and <prefix>-admin.session_token, so two worktrees on one host keep separate sessions. pnpm dev:ports writes it into apps/api/.env.local in a linked worktree and leaves it out in the main checkout. It is ignored on an https: BETTER_AUTH_URL, so production never reads it. |
 | `BETTER_AUTH_SECRET` | [`auth`](modules/auth.md) | api | yes | Workers secret used to sign sessions. Required: auth throws while the Worker initializes when it is unset, unless BETTER_AUTH_URL names a loopback host. |
 | `BETTER_AUTH_URL` | [`auth`](modules/auth.md) | api | no | The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop. When unset there is no loopback exception, so BETTER_AUTH_SECRET becomes mandatory, and the session cookie stays host-only unless COOKIE_DOMAIN sets it. FIRST SUPERADMIN: every sign-up gets role 'user'; no account is promoted automatically. Make the first superadmin before this origin is public: `pnpm db:prod:superadmin --email <you>`. Development databases get one from the seed. |

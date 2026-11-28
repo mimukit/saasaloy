@@ -31,7 +31,7 @@ pnpm install
 | Depends on | [`logger`](logger.md), [`logger-console`](logger-console.md) |
 | Requires one of | none |
 | Conflicts with | none |
-| Depended on by | [`admin`](admin.md), [`agent`](agent.md), [`app`](app.md), [`auth`](auth.md), [`cms`](cms.md), [`database`](database.md), [`e2e`](e2e.md), [`ecommerce`](ecommerce.md), [`email`](email.md), [`feature-flags`](feature-flags.md), [`file-uploads`](file-uploads.md), [`kv`](kv.md), [`multitenant`](multitenant.md), [`notification`](notification.md), [`payment`](payment.md), [`queue`](queue.md), [`ratelimit`](ratelimit.md), [`sms`](sms.md), [`storage`](storage.md), [`subscription`](subscription.md), [`teams`](teams.md), [`validators`](validators.md), [`waitlist`](waitlist.md) |
+| Depended on by | [`admin`](admin.md), [`agent`](agent.md), [`ai`](ai.md), [`app`](app.md), [`auth`](auth.md), [`cms`](cms.md), [`database`](database.md), [`e2e`](e2e.md), [`ecommerce`](ecommerce.md), [`email`](email.md), [`feature-flags`](feature-flags.md), [`file-uploads`](file-uploads.md), [`kv`](kv.md), [`multitenant`](multitenant.md), [`notification`](notification.md), [`payment`](payment.md), [`queue`](queue.md), [`ratelimit`](ratelimit.md), [`sms`](sms.md), [`storage`](storage.md), [`subscription`](subscription.md), [`teams`](teams.md), [`validators`](validators.md), [`waitlist`](waitlist.md) |
 
 ## Environment variables
 
