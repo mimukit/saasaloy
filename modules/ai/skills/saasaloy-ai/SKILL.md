@@ -33,7 +33,7 @@ The CLI also writes `packages/ai/src/providers.generated.ts` and `packages/ai/sr
 
 ## Driver
 
-The core calls no model itself. A driver module holds every line that imports an AI framework. Install exactly one.
+The core calls no model itself. A driver module holds every line that imports an AI framework. Exactly one is installed: `ai` names `ai-sdk` in `requiresOneOf`, so `saasaloy add ai` adds `ai-sdk`, and `app` with it, in the same run.
 
 | Module | Framework | Exports | Runbook |
 | --- | --- | --- | --- |

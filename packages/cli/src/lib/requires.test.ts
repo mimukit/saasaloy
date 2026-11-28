@@ -339,3 +339,22 @@ describe("the first-party database driver wiring", () => {
     ).toStrictEqual([]);
   });
 });
+
+describe("the first-party ai driver wiring", () => {
+  it("has the core requiring its one driver", async () => {
+    expect((await descriptor("ai")).requiresOneOf).toStrictEqual(["ai-sdk"]);
+  });
+
+  it("leaves nothing unmet when the driver depends back on the core", async () => {
+    const missing = detectMissingRequirements({
+      config: config(),
+      graph: graph(
+        await loaded("api"),
+        await loaded("ai"),
+        await loaded("app"),
+        await loaded("ai-sdk")
+      ),
+    });
+    expect(missing).toStrictEqual([]);
+  });
+});

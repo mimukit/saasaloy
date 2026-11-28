@@ -13,11 +13,10 @@ Select a module to see what it depends on, what depends on it, and its providers
 ```saasaloy-graph
 admin (capability): depends on api, database, auth, shell; used by cms, ecommerce, feature-flags, file-uploads, multitenant, payment, subscription, teams
 agent (capability): depends on api, validators, auth, app, api-keys
-ai (capability): depends on api; used by ai-sdk; providers ai-gateway, ai-mock
-ai-sdk (feature): depends on ai, app
+ai (capability): depends on api; providers ai-gateway, ai-mock; drivers ai-sdk
 api (capability): depends on logger; used by admin, agent, ai, app, auth, cms, database, e2e, ecommerce, email, feature-flags, file-uploads, kv, multitenant, notification, payment, queue, ratelimit, sms, storage, subscription, teams, validators, waitlist
 api-keys (feature): depends on auth; used by agent; drivers api-keys-organization, api-keys-user
-app (capability): depends on api, auth, shell; used by agent, ai-sdk, notification
+app (capability): depends on api, auth, shell; used by agent, notification
 auth (capability): depends on api, database; used by admin, agent, api-keys, app, auth-phone, cms, ecommerce, feature-flags, file-uploads, multitenant, notification, payment, subscription, teams
 auth-phone (feature): depends on auth, sms, ratelimit; used by ecommerce
 ci (capability)
@@ -57,7 +56,7 @@ waitlist (feature): depends on api, database, validators
 | [`ai`](modules/ai.md) | capability | mvp | A packages/ai workspace that hands a feature a LanguageModelV4 from the selected provider, with one model id lookup and one error shape. |
 | [`ai-gateway`](modules/ai-gateway.md) | provider | mvp | An ai provider on any OpenAI-compatible gateway (Cloudflare AI Gateway, OpenRouter, Vercel AI Gateway) through @ai-sdk/openai-compatible, with `vendor/model` ids; needs a gateway account and key. |
 | [`ai-mock`](modules/ai-mock.md) | provider | mvp | An ai provider whose model echoes the last user message and, on a `/mock` line, streams reasoning, a tool call, a source or a set failure; for local development and tests, with no vendor account. |
-| [`ai-sdk`](modules/ai-sdk.md) | feature | mvp | The ai driver on the Vercel AI SDK: `generate` and `streamChat` helpers in @repo/ai/sdk that retry, turn every failure into AiError, log it without a stack, log one usage line per turn, and run tools only after the user approves. |
+| [`ai-sdk`](modules/ai-sdk.md) | driver | mvp | The ai driver on the Vercel AI SDK: `generate` and `streamChat` helpers in @repo/ai/sdk that retry, turn every failure into AiError, log it without a stack, log one usage line per turn, and run tools only after the user approves. |
 | [`api`](modules/api.md) | capability | validate | An apps/api Hono Worker on Cloudflare, registered as the @api alias, with structured logging. |
 | [`api-keys`](modules/api-keys.md) | feature | scale | API keys on the Better Auth api-key plugin, stored as a hash; pick api-keys-organization or api-keys-user as the owner. |
 | [`api-keys-organization`](modules/api-keys-organization.md) | driver | scale | Organization-owned API keys scoped through can(), on multitenant, plus an API keys admin screen. |

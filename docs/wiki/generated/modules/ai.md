@@ -27,12 +27,13 @@ pnpm install
 | Tier | capability |
 | Stage | mvp |
 | Needs | nothing outside the code |
-| Needs CLI | `>=0.10.0` |
+| Needs CLI | `>=0.11.0` |
 | Depends on | [`api`](api.md) |
-| Requires one of | none |
+| Requires one of | [`ai-sdk`](ai-sdk.md) |
 | Conflicts with | none |
 | Depended on by | [`ai-gateway`](ai-gateway.md), [`ai-mock`](ai-mock.md), [`ai-sdk`](ai-sdk.md) |
 | Providers | [`ai-gateway`](ai-gateway.md), [`ai-mock`](ai-mock.md) |
+| Drivers | [`ai-sdk`](ai-sdk.md) |
 
 ## Providers
 
@@ -118,7 +119,7 @@ The CLI also writes `packages/ai/src/providers.generated.ts` and `packages/ai/sr
 
 #### Driver
 
-The core calls no model itself. A driver module holds every line that imports an AI framework. Install exactly one.
+The core calls no model itself. A driver module holds every line that imports an AI framework. Exactly one is installed: `ai` names `ai-sdk` in `requiresOneOf`, so `saasaloy add ai` adds `ai-sdk`, and `app` with it, in the same run.
 
 | Module | Framework | Exports | Runbook |
 | --- | --- | --- | --- |

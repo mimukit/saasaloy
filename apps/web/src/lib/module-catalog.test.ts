@@ -251,7 +251,7 @@ describe("the real registry", () => {
     );
   });
 
-  it("gives the README's 21 providers and 3 drivers", () => {
+  it("gives the README's 21 providers and 4 drivers", () => {
     assert.deepEqual(namesOf("provider"), [
       "ai-gateway",
       "ai-mock",
@@ -276,6 +276,7 @@ describe("the real registry", () => {
       "subscription-stripe",
     ]);
     assert.deepEqual(namesOf("driver"), [
+      "ai-sdk",
       "api-keys-organization",
       "api-keys-user",
       "database-postgres",

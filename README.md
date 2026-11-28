@@ -128,9 +128,9 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 | Tier | Modules |
 |---|---|
 | Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `agent`, `email`, `sms`, `queue`, `kv`, `storage`, `subscription`, `payment`, `ai` |
-| Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `email-react`, `ratelimit`, `feature-flags`, `command`, `notification`, `ai-sdk` |
+| Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `email-react`, `ratelimit`, `feature-flags`, `command`, `notification` |
 | Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-upstash`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe`, `payment-console`, `payment-manual`, `payment-bkash`, `payment-sslcommerz`, `ai-gateway`, `ai-mock` |
-| Driver | `database-postgres`, `api-keys-organization`, `api-keys-user` |
+| Driver | `database-postgres`, `api-keys-organization`, `api-keys-user`, `ai-sdk` |
 
 What each module gives you and what it depends on is on the [Modules](docs/wiki/modules.md) page. Which ones need a paid Cloudflare plan or a third-party account is in the [Reference](docs/wiki/reference.md#email-providers). The short version: the base, `api`, `database-postgres`, `auth`, `admin`, `waitlist` and `teams` run on the Cloudflare and Neon free tiers, and every local provider runs with no account at all.
 

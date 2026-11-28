@@ -5,8 +5,9 @@
   "description": "A packages/ai workspace that hands a feature a LanguageModelV4 from the selected provider, with one model id lookup and one error shape.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.10.0" },
+  "requires": { "saasaloy": ">=0.11.0" },
   "dependsOn": ["api"],
+  "requiresOneOf": ["ai-sdk"],
   "dependencies": [],
   "envVars": {
     "AI_PROVIDER": "Which installed provider serves models: `gateway` (add ai-gateway) or `mock` (add ai-mock). Always required — there is no default, so a deploy never answers from the mock and a test run never spends tokens on a real gateway.",
