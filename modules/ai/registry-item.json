@@ -1,0 +1,118 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "ai",
+  "type": "saasaloy:capability",
+  "description": "A packages/ai workspace that hands a feature a LanguageModelV4 from the selected provider, with one model id lookup and one error shape.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.11.0" },
+  "dependsOn": ["api"],
+  "requiresOneOf": ["ai-sdk"],
+  "dependencies": [],
+  "envVars": {
+    "AI_PROVIDER": "Which installed provider serves models: `gateway` (add ai-gateway) or `mock` (add ai-mock). Always required — there is no default, so a deploy never answers from the mock and a test run never spends tokens on a real gateway.",
+    "AI_MODEL": "Optional model id for every feature that has no id of its own, in the gateway's `vendor/model` form (e.g. `openai/gpt-6-luna`). Blank uses `config.ai.defaultModel`. A feature's own `<FEATURE>_MODEL` key wins over it."
+  },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["AI_MODEL"],
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/ai",
+      "range": "workspace:*"
+    }
+  ],
+  "tables": [
+    {
+      "id": "ai.providers",
+      "file": "@ai/providers.generated.ts",
+      "shape": "calls"
+    },
+    {
+      "id": "ai.envPresets",
+      "file": "@ai/env-preset.generated.ts",
+      "shape": "calls"
+    }
+  ],
+  "entries": [
+    {
+      "table": "config.sections",
+      "call": "aiConfig",
+      "import": {
+        "name": "aiConfig",
+        "from": "./sections/ai"
+      }
+    },
+    {
+      "table": "api.envPresets",
+      "call": "aiEnv",
+      "import": {
+        "name": "aiEnv",
+        "from": "@repo/ai/env-preset"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/config/ai.ts",
+      "target": "@config/sections/ai.ts"
+    },
+    {
+      "path": "files/ui/blocks/ai-chat.tsx",
+      "target": "@ui/blocks/ai-chat.tsx"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/ai",
+      "aliases": {
+        "@ai": "packages/ai/src"
+      },
+      "files": [
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/provider.ts",
+          "target": "src/provider.ts"
+        },
+        {
+          "path": "files/src/prompt.ts",
+          "target": "src/prompt.ts"
+        },
+        {
+          "path": "files/src/usage.ts",
+          "target": "src/usage.ts"
+        },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-ai"]
+  }
+}

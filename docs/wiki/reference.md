@@ -154,6 +154,9 @@ carries the tables, the schema barrel and `db:generate`; the driver carries the 
 migrate commands ([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)). Postgres is
 the only SQL dialect, so every module ships one schema file
 ([ADR 0065](../adr/0065-adr-postgres-is-the-only-sql-dialect-2026-11-20.md)).
+`ai` names one driver, `ai-sdk`, in `requiresOneOf`. The `ai` core carries the provider
+selection and the model lookup; the driver carries the `./sdk` files, the chat stream and the
+chat island in `apps/app`, so `saasaloy add ai` adds `ai-sdk` and `app` with it.
 
 An entry in `files[]`, a scaffold's `files[]` or `patches` may also declare `when`, which decides whether it ships at all. `{ "testing": true }` ships it only while the project's testing mode is `tests-after` or `tdd`, and every test file a module ships carries it. `{ "installed": ["e2e"] }` ships it only while every named module is installed, which is how a feature module ships its Playwright journey spec beside `e2e`. Both keys together mean both. A target whose every entry `when` drops is skipped rather than refused. The render writes every entry whose `when` holds on each run, so an entry whose condition turns true later arrives with the next `add`, `update` or `testing` run. When a condition turns false, an unedited file is deleted and an edited one stays, untracked; `testing off` is the exception and deletes nothing.
 

@@ -1,0 +1,32 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "ai-mock",
+  "type": "saasaloy:feature",
+  "description": "An ai provider whose model echoes the last user message and, on a `/mock` line, streams reasoning, a tool call, a source or a set failure; for local development and tests, with no vendor account.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.10.0" },
+  "dependsOn": ["ai"],
+  "dependencies": [],
+  "envVars": {},
+  "files": [
+    {
+      "path": "files/mock.ts",
+      "target": "@ai/providers/mock.ts"
+    }
+  ],
+  "entries": [
+    {
+      "table": "ai.providers",
+      "call": "mock",
+      "import": {
+        "name": "mock",
+        "from": "./providers/mock"
+      }
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-ai-mock"]
+  }
+}

@@ -122,6 +122,8 @@ Two kinds of setup stay manual:
 | `payment` | `PAYMENT_PROVIDER`, `PAYMENT_APP_URL` |
 | `subscription` | `SUBSCRIPTION_PROVIDER`, `SUBSCRIPTION_APP_URL` |
 | `subscription-stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
+| `ai` | `AI_PROVIDER`, `AI_MODEL` |
+| `ai-gateway` | `AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY`, `AI_GATEWAY_HEADERS` |
 | `database-postgres` | `DATABASE_URL` |
 | `waitlist` | `PUBLIC_API_URL` |
 

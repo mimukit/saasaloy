@@ -66,6 +66,8 @@
     "verify:e2e": "node scripts/verify-e2e.ts"
   },
   "devDependencies": {
+    "@ai-sdk/openai-compatible": "3.0.94",
+    "@ai-sdk/provider": "4.0.39",
     "@axe-core/playwright": "4.13.0",
     "@clack/prompts": "1.7.0",
     "@commitlint/cli": "21.2.2",
@@ -77,6 +79,7 @@
     "@tiptap/starter-kit": "3.32.0",
     "@tiptap/static-renderer": "3.32.0",
     "@types/node": "26.4.1",
+    "ai": "7.0.181",
     "husky": "9.1.7",
     "ignore": "7.0.10",
     "jsonc-parser": "3.3.1",

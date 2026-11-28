@@ -1,0 +1,76 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "ai-gateway",
+  "type": "saasaloy:feature",
+  "description": "An ai provider on any OpenAI-compatible gateway (Cloudflare AI Gateway, OpenRouter, Vercel AI Gateway) through @ai-sdk/openai-compatible, with `vendor/model` ids; needs a gateway account and key.",
+  "stage": "mvp",
+  "needs": ["vendor-account"],
+  "requires": { "saasaloy": ">=0.13.0" },
+  "dependsOn": ["ai"],
+  "dependencies": [],
+  "envVars": {
+    "AI_GATEWAY_URL": "Required while AI_PROVIDER=gateway, and may stay blank under any other provider. Base URL of the gateway's OpenAI-compatible API, without `/chat/completions`: `https://api.cloudflare.com/client/v4/accounts/<ACCOUNT_ID>/ai/v1` for Cloudflare AI Gateway, `https://openrouter.ai/api/v1` for OpenRouter, `https://ai-gateway.vercel.sh/v1` for Vercel AI Gateway. Unset, `model()` throws AiError(\"not_configured\").",
+    "AI_GATEWAY_API_KEY": "Required while AI_PROVIDER=gateway, and may stay blank under any other provider. The gateway's key, sent as `Authorization: Bearer <key>`: a Cloudflare API token with the Workers AI Read permission, an OpenRouter key, or a Vercel AI Gateway key. Store it as a Workers secret (`wrangler secret put AI_GATEWAY_API_KEY`), never in wrangler.jsonc. A wrong key surfaces as AiError(\"auth\") with retryable false.",
+    "AI_GATEWAY_HEADERS": "Optional extra request headers as a JSON object of strings, such as `{\"cf-aig-gateway-id\":\"main\"}` to pick a named Cloudflare gateway, or `{\"HTTP-Referer\":\"https://example.com\",\"X-OpenRouter-Title\":\"My app\"}` for OpenRouter's app ranking. Blank sends none. The env check refuses anything that is not an object of strings."
+  },
+  "envRequiredWhen": {
+    "AI_GATEWAY_URL": { "key": "AI_PROVIDER", "is": "gateway" },
+    "AI_GATEWAY_API_KEY": { "key": "AI_PROVIDER", "is": "gateway" }
+  },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["AI_GATEWAY_HEADERS"],
+  "removeWarnings": [
+    "Removing this module does not revoke the gateway key. Revoke AI_GATEWAY_API_KEY in the gateway's dashboard when nothing else uses it, and delete the Workers secret with `wrangler secret delete AI_GATEWAY_API_KEY`.",
+    "`AI_GATEWAY_URL`, `AI_GATEWAY_API_KEY` and `AI_GATEWAY_HEADERS` stay in packages/env/.env. Delete them by hand, and switch AI_PROVIDER to another installed provider first, or `createAi(env)` throws."
+  ],
+  "patches": [
+    {
+      "file": "packages/ai/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@ai-sdk/openai-compatible",
+      "range": "3.0.94"
+    },
+    {
+      "file": "packages/ai/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "zod",
+      "range": "4.6.5"
+    }
+  ],
+  "entries": [
+    {
+      "table": "ai.providers",
+      "call": "gateway",
+      "import": {
+        "name": "gateway",
+        "from": "./providers/gateway"
+      }
+    },
+    {
+      "table": "ai.envPresets",
+      "call": "gatewayEnv",
+      "import": {
+        "name": "gatewayEnv",
+        "from": "./env/gateway"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/gateway.ts",
+      "target": "@ai/providers/gateway.ts"
+    },
+    {
+      "path": "files/env.ts",
+      "target": "@ai/env/gateway.ts"
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-ai-gateway"]
+  }
+}

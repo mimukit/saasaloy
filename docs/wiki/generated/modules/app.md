@@ -31,7 +31,7 @@ pnpm install
 | Depends on | [`api`](api.md), [`auth`](auth.md), [`shell`](shell.md) |
 | Requires one of | none |
 | Conflicts with | none |
-| Depended on by | [`agent`](agent.md), [`notification`](notification.md) |
+| Depended on by | [`agent`](agent.md), [`ai-sdk`](ai-sdk.md), [`notification`](notification.md) |
 
 ## Environment variables
 

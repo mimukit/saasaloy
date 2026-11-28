@@ -255,6 +255,7 @@ export const TABLES: Record<string, TableSpec> = {
     shape: "calls",
   },
   // --- Capabilities with providers ---------------------------------------------------
+  ...capability("ai", ["providers"]),
   ...capability("email", ["providers"]),
   ...capability("kv", ["policies", "providers"]),
   ...capability("logger", ["providers"], false),

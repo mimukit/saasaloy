@@ -102,7 +102,7 @@ describe("the converted registry", () => {
 
   it("names a table for every row, and an owner for every table", () => {
     const ids = new Set(Object.values(TABLES).map((spec) => spec.id));
-    assert.equal(ids.size, 48);
+    assert.equal(ids.size, 50);
     for (const name of names) {
       const item = JSON.parse(
         readFileSync(join(MODULES, name, "registry-item.json"), "utf-8")
