@@ -31,7 +31,7 @@ pnpm install
 | Depends on | [`api`](api.md) |
 | Requires one of | none |
 | Conflicts with | none |
-| Depended on by | [`ai-gateway`](ai-gateway.md), [`ai-mock`](ai-mock.md) |
+| Depended on by | [`ai-gateway`](ai-gateway.md), [`ai-mock`](ai-mock.md), [`ai-sdk`](ai-sdk.md) |
 | Providers | [`ai-gateway`](ai-gateway.md), [`ai-mock`](ai-mock.md) |
 
 ## Providers
@@ -113,6 +113,16 @@ The CLI also writes `packages/ai/src/providers.generated.ts` and `packages/ai/sr
 | --- | --- | --- | --- |
 | `ai-gateway` | `gateway` | Cloudflare AI Gateway, OpenRouter or Vercel AI Gateway | `saasaloy-ai-gateway` |
 | `ai-mock` | `mock` | Local development and tests, with a scripted echo model | `saasaloy-ai-mock` |
+
+#### Driver
+
+The core calls no model itself. A driver module holds every line that imports an AI framework. Install exactly one.
+
+| Module | Framework | Exports | Runbook |
+| --- | --- | --- | --- |
+| `ai-sdk` | Vercel AI SDK 7 | `@repo/ai/sdk`: `generate`, `streamChat`, `toolCallsOf`, `turnUsage` | `saasaloy-ai-sdk` |
+
+`packages/ai/package.json` declares the `./sdk` export, and the driver fills it.
 
 #### Get a model for a feature
 

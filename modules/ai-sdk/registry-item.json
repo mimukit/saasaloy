@@ -1,0 +1,57 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "ai-sdk",
+  "type": "saasaloy:feature",
+  "description": "The ai driver on the Vercel AI SDK: `generate` and `streamChat` helpers in @repo/ai/sdk that retry, turn every failure into AiError, log it without a stack, log one usage line per turn, and run tools only after the user approves.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.10.0" },
+  "dependsOn": ["ai", "app"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/ai/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "ai",
+      "range": "7.0.181"
+    },
+    {
+      "file": "packages/ai/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/logger",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/app/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@ai-sdk/react",
+      "range": "4.0.186"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/index.ts",
+      "target": "@ai/sdk/index.ts"
+    },
+    {
+      "path": "files/chat.ts",
+      "target": "@ai/sdk/chat.ts"
+    },
+    {
+      "path": "files/stream.ts",
+      "target": "@ai/sdk/stream.ts"
+    },
+    {
+      "path": "files/turn.ts",
+      "target": "@ai/sdk/turn.ts"
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-ai-sdk"]
+  }
+}
