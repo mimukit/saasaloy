@@ -59,6 +59,10 @@
     {
       "path": "files/config/ai.ts",
       "target": "@config/sections/ai.ts"
+    },
+    {
+      "path": "files/ui/blocks/ai-chat.tsx",
+      "target": "@ui/blocks/ai-chat.tsx"
     }
   ],
   "scaffolds": [

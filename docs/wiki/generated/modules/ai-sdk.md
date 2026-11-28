@@ -44,6 +44,8 @@ Files:
 - `@ai/sdk/chat.ts`
 - `@ai/sdk/stream.ts`
 - `@ai/sdk/turn.ts`
+- `@app/components/ai-chat.tsx`
+- `@app/lib/ai-chat-messages.ts`
 
 ## Patches it applies
 
@@ -51,6 +53,7 @@ Files:
 |---|---|
 | `packages/ai/package.json` | `package-json-dependency` |
 | `packages/ai/package.json` | `package-json-dependency` |
+| `apps/app/package.json` | `package-json-dependency` |
 | `apps/app/package.json` | `package-json-dependency` |
 
 ## Tables it owns
@@ -71,7 +74,7 @@ Skill source: `modules/ai-sdk/skills/saasaloy-ai-sdk/SKILL.md`
 
 ### ai-sdk: the AI SDK driver for the `ai` capability
 
-`saasaloy add ai-sdk` puts the server helpers into `packages/ai/src/sdk/` and exports them as `@repo/ai/sdk`. It adds `ai` 7.0.181 to `packages/ai` and `@ai-sdk/react` 4.0.186 to `apps/app`. It is the only module that imports `ai`. The core and the providers import only the `LanguageModelV4` types. `@repo/ai/sdk` also exports `tool`, `jsonSchema` and the `UIMessage` and `ToolSet` types, so a route in `apps/api` needs no `ai` dependency of its own.
+`saasaloy add ai-sdk` puts the server helpers into `packages/ai/src/sdk/` and exports them as `@repo/ai/sdk`. It also ships the chat island into `apps/app`. It adds `ai` 7.0.181 to `packages/ai`, and `ai` 7.0.181 and `@ai-sdk/react` 4.0.186 to `apps/app`. It is the only module that imports `ai`. The core and the providers import only the `LanguageModelV4` types. `@repo/ai/sdk` also exports `tool`, `jsonSchema` and the `UIMessage` and `ToolSet` types, so a route in `apps/api` needs no `ai` dependency of its own.
 
 Read `modules/ai/skills/saasaloy-ai/` first. This file covers only what the driver adds.
 
@@ -83,6 +86,8 @@ Read `modules/ai/skills/saasaloy-ai/` first. This file covers only what the driv
 | `files/chat.ts` | `packages/ai/src/sdk/chat.ts`: `generate`, `streamChat`, `chatErrorText` |
 | `files/stream.ts` | `packages/ai/src/sdk/stream.ts`: `toolCallsOf`, `isFinishedCall`, `asRecord` |
 | `files/turn.ts` | `packages/ai/src/sdk/turn.ts`: `turnUsage`, `usageFields` |
+| `files/app/ai-chat.tsx` | `apps/app/src/components/ai-chat.tsx`: `AiChatIsland`, the chat block on `useChat` |
+| `files/app/ai-chat-messages.ts` | `apps/app/src/lib/ai-chat-messages.ts`: maps `UIMessage` parts and errors to the block's props |
 
 It also adds `@repo/logger` to `packages/ai/package.json`, because both helpers take a `Logger`. It depends on `ai` and on `app`, because the chat island lives in the signed-in `apps/app`.
 
@@ -166,9 +171,95 @@ onEnd: async ({ messages, isAborted }) => {
 
 `toolCallsOf(message)` gives each tool call of a message in order, with `name`, `state`, `input`, `output` and `errorText`. `asRecord(value)` wraps a value that is not an object, so a JSON column always holds an object. `turnUsage(event)` reads the usage fields from an `onEnd` event when you call `generateText` or `streamText` yourself.
 
+#### Wire-up
+
+v1 mounts no chat route and places no chat page. Add both yourself: a route in `apps/api` that calls `streamChat`, and a page in `apps/app` that renders the island.
+
+**1. Write the route** at `apps/api/src/routes/chat.ts`:
+
+```ts
+import { createAi } from "@repo/ai";
+import type { AiEnv } from "@repo/ai";
+import { jsonSchema, streamChat, tool } from "@repo/ai/sdk";
+import type { UIMessage } from "@repo/ai/sdk";
+import { requireSession } from "@repo/auth/server";
+import type { AuthDbBindings } from "@repo/auth/server";
+import type { LoggerVariables } from "@repo/logger";
+import { Hono } from "hono";
+import { declare } from "../contract";
+
+const tools = {
+  rename_workspace: tool({
+    description: "Rename the user's workspace.",
+    inputSchema: jsonSchema<{ name: string }>({
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    }),
+    execute: async ({ name }) => ({ renamed: name }),
+  }),
+};
+
+export const chat = new Hono<{ Bindings: AuthDbBindings & AiEnv; Variables: LoggerVariables }>().post(
+  "/",
+  declare({
+    name: "chat_send",
+    description: "Stream one chat turn for the signed-in user.",
+    agent: { callable: false, reason: "Spends model tokens for a person in the app." },
+  }),
+  async (c) => {
+    await requireSession(c);
+    const { messages } = await c.req.json<{ messages: UIMessage[] }>();
+    return streamChat({
+      ai: createAi(c.env),
+      log: c.get("log"),
+      feature: "chat",
+      messages,
+      tools,
+      approve: ["rename_workspace"],
+      abortSignal: c.req.raw.signal,
+    });
+  }
+);
+```
+
+`requireSession` keeps token spend behind sign-in. `approve` makes `rename_workspace` wait for the user's answer. Add `approvalSecret` before a tool changes real data (see "Tool approval").
+
+**2. Mount it** in `apps/api/src/index.ts`, after the generated routes:
+
+```ts
+import { chat } from "./routes/chat";
+
+const app = apiRoutes(base).route("/chat", chat);
+```
+
+**3. Place the island** on a page, such as `apps/app/src/routes/chat.tsx`:
+
+```tsx
+import { createFileRoute } from "@tanstack/react-router";
+
+import { AiChatIsland } from "@app/components/ai-chat";
+
+export const Route = createFileRoute("/chat")({ component: ChatPage });
+
+function ChatPage() {
+  return (
+    <div className="h-[calc(100dvh-8rem)]">
+      <AiChatIsland api="/chat" />
+    </div>
+  );
+}
+```
+
+The block fills its parent, so give the parent a height. In a side panel, pass `title` and `description` for the header. `api` is the route path on the api, and it defaults to `/chat`. The island joins it to `PUBLIC_API_URL` and sends the session cookie with `credentials: "include"`, so the app's origin must be in `CORS_ORIGINS`. Pass `copy` to change the empty-state heading, the suggestions and the labels.
+
+The island maps each `UIMessage` part to the block: text, reasoning, each tool state, and `source-url` and `source-document` parts. Approve and Deny call `useChat`'s `addToolApprovalResponse({ id, approved })`, and `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses` sends the chat back once every approval has an answer. Retry calls `regenerate()`. Stop calls `stop()`. An error shows the driver's `ChatErrorBody` message. A 401 from the route shows a sign-in line, and a network failure shows a fixed line.
+
+Add a sidebar link through your own `app.nav` entry if you want one. `saasaloy remove ai-sdk` deletes the island files, but not the route, the mount or the page you added. Take those out yourself.
+
 #### Removal
 
-`saasaloy remove ai-sdk` deletes `packages/ai/src/sdk/` and takes `ai`, `@repo/logger` and `@ai-sdk/react` out of the two `package.json` files. Run `pnpm install` afterwards. Every route that imports `@repo/ai/sdk` or `ai` stops compiling. The `@repo/ai/sdk` export stays in `packages/ai/package.json` and resolves to nothing until a driver is installed again.
+`saasaloy remove ai-sdk` deletes `packages/ai/src/sdk/` and the two island files in `apps/app`, and takes `ai`, `@repo/logger` and `@ai-sdk/react` out of the two `package.json` files. Run `pnpm install` afterwards. Every route that imports `@repo/ai/sdk` or `ai` stops compiling. The `@repo/ai/sdk` export stays in `packages/ai/package.json` and resolves to nothing until a driver is installed again.
 
 #### Failure modes
 
@@ -177,6 +268,7 @@ onEnd: async ({ messages, isAborted }) => {
 - An `ai error` line with `code: "rate_limited"` after 3 calls: the gateway refused the requests. Wait, or raise the gateway's limit.
 - A tool runs with no approval: its name is not in `approve`.
 - An `ai error` line with `code: "unknown"` on the request after an approval: the approval signature did not verify. `approvalSecret` changed between the two requests, or a client forged the approval.
+- The chat shows "The chat request failed. Try again." on every send: the route is not mounted at the island's `api` path, or the app's origin is missing from `CORS_ORIGINS`. Read the browser's network tab.
 - The usage line shows `0` input tokens: the gateway sends no streamed usage. See `saasaloy-ai-gateway`.
 
 #### Next

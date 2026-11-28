@@ -56,6 +56,7 @@ AI_PROVIDER=mock  uses ai-mock
   - Alias `@ai` points at `packages/ai/src`.
 Files:
 - `@config/sections/ai.ts`
+- `@ui/blocks/ai-chat.tsx`
 
 ## Patches it applies
 
@@ -104,6 +105,7 @@ Callers import `@repo/ai`, call `createAi(env)`, and never learn which provider 
 | `files/src/usage.ts` | `packages/ai/src/usage.ts`: the `AiUsageFields` type |
 | `files/src/env-preset.ts` | `packages/ai/src/env-preset.ts`: the `AI_PROVIDER` and `AI_MODEL` gate |
 | `files/config/ai.ts` | `packages/config/src/sections/ai.ts`: the `ai` config section |
+| `files/ui/blocks/ai-chat.tsx` | `packages/ui/src/blocks/ai-chat.tsx`: the `AiChat` block |
 
 The CLI also writes `packages/ai/src/providers.generated.ts` and `packages/ai/src/env-preset.generated.ts`, adds `aiEnv()` to the `api.envPresets` table, adds `aiConfig()` to the `config.sections` table, and adds `@repo/ai` to `apps/api/package.json`.
 
@@ -123,6 +125,27 @@ The core calls no model itself. A driver module holds every line that imports an
 | `ai-sdk` | Vercel AI SDK 7 | `@repo/ai/sdk`: `generate`, `streamChat`, `toolCallsOf`, `turnUsage` | `saasaloy-ai-sdk` |
 
 `packages/ai/package.json` declares the `./sdk` export, and the driver fills it.
+
+#### Wire-up
+
+`@repo/ui/blocks/ai-chat` is a presentational chat block. It imports no AI framework and calls no network. It renders the empty state with prompt suggestions, user and assistant messages, text, a collapsible reasoning section, tool calls (running, finished with input and output, failed, denied), an approval card with Approve and Deny, numbered sources, an error banner with Retry, and a composer with Send, or Stop while a reply streams. It fills its container, so the same block fits a full page and a side panel.
+
+Nothing places the block for you. The usual path is the driver's island: `saasaloy add ai-sdk` ships `apps/app/src/components/ai-chat.tsx`, which feeds the block from `useChat`. The `saasaloy-ai-sdk` skill's Wire-up section has the route and the page.
+
+To drive the block from your own state instead, pass these props:
+
+| Prop | Meaning |
+| --- | --- |
+| `messages` | `AiChatMessage[]`: `{ id, role: "user" \| "assistant", parts }`. A part is `text`, `reasoning`, `tool` (with `toolCallId`, `name`, `state`, `input`, `output`, `errorText`) or `source` (with `id`, `title`, `url`). |
+| `status` | `"ready"`, `"submitted"` (waits for the first token) or `"streaming"`. Stop shows in the last two. |
+| `error` | `{ message, retryable }` or `null`. Retry shows only when `retryable` is true. |
+| `onSend(text)`, `onStop()`, `onRetry()` | The composer, the Stop button and the Retry button. |
+| `onApprove(toolCallId, approved)` | Approve or Deny on a tool in the `approval` state. |
+| `title`, `description` | An optional header, for a side panel. |
+| `copy` | Any subset of `AI_CHAT_COPY`: the empty-state heading, the suggestions, the placeholder and every label. |
+| `className` | Sizes the block. Give its parent a height, such as `h-full` inside a flex column. |
+
+The block uses only the base theme tokens, so it renders in `apps/app`, `apps/admin` and `apps/web` alike. `saasaloy remove ai` deletes the block, but not an import you added. Take that import out yourself.
 
 #### Get a model for a feature
 

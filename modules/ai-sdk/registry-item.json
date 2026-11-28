@@ -30,6 +30,13 @@
       "section": "dependencies",
       "name": "@ai-sdk/react",
       "range": "4.0.186"
+    },
+    {
+      "file": "apps/app/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "ai",
+      "range": "7.0.181"
     }
   ],
   "files": [
@@ -48,6 +55,14 @@
     {
       "path": "files/turn.ts",
       "target": "@ai/sdk/turn.ts"
+    },
+    {
+      "path": "files/app/ai-chat.tsx",
+      "target": "@app/components/ai-chat.tsx"
+    },
+    {
+      "path": "files/app/ai-chat-messages.ts",
+      "target": "@app/lib/ai-chat-messages.ts"
     }
   ],
   "scaffolds": [],
