@@ -75,6 +75,8 @@ A list with one option is no choice, so `add` asks nothing. `database` declares 
 database needs database-postgres; adding it.
 ```
 
+`ai` declares `requiresOneOf: ["ai-sdk"]` the same way, so `saasaloy add ai` also adds the `ai-sdk` driver and the `app` module it depends on.
+
 `--with <module>` answers the choice on the command line, so the run needs no prompt: `saasaloy add api-keys --with api-keys-user --yes`. It is repeatable. A `--with` module that answers no unmet requirement exits 2 before anything is written, so it cannot install a module on the side.
 
 There is no prompt in a non-interactive run or under `--yes`. Without `--with`, a list of two or more refuses and names the options, exit 2:
@@ -91,7 +93,7 @@ Cannot add api-keys-organization — module conflict:
   api-keys-user is already installed and declares a conflict with api-keys-organization. Run `saasaloy remove api-keys-user` first.
 ```
 
-Provider modules are the other shape. A capability such as `email`, `kv`, `queue`, `storage`, `sms`, `logger` or `payment` takes any number of providers side by side, and a `<CAP>_PROVIDER` environment variable picks the one that runs. The value is always required and there is no default, so `add` lists the variable under **Env vars to set** and `saasaloy env` prompts for it.
+Provider modules are the other shape. A capability such as `email`, `kv`, `queue`, `storage`, `sms`, `logger`, `payment` or `ai` takes any number of providers side by side, and a `<CAP>_PROVIDER` environment variable picks the one that runs. The value is always required and there is no default, so `add` lists the variable under **Env vars to set** and `saasaloy env` prompts for it.
 
 ## Look before you leap
 

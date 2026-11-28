@@ -172,6 +172,21 @@ describe("streamChat", () => {
     assert.equal(text, "hello there friend");
   });
 
+  it("streams the reasoning and the source parts", async () => {
+    const { log } = recorder();
+    const response = await streamChat({
+      ai: client(counted().provider),
+      feature: "chat",
+      log,
+      messages: [user("/mock reasoning source\nhello")],
+    });
+    const types = new Set(
+      chunksOf(await events(response)).map((chunk) => chunk.type)
+    );
+    assert.ok(types.has("reasoning-delta"), "the stream sent no reasoning");
+    assert.ok(types.has("source-url"), "the stream sent no source");
+  });
+
   it("logs one usage line per turn with every usage field", async () => {
     const { lines, log } = recorder();
     const response = await streamChat({

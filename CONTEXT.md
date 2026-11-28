@@ -484,6 +484,40 @@ _Avoid: circuit breaker, which trips itself on errors. A person turns a kill swi
 The reserved `system.maintenance` [flag](#flag). While it is on, a normal request gets a custom 503 page, and an admin session plus a configured path list pass through, so the operator can still reach the app that turned it on.
 _Avoid: downtime, outage. Maintenance mode is deliberate._
 
+## AI
+
+### `LanguageModelV4` contract
+The model type the `ai` core hands out: `createAi(env).model(feature)` returns a `LanguageModelV4` from `@ai-sdk/provider`, which AI SDK 7, Mastra, Vercel `eve` and Cloudflare `agents` all take. The core and every [AI provider](#ai-provider) import it with `import type` only, so the core keeps zero runtime dependencies, and `scripts/ai-spec-imports.test.ts` fails on a value import ([ADR 0072](docs/adr/0072-adr-ai-frameworks-are-drivers-model-vendors-are-providers-2026-11-28.md)). Vercel controls the spec, so a V5 means a coordinated bump of the core and every provider.
+_Avoid: model interface, adapter. Saasaloy defines no model type of its own._
+
+### AI provider
+A [provider module](#provider-module) of `ai` that serves models from one vendor or gateway: `ai-gateway` (Cloudflare AI Gateway, OpenRouter or Vercel AI Gateway through `@ai-sdk/openai-compatible`) and `ai-mock` (a scripted model that echoes the last user message and reads a `/mock` line). `AI_PROVIDER` selects one and holds one value, because each gateway does its own fallback. A provider owns a pure `normalizeError(err): AiError` and never wraps the model, because a rethrow inside the model call stops the AI SDK's retries.
+_Avoid: model vendor for `ai-gateway`, which reaches many vendors. Avoid AI driver, which is the framework layer._
+
+### AI driver
+A [driver module](#driver-module) of `ai` that brings one AI framework: today only `ai-sdk`, which writes the server helpers `generate` and `streamChat` into `packages/ai/src/sdk/` and the [chat island](#chat-island) into `apps/app`. It is the only module that imports `ai`. The core names it in `requiresOneOf`, and a later `ai-tanstack` declares `conflictsWith: ["ai-sdk"]`, because a change of framework replaces route and island code that no env var can swap ([ADR 0072](docs/adr/0072-adr-ai-frameworks-are-drivers-model-vendors-are-providers-2026-11-28.md)).
+_Avoid: AI provider, AI adapter._
+
+### Model id resolution
+The order `model(feature)` reads a model id in: the feature's own `<FEATURE>_MODEL` env key (`COPILOT_MODEL` for `copilot`), `config.ai.models.<feature>`, the core's `AI_MODEL` env key, then `config.ai.defaultModel`. The id is the gateway's `vendor/model` form, such as `openai/gpt-6-luna`. No id at all throws `AiError` `not_configured`, before any stream starts.
+_Avoid: model selection, which suggests a runtime choice between providers; that is `AI_PROVIDER`._
+
+### Chat block
+The presentational [block](#block) `@ui/blocks/ai-chat.tsx` that the `ai` core ships: it renders text, reasoning, tool calls with their state (running, approval, finished, error, denied), sources, an error with a retry action and a stop button. It takes neutral props and the callbacks `onSend`, `onStop`, `onRetry` and `onApprove(toolCallId, approved)`, and it imports no framework, so a second [AI driver](#ai-driver) reuses it.
+_Avoid: chat component, copilot. Copilot is one feature that may use the block._
+
+### Chat island
+The framework half of the chat UI, shipped by the [AI driver](#ai-driver) into the signed-in `apps/app`, so token spend stays behind sign-in. `ai-sdk`'s island, `AiChatIsland` in `@app/components/ai-chat.tsx`, runs `useChat` against a route that calls `streamChat`, maps each `UIMessage` part to the [chat block](#chat-block)'s props, and sends approve and deny answers back as the next request.
+_Avoid: chat page. The owner places the island on a page through the driver skill's [wire-up](#wire-up)._
+
+### Tool approval
+The round trip that holds a tool call until the user answers: a tool named in `streamChat`'s `approve` list does not run on the first request, the stream sends a `tool-approval-request`, and the next request carries the answer and runs or skips the tool. An `approvalSecret` signs each request, so a client cannot forge an approval.
+_Avoid: confirmation, human in the loop._
+
+### Usage line
+The one `ai usage` log line the [AI driver](#ai-driver) writes per turn through `@repo/logger`: the feature, provider, model and finish reason, and the token fields (`inputTokens`, `cachedInputTokens`, `outputTokens`, `reasoningTokens`, `totalTokens`, `cachePercent`, plus `steps` and `tools`). It holds no message text, and no table stores it.
+_Avoid: usage record, billing event. Nothing meters or bills from it._
+
 ## The two repos
 
 ### Tool repo

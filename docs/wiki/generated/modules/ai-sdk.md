@@ -125,9 +125,10 @@ const { text } = await generate({ ai: createAi(c.env), log: c.get("log"), featur
 import { createAi } from "@repo/ai";
 import { streamChat } from "@repo/ai/sdk";
 import type { UIMessage } from "@repo/ai/sdk";
+import { apiEnv } from "../env";
 
 const { messages } = await c.req.json<{ messages: UIMessage[] }>();
-return streamChat({ ai: createAi(c.env), log: c.get("log"), feature: "copilot", messages, tools, approve: ["delete_note"], approvalSecret: c.env.CHAT_APPROVAL_SECRET });
+return streamChat({ ai: createAi(c.env), log: c.get("log"), feature: "copilot", messages, tools, approve: ["delete_note"], approvalSecret: apiEnv(c.env).CHAT_APPROVAL_SECRET });
 ```
 
 `streamChat` converts the UI messages, calls `streamText`, and returns a UI message stream `Response` that `useChat` reads. The stream ends with a `finish` chunk and `data: [DONE]`. Pass `onEnd` to store the finished chat. It receives the full message list.
@@ -157,7 +158,7 @@ The line holds no message text. A gateway that sends no usage gives zeros.
 
 A tool named in `approve` does not run on the first request. The stream sends a `tool-approval-request` chunk, and the tool part in `useChat` has the state `approval-requested`. The island calls `addToolApprovalResponse({ id, approved })`, and `useChat` sends the chat again. On that request, an approved tool runs and the model answers its result. A denied tool does not run, its part has the state `output-denied`, and the model reads the denial.
 
-Pass `approvalSecret` whenever a tool is in `approve`. Without it, the server cannot tell its own approval request from one a client made up, so a client can send `approved: true` for a call the user never approved, and the tool runs. Use at least 32 random bytes (`openssl rand -base64 32`), keep it in a Workers secret, and use the same value on every Worker. The helpers take the value, so the route reads it from its own env key, such as `CHAT_APPROVAL_SECRET` in the examples. Declare that key through `packages/env` (see `saasaloy-env`).
+Pass `approvalSecret` whenever a tool is in `approve`. Without it, the server cannot tell its own approval request from one a client made up, so a client can send `approved: true` for a call the user never approved, and the tool runs. Use at least 32 random bytes (`openssl rand -base64 32`), keep it in a Workers secret, and use the same value on every Worker. The helpers take the value, so the route reads it from its own env key, such as `CHAT_APPROVAL_SECRET` in the examples. Wire-up step 1 declares that key. Read it through `apiEnv(c.env)`, not `c.env` directly: the bindings type gives an undeclared key the type `unknown`, which does not compile as `approvalSecret`.
 
 #### Store a finished turn
 
@@ -175,7 +176,23 @@ onEnd: async ({ messages, isAborted }) => {
 
 v1 mounts no chat route and places no chat page. Add both yourself: a route in `apps/api` that calls `streamChat`, and a page in `apps/app` that renders the island.
 
-**1. Write the route** at `apps/api/src/routes/chat.ts`:
+**1. Declare the approval secret.** Add the key to `packages/env/.env.example`, under `# @services api`:
+
+```
+# Secret that signs each chat tool approval request. At least 32 random bytes
+# (openssl rand -base64 32); a Workers secret in production. Unset, the chat route throws.
+CHAT_APPROVAL_SECRET=
+```
+
+Declare it in the `server` block of `apps/api/src/env.ts`, so `apiEnv(c.env)` validates it and types it:
+
+```ts
+CHAT_APPROVAL_SECRET: z.string().min(32).describe("Secret that signs each chat tool approval request."),
+```
+
+Put a value in `packages/env/.env` and run `pnpm env:setup`. In production, run `wrangler secret put CHAT_APPROVAL_SECRET --config apps/api/wrangler.jsonc`.
+
+**2. Write the route** at `apps/api/src/routes/chat.ts`:
 
 ```ts
 import { createAi } from "@repo/ai";
@@ -187,6 +204,7 @@ import type { AuthDbBindings } from "@repo/auth/server";
 import type { LoggerVariables } from "@repo/logger";
 import { Hono } from "hono";
 import { declare } from "../contract";
+import { apiEnv } from "../env";
 
 const tools = {
   rename_workspace: tool({
@@ -217,7 +235,7 @@ export const chat = new Hono<{ Bindings: AuthDbBindings & AiEnv; Variables: Logg
       messages,
       tools,
       approve: ["rename_workspace"],
-      approvalSecret: c.env.CHAT_APPROVAL_SECRET,
+      approvalSecret: apiEnv(c.env).CHAT_APPROVAL_SECRET,
       abortSignal: c.req.raw.signal,
     });
   }
@@ -226,7 +244,7 @@ export const chat = new Hono<{ Bindings: AuthDbBindings & AiEnv; Variables: Logg
 
 `requireSession` keeps token spend behind sign-in. `approve` makes `rename_workspace` wait for the user's answer, and `approvalSecret` stops a client from forging that answer (see "Tool approval").
 
-**2. Mount it** in `apps/api/src/index.ts`, after the generated routes:
+**3. Mount it** in `apps/api/src/index.ts`, after the generated routes:
 
 ```ts
 import { chat } from "./routes/chat";
@@ -234,7 +252,7 @@ import { chat } from "./routes/chat";
 const app = apiRoutes(base).route("/chat", chat);
 ```
 
-**3. Place the island** on a page, such as `apps/app/src/routes/chat.tsx`:
+**4. Place the island** on a page, such as `apps/app/src/routes/chat.tsx`:
 
 ```tsx
 import { createFileRoute } from "@tanstack/react-router";

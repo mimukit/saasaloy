@@ -175,6 +175,8 @@ export async function streamChat<TOOLS extends ToolSet = ToolSet>(
       onEnd: options.onEnd,
       onError: (error) => chatErrorText(options.ai.normalizeError(error)),
       originalMessages: options.messages,
+      // The AI SDK drops source parts unless asked, and the chat block renders them.
+      sendSources: true,
       stream: result.stream,
       tools: options.tools,
     }),
