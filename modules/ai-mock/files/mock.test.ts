@@ -4,7 +4,6 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { APICallError } from "@ai-sdk/provider";
 import type {
   LanguageModelV4CallOptions,
   LanguageModelV4Prompt,
@@ -182,10 +181,6 @@ describe("ai-mock scripts", () => {
       assert.equal(fields[Symbol.for("vercel.ai.error.AI_APICallError")], true);
       assert.equal(fields.statusCode, 429);
       assert.equal(fields.isRetryable, true);
-      assert.ok(
-        APICallError.isInstance(error),
-        "the real AI SDK class accepts it"
-      );
     }
   });
 

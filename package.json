@@ -79,6 +79,7 @@
     "@tiptap/starter-kit": "3.32.0",
     "@tiptap/static-renderer": "3.32.0",
     "@types/node": "26.4.1",
+    "ai": "7.0.181",
     "husky": "9.1.7",
     "ignore": "7.0.10",
     "jsonc-parser": "3.3.1",

@@ -6,7 +6,6 @@
 
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { APICallError } from "@ai-sdk/provider";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { defineAi } from "../index.ts";
 import { AiError } from "../provider.ts";
@@ -48,6 +47,16 @@ function answer(status: number, body: unknown, seen: Seen[] = []): Seen[] {
 }
 
 /** What the real model throws for a recorded error response. */
+/** The global markers the AI SDK's own `APICallError.isInstance` reads. */
+function isApiCallError(error: unknown): boolean {
+  const fields = error as Record<symbol, unknown> | null;
+  return (
+    error instanceof Error &&
+    fields?.[Symbol.for("vercel.ai.error")] === true &&
+    fields[Symbol.for("vercel.ai.error.AI_APICallError")] === true
+  );
+}
+
 async function thrown(status: number, body: unknown): Promise<unknown> {
   answer(status, body);
   const model = gateway().languageModel(ENV, "openai/gpt-6-luna");
@@ -247,8 +256,8 @@ describe("ai-gateway normalizeError on recorded bodies", () => {
     it(`${name}: HTTP ${status} is ${code}`, async () => {
       const error = await thrown(status, body);
       assert.ok(
-        APICallError.isInstance(error),
-        "the real model throws an APICallError"
+        isApiCallError(error),
+        "the real model throws an error carrying the APICallError markers"
       );
       const mapped = normalizeError(error);
       assert.ok(mapped instanceof AiError);
@@ -311,13 +320,27 @@ describe("ai-gateway normalizeError on recorded bodies", () => {
     }
   });
 
-  it("maps an SDK error with no status, a refused connection, onto unavailable", () => {
-    const refused = new APICallError({
-      isRetryable: true,
-      message: "Cannot connect to API: connect ECONNREFUSED",
-      requestBodyValues: {},
-      url: "https://gateway.test/v1/chat/completions",
-    });
+  it("maps an SDK error with no status, a refused connection, onto unavailable", async () => {
+    globalThis.fetch = (async () => {
+      throw new TypeError("fetch failed", {
+        cause: Object.assign(new Error("connect ECONNREFUSED"), {
+          code: "ECONNREFUSED",
+        }),
+      });
+    }) as typeof fetch;
+    const refused = await gateway()
+      .languageModel(ENV, "openai/gpt-6-luna")
+      .doGenerate(CALL)
+      .then(
+        () => assert.fail("the call should fail"),
+        (error: unknown) => error
+      );
+    assert.ok(isApiCallError(refused));
+    assert.equal(
+      (refused as Record<string, unknown>).statusCode,
+      undefined,
+      "a refused connection has no status"
+    );
     const mapped = normalizeError(refused);
     assert.equal(mapped.code, "unavailable");
     assert.equal(mapped.retryable, true);

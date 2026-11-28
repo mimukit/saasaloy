@@ -2,7 +2,8 @@
 // `@ai-sdk/provider` is a type-only dependency of `packages/ai`: a value import would make
 // the vendor-blind core and every provider load a vendor package at runtime. This test
 // fails on any value import of it in what a project receives: the base template and the
-// payload of every `ai*` module. A test file is exempt, because no project receives one.
+// payload of every `ai*` module, test files included, so a test cannot model the habit.
+// The AI SDK runtime itself (`ai`, `@ai-sdk/react`) belongs to the `ai-sdk` driver alone.
 
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -73,7 +74,7 @@ function statement(source: string, index: number, text: string): string {
   return `${line}: ${text.replaceAll(/\s+/g, " ")}`;
 }
 
-/** Every shipped source file under `dir`, skipping tests and installed packages. */
+/** Every source file under `dir`, skipping installed packages. */
 function sourceFiles(dir: string): string[] {
   if (!existsSync(dir)) {
     return [];
@@ -85,10 +86,7 @@ function sourceFiles(dir: string): string[] {
       if (entry.name !== "node_modules") {
         found.push(...sourceFiles(path));
       }
-    } else if (
-      SOURCE.test(entry.name) &&
-      !/\.(?:test|vitest)\./.test(entry.name)
-    ) {
+    } else if (SOURCE.test(entry.name)) {
       found.push(path);
     }
   }
@@ -166,13 +164,16 @@ describe("the value-import checker", () => {
 describe("what a project receives imports @ai-sdk/provider as types only", () => {
   const files = shippedRoots().flatMap(sourceFiles);
 
-  it("finds the ai core's sources", () => {
-    assert.ok(
-      files.some((file) =>
-        file.endsWith(join("modules/ai/files/src/provider.ts"))
-      ),
-      "modules/ai/files/src/provider.ts was not scanned"
-    );
+  it("finds the ai core's sources and the provider tests", () => {
+    for (const path of [
+      "modules/ai/files/src/provider.ts",
+      "modules/ai-mock/files/mock.test.ts",
+    ]) {
+      assert.ok(
+        files.some((file) => file.endsWith(join(path))),
+        `${path} was not scanned`
+      );
+    }
   });
 
   it("holds no value import of @ai-sdk/provider", () => {
@@ -181,6 +182,52 @@ describe("what a project receives imports @ai-sdk/provider as types only", () =>
         (problem) => `${relative(ROOT, file)}:${problem}`
       )
     );
+    assert.deepEqual(problems, []);
+  });
+});
+
+/** One problem per import of the AI SDK runtime (`ai`, `ai/*`, `@ai-sdk/react`), types included. */
+function runtimeImports(text: string): string[] {
+  const source = withoutComments(text);
+  const name = String.raw`["'](?:ai(?:/[^"']*)?|@ai-sdk/react)["']`;
+  const pattern = new RegExp(
+    String.raw`^[ \t]*(?:import|export)\s+[^;]*?\s*from\s*${name}|^[ \t]*import\s*${name}|\bimport\s*\(\s*${name}|\brequire\s*\(\s*${name}`,
+    "gm"
+  );
+  return [...source.matchAll(pattern)].map((match) =>
+    statement(source, match.index, match[0])
+  );
+}
+
+describe("only the ai-sdk driver imports the AI SDK runtime", () => {
+  it("reads a value import, a type import and a subpath, and skips look-alikes", () => {
+    const problems = runtimeImports(
+      [
+        `import { streamText } from "ai";`,
+        `import type { UIMessage } from 'ai';`,
+        `import { MockLanguageModelV4 } from "ai/test";`,
+        `import { useChat } from "@ai-sdk/react";`,
+        `import { x } from "aim";`,
+        `import { y } from "@repo/ai";`,
+        `// import { z } from "ai";`,
+      ].join("\n")
+    );
+    assert.deepEqual(
+      problems.map((problem) => problem.split(":")[0]),
+      ["1", "2", "3", "4"]
+    );
+  });
+
+  it("holds no import of ai or @ai-sdk/react outside modules/ai-sdk", () => {
+    const driver = join(ROOT, "modules/ai-sdk");
+    const problems = shippedRoots()
+      .filter((root) => !root.startsWith(driver))
+      .flatMap(sourceFiles)
+      .flatMap((file) =>
+        runtimeImports(readFileSync(file, "utf-8")).map(
+          (problem) => `${relative(ROOT, file)}:${problem}`
+        )
+      );
     assert.deepEqual(problems, []);
   });
 });

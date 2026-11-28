@@ -251,8 +251,10 @@ describe("the real registry", () => {
     );
   });
 
-  it("gives the README's 19 providers and 3 drivers", () => {
+  it("gives the README's 21 providers and 3 drivers", () => {
     assert.deepEqual(namesOf("provider"), [
+      "ai-gateway",
+      "ai-mock",
       "email-cloudflare",
       "email-console",
       "email-plunk",
