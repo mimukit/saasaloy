@@ -31,7 +31,17 @@ pnpm install
 | Depends on | [`api`](api.md) |
 | Requires one of | none |
 | Conflicts with | none |
-| Depended on by | none |
+| Depended on by | [`ai-gateway`](ai-gateway.md), [`ai-mock`](ai-mock.md) |
+| Providers | [`ai-gateway`](ai-gateway.md), [`ai-mock`](ai-mock.md) |
+
+## Providers
+
+`ai` picks its provider at runtime with `AI_PROVIDER`. Select a provider to see the value to set.
+
+```saasaloy-providers capability=ai
+AI_PROVIDER=gateway  uses ai-gateway
+AI_PROVIDER=mock  uses ai-mock
+```
 
 ## Environment variables
 
@@ -96,6 +106,13 @@ Callers import `@repo/ai`, call `createAi(env)`, and never learn which provider 
 | `files/config/ai.ts` | `packages/config/src/sections/ai.ts`: the `ai` config section |
 
 The CLI also writes `packages/ai/src/providers.generated.ts` and `packages/ai/src/env-preset.generated.ts`, adds `aiEnv()` to the `api.envPresets` table, adds `aiConfig()` to the `config.sections` table, and adds `@repo/ai` to `apps/api/package.json`.
+
+#### Providers
+
+| Module | `AI_PROVIDER` | Use it for | Runbook |
+| --- | --- | --- | --- |
+| `ai-gateway` | `gateway` | Cloudflare AI Gateway, OpenRouter or Vercel AI Gateway | `saasaloy-ai-gateway` |
+| `ai-mock` | `mock` | Local development and tests, with a scripted echo model | `saasaloy-ai-mock` |
 
 #### Get a model for a feature
 

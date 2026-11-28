@@ -23,6 +23,13 @@ Callers import `@repo/ai`, call `createAi(env)`, and never learn which provider 
 
 The CLI also writes `packages/ai/src/providers.generated.ts` and `packages/ai/src/env-preset.generated.ts`, adds `aiEnv()` to the `api.envPresets` table, adds `aiConfig()` to the `config.sections` table, and adds `@repo/ai` to `apps/api/package.json`.
 
+## Providers
+
+| Module | `AI_PROVIDER` | Use it for | Runbook |
+| --- | --- | --- | --- |
+| `ai-gateway` | `gateway` | Cloudflare AI Gateway, OpenRouter or Vercel AI Gateway | `saasaloy-ai-gateway` |
+| `ai-mock` | `mock` | Local development and tests, with a scripted echo model | `saasaloy-ai-mock` |
+
 ## Get a model for a feature
 
 ```ts

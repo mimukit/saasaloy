@@ -66,6 +66,7 @@
     "verify:e2e": "node scripts/verify-e2e.ts"
   },
   "devDependencies": {
+    "@ai-sdk/openai-compatible": "3.0.94",
     "@ai-sdk/provider": "4.0.39",
     "@axe-core/playwright": "4.13.0",
     "@clack/prompts": "1.7.0",
